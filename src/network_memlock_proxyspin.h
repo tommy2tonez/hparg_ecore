@@ -17,6 +17,8 @@ namespace dg::network_memlock_proxyspin{
 
     using namespace dg::network_lang_x;
 
+    //maybe I should consider removing static - thats a decision that will be made in the future - when I do optimization and profiling 
+
     template <class T>
     struct ReferenceLockInterface{
 

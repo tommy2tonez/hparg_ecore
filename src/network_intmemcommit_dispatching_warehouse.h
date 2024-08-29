@@ -1,5 +1,5 @@
-#ifndef __NETWORK_EVENT_CENTER_H__
-#define __NETWORK_EVENT_CENTER_H__
+#ifndef __NETWORK_MEMCOMMIT_DISPATCHING_WAREHOUSE_H__
+#define __NETWORK_MEMCOMMIT_DISPATCHING_WAREHOUSE_H__
 
 #include <thread>
 #include "network_concurrency.h"
@@ -8,7 +8,7 @@
 #include "network_fundamental_vector.h"
 #include "network_producer_consumer.h" 
 
-namespace dg::network_event_center{
+namespace dg::network_intmemcommit_dispatching_warehouse{
 
     template <class T>
     struct ThreadTableInterface{
@@ -20,11 +20,10 @@ namespace dg::network_event_center{
     };
 
     template <class ID, class EventT, class T, class Capacity>
-    class EventCenter{};
+    class DispatchingWarehouse{};
 
     template <class ID, class EventT, class T, size_t CAPACITY>
-    class EventCenter<ID, EventT, ThreadTableInterface<T>, std::integral_constant<size_t, CAPACITY>>: public dg::network_producer_consumer::ProducerInterface<EventCenter<ID, EventT, ThreadTableInterface<T>, std::integral_constant<size_t, CAPACITY>>>,
-                                                                                                      public dg::network_producer_consumer::LimitConsumerInterface<EventCenter<ID, EventT, ThreadTableInterface<T>, std::integral_constant<size_t, CAPACITY>>>{
+    class DispatchingWarehouse<ID, EventT, ThreadTableInterface<T>, std::integral_constant<size_t, CAPACITY>>{
 
         public:
 
@@ -32,7 +31,7 @@ namespace dg::network_event_center{
 
         private:
 
-            alignas(dg::memory_utility::HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE) struct ContainerUnit{
+            alignas(dg::memult::HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE) struct ContainerUnit{
                 dg::network_fundamental_vector::fixed_fundamental_vector<event_t, CAPACITY> container;
                 std::atomic_flag lck;
             };
@@ -42,9 +41,11 @@ namespace dg::network_event_center{
 
         public:
 
-            static void init() noexcept{
-
+            static void init(){
+                
+                auto logger = dg::network_log_scope::critical_terminate();
                 container_unit_table = new ContainerUnit[dg::network_concurrency::THREAD_COUNT];
+                logger.release();
             }
 
             static inline auto push_try(event_t * events, size_t sz) noexcept -> bool{

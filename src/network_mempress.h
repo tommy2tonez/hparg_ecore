@@ -15,229 +15,213 @@
 #include "network_producer_consumer.h"
 #include "network_exception.h"
 #include "network_log.h" 
+#include "network_segcheck_bound.h"
 
 namespace dg::network_mempress{
     
+    //move from stricter -> less stricter unique_ptr<> next iteration - this is likely not going to be the bottleneck 
+    //strongly suggest this
+    //yet there are so many problem not being addressed 
+    //- normal interface does not support template types
+
     template <class T>
     struct Notifiable{
 
-        static inline void notify(const void * memregion) noexcept{
+        using ptr_t = typename T::ptr_t;
+
+        static_assert(dg::is_ptr_v<ptr_t>);
+
+        static void notify(ptr_t region) noexcept{
             
-            T::notify(memregion);
+            T::notify(region);
         }
     };
 
     template <class T>
-    struct EventContainerInterface{
+    struct MemPressInterface{
 
-        using event_t = T::event_t; 
+        using event_t   = typename T::event_t; 
+        using ptr_t     = typename T::ptr_t;
 
-        static inline auto first() noexcept -> const void *{
+        static_assert(dg::is_ptr_v<ptr_t>); 
+
+        static auto first() noexcept -> ptr_t{
 
             return T::first();
         }
 
-        static inline auto last() noexcept -> const void *{
+        static auto last() noexcept -> ptr_t{
 
             return T::last(); 
         }
 
-        static inline auto capacity() noexcept -> size_t{
+        static auto capacity() noexcept -> size_t{
 
             return T::capacity();
         }
 
-        static consteval auto memregion_size() noexcept -> size_t{
+        static auto memregion_size() noexcept -> size_t{
 
             return T::memregion_size();
         }
 
-        static inline auto try_push(const void * region, event_t * event, size_t event_sz) noexcept -> bool{
+        static void push(ptr_t ptr, event_t * event, size_t event_sz) noexcept{
 
-            return T::try_push(region, event, event_sz);
+            T::push(ptr, event, event_sz);
         } 
 
-        static inline void collect(const void * region, event_t * dst, size_t& event_count, size_t event_cap) noexcept{
+        static void collect(ptr_t region, event_t * dst, size_t& event_count, size_t event_cap) noexcept{
 
             return T::collect(region, dst, event_count, event_cap);
         } 
     };
 
-    template <class T>
-    struct UnboundedEventContainerInterface{
-
-        using event_t = T::event_t; 
-
-        static inline auto first() noexcept -> const void *{
-
-            return T::first();
-        }
-
-        static inline auto last() noexcept -> const void *{
-
-            return T::last(); 
-        }
-
-        static inline auto capacity() noexcept -> size_t{
-
-            return T::capacity();
-        }
-
-        static consteval auto memregion_size() noexcept -> size_t{
-
-            return T::memregion_size();
-        }
-
-        static inline void push(const void * region, event_t * event, size_t event_sz) noexcept{
-
-            T::push(region, event, event_sz);
-        } 
-
-        static inline void collect(const void * region, event_t * dst, size_t& event_count, size_t event_cap) noexcept{
-
-            return T::collect(region, dst, event_count, event_cap);
-        } 
-    };
-
-    template <class ID, class MemRegionSize, class Event, class EventCountPerRegion>
+    template <class ID, class PtrType, class MemRegionSize, class Event, class EventCountPerRegion>
     class EventContainer{}; 
 
-    template <class ID, size_t MEMREGION_SZ, class EventType, size_t EVENT_COUNT_PER_REGION>
-    class EventContainer<ID, std::integral_constant<size_t, MEMREGION_SZ>, EventType, std::integral_constant<size_t, EVENT_COUNT_PER_REGION>>: public EventContainerInterface<EventContainer<ID, std::integral_constant<size_t, MEMREGION_SZ>, EventType, std::integral_constant<size_t, EVENT_COUNT_PER_REGION>>>{
+    template <class ID, class PtrType, size_t MEMREGION_SZ, class EventType, size_t EVENT_COUNT_PER_REGION>
+    class EventContainer<ID, PtrType, std::integral_constant<size_t, MEMREGION_SZ>, EventType, std::integral_constant<size_t, EVENT_COUNT_PER_REGION>>{
 
         public:
 
-            using event_t = EventType;
+            using event_t           = EventType;
+            using ptr_t             = PtrType;
 
         private:
 
-            using memlock       = dg::network_memlock::CollisionlessLock<ID, std::integral_constant<size_t, MEMREGION_SZ>>;
-            using container_t   = dg::network_fundamental_vector::fixed_fundamental_vector<event_t, EVENT_COUNT_PER_REGION>;
+            using ptr_arithmetic_t  = typename dg::ptr_info<ptr_t>::max_unsigned_t;
+            using memlock           = dg::network_memlock::Lock<ID, std::integral_constant<size_t, MEMREGION_SZ>, ptr_t>;
+            using container_t       = dg::network_fundamental_vector::fixed_fundamental_vector<event_t, EVENT_COUNT_PER_REGION>;
 
             static inline container_t * events{};
-            static inline const void * first_region{};
-            static inline const void * last_region{}; 
+            static inline ptr_t first_region{};
+            static inline ptr_t last_region{}; 
 
-            static inline auto memregion_id(const void * region) noexcept -> size_t{
+            static auto memregion_id(ptr_t ptr) noexcept -> size_t{
 
-                return reinterpret_cast<uintptr_t>(region) / MEMREGION_SZ;
+                return pointer_cast<ptr_arithmetic_t>(ptr) / static_cast<ptr_arithmetic_t>(MEMREGION_SZ);
             } 
 
         public:
 
-            static_assert(MEMREGION_SZ != 0);
-            static_assert((MEMREGION_SZ & (MEMREGION_SZ - 1 )) == 0)
+            static_assert(dg::memult::is_pow2(MEMREGION_SZ));
             static_assert(EVENT_COUNT_PER_REGION != 0);
 
-            static void init(const void * buf, size_t buf_sz) noexcept{
+            static void init(ptr_t arg_first, ptr_t arg_last){
 
-                auto log_scope = dg::network_log_scope::critical_error_catch("dg::network_mempress::EventContainer::init(const void *, size_t)"); 
+                auto logger = dg::network_log_scope::critical_terminate(); 
 
-                if (reinterpret_cast<uintptr_t>(buf) == 0u || reinterpret_cast<uintptr_t>(buf) % MEMREGION_SZ != 0u || buf_sz == 0u || buf_sz % MEMREGION_SZ != 0u){
-                    throw dg::network_exception::invalid_init();
+                if (pointer_cast<ptr_arithmetic_t>(arg_first) == 0u || pointer_cast<ptr_arithmetic_t>(arg_first) % MEMREGION_SZ != 0u || pointer_cast<ptr_arithmetic_t>(arg_last) == 0u || pointer_cast<ptr_arithmetic_t>(arg_last) % MEMREGION_SZ != 0u){
+                    throw dg::network_exception::invalid_arg();
                 }
 
-                first_region    = buf;
-                last_region     = reinterpret_cast<const char *>(buf) + buf_sz;
-                size_t event_sz = reinterpret_cast<uintptr_t>(last_region) / MEMREGION_SZ;
+                first_region    = arg_first;
+                last_region     = arg_last;
+                size_t event_sz = pointer_cast<ptr_arithmetic_t>(last_region) / static_cast<ptr_arithmetic_t>(MEMREGION_SZ);
                 events          = new container_t[event_sz];
-                log_scope.release();
+                memlock::init(); //
+                logger.release();
             }
 
-            static inline auto first() noexcept -> const void *{
+            static auto first() noexcept -> ptr_t{
 
                 return first_region;
             }
 
-            static inline auto last() noexcept -> const void *{
+            static auto last() noexcept -> ptr_t{
                 
                 return last_region;
             }
     
-            static consteval auto capacity() noexcept -> size_t{
+            static auto capacity() noexcept -> size_t{
 
                 return EVENT_COUNT_PER_REGION;
             }
 
-            static consteval auto memregion_size() noexcept -> size_t{
+            static auto memregion_size() noexcept -> size_t{
 
                 return MEMREGION_SZ;
             } 
 
-            static inline auto try_push(const void * region, event_t * event, size_t event_sz) noexcept -> bool{
+            static auto try_push(ptr_t ptr, event_t * event, size_t event_sz) noexcept -> bool{
 
-                if (!memlock::acquire_try(region)){
-                    return false;
-                }
+                ptr             = safe_access_instance::access(ptr);
+                auto lck_grd    = dg::network_memlock_utility::lock_guard(memlock{}, ptr); //
+                size_t id       = memregion_id(ptr); 
 
-                size_t id   = memregion_id(region); 
-                bool rs     = false;
                 if (events[id].size() + event_sz <= events[id].capacity()){
                     evemts[id].push_back(event, event + event_sz);
-                    rs = true;
+                    return true;
                 }
-                memlock::acquire_release(region);
 
-                return rs;
+                return false;
             } 
 
-            static inline void collect(const void * region, event_t * dst, size_t& event_count, size_t event_cap) noexcept{
+            static void collect(ptr_t region, event_t * dst, size_t& dst_count, size_t dst_cap) noexcept{
 
-                memlock::acquire_wait(region);
-                size_t id       = memregion_id(region);
-                size_t cur_sz   = events[id].size();
-                size_t peek_sz  = std::min(event_cap, cur_sz);
-                size_t rem_sz   = cur_sz - peek_sz;
-                event_count     = peek_sz;
-                std::memcpy(dst, events[id].data() + rem_sz, peek_sz * sizeof(event_t));
+                region                  = safe_access_instance::access(region);
+                auto lck_grd            = dg::network_memlock_utility::lock_guard(memlock{}, region); //
+                size_t id               = memregion_id(region);
+                size_t cur_sz           = events[id].size();
+                size_t peek_sz          = std::min(dst_cap, cur_sz);
+                size_t rem_sz           = cur_sz - peek_sz;
+                const event_t * src     = dg::memult::advance(events[id].data(), rem_sz);
+                dst_count               = peek_sz;
+
+                std::memcpy(dst, src, peek_sz * sizeof(event_t));
                 events[id].resize(rem_sz);
-                memlock::acquire_release(region);
             }
     };
 
-    template <class ID, class T, class Notifier>
-    class LeakyEventContainer{};
+    template <class ID, class Container, class Notifier>
+    class MemPress{};
 
     template <class ID, class T, class T1>
-    class LeakyEventContainer<ID, EventContainerInterface<T>, Notifiable<T1>>: public UnboundedEventContainerInterface<LeakyEventContainer<ID, event::EventContainerInterface<T>, Notifiable<T1>>>{
+    class MemPress<ID, ContainerInterface<T>, Notifiable<T1>>: public MemPressInterface<MemPress<ID, ContainerInterface<T>, Notifiable<T1>>>{
 
         private:
 
-            using base      = event::EventContainerInterface<T>;
-            using notifier  = notifier_interface::Notifiable<T1>;
+            using base      = ContainerInterface<T>;
+            using notifier  = Notifiable<T1>;
 
         public:
             
+            using ptr_t     = typename base::ptr_t;
             using event_t   = typename base::event_t;
 
-            static inline auto first() noexcept -> const void *{
+            static auto first() noexcept -> const void *{
 
                 return base::first();
             }
 
-            static inline auto last() noexcept -> const void *{
+            static auto last() noexcept -> const void *{
 
                 return base::last();
             }
 
-            static inline auto capacity() noexcept -> size_t{
+            static auto capacity() noexcept -> size_t{
 
                 return base::capacity();
             }
 
-            static consteval auto memregion_size() noexcept -> size_t{
+            static auto memregion_size() noexcept -> size_t{
 
                 return base::memregion_size();
             } 
 
-            static inline void push(const void * region, event_t * event, size_t event_sz) noexcept{
+            static void push(ptr_t ptr, event_t * event, size_t event_sz) noexcept{
 
-                while (!base::try_push(region, event, event_sz)){
-                    notifier::notify(region);
+                if (event_sz > capacity()){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+
+                while (!base::try_push(ptr, event, event_sz)){
+                    notifier::notify(region(ptr));
                 }
             } 
 
-            static inline void collect(const void * region, event_t * dst, size_t& event_count, size_t event_cap) noexcept{
+            static void collect(ptr_t region, event_t * dst, size_t& event_count, size_t event_cap) noexcept{
 
                 base::collect(region, dst, event_count, event_cap);
             }
@@ -252,67 +236,48 @@ namespace dg::network_mempress_wrapper{
     struct RetranslatedProducerWrapper{}; 
 
     template <class ID, class T>
-    struct RetranslatedProducerWrapper<ID, UnboundedEventContainerInterface<T>>: dg::network_producer_consumer::DistributedProducerInterface<RangeCollectible<ID, UnboundedEventContainerInterface<T>>>{
+    struct RetranslatedProducerWrapper<ID, MemPressInterface<T>>: dg::network_producer_consumer::DistributedProducerInterface<RetranslatedProducerWrapper<ID, MemPressInterface<T>>>{
 
         private:
 
-            static inline const void ** translation_table{};
-            using base = UnboundedEventContainerInterface<T>; 
+            using self                  = RetranslatedProducerWrapper;
+            using base                  = MemPressInterface<T>; 
+            using ptr_t                 = typename base::ptr_t; 
+            using idx_ptr_t             = typename dg::ptr_info<>::max_unsigned_t; 
+            using safe_access_instance  = dg::network_segcheck_bound::StdAccess<self, idx_ptr_t>;
+
+            static inline ptr_t * translation_table{};
 
         public:
 
             using event_t = typename base::event_t;
 
-            static inline auto range() noexcept -> size_t{
+            static auto range() noexcept -> size_t{
 
-                return std::distance(reinterpret_cast<const char *>(base::first()), reinterpret_cast<const char *>(base::last())) / base::memregion_size();
+                return dg::memult::distance(base::first(), base::last()) / base::memregion_size();
             }
 
-            static void init(const void ** host_memregion, const void ** translated_memregion, size_t sz) noexcept{
+            static void init(ptr_t * original_memregion, ptr_t * translated_memregion, size_t sz){
 
-                auto log_scope      = dg::network_log_scope::critical_error_catch("dg::network_mempress_wrapper::RetranslatedProducerWrapper::init(const void **, const void **, size_t)");
-                translation_table   = new std::add_pointer_t<const void>[range()];
+                auto logger         = dg::network_log_scope::critical_terminate();
+                translation_table   = new ptr_t[range()];
 
                 for (size_t i = 0; i < sz; ++i){
-                    size_t table_idx                = std::distance(reinterpret_cast<const char *>(base::first()), reinterpret_cast<const char *>(host_memregion[i])) / base::memregion_size();
+                    size_t table_idx                = dg::memult::distance(base::first(), original_memregion[i]) / base::memregion_size();
                     translation_table[table_idx]    = translated_memregion[i]; 
                 }
 
-                log_scope.release();
+                safe_access_instance::init(static_cast<idx_ptr_t>(0u), static_cast<idx_ptr_t>(range()));
+                logger.release();
             }
 
-            static inline void get(size_t i, event_t * dst, event_t& dst_sz, size_t dst_cap) noexcept{
+            static void get(size_t i, event_t * dst, event_t& dst_sz, size_t dst_cap) noexcept{
 
-                const void * memregion = translation_table[i];
-                base::collect(memregion, dst, dst_sz, dst_cap);
-            }
-    };
-
-    template <class ID, class T>
-    struct ConsumerWrapper{};
-
-    template <class ID, class T>
-    struct ConsumerWrapper<ID, UnboundedEventContainerInterface<T>>: dg::network_producer_consumer::LimitConsumerInterface<ConsumerWrapper<ID, UnboundedEventContainerInterface<T>>>{
-
-        private:
-
-            using base = UnboundedEventContainerInterface<T>; 
-
-        public:
-
-            // using event_t = typename base::event_t; 
-
-            static inline void push(event_t * events, size_t event_sz) noexcept{
-
-                // T::push(events, event_sz);
-            }
-
-            static consteval capacity() noexcept -> size_t{
-
-                return base::capacity();
+                idx_ptr_t idx_ptr   = safe_access_instance::access(static_cast<idx_ptr_t>(i)); 
+                ptr_t region        = translation_table[idx_ptr];
+                base::collect(region, dst, dst_sz, dst_cap);
             }
     };
-
 };
 
 

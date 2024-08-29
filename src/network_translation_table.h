@@ -56,11 +56,12 @@ namespace dg::network_translation_table_bijective{
 
             static void init(vma_ptr_t * host_region, device_ptr_t * device_region, size_t n){
 
+                auto logger = dg::network_log_scope::critical_error_terminate();
+
                 if (n == 0u){
-                    return;
+                    throw dg::network_exception::invalid_arg();
                 }
 
-                auto logger         = dg::network_log_scope::critical_error_terminate();
                 vma_ptr_t max_ptr   = *std::max_element(host_region, host_region + n);
                 vma_ptr_t last_ptr  = memult::advance(max_ptr, MEMREGION_SZ);
                 size_t table_sz     = pointer_cast<ptr_arithmetic_t>(last_ptr) / MEMREGION_SZ;
@@ -88,7 +89,7 @@ namespace dg::network_translation_table_bijective{
                 if (translation_table[idx] == dg::pointer_limits<device_ptr_t>::null_value()){
                     dg::network_log_stackdump::critical_error(dg::network_exception::SEGFAULT_CSTR);
                     std::abort();
-                } 
+                }
 
                 return memult::advance(translation_table[idx], off);
             }
@@ -101,8 +102,8 @@ namespace dg::network_translation_table_bijective{
 
             static_assert(MEMREGION_SZ != 0u);
             
-            using vma_ptr_t         = VMAPtrType;
-            using device_ptr_t      = DevicePtrType;
+            using vma_ptr_t     = VMAPtrType;
+            using device_ptr_t  = DevicePtrType;
         
         private:
 
@@ -123,11 +124,12 @@ namespace dg::network_translation_table_bijective{
 
             static void init(vma_ptr_t * host_region, device_ptr_t * device_region, size_t n){
 
+                auto logger = dg::network_log_scope::critical_error_terminate();
+
                 if (n == 0u){
-                    return;
+                    throw dg::network_exception::invalid_arg();
                 }
 
-                auto logger         = dg::network_log_scope::critical_error_terminate();
                 vma_ptr_t max_ptr   = *std::max_element(host_region, host_region + n);
                 vma_ptr_t last_ptr  = memult::advance(max_ptr, MEMREGION_SZ);
                 size_t table_sz     = pointer_cast<ptr_arithmetic_t>(last_ptr) / MEMREGION_SZ;

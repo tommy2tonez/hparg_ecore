@@ -2,23 +2,23 @@
 #define __NETWORK_TILE_TLB_H__
 
 namespace dg::network_tile_tlb{
-
+    
     template <class T>
     struct TranslatorInterface{
 
         using vma_ptr_t = typename T::vma_ptr_t; 
 
-        static inline void add(vma_ptr_t dst, vma_ptr_t src) noexcept{
+        static void add(vma_ptr_t dst, vma_ptr_t src) noexcept{ //whether using direct hash_table or using vector_table + retranslation
 
             T::add(dst, src);
         } 
 
-        static inline void remove(vma_ptr_t ptr) noexcept{
+        static void remove(vma_ptr_t ptr) noexcept{
             
             T::remove(ptr);
         }
 
-        static inline auto translate(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+        static auto translate(vma_ptr_t ptr) noexcept -> vma_ptr_t{
 
             return T::translate(ptr);
         } 

@@ -101,7 +101,7 @@ namespace dg::memult{
         return static_cast<T>(static_cast<size_t>(ptr) + sz);
     }
 
-    template <class T, std::enable_if_t<std::is_pointer_v<T>, bool> = true>
+    template <class T, std::enable_if_t<std::is_pointer_v<T>, bool> = true> //
     static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
 
         return ptr + sz;
@@ -117,6 +117,10 @@ namespace dg::memult{
     static constexpr auto is_validptr(PtrType ptr) noexcept -> bool{
 
         return ptr != dg::pointer_limits<PtrType>::null_value();
+    }
+
+    static constexpr auto ptrcmp_aligned(...) noexcept -> int{
+
     }
 }
 

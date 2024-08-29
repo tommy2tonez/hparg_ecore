@@ -1,14 +1,14 @@
-#ifndef __DG_NETWORK_BUFFER_CONTAINER_H__
-#define __DG_NETWORK_BUFFER_CONTAINER_H__
+#ifndef __DG_NETWORK_CONTAINER_FUNDAMENTAL_VECTOR_H__
+#define __DG_NETWORK_CONTAINER_FUNDAMENTAL_VECTOR_H__
 
 #include <type_traits>
 #include <stdint.h>
 #include <stddef.h>
 #include <cstring>
 #include <memory>
-#include "network_memory_utility.h"
+#include "network_memult.h"
 
-namespace dg::network_fundamental_vector{
+namespace dg::network_container::fundamental_vector{
 
     struct init_tag{}; 
 
@@ -28,9 +28,9 @@ namespace dg::network_fundamental_vector{
 
             explicit fixed_fundamental_vector_view(char * buf) noexcept{
                 
-                void * aligned_buf      = dg::memory_utility::align(buf, alignof(size_t));
-                this->arr               = dg::memory_utility::start_lifetime_as_array<ContaineeType>(static_cast<char *>(aligned_buf) + sizeof(size_t), CAPACITY);
-                this->sz                = dg::memory_utility::start_lifetime_as<size_t>(aligned_buf);
+                void * aligned_buf      = dg::memult::align(buf, alignof(size_t));
+                this->arr               = dg::memult::start_lifetime_as_array<ContaineeType>(static_cast<char *>(aligned_buf) + sizeof(size_t), CAPACITY);
+                this->sz                = dg::memult::start_lifetime_as<size_t>(aligned_buf);
             }
 
             explicit fixed_fundamental_vector_view(char * buf, const init_tag) noexcept: fixed_fundamental_vector_view(buf){

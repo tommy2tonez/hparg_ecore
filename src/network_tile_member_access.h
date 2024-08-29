@@ -6,13 +6,13 @@
 #include <limits.h>
 #include <cstring>
 #include "network_segcheck_bound.h"
-#include "network_vma.h"
+#include "network_uma.h"
 #include "network_memult.h"
 
 namespace dg::network_tile_member_access_template{
     
-    using vma_ptr_t = dg::network_vma::vma_ptr_t;
-    static_assert(dg::is_ptr_v<vma_ptr_t>);
+    using uma_ptr_t = dg::network_uma::uma_ptr_t;
+    static_assert(dg::is_ptr_v<uma_ptr_t>);
 
     template <class ...Args>
     struct tags{};
@@ -21,14 +21,14 @@ namespace dg::network_tile_member_access_template{
     struct PtrAccess{
 
         using self  = PtrAccess;
-        using base  = dg::network_segcheck_bound::StdAccess<self, vma_ptr_t>;  
+        using base  = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;  
 
-        static void init(vma_ptr_t buf, size_t buf_sz) noexcept{
+        static void init(uma_ptr_t buf, size_t buf_sz) noexcept{
 
             base::init(buf, memult::forward(buf, buf_sz));
         }
 
-        static constexpr auto access(vma_ptr_t buf) noexcept -> vma_ptr_t{
+        static constexpr auto access(uma_ptr_t buf) noexcept -> uma_ptr_t{
 
             return base::access(buf);
         }
@@ -39,16 +39,16 @@ namespace dg::network_tile_member_access_template{
         
         private:
 
-            static inline vma_ptr_t head{}; 
+            static inline uma_ptr_t head{}; 
 
         protected:
 
-            static inline auto get_head() noexcept -> vma_ptr_t{
+            static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return head;
             } 
 
-            static constexpr auto index(vma_ptr_t ptr) noexcept -> size_t{
+            static constexpr auto index(uma_ptr_t ptr) noexcept -> size_t{
 
                 return memult::distance(head, access(ptr));
             }
@@ -92,10 +92,10 @@ namespace dg::network_tile_member_access_template{
 
             static_assert(sizeof(identity_t) == sizeof(char));
 
-            static void init(vma_ptr_t buf) noexcept{
+            static void init(uma_ptr_t buf) noexcept{
 
                 head = buf;
-                dg::network_vma::memset_synchronous_qualifier_bypass(buf, ID, TILE_COUNT);
+                dg::network_uma::memset_synchronous_alldevice_bypass_qualifier(buf, ID, TILE_COUNT);
                 PtrAccess<ID>::init(buf, TILE_COUNT);
             }
 
@@ -104,47 +104,47 @@ namespace dg::network_tile_member_access_template{
                 return offset_pong_count_addr(TILE_COUNT);
             } 
 
-            static constexpr auto id_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
                 
                 return access(ptr);
             }
 
-            static constexpr auto observing_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto observing_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_observing_addr(index(ptr)));
             }
 
-            static constexpr auto tile_logit_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_tile_logit_addr(index(ptr)));
             }
 
-            static constexpr auto tile_grad_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_tile_grad_addr(index(ptr)));
             }
 
-            static constexpr auto bit_control_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto bit_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_bit_control_addr(index(ptr)));
             }
 
-            static constexpr auto dispatch_control_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_dispatch_control_addr(index(ptr)));
             }
 
-            static constexpr auto pong_count_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_pong_count_addr(index(ptr)));
             }
 
-            static constexpr auto notification_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return tile_logit_addr(ptr);
             }
 
-            static constexpr auto rcu_lock_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto rcu_lock_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return tile_logit_addr(ptr);
             }
@@ -179,17 +179,17 @@ namespace dg::network_tile_member_access_template{
                 return offset_child_grad_ver_id_addr(TILE_COUNT);
             }
 
-            static constexpr auto old_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto old_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_old_addr(index(ptr)));
             }
 
-            static constexpr auto grad_acm_id_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto grad_acm_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_grad_acm_id_addr(index(ptr)));
             } 
 
-            static constexpr auto child_grad_ver_id_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto child_grad_ver_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_child_grad_ver_id_addr(index(ptr)));
             }
@@ -230,19 +230,19 @@ namespace dg::network_tile_member_access_template{
                 return offset_child_addr(TILE_COUNT, std::integral_constant<size_t, 0>{});
             }
 
-            static constexpr auto grad_acm_id_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto grad_acm_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_grad_acm_id_addr(index(ptr)));
             }
 
             template <size_t ACM_IDX>
-            static constexpr auto child_grad_ver_id_addr(vma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> vma_ptr_t{
+            static constexpr auto child_grad_ver_id_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_child_grad_ver_id_addr(index(ptr), std::integral_constant<size_t, ACM_IDX>{}));
             } 
 
             template <size_t ACM_IDX>
-            static constexpr auto child_addr(vma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> vma_ptr_t{
+            static constexpr auto child_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_child_addr(index(ptr), std::integral_constant<size_t, ACM_IDX>{}));
             }
@@ -279,25 +279,25 @@ namespace dg::network_tile_member_access_template{
             }
 
             template <size_t ACM_IDX>
-            static constexpr auto lhs_child_addr(vma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> vma_ptr_t{
+            static constexpr auto lhs_child_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_lhs_child_addr(index(ptr), std::integral_constant<size_t, ACM_IDX>{}));
             }
 
             template <size_t ACM_IDX>
-            static constexpr auto lhs_grad_ver_id_addr(vma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> vma_ptr_t{
+            static constexpr auto lhs_grad_ver_id_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_lhs_grad_ver_id_addr(index(ptr), std::integral_constant<size_t, ACM_IDX>{}));
             }
 
             template <size_t ACM_IDX>   
-            static constexpr auto rhs_child_addr(vma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> vma_ptr_t{
+            static constexpr auto rhs_child_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> uma_ptr_t{
 
                 return child_addr(ptr, std::integral_constant<size_t, ACM_IDX>{})
             }
 
             template <size_t ACM_IDX>   
-            static constexpr auto rhs_grad_ver_id_addr(vma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> vma_ptr_t{
+            static constexpr auto rhs_grad_ver_id_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ACM_IDX>) noexcept -> uma_ptr_t{
 
                 return grad_ver_id_addr(ptr, std::integral_constant<size_t, ACM_IDX>{});
             }
@@ -327,22 +327,22 @@ namespace dg::network_tile_member_access_template{
                 return offset_rhs_grad_ver_id_addr(TILE_COUNT);
             }
 
-            static constexpr auto lhs_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto lhs_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
                 
                 return old_addr(ptr);
             }
 
-            static constexpr auto lhs_grad_ver_id_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto lhs_grad_ver_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return child_grad_ver_id_addr(ptr);
             }
 
-            static constexpr auto rhs_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto rhs_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_rhs_child_addr(index(ptr)));
             }
 
-            static constexpr auto rhs_grad_ver_id_addr(vma_ptr_t ptr) noexcept -> vma_ptr_t{
+            static constexpr auto rhs_grad_ver_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return memult::advance(get_head(), offset_rhs_grad_ver_id_addr(index(ptr)));
             }
@@ -501,13 +501,6 @@ namespace dg::network_tile_member_access{
         id_msgr_16  = 13u
     };
 
-    inline auto tile_id(vma_ptr_t addr) noexcept -> uint8_t{
-
-        uint8_t rs{};
-        dg::network_vma::memcpy_vma_to_device(&rs, HOST_VIRTUAL_DEVICE_ID, addr, sizeof(uint8_t));
-        return rs;
-    } 
-
     using identity_t            = uint8_t;
     using observing_value_t     = std::array<char, 256>; //each stable ptr have maximum 256-byte observable registration (backward reference)
     using bit_control_t         = uint64_t;
@@ -518,19 +511,33 @@ namespace dg::network_tile_member_access{
     using grad_value_8_t        = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint8_t)>; //buggy
     using grad_value_16_t       = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint16_t)>; //buggy
 
-    using leaf_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::leaf_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, std::integral_constant<uint8_t, lookup_id::leaf_8_id>>{}));
-    using mono_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::mono_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<uint8_t, mono_8_id>>{}));
-    using uacm_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::uacm_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, UNORDERED_ACCUM_SZ>, std::integral_constant<uint8_t, uacm_8_id>>{})); 
-    using pacm_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::lacm_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, LINEAR_GROUP_SZ>, std::integral_constant<uint8_t, lacm_8_id>>{})); 
-    using pair_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::pair_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, pair_8_id>>{}));
-    using crit_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::dair_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_8_id>>{}));
-    using msgr_addr_lookup_8_t  = decltype(network_vma_tile_member_access_template::dair_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_8_id>>{}));
+    using leaf_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::leaf_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, std::integral_constant<uint8_t, lookup_id::leaf_8_id>>{}));
+    using mono_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::mono_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<uint8_t, mono_8_id>>{}));
+    using uacm_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::uacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, UNORDERED_ACCUM_SZ>, std::integral_constant<uint8_t, uacm_8_id>>{})); 
+    using pacm_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::lacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, LINEAR_GROUP_SZ>, std::integral_constant<uint8_t, lacm_8_id>>{})); 
+    using pair_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::pair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, pair_8_id>>{}));
+    using crit_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_8_id>>{}));
+    using msgr_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_8_id>>{}));
 
-    using leaf_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::leaf_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, std::integral_constant<uint8_t, leaf_16_id>>{}));  
-    using mono_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::mono_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<uint8_t, mono_16_id>>{}));
-    using uacm_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::uacm_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, UNORDERED_ACCUM_SZ>, std::integral_constant<uint8_t, uacm_16_id>>{}));
-    using lacm_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::lacm_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, LINEAR_GROUP_SZ>, std::integral_constant<uint8_t, lacm_16_id>>{})); 
-    using pair_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::pair_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, pair_16_id>>{}));
-    using crit_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::dair_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_16_id>>{}));
-    using msgr_addr_lookup_16_t = decltype(network_vma_tile_member_access_template::dair_lookup_type(network_vma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_16_id>>{}));
+    using leaf_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::leaf_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, std::integral_constant<uint8_t, leaf_16_id>>{}));  
+    using mono_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::mono_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<uint8_t, mono_16_id>>{}));
+    using uacm_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::uacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, UNORDERED_ACCUM_SZ>, std::integral_constant<uint8_t, uacm_16_id>>{}));
+    using lacm_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::lacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, LINEAR_GROUP_SZ>, std::integral_constant<uint8_t, lacm_16_id>>{})); 
+    using pair_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::pair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, pair_16_id>>{}));
+    using crit_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_16_id>>{}));
+    using msgr_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_16_id>>{}));
+
+    inline auto tile_id(uma_ptr_t addr) noexcept -> uint8_t{
+
+        uint8_t rs{};
+        dg::network_uma::memcpy_uma_to_device(&rs, dg::network_virtual_device::HOST_VIRTUAL_DEVICE_ID, addr, sizeof(uint8_t));
+        return rs;
+    } 
+
+    template <class CallBack>
+    inline void get_accessor(CallBack callback, uma_ptr_t addr) noexcept{
+
+        uint8_t id = tile_id(addr);
+    }
+
 }

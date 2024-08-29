@@ -1,10 +1,10 @@
-#ifndef __NETWORK_EVENT_SUBMITTER_H__
-#define __NETWORK_EVENT_SUBMITTER_H__
+#ifndef __NETWORK_MEMCOMMIT_DISPATCHER_H__
+#define __NETWORK_MEMCOMMIT_DISPATCHER_H__
 
 #include "network_function_concurrent_buffer.h" 
 #include "network_producer_consumer.h"
 
-namespace dg::network_event_consumer{
+namespace dg::network_memcommit_consumer_dispatcher{
 
     using daemon_submittable_t  = void (*)(void (*)(void) noexcept); 
     
@@ -12,14 +12,14 @@ namespace dg::network_event_consumer{
     struct tags{}; 
 
     template <class Producer, class EndUser, class MaxDispatchSize>
-    class Consumer{};
+    class Dispatcher{};
 
     template <class T, class T1, size_t MAX_DISPATCH_SIZE>
-    class Consumer<dg::network_producer_consumer::ProducerInterface<T>, dg::network_producer_consumer::ConsumerInterface<T1>, std::integral_constant<size_t, MAX_DISPATCH_SIZE>>{
+    class Dispatcher<dg::network_producer_consumer::ProducerInterface<T>, dg::network_producer_consumer::ConsumerInterface<T1>, std::integral_constant<size_t, MAX_DISPATCH_SIZE>>{
 
         private:
 
-            using self          = Consumer;
+            using self          = Dispatcher;
             using producer      = dg::network_producer_consumer::ProducerInterface<T>;
             using consumer      = dg::network_producer_consumer::ConsumerInterface<T1>;
             using event_t       = typename producer::event_t;

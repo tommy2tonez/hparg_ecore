@@ -91,7 +91,7 @@ namespace dg::network_producer_consumer{
     };
 
     template <class T>
-    struct DeliveryHandlerInterface{
+    struct DeliveryHandlerSpawnerInterface{
 
         using event_t = typename T::event_t; 
 
@@ -111,7 +111,9 @@ namespace dg::network_producer_consumer{
         }    
     };
 
-    //singleton w.r.t thread
+    //deprecate Singleton prereq
+    //sole interface for handler to do memcommit -> 
+    //singleton w.r.t thread - remove this precond
     template <class ID, class MaxDispatchSize, class Consumer>
     class SingletonDeliveryHandler{}; 
 

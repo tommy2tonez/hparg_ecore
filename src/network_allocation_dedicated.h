@@ -12,7 +12,7 @@
 #include "network_memult.h"
 #include "network_log.h" 
 
-namespace dg::network_function_concurrent_buffer{
+namespace dg::network_allocation_dedicated::buffer{
 
     template <class ID, size_t BUF_SZ>
     struct DedicatedBuffer{
@@ -26,10 +26,10 @@ namespace dg::network_function_concurrent_buffer{
 
             static_assert(BUF_SZ != 0);
 
-            static void init() noexcept{
+            static void init(){
                 
-                auto log_scope = dg::network_log_scope::critical_error_terminate(); 
-                buf = new std::add_pointer_t<void>[dg::network_concurrency::THREAD_COUNT]; 
+                auto log_scope  = dg::network_log_scope::critical_terminate(); 
+                buf             = new std::add_pointer_t<void>[dg::network_concurrency::THREAD_COUNT]; 
 
                 for (size_t i = 0; i < dg::network_concurrency::THREAD_COUNT; ++i){
                     buf[i] = dg::memult::aligned_alloc_cpp(ALIGNMENT_SZ, BUF_SZ);
@@ -48,7 +48,7 @@ namespace dg::network_function_concurrent_buffer{
     struct tag{}; 
 
     template <class FunctionSignature, size_t BUF_SZ>
-    void init(tag<FunctionSignature, BUF_SZ>) noexcept{
+    void init(tag<FunctionSignature, BUF_SZ>){
 
         DedicatedBuffer<FunctionSignature, BUF_SZ>::init();
     }
@@ -69,23 +69,23 @@ namespace dg::network_function_concurrent_buffer{
     }
 }
 
-namespace dg::network_function_concurrent_local_array{
+namespace dg::network_allocation_dedicated::array{
 
     template <class LocalVarSignature, class T, size_t SZ, std::enable_if_t<std::is_fundamental_v<T> && (SZ > 0), bool> = true>
     struct fundamental_tag{};
 
     template <class LocalVarSignature, class T, size_t SZ>
-    void init(fundamental_tag<LocalVarSignature, T, SZ>) noexcept{
+    void init(fundamental_tag<LocalVarSignature, T, SZ>){
 
         constexpr size_t ARRAY_BUF_SZ   = SZ * sizeof(T) + alignof(T); 
-        dg::network_function_concurrent_buffer::init(dg::network_function_concurrent_buffer::tag<LocalVarSignature, ARRAY_BUF_SZ>{});
+        dg::network_allocation_dedicated::buffer::init(dg::network_allocation_dedicated::buffer::tag<LocalVarSignature, ARRAY_BUF_SZ>{});
     }
 
     template <class LocalVarSignature, class T, size_t SZ>
     inline auto get_array(const fundamental_tag<LocalVarSignature, T, SZ>) noexcept -> T *{
         
         constexpr size_t ARRAY_BUF_SZ   = SZ * sizeof(T) + alignof(T); 
-        void * buf                      = dg::network_function_concurrent_buffer::get_buf(dg::network_function_concurrent_buffer::tag<LocalVarSignature, ARRAY_BUF_SZ>{}); 
+        void * buf                      = dg::network_allocation_dedicated::buffer::get_buf(dg::network_allocation_dedicated::buffer::tag<LocalVarSignature, ARRAY_BUF_SZ>{}); 
         void * aligned_buf              = dg::memult::align(buf, std::integral_constant<size_t, alignof(T)>{});
 
         return dg::memult::start_lifetime_as_array<T>(aligned_buf, SZ);
@@ -95,7 +95,7 @@ namespace dg::network_function_concurrent_local_array{
     inline auto get_carray(const fundamental_tag<LocalVarSignature, T, SZ>) noexcept -> T *{
 
         constexpr size_t ARRAY_BUF_SZ   = SZ * sizeof(T) + alignof(T); 
-        void * buf                      = dg::network_function_concurrent_buffer::get_cbuf(dg::network_function_concurrent_buffer::tag<LocalVarSignature, ARRAY_BUF_SZ>{}); 
+        void * buf                      = dg::network_allocation_dedicated::buffer::get_cbuf(dg::network_allocation_dedicated::buffer::tag<LocalVarSignature, ARRAY_BUF_SZ>{}); 
         void * aligned_buf              = dg::memult::align(buf, std::integral_constant<size_t, alignof(T)>{});
 
         return dg::memult::start_lifetime_as_array<T>(aligned_buf, SZ);

@@ -3,16 +3,21 @@
 
 #include "network_log.h"
 
+//change semantics 
 namespace dg::network_memcommit_kernel_handler{
 
     using event_loop_register_t = void (*)(void (*)(void) noexcept); 
     using payload_taxonomy_t    = uint8_t; 
     
     enum payload_taxonomy: payload_taxonomy_t{
-        payload_tile_signal = 0u,
-        payload_tile_inject = 1u,
-        payload_tile_init   = 2u
+        payload_tile_signal         = 0u,
+        payload_tile_inject         = 1u, //inject foreign vma_addr or leaf + crit logit tiles
+        payload_tile_init           = 2u, //addr_init only (light-weight) 
+        payload_tile_fwd_request    = 3u, //might or might not fulfill the request - offload to peers if network stress is high - might be destructive interference for allocation optimizer 
+        payload_tile_bwd_request    = 4u  //might or might not fulfill the request - offload to peers if network stress is high - might be destructive interference for allocation optimizer
     };
+
+    //remove interface - 1hr 
 
     template <class T>
     struct TileControllerInterface{
@@ -132,7 +137,7 @@ namespace dg::network_memcommit_kernel_handler{
     template <class T>
     struct MemoryEventObserverInterface{
 
-        static inline void notify(vma_ptr_t ptr, memory_event_t event) noexcept{
+        static inline void notify(vma_ptr_t ptr, memory_event_t event) noexcept{ //delivery handler - offload to memcommit_dropbox
 
             T::notify(ptr, event);
         }
@@ -209,14 +214,14 @@ namespace dg::network_memcommit_kernel_handler{
 
             static void run() noexcept{
 
-                char * buf = {};
-                size_t buf_sz = {};
-                size_t BUF_CAP = {};
+                char * buf      = {};
+                size_t buf_sz   = {};
+                size_t BUF_CAP  = {};
 
                 kernel_producer::get(buf, buf_sz, BUF_CAP);
 
                 if (!kernel_payload_deserializer::is_correct_format(buf, buf_sz)){
-                    dg::network_log_stackdump::error_optional_fast("unrecognized network serialization format");
+                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::UNRECOGNIZED_KERNEL_PAYLOAD_SERIALIZATION_FORMAT);
                     return;
                 }
    

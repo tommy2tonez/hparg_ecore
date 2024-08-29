@@ -2,6 +2,8 @@
 #define __NETWORK_SEGCHECK_BOUND_H__
 
 #include "network_log.h" 
+#include "network_exception.h"
+#include "network_memult.h"
 
 namespace dg::network_segcheck_bound{
 
@@ -55,7 +57,7 @@ namespace dg::network_segcheck_bound{
             static inline auto access(ptr_t ptr) noexcept -> ptr_t{
                 
                 if (memult::ptrcmp_aligned(ptr, first) < 0 || memult::ptrcmp_aligned(ptr, last) >= 0){
-                    dg::network_log_stackdump::critical_error(dg::network_exception::CORE_SEGFAULT_CSTR);
+                    dg::network_log_stackdump::critical_error(dg::network_exception::SEGFAULT_CSTR);
                     std::abort();
                 }
 

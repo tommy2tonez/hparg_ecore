@@ -24,27 +24,27 @@ namespace dg::network_memlock{
         using ptr_t         = typename T::ptr_t;
         static_assert(dg::is_pointer_v<ptr_t>); 
 
-        static inline auto acquire_try(ptr_t ptr) noexcept -> bool{
+        static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
             return T::acquire_try(ptr);
         }
 
-        static inline auto acquire_wait(ptr_t ptr) noexcept{
+        static auto acquire_wait(ptr_t ptr) noexcept{
 
             T::acquire_wait(ptr);
         } 
 
-        static inline void acquire_release(ptr_t ptr) noexcept{
+        static void acquire_release(ptr_t ptr) noexcept{
 
             T::acquire_release(ptr);
         }
 
-        static inline auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+        static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
             return T::transfer_try(new_ptr, old_ptr);
         } 
 
-        static inline void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+        static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
             T::acquire_transfer_wait(new_ptr, old_ptr);
         }
@@ -57,27 +57,27 @@ namespace dg::network_memlock{
         using ptr_t         = typename T::ptr_t;
         static_assert(dg::is_pointer_v<ptr_t>); 
 
-        static inline auto reference_try(ptr_t ptr) noexcept -> bool{
+        static auto reference_try(ptr_t ptr) noexcept -> bool{
 
             return T::reference_try(ptr);
         }
 
-        static inline void reference_wait(ptr_t ptr) noexcept {
+        static void reference_wait(ptr_t ptr) noexcept {
 
             T::reference_wait(ptr);
         } 
 
-        static inline void reference_release(ptr_t ptr) noexcept{
+        static void reference_release(ptr_t ptr) noexcept{
 
             T::reference_release(ptr);
         }
 
-        static inline auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+        static auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
             return T::reference_transfer_try(new_ptr, old_ptr);
         } 
 
-        static inline void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+        static void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
             T::reference_transfer_wait(new_ptr, old_ptr);
         }
@@ -89,7 +89,7 @@ namespace dg::network_memlock{
         using interface_t   = MemoryReferenceLockInterface<T>;
         using ptr_t         = typename T::ptr_t;
 
-        static inline auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+        static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
             
             return T::transfer_try(new_ptr, old_ptr);
         }
@@ -102,27 +102,27 @@ namespace dg::network_memlock{
         using ptr_t         = typename T::ptr_t;
         static_assert(dg::is_pointer_v<ptr_t>); 
 
-        static inline auto acquire_try(ptr_t * ptr) noexcept -> bool{
+        static auto acquire_try(ptr_t * ptr) noexcept -> bool{
 
             return T::acquire_try(ptr);
         }
 
-        static inline void acquire_wait(ptr_t * ptr) noexcept{
+        static void acquire_wait(ptr_t * ptr) noexcept{
 
             T::acquire_wait(ptr);
         } 
 
-        static inline void acquire_release(ptr_t * ptr) noexcept{
+        static void acquire_release(ptr_t * ptr) noexcept{
 
             T::acquire_release(ptr);
         }
 
-        static inline auto acquire_transfer_try(ptr_t * new_ptr, ptr_t * old_ptr) noexcept -> bool{
+        static auto acquire_transfer_try(ptr_t * new_ptr, ptr_t * old_ptr) noexcept -> bool{
 
             return T::transfer_try(new_ptr, old_ptr);
         } 
 
-        static inline void acquire_transfer_wait(ptr_t * new_ptr, ptr_t * old_ptr) noexcept{
+        static void acquire_transfer_wait(ptr_t * new_ptr, ptr_t * old_ptr) noexcept{
 
             T::acquire_transfer_wait(new_ptr, old_ptr);
         }
@@ -135,27 +135,27 @@ namespace dg::network_memlock{
         using ptr_t         = typename T::ptr_t;
         static_assert(dg::is_pointer_v<ptr_t>); 
 
-        static inline auto reference_try(ptr_t * ptr) noexcept -> bool{
+        static auto reference_try(ptr_t * ptr) noexcept -> bool{
 
             return T::reference_try(ptr);
         }
 
-        static inline void reference_wait(ptr_t * ptr) noexcept {
+        static void reference_wait(ptr_t * ptr) noexcept {
 
             T::reference_wait(ptr);
         } 
 
-        static inline void reference_release(ptr_t * ptr) noexcept{
+        static void reference_release(ptr_t * ptr) noexcept{
 
             T::reference_release(ptr);
         }
 
-        static inline auto reference_transfer_try(ptr_t * new_ptr, ptr_t * old_ptr) noexcept -> bool{
+        static auto reference_transfer_try(ptr_t * new_ptr, ptr_t * old_ptr) noexcept -> bool{
 
             return T::reference_transfer_try(new_ptr, old_ptr);
         } 
 
-        static inline void reference_transfer_wait(ptr_t * new_ptr, ptr_t * old_ptr) noexcept{
+        static void reference_transfer_wait(ptr_t * new_ptr, ptr_t * old_ptr) noexcept{
 
             T::reference_transfer_wait(new_ptr, old_ptr);
         }
@@ -184,27 +184,27 @@ namespace dg::network_memlock_host{
 
             static inline std::atomic_flag * lck_table{};
             
-            static inline auto memregion_slot(ptr_t ptr) noexcept -> size_t{
+            static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
                 return pointer_cast<typename dg::ptr_info<ptr_t>::max_unsigned_t>(ptr) / MEMREGION_SZ;
             }
 
-            static inline auto to_table_idx(ptr_t ptr) noexcept -> size_t{
+            static auto to_table_idx(ptr_t ptr) noexcept -> size_t{
 
                 return memregion_slot(segcheck_ins::access(ptr));
             } 
 
-            static inline auto internal_acquire_try(size_t table_idx) noexcept -> bool{
+            static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
                 return lck_table[table_idx].test_and_set(std::memory_order_acq_rel);
             }
 
-            static inline void internal_acquire_wait(size_t table_idx) noexcept{
+            static void internal_acquire_wait(size_t table_idx) noexcept{
 
                 while (!internal_acquire_try(table_idx)){}
             }
 
-            static inline void internal_acquire_release(size_t table_idx) noexcept{
+            static void internal_acquire_release(size_t table_idx) noexcept{
 
                 lck_table[table_idx].clear(std::memory_order_acq_rel);
             }
@@ -225,27 +225,27 @@ namespace dg::network_memlock_host{
                 log_scope.release();
             } 
 
-            static inline auto acquire_try(ptr_t ptr) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
                 
                 return internal_acquire_try(to_table_idx(ptr));
             }
 
-            static inline void acquire_wait(ptr_t ptr) noexcept{
+            static void acquire_wait(ptr_t ptr) noexcept{
 
                 internal_acquire_wait(to_table_idx(ptr));
             } 
 
-            static inline void acquire_release(ptr_t ptr) noexcept{
+            static void acquire_release(ptr_t ptr) noexcept{
 
                 internal_acquire_release(to_table_idx(ptr));
             }
 
-            static inline auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
             } 
 
-            static inline void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+            static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
                 if (acquire_transfer_try(new_ptr, old_ptr)){
                     return;
@@ -273,12 +273,12 @@ namespace dg::network_memlock_host{
 
             static inline std::mutex * lck_table{};
         
-            static inline auto memregion_slot(ptr_t ptr) noexcept -> size_t{
+            static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
                 return pointer_cast<typename dg::ptr_info<ptr_t>::max_unsigned_t>(ptr) / MEMREGION_SZ;
             }
 
-            static inline auto to_table_idx(ptr_t ptr) noexcept -> size_t{
+            static auto to_table_idx(ptr_t ptr) noexcept -> size_t{
 
                 return memregion_slot(segcheck_ins::access(ptr));
             }
@@ -299,27 +299,27 @@ namespace dg::network_memlock_host{
                 log_scope.release();
             }
 
-            static inline auto acquire_try(ptr_t ptr) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return lck_table[to_table_idx(ptr)].try_lock();
             }
 
-            static inline void acquire_wait(ptr_t ptr) noexcept{
+            static void acquire_wait(ptr_t ptr) noexcept{
 
                 lck_table[to_table_idx(ptr)].lock();
             } 
 
-            static inline void acquire_release(ptr_t ptr) noexcept{
+            static void acquire_release(ptr_t ptr) noexcept{
 
                 lck_table[to_table_idx(ptr)].unlock();
             }
 
-            static inline auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
             }
 
-            static inline void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+            static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
                 if (acquire_transfer_try(new_ptr, old_ptr)){
                     return;
@@ -353,32 +353,32 @@ namespace dg::network_memlock_host{
             static inline atomic_lock_t MEMREGION_EMP_STATE = 0u;
             static inline atomic_lock_t MEMREGION_ACQ_STATE = ~PAGE_EMP_STATE;
 
-            static inline auto memregion_slot(ptr_t ptr) noexcept -> size_t{
+            static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
                 return pointer_cast<typename dg::ptr_info<ptr_t>::max_unsigned_t>(ptr) / MEMREGION_SZ;
             }
 
-            static inline auto to_table_idx(ptr_t ptr) noexcept -> size_t{
+            static auto to_table_idx(ptr_t ptr) noexcept -> size_t{
 
                 return memregion_slot(segcheck_ins::access(ptr));
             } 
 
-            static inline auto internal_acquire_try(size_t table_idx) noexcept -> bool{
+            static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
                 return lck_table[table_idx].compare_exchange_weak(MEMREGION_EMP_STATE, MEMREGION_ACQ_STATE, std::memory_order_acq_rel);
             } 
 
-            static inline void internal_acquire_wait(size_t table_idx) noexcept{
+            static void internal_acquire_wait(size_t table_idx) noexcept{
 
                 while (!acquire_try(table_idx)){}
             }
 
-            static inline void internal_acquire_release(size_t table_idx) noexcept{
+            static void internal_acquire_release(size_t table_idx) noexcept{
 
                 lck_table[table_idx].exchange(MEMREGION_EMP_STATE, std::memory_order_acq_rel);
             }
 
-            static inline auto internal_reference_try(size_t table_idx) noexcept -> bool{
+            static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
                 atomic_lock_t cur_state  = lck_table[table_idx].load(std::memory_order_acquire);
 
@@ -390,12 +390,12 @@ namespace dg::network_memlock_host{
                 return lck_table[table_idx].compare_exchange_weak(cur_state, nxt_state, std::memory_order_acq_rel);
             }
 
-            static inline void internal_reference_wait(size_t table_idx) noexcept{
+            static void internal_reference_wait(size_t table_idx) noexcept{
 
                 while (!reference_try(table_idx)){}
             }
 
-            static inline void internal_reference_release(size_t table_idx) noexcept{
+            static void internal_reference_release(size_t table_idx) noexcept{
                 
                 lck_table[table_idx].fetch_sub(1, std::memory_order_acq_rel);
             }
@@ -421,32 +421,32 @@ namespace dg::network_memlock_host{
                 log_scope.release();
             }
 
-            static inline auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
             }
 
-            static inline auto acquire_try(ptr_t ptr) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_acquire_try(to_table_idx(ptr));
             }
 
-            static inline void acquire_wait(ptr_t ptr) noexcept{
+            static void acquire_wait(ptr_t ptr) noexcept{
 
                 internal_acquire_wait(to_table_idx(ptr));
             }
 
-            static inline void acquire_release(ptr_t ptr) noexcept{
+            static void acquire_release(ptr_t ptr) noexcept{
 
                 internal_acquire_release(to_table_idx(ptr));
             }
 
-            static inline auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return transfer_try(new_ptr, old_ptr);
             } 
 
-            static inline void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+            static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
                 if (acquire_transfer_try(new_ptr, old_ptr)){
                     return;
@@ -456,27 +456,27 @@ namespace dg::network_memlock_host{
                 acquire_wait(new_ptr);
             }
 
-            static inline auto reference_try(ptr_t ptr) noexcept -> bool{
+            static auto reference_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_reference_try(to_table_idx(ptr));
             }
 
-            static inline void reference_wait(ptr_t ptr) noexcept{
+            static void reference_wait(ptr_t ptr) noexcept{
 
                 internal_reference_wait(to_table_idx(ptr));
             } 
 
-            static inline void reference_release(ptr_t ptr) noexcept{
+            static void reference_release(ptr_t ptr) noexcept{
 
                 internal_reference_release(to_table_idx(ptr));
             }
 
-            static inline auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return transfer_try(new_ptr, old_ptr);
             } 
 
-            static inline void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+            static void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
                 if (reference_transfer_try(new_ptr, old_ptr)){
                     return;
@@ -503,8 +503,8 @@ namespace dg::network_memlock_host{
             using self          = MtxReferenceLock;
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;
 
-            static inline constexpr refcount_t REFERENCE_EMPTY_STATE    = 0u;
-            static inline constexpr refcount_t REFERENCE_ACQUIRED_STATE = ~REFERENCE_EMPTY_STATE;
+            static constexpr inline refcount_t REFERENCE_EMPTY_STATE    = 0u;
+            static constexpr inline refcount_t REFERENCE_ACQUIRED_STATE = ~REFERENCE_EMPTY_STATE;
 
             struct LockUnit{
                 std::mutex lck;
@@ -513,17 +513,17 @@ namespace dg::network_memlock_host{
 
             static inline LockUnit * lck_table{};
 
-            static inline auto memregion_slot(ptr_t ptr) noexcept -> size_t{
+            static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
                 return pointer_cast<typename dg::ptr_info<ptr_t>::max_unsigned_t>(ptr) / MEMREGION_SZ;
             }
 
-            static inline auto to_table_idx(ptr_t ptr) noexcept -> size_t{
+            static auto to_table_idx(ptr_t ptr) noexcept -> size_t{
 
                 return memregion_slot(segcheck_ins::access(ptr));
             } 
 
-            static inline auto internal_acquire_try(size_t table_idx) noexcept -> bool{
+            static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
                 std::lock_guard<std::mutex> lck_grd{lck_table[table_idx].lck};
                 
@@ -535,18 +535,18 @@ namespace dg::network_memlock_host{
                 return true;
             }
 
-            static inline auto internal_acquire_wait(size_t table_idx) noexcept{
+            static auto internal_acquire_wait(size_t table_idx) noexcept{
 
                 while (!internal_acquire_try(table_idx)){}
             }
 
-            static inline auto internal_acquire_release(size_t table_idx) noexcept{
+            static auto internal_acquire_release(size_t table_idx) noexcept{
 
                 std::lock_guard<std::mutex> lck_grd{lck_table[table_idx].lck};
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_STATE;
             }
 
-            static inline auto internal_reference_try(size_t table_idx) noexcept -> bool{
+            static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
                 std::lock_guard<std::mutex> lck_grd{lck_table[table_idx].lck};
                 
@@ -558,12 +558,12 @@ namespace dg::network_memlock_host{
                 return true;
             }
 
-            static inline auto internal_reference_wait(size_t table_idx) noexcept{
+            static auto internal_reference_wait(size_t table_idx) noexcept{
 
                 while (!internal_reference_try(table_idx)){}
             }
 
-            static inline auto internal_reference_release(size_t table_idx) noexcept{
+            static auto internal_reference_release(size_t table_idx) noexcept{
 
                 std::lock_guard<std::mutex> lck_grd{lck_table[table_idx].lck};
                 --lck_table[table_idx].refcount;
@@ -586,32 +586,32 @@ namespace dg::network_memlock_host{
                 log_scope.release();
             } 
 
-            static inline auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
                 
                 return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
             }
 
-            static inline auto acquire_try(ptr_t ptr) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_acquire_try(to_table_idx(ptr));
             }
 
-            static inline auto acquire_wait(ptr_t ptr) noexcept{
+            static auto acquire_wait(ptr_t ptr) noexcept{
 
                 internal_acquire_wait(to_table_idx(ptr));
             } 
 
-            static inline void acquire_release(ptr_t ptr) noexcept{
+            static void acquire_release(ptr_t ptr) noexcept{
 
                 internal_acquire_release(to_table_idx(ptr));
             }
 
-            static inline auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return transfer_try(new_ptr, old_ptr);
             } 
 
-            static inline void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+            static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
                 if (acquire_transfer_try(new_ptr, old_ptr)){
                     return;
@@ -621,27 +621,27 @@ namespace dg::network_memlock_host{
                 acquire_wait(new_ptr);
             }
 
-            static inline auto reference_try(ptr_t ptr) noexcept -> bool{
+            static auto reference_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_reference_try(to_table_idx(ptr));
             }
 
-            static inline void reference_wait(ptr_t ptr) noexcept{
+            static void reference_wait(ptr_t ptr) noexcept{
 
                 internal_reference_wait(to_table_idx(ptr));
             } 
 
-            static inline void reference_release(ptr_t ptr) noexcept{
+            static void reference_release(ptr_t ptr) noexcept{
 
                 internal_reference_release(to_table_idx(ptr));
             }
 
-            static inline auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+            static auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
                 return transfer_try(new_ptr, old_ptr);
             }
 
-            static inline void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+            static void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
                 if (reference_transfer_try(new_ptr, old_ptr)){
                     return;
@@ -661,7 +661,7 @@ namespace dg::network_memlock_host{
         using base  = MemoryLockInterface<T>;
         using ptr_t = typename base::ptr_t;
 
-        static inline auto acquire_try(ptr_t * ptr) noexcept -> bool{
+        static auto acquire_try(ptr_t * ptr) noexcept -> bool{
 
             std::array<ptr_t, MAX_ARG_SIZE> acquired_arr{};
             ptr_t * last = acquired_arr.data();
@@ -685,12 +685,12 @@ namespace dg::network_memlock_host{
             return false;
         }
 
-        static inline void acquire_wait(ptr_t * ptr) noexcept{
+        static void acquire_wait(ptr_t * ptr) noexcept{
 
             while (!acquire_try_many(ptr)){};
         }
 
-        static inline void acquire_release(ptr_t * ptr) noexcept{
+        static void acquire_release(ptr_t * ptr) noexcept{
 
             while (static_cast<bool>(*ptr)){
                 base::acquire_release(*ptr);
@@ -698,7 +698,7 @@ namespace dg::network_memlock_host{
             }
         } 
 
-        static inline auto acquire_transfer_try(ptr_t * dst, ptr_t * src) noexcept -> bool{
+        static auto acquire_transfer_try(ptr_t * dst, ptr_t * src) noexcept -> bool{
             
             while (static_cast<bool>(*dst)){
                 if (!base::transfer_try(*dst, *src)){
@@ -712,7 +712,7 @@ namespace dg::network_memlock_host{
             return true;
         }
 
-        static inline void acquire_transfer_wait(ptr_t * dst, ptr_t * src) noexcept{
+        static void acquire_transfer_wait(ptr_t * dst, ptr_t * src) noexcept{
 
             if (transfer_try_many(dst, src)){
                 return;
@@ -732,7 +732,7 @@ namespace dg::network_memlock_host{
         using base  = MemoryReferenceInterface<T>;
         using ptr_t = typename base::ptr_t;
         
-        static inline auto reference_try(ptr_t * ptr) noexcept -> bool{
+        static auto reference_try(ptr_t * ptr) noexcept -> bool{
 
             std::array<ptr_t, MAX_ARG_SIZE> acquired_arr{};
             ptr_t * last = acquired_arr.data();
@@ -756,12 +756,12 @@ namespace dg::network_memlock_host{
             return false;
         }
 
-        static inline void reference_wait(ptr_t * ptr) noexcept{
+        static void reference_wait(ptr_t * ptr) noexcept{
 
             while (!reference_try_many(ptr)){}
         }
 
-        static inline void reference_release(ptr_t * ptr) noexcept{
+        static void reference_release(ptr_t * ptr) noexcept{
 
             while (static_cast<bool>(*ptr)){
                 base::reference_release(*ptr);
@@ -769,7 +769,7 @@ namespace dg::network_memlock_host{
             }
         }
 
-        static inline auto reference_transfer_try(ptr_t * dst, ptr_t * src) noexcept -> bool{
+        static auto reference_transfer_try(ptr_t * dst, ptr_t * src) noexcept -> bool{
             
             while (static_cast<bool>(*dst)){
                 if (!base::transfer_try(*dst, *src)){
@@ -783,7 +783,7 @@ namespace dg::network_memlock_host{
             return true;
         }
 
-        static inline void reference_transfer_wait(ptr_t * dst, ptr_t * src) noexcept{
+        static void reference_transfer_wait(ptr_t * dst, ptr_t * src) noexcept{
 
             if (reference_transfer_try(dst, src)){
                 return;
@@ -794,7 +794,6 @@ namespace dg::network_memlock_host{
         }
     };
 
-    
     static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true; 
     
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
@@ -809,5 +808,20 @@ namespace dg::network_memlock_host{
                                              MtxReferenceLock<ID, MemRegionSize, PtrT>>;
 
 } 
+
+namespace dg::network_memlock_utility{
+
+    template <class T, class ptr_t>
+    auto lock_guard(const dg::network_memlock::MemoryLockInterface<T>, ptr_t ptr){
+
+        static int i    = 0;
+        auto destructor = [=](int *) noexcept{
+            dg::network_memlock::MemoryLockInterface<T>::acquire_release(ptr);
+        };
+
+        dg::network_memlock::MemoryLockInterface<T>::acquire_wait(ptr);
+        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+    }
+}
 
 #endif 

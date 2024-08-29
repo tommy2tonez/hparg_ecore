@@ -1,5 +1,5 @@
-#ifndef __NETWORK_EVENT_COLLECTOR_H__
-#define __NETWORK_EVENT_COLLECTOR_H__
+#ifndef __NETWORK_MEMPRESS_COLLECTOR_H__
+#define __NETWORK_MEMPRESS_COLLECTOR_H__
 
 #include <stddef.h>
 #include <stdint.h>
@@ -8,7 +8,7 @@
 #include <ratio>
 #include "network_producer_consumer.h"
 
-namespace dg::network_event_collector{
+namespace dg::network_mempress_collector{
 
     using epoch_milli_t                 = size_t;  
     using event_loop_register_t         = void (*)(void (*)(void) noexcept); 

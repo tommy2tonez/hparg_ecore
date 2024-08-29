@@ -1,11 +1,11 @@
-#ifndef __NETWORK_BITSET_H__
-#define __NETWORK_BITSET_H__
+#ifndef __NETWORK_CONTAINER_UNSIGNED_BITSET_H__
+#define __NETWORK_CONTAINER_UNSIGNED_BITSET_H__
 
 #include <stdlib.h>
 #include <stdint.h>
 #include <limits.h>
 
-namespace dg::network_unsigned_bitset{
+namespace dg::network_container::unsigned_bitset{
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr auto true_toggle(size_t idx) noexcept -> T{
