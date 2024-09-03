@@ -1,5 +1,3 @@
-//mono_layout   = <identity_addr, observing_addr, tile_logit_value, tile_grad_value, bit_control, version_control> - union 
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <array>
@@ -8,6 +6,8 @@
 #include "network_segcheck_bound.h"
 #include "network_uma.h"
 #include "network_memult.h"
+#include "network_exception_handler.h"
+#include "network_memops_uma.h"
 
 namespace dg::network_tile_member_access_template{
     
@@ -483,61 +483,514 @@ namespace dg::network_tile_member_access{
     static inline constexpr size_t LOGIT_COUNT_PER_TILE     = size_t{1} << 10;
     static inline constexpr size_t UNORDERED_ACCUM_SZ       = size_t{1} << 5;
     static inline constexpr size_t LINEAR_GROUP_SZ          = size_t{1} << 5;
+    using tile_polymorphic_t = uint8_t; 
 
-    enum lookup_id: uint8_t{
-        id_leaf_8   = 0u,
-        id_leaf_16  = 1u,
-        id_mono_8   = 2u,
-        id_mono_16  = 3u,
-        id_uacm_8   = 4u,
-        id_uacm_16  = 5u,
-        id_pacm_8   = 6u,
-        id_pacm_16  = 7u,
-        id_pair_8   = 8u,
-        id_pair_16  = 9u,
-        id_crit_8   = 10u,
-        id_crit_16  = 11u,
-        id_msgr_8   = 12u,
-        id_msgr_16  = 13u
+    enum object_identifier_option: tile_polymorphic_t{
+        id_leaf_8       = 0u,
+        id_leaf_16      = 1u,
+        id_leaf_32      = 2u,
+        id_mono_8       = 3u,
+        id_mono_16      = 4u,
+        id_mono_32      = 5u,
+        id_uacm_8       = 6u,
+        id_uacm_16      = 7u,
+        id_uacm_32      = 8u,
+        id_pacm_8       = 9u,
+        id_pacm_16      = 10u,
+        id_pacm_32      = 11u,
+        id_pair_8       = 12u,
+        id_pair_16      = 13u,
+        id_pair_32      = 14u,
+        id_crit_8       = 15u,
+        id_crit_16      = 16u,
+        id_crit_32      = 17u,
+        id_msgrfwd_8    = 18u,
+        id_msgrfwd_16   = 19u,
+        id_msgrfwd_32   = 20u,
+        id_msgrbwd_8    = 21u,
+        id_msgrbwd_16   = 22u,
+        id_msgrbwd_32   = 23u
     };
 
-    using identity_t            = uint8_t;
-    using observing_value_t     = std::array<char, 256>; //each stable ptr have maximum 256-byte observable registration (backward reference)
-    using bit_control_t         = uint64_t;
-    using addr_t                = uint64_t; 
+    using identity_t                = uint8_t;
+    using observing_value_t         = std::array<char, 256>; //each stable ptr have maximum 256-byte observable registration (backward reference)
+    using bit_control_t             = uint64_t;
+    using addr_t                    = uint64_t; 
 
-    using logit_value_8_t       = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint8_t)>; //buggy
-    using logit_value_16_t      = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint16_t)>; //buggy
-    using grad_value_8_t        = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint8_t)>; //buggy
-    using grad_value_16_t       = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint16_t)>; //buggy
+    using logit_value_8_t           = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint8_t)>; //buggy
+    using logit_value_16_t          = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint16_t)>; //buggy
+    using grad_value_8_t            = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint8_t)>; //buggy
+    using grad_value_16_t           = std::array<char, LOGIT_COUNT_PER_TILE * sizeof(uint16_t)>; //buggy
 
-    using leaf_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::leaf_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, std::integral_constant<uint8_t, lookup_id::leaf_8_id>>{}));
-    using mono_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::mono_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<uint8_t, mono_8_id>>{}));
-    using uacm_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::uacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, UNORDERED_ACCUM_SZ>, std::integral_constant<uint8_t, uacm_8_id>>{})); 
-    using pacm_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::lacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, LINEAR_GROUP_SZ>, std::integral_constant<uint8_t, lacm_8_id>>{})); 
-    using pair_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::pair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, pair_8_id>>{}));
-    using crit_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_8_id>>{}));
-    using msgr_addr_lookup_8_t  = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_8_t, grad_value_8_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_8_id>>{}));
+    using leaf8_accessor_t          = void *;
+    using leaf16_accessor_t         = void *;
+    using leaf32_accessor_t         = void *;
+    using mono8_accessor_t          = void *;
+    using mono16_accessor_t         = void *;
+    using mono32_accessor_t         = void *;
+    using pair8_accessor_t          = void *;
+    using pair16_accessor_t         = void *;
+    using pair32_accessor_t         = void *;
+    using uacm8_accesor_t           = void *;
+    using uacm16_accessor_t         = void *;
+    using uacm32_accessor_t         = void *;
+    using pacm8_accessor_t          = void *;
+    using pacm16_accessor_t         = void *;
+    using pacm32_accesor_t          = void *;
+    using crit8_accessor_t          = void *;
+    using crit16_accessor_t         = void *;
+    using crit32_accessor_t         = void *;
+    using msgrfwd8_accessor_t       = void *;
+    using msgrfwd16_accessor_t      = void *;
+    using msgrfwd32_accessor_t      = void *;
+    using msgrbwd8_accessor_t       = void *;
+    using msgrbwd16_accessor_t      = void *;
+    using msgrbwd32_accessor_t      = void *;
 
-    using leaf_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::leaf_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, std::integral_constant<uint8_t, leaf_16_id>>{}));  
-    using mono_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::mono_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<uint8_t, mono_16_id>>{}));
-    using uacm_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::uacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, UNORDERED_ACCUM_SZ>, std::integral_constant<uint8_t, uacm_16_id>>{}));
-    using lacm_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::lacm_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, std::integral_constant<size_t, LINEAR_GROUP_SZ>, std::integral_constant<uint8_t, lacm_16_id>>{})); 
-    using pair_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::pair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, pair_16_id>>{}));
-    using crit_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_16_id>>{}));
-    using msgr_addr_lookup_16_t = decltype(network_uma_tile_member_access_template::dair_lookup_type(network_uma_tile_member_access_template::empty_tuple<std::integral_constant<size_t, BUF_SZ>, std::integral_constant<size_t, PADDING_SZ>, std::integral_constant<size_t, ALIGNMENT_SZ>, identity_t, logit_value_16_t, grad_value_16_t, observing_value_t, bit_control_t, addr_t, addr_t, std::integral_constant<uint8_t, dair_16_id>>{}));
+    auto is_leaf_tile(tile_polymorphic_t id) noexcept -> bool{
 
-    inline auto tile_id(uma_ptr_t addr) noexcept -> uint8_t{
+        return (id == id_leaf_8) || (id == id_leaf_16) || (id == id_leaf_32);
+    }
 
-        uint8_t rs{};
-        dg::network_uma::memcpy_uma_to_device(&rs, dg::network_virtual_device::HOST_VIRTUAL_DEVICE_ID, addr, sizeof(uint8_t));
-        return rs;
+    auto is_mono_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_mono_8) || (id == id_mono_16) || (id == id_mono_32);
+    }
+
+    auto is_pair_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_pair_8) || (id == id_pair_16) || (id == id_pair_32);
+    }
+
+    auto is_uacm_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_uacm_8) || (id == id_uacm_16) || (id == id_uacm_32);
+    } 
+
+    auto is_pacm_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_pacm_8) || (id == id_pacm_16) || (id == id_pacm_32);
+    }
+
+    auto is_crit_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_crit_8) || (id == id_crit_16) || (id == id_crit_32);
+    }
+
+    auto is_msgrfwd_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_msgrfwd_8) || (id == id_msgrfwd_16) || (id == id_msgrfwd_32);
+    }
+
+    auto is_msgrbwd_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return (id == id_msgrbwd_8) || (id == id_msgrbwd_16) || (id == id_msgrbwd_32);
+    }
+
+    auto is_leaf8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_leaf_8;
+    }
+
+    auto is_mono8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_mono_8;
+    }
+
+    auto is_pair8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_pair_8;
+    }
+
+    auto is_uacm8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_uacm_8;
+    }
+
+    auto is_pacm8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_pacm_8;
+    }
+
+    auto is_crit8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_crit_8;
+    }
+
+    auto is_msgrfwd8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_msgrfwd_8;
+    }
+
+    auto is_msgrbwd8_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_msgrbwd_8;
+    } 
+
+    auto is_leaf16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_leaf_16;
+    }
+
+    auto is_mono16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_mono_16;
+    }
+
+    auto is_pair16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_pair_16;
+    }
+
+    auto is_uacm16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_uacm_16;
+    }
+
+    auto is_pacm16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_pacm_16;
+    }
+
+    auto is_crit16_tile(tile_polymorphic_t id) noexcept -> bool{
+        
+        return id == id_crit_16;
+    }
+
+    auto is_msgrfwd16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_msgrfwd_16;
+    }
+
+    auto is_msgrbwd16_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_msgrbwd_16;
+    }
+
+    auto is_leaf32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_leaf_32;
+    }
+
+    auto is_mono32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_mono_32;
+    }
+
+    auto is_pair32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_pair_32;
+    }
+
+    auto is_uacm32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_uacm_32;
+    }
+
+    auto is_pacm32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_pacm_32;
+    }
+
+    auto is_crit32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_crit_32;
+    }
+
+    auto is_msgrfwd32_tile(tile_polymorphic_t id) noexcept -> bool{
+
+        return id == id_msgrfwd_32;
+    }
+
+    auto is_msgrbwd32_tile(tile_polymorphic_t id) noexcept -> bool{
+        
+        return id == id_msgrbwd_32;
+    }
+
+    auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_t{
+
+        tile_polymorphic_t id{};
+        void * dst      = &id;
+        uma_ptr_t src   = ptr;
+        dg::network_memops_umax::memcpy_uma_to_host_nothrow(dst, src, sizeof(tile_polymorphic_t));
+
+        return id;
     } 
 
     template <class CallBack>
-    inline void get_accessor(CallBack callback, uma_ptr_t addr) noexcept{
+    void get_leaf_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
 
-        uint8_t id = tile_id(addr);
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_leaf8_tile(id)){
+            cb(leaf8_accessor_t{});
+            return;
+        }
+
+        if (is_leaf16_tile(id)){
+            cb(leaf16_accessor_t{});
+            return;
+        }
+
+        if (is_leaf32_tile(id)){
+            cb(leaf32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
     }
 
+    template <class CallBack>
+    void get_mono_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_mono8_tile(id)){
+            cb(mono8_accessor_t{});
+            return;
+        }
+
+        if (is_mono16_tile(id)){
+            cb(mono16_accessor_t{});
+            return;
+        }
+
+        if (is_mono32_tile(id)){
+            cb(mono32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    template <class CallBack>
+    void get_pair_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_pair8_tile(id)){
+            cb(pair8_accessor_t{});
+            return;
+        }
+
+        if (is_pair16_tile(id)){
+            cb(pair16_accessor_t{});
+            return;
+        }
+
+        if (is_pair32_tile(id)){
+            cb(pair32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    template <class CallBack>
+    void get_uacm_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_uacm8_tile(id)){
+            cb(uacm8_accesor_t{});
+            return;
+        }
+
+        if (is_uacm16_tile(id)){
+            cb(uacm16_accesor_t{});
+            return;
+        }
+
+        if (is_uacm_32_tile(id)){
+            cb(uacm32_accesor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    template <class CallBack>
+    void get_pacm_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_pacm8_tile(id)){
+            cb(pacm8_accessor_t{});
+            return;
+        }
+
+        if (is_pacm16_tile(id)){
+            cb(pacm16_accessor_t{});
+            return;
+        }
+
+        if (is_pacm32_tile(id)){
+            cb(pacm32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    template <class CallBack>
+    void get_crit_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_crit8_tile(id)){
+            cb(crit8_accessor_t{});
+            return;
+        }
+
+        if (is_crit16_tile(id)){
+            cb(crit16_accessor_t{});
+            return;
+        }
+
+        if (is_crit32_tile(id)){
+            cb(crit32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    template <class CallBack>
+    void get_msgrfwd_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_msgrfwd8_tile(id)){
+            cb(msgrfwd8_accessor_t{});
+            return;
+        }
+
+        if (is_msgrfwd16_tile(id)){
+            cb(msgrfwd16_accessor_t{});
+            return;
+        }
+
+        if (is_msgrfwd32_tile(id)){
+            cb(msgrfwd32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    template <class CallBack>
+    void get_msgrbwd_static_polymorphic_accessor(CallBack cb, uma_ptr_t ptr) noexcept{
+
+        tile_polymorphic_t id = dg_typeid(ptr);
+
+        if (is_msgrbwd8_tile(id)){
+            cb(msgrbwd8_accessor_t{});
+            return;
+        }
+
+        if (is_msgrbwd16_tile(id)){
+            cb(msgrbwd16_accessor_t{});
+            return;
+        }
+
+        if (is_msgrbwd32_tile(id)){
+            cb(msgrbwd32_accessor_t{});
+            return;
+        }
+
+        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+        std::abort();
+    }
+
+    auto safe_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_leaf_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_mono_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_pair_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_uacm_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_pacm_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_crit_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_msgrfwd_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_msgrbwd_ptr_access_instance::access(ptr);
+    }
+
+    auto safe_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        return safe_tile_ptr_access_instance::access(ptr);
+    }
+
+    auto throwsafe_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_leaf_ptr_access(ptr));
+    }
+
+    auto throwsafe_mono_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_mono_ptr_access(ptr));
+    }
+
+    auto throwsafe_pair_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_pair_ptr_access(ptr));
+    }
+
+    auto throwsafe_uacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_uacm_ptr_access(ptr));
+    }
+    
+    auto throwsafe_pacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_pacm_ptr_access(ptr));
+    }
+
+    auto throwsafe_crit_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_crit_ptr_access(ptr));
+    }
+
+    auto throwsafe_msgrfwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_msgrfwd_ptr_access(ptr));
+    }
+
+    auto throwsafe_msgrbwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safe_msgrbwd_ptr_access(ptr));
+    }
 }

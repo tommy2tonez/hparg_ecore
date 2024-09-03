@@ -6,9 +6,15 @@
 #include "network_memory_utility.h"
 #include <atomic>
 #include "network_fundamental_vector.h"
-#include "network_producer_consumer.h" 
+#include "network_utility.h"
+#include "network_log.h"
+#include "network_exception.h"
 
 namespace dg::network_intmemcommit_dispatching_warehouse{
+
+    //let's make a bet
+    //I will send the challenge to all the compiler out there 
+    //I will write optimization O4 in 2 months
 
     template <class T>
     struct ThreadTableInterface{
@@ -18,6 +24,11 @@ namespace dg::network_intmemcommit_dispatching_warehouse{
             return T::map(id);
         } 
     };
+
+    static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true;
+    using Lock = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED, 
+                                    std::atomic_flag,
+                                    std::mutex>; 
 
     template <class ID, class EventT, class T, class Capacity>
     class DispatchingWarehouse{};
@@ -33,7 +44,7 @@ namespace dg::network_intmemcommit_dispatching_warehouse{
 
             alignas(dg::memult::HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE) struct ContainerUnit{
                 dg::network_fundamental_vector::fixed_fundamental_vector<event_t, CAPACITY> container;
-                std::atomic_flag lck;
+                Lock lck;
             };
 
             static inline ContainerUnit * container_unit_table{};
@@ -48,13 +59,15 @@ namespace dg::network_intmemcommit_dispatching_warehouse{
                 logger.release();
             }
 
-            static inline auto push_try(event_t * events, size_t sz) noexcept -> bool{
+            static auto push_try(event_t * events, size_t sz) noexcept -> bool{
 
-                size_t idx                      = dg::network_concurrency::to_thread_idx(std::this_thread::get_id()); 
-                ContainerUnit& container_unit   = container_unit_table[idx];
+                size_t idx              = dg::network_concurrency::this_thread_idx(); 
+                auto& container_unit    = container_unit_table[idx];
+                auto lck_grd            = dg::network_genult::lock_guard(container_unit.lck);
 
-                if (!container_unit.lck.test_and_set(std::memory_order_acq_rel)){
-                    return false;
+                if (sz > container_unit.container.capacity()){
+                    dg::network_log_stackdump::critical(dg::network_exception::INTERNAL_CORRUPTION);
+                    std::abort();
                 }
 
                 if (container_unit.container.size() + sz > container_unit.container.capacity()){
@@ -62,27 +75,25 @@ namespace dg::network_intmemcommit_dispatching_warehouse{
                 }
 
                 container_unit.container.push_back(events, sz);
-                container_unit.lck.clear(std::memory_order_acq_rel);
-
                 return true;
             }
 
-            static inline void push(event_t * events, size_t sz) noexcept{
+            static void push(event_t * events, size_t sz) noexcept{
 
                 while (!push_try(events, sz)){}
             }
 
-            static inline void get(event_t * dst, size_t& sz, size_t dst_cap) noexcept{
+            static void get(event_t * dst, size_t& sz, size_t dst_cap) noexcept{
 
-                size_t idx                      = dg::network_concurrency::to_thread_idx(thread_table::map(std::this_thread::get_id()));
-                ContainerUnit& container_unit   = container_unit_table[idx];
+                size_t idx              = dg::network_concurrency::to_thread_idx(thread_table::map(std::this_thread::get_id()));
+                auto& container_unit    = container_unit_table[idx];
+                auto lck_grd            = dg::network_genult::lock_guard(container_unit.lck);
+                sz                      = std::min(dst_cap, container_unit.container.size());
+                size_t rem_sz           = container_unit.container.size() - sz;
+                const event_t * src     = dg::memult::advance(container_unit.container.data(), rem_sz);
 
-                while (!container_unit.lck.test_and_set(std::memory_order_acq_rel)){}
-                sz              = std::min(dst_cap, container_unit.container.size()); 
-                size_t rem_sz   = container_unit.container.size() - sz;
-                std::memcpy(dst, container_unit.container.data() + rem_sz, sz * sizeof(event_t));
+                std::memcpy(dst, src, sz * sizeof(event_t));
                 container_unit.container.resize(rem_sz);
-                container_unit.lck.clear(std::memory_order_acq_rel);
             }
 
             static consteval auto capacity() noexcept -> size_t{

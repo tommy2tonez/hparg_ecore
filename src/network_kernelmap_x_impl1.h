@@ -36,12 +36,12 @@ namespace dg::network_kernelmap_x_impl1::model{
     
         inline auto ptr() const noexcept -> void *{
 
-            return dg::memult::advance(dg::safe_ptr_access(this->node)->cptr, this->off);
+            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr, this->off);
         }
 
         inline auto const_ptr() const noexcept -> const void *{
 
-            return dg::memult::advance(dg::safe_ptr_access(this->node)->cptr, this->off);
+            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr, this->off);
         }
     };
 }
@@ -238,10 +238,6 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         return rs.value();
                     }
 
-                    if (rs.error() == dg::network_exception::RECOVERABLE_OUT_OF_MEMORY){ //malicious
-                        continue;
-                    }
-
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(rs.error()));
                     std::abort();
                 }
@@ -398,7 +394,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         return this->internal_map_try(ptr);
                     }
 
-                    return std::unexpected(dg::network_exception::RECOVERABLE_OUT_OF_MEMORY);
+                    return std::unexpected(dg::network_exception::OUT_OF_MEMORY);
                 }
 
                 exception_t create_err_code = this->fsys_loader->load(*priority_queue[0u], ptr_region);

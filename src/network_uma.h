@@ -5,10 +5,9 @@
 #include <stddef.h>
 #include "network_uma_definition.h"
 #include "network_uma_tlb.h"
+#include "network_exception_handler.h"
 
 namespace dg::network_uma{
-
-    //
     
     struct signature_dg_network_uma{}; 
 
@@ -22,30 +21,36 @@ namespace dg::network_uma{
 
     void init(uma_ptr_t * host_region, vma_ptr_t * device_region, device_id_t * device_id, memqualifier_t * qualifier, size_t n){
 
-        tlb_factory::init(host_ptr, device_ptr, device_id, qualifier, n);
+        tlb_factory::init(host_region, device_region, device_id, qualifier, n);
     }
     
-    auto map_direct(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+    auto map_direct(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<vma_ptr_t, exception_t>{
 
-        return tlbdirect_instance::map_wait(device_id, host_ptr);
-    } 
-
-    auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> std::expected<map_resource_handler_t, exception_t>{ //it's clearer this way - strange but I just feel like it
-
-        // return tlb_instance::map_try(device_id, host_ptr);
-    } 
-
-    auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> map_resource_handler_t{
-
-        // return tlb_instance::map_wait(device_id, host_ptr);
     }
 
-    void map_release(map_resource_handler_t map_resource) noexcept{
+    auto map_direct_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
-        // tlb_instance::map_release(device_id, host_ptr);
+        return tlbdirect_instance::map_wait(device_id, ptr);
+    } 
+
+    auto map_try(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{ //it's clearer this way - strange but I just feel like it
+
     }
 
-    auto map_relguard(map_resource_handler_t map_resource) noexcept{
+    auto map_wait(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
+
+    }
+
+    auto map_wait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> map_resource_handle_t{
+
+    }
+
+    void map_release(map_resource_handle_t map_resource) noexcept{
+
+        // tlb_instance::map_release(device_id, ptr);
+    }
+
+    auto map_relguard(map_resource_handle_t map_resource) noexcept{
 
         static int i    = 0;
         auto destructor = [=](int *) noexcept{
@@ -55,98 +60,70 @@ namespace dg::network_uma{
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
     } 
 
-    auto get_vma_ptr(map_resource_handler_t map_resource) noexcept -> vma_ptr_t{
+    auto get_vma_ptr(map_resource_handle_t map_resource) noexcept -> vma_ptr_t{
 
     } 
 
-    auto get_vma_const_ptr(map_resource_handler_t map_resource) noexcept -> vma_ptr_t{ 
+    auto get_vma_const_ptr(map_resource_handle_t map_resource) noexcept -> vma_ptr_t{ 
 
     } 
 
-    //-----
-    
-    auto safe_ptr_access(uma_ptr_t) -> uma_ptr_t{
-
-    }
-
-    auto safe_ptr_access_nothrow(uma_ptr_t) noexcept -> uma_ptr_t{
-        
-    }
-
-    //-----
-    
-    auto memacquire_try(uma_ptr_t ptr) noexcept -> bool{
-
-    }
-
-    void memacquire_wait(uma_ptr_t ptr) noexcept{
-
-    }
-
-    void memacquire_release(uma_ptr_t ptr) noexcept{
-
-    }
-
-    auto memacquire_guard(uma_ptr_t ptr) noexcept{
-
-        static int i    = 0;
-        auto destructor = [=](int *) noexcept{
-            memacquire_release(ptr);
-        };
-
-        memacquire_wait(ptr);
-        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
-    } 
-
-    //-----
-
-    auto device_count(uma_ptr_t host_ptr) noexcept -> size_t{
-
-        return uma_metadata_instance::device_reference_count(host_ptr);
-    }
-
-    auto device_at(uma_ptr_t host_ptr, size_t idx) noexcept -> device_id_t{
-
-        return uma_metadata_instance::device_at(host_ptr, idx);
-    }
-
-    auto device_strictest_at(uma_ptr_t host_ptr) noexcept -> device_id_t{
-
-        return uma_metadata_instance::device_strictest_at(host_ptr);
-    }
-
-    //-----
-    //lengthy - consider dispatch_t
-    void memset_synchronous_alldevice_bypass_qualifier(uma_ptr_t dst, int c, size_t sz) noexcept{
+    auto device_count(uma_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
     } 
 
-    void memset_synchronous(uma_ptr_t dst, int c, size_t sz) noexcept{
+    auto device_count_nothrow(uma_ptr_t ptr) noexcept -> size_t{
 
+        // return uma_metadata_instance::device_reference_count(ptr);
     }
 
-    void memset(uma_ptr_t dst, int c, size_t sz) noexcept{
-
-    }
-
-    void memcpy_uma_to_device_synchronous(vma_ptr_t dst, uma_ptr_t src, size_t sz) noexcept{
-
-    }
-
-    void memcpy_uma_to_device(vma_ptr_t dst, uma_ptr_t src, size_t sz) noexcept{
-
-    } 
-    
-    void memcpy_device_to_uma_synchronous_alldevice_bypass_qualifier(uma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept{
+    auto device_at(uma_ptr_t ptr, size_t idx) noexcept -> std::expected<device_id_t, exception_t>{
 
     } 
 
-    void memcpy_device_to_uma_synchronous(uma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept{
+    auto device_at_nothrow(uma_ptr_t ptr, size_t idx) noexcept -> device_id_t{
+
+        // return uma_metadata_instance::device_at(ptr, idx);
+    }
+
+    auto device_strictest_at(uma_ptr_t ptr) noexcept -> std::expected<device_id_t, exception_t>{
+
+        return uma_metadata_instance::device_strictest_at(ptr);
+    }
+
+    auto device_strictest_at_nothrow(uma_ptr_t ptr) noexcept -> device_id_t{
+
+    } 
+
+    auto device_recent_at(uma_ptr_t ptr) noexcept -> std::expected<device_id_t, exception_t>{
 
     }
 
-    void memcpy_device_to_uma(uma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept{
+    auto device_recent_at_nothrow(uma_ptr_t ptr) noexcept -> device_id_t{
 
+    }
+
+    auto map_wait(uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
+
+        while (true){
+            device_id_t id  = device_recent_at(ptr);
+            auto map_token  = map_try(id, ptr);
+
+            if (map_token.has_value()){
+                return map_token.value();
+            }
+
+            if (map_token.error() == dg::network_exception::OCCUPIED_MEMREGION){
+                continue;
+            }
+
+            return std::unexpected(map_token.error());
+        }
+    }
+
+    auto map_wait_nothrow(uma_ptr_t ptr) noexcept -> map_resource_handle_t{
+
+        return dg::network_exception_handler::nothrow_log(map_wait(ptr));
     }
 }
 

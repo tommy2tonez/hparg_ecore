@@ -20,7 +20,7 @@ namespace dg::network_allocation_dedicated::buffer{
         private:
 
             static inline constexpr size_t ALIGNMENT_SZ = dg::memult::simd_align_val_max();
-            static inline void ** buf{}; 
+            static inline void ** buf{};  //
 
         public:
 

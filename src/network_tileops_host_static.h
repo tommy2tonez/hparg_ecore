@@ -5,9 +5,8 @@
 #include <stdlib.h>
 #include <type_traits> 
 #include <math.h>
-#include "network_x_math.h"
+#include "network_xmath_host.h"
 
-//
 namespace dg::network_tileops_host_static::templated_ops{
 
     static constexpr auto pow2(size_t val) noexcept -> size_t{
@@ -23,120 +22,125 @@ namespace dg::network_tileops_host_static::templated_ops{
     static constexpr auto sqrt2(size_t val) noexcept -> size_t{
 
         return pow2(log2(val) >> 1);
-    } 
+    }
 
     template <class arithmetic_ops_t>
     struct coerced_x_math{
 
         static inline auto sign(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::sign(value);
+            return network_xmath_host::sign(value);
         }
 
         static inline auto exp(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::exp(value);
+            return network_xmath_host::exp(value);
         }
 
         static inline auto ln(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::log(value);
+            return network_xmath_host::log(value);
         }
 
         static inline auto abs(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::abs(value);
+            return network_xmath_host::abs(value);
         }
 
         static inline auto cos(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::cos(value);
+            return network_xmath_host::cos(value);
         }
 
         static inline auto acos(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::acos(value);
+            return network_xmath_host::acos(value);
         }
 
         static inline auto sin(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::sin(value);
+            return network_xmath_host::sin(value);
         }
 
         static inline auto asin(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::asin(value);
+            return network_xmath_host::asin(value);
         }
 
         static inline auto tan(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::tan(value);
+            return network_xmath_host::tan(value);
         }
 
         static inline auto atan(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::atan(value);
+            return network_xmath_host::atan(value);
         }
 
         static inline auto sqrt(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::sqrt(value);
+            return network_xmath_host::sqrt(value);
         }
+
+        static inline auto invsqrt(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
+
+            return network_xmath_host::invsqrt(value);
+        } 
 
         static inline auto negative(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::negative(value);
+            return network_xmath_host::negative(value);
         } 
 
         static inline auto add(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::add(lhs, rhs);
+            return network_xmath_host::add(lhs, rhs);
         }
 
         static inline auto sub(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::sub(lhs, rhs);
+            return network_xmath_host::sub(lhs, rhs);
         }
 
         static inline auto mul(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::mul(lhs, rhs);
+            return network_xmath_host::mul(lhs, rhs);
         }
 
         static inline auto div(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::div(lhs, rhs);
+            return network_xmath_host::div(lhs, rhs);
         }
 
         static inline auto pow(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::pow(lhs, rhs);
+            return network_xmath_host::pow(lhs, rhs);
         }
 
         template <size_t RHS_VALUE>
         static inline auto pow(arithmetic_ops_t lhs, const std::integral_constant<size_t, RHS_VALUE>) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::pow(lhs, std::integral_constant<size_t, RHS_VALUE>{});
+            return network_xmath_host::pow(lhs, std::integral_constant<size_t, RHS_VALUE>{});
         }
 
-        static inline auto fma(arithmetic_ops_t first, arithmetic_ops_t second, arithmetic_ops_t third){
+        static inline auto fma(arithmetic_ops_t first, arithmetic_ops_t second, arithmetic_ops_t third) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::fma(first, second, third);
+            return network_xmath_host::fma(first, second, third);
         }
 
         static inline auto min(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::min(lhs, rhs);
+            return network_xmath_host::min(lhs, rhs);
         }
 
         static inline auto max(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::max(lhs, rhs);
+            return network_xmath_host::max(lhs, rhs);
         }
 
-        static inline auto eqcmp_mul(arithmetic_ops_t lcmp, arithmetic_ops_t rcmp, arithmetic_ops_t val) -> arithmetic_ops_t{
+        static inline auto eqcmp_mul(arithmetic_ops_t lcmp, arithmetic_ops_t rcmp, arithmetic_ops_t val) noexcept -> arithmetic_ops_t{
 
-            return network_x_math::eqcmp_mul(lcmp, rcmp, val);
+            return network_xmath_host::eqcmp_mul(lcmp, rcmp, val);
         }
     };
 

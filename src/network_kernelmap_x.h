@@ -48,12 +48,12 @@ namespace dg::network_kernelmap_x{
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
     }
 
-    auto to_ptr(map_resource_handler_t map_resource) noexcept -> void *{
+    auto get_host_ptr(map_resource_handler_t map_resource) noexcept -> void *{
 
         return map_resource.ptr();
     }
 
-    auto to_const_ptr(map_resource_handler_t map_resource) noexcept -> const void *{
+    auto get_host_const_ptr(map_resource_handler_t map_resource) noexcept -> const void *{
 
         return map_resource.const_ptr();
     }

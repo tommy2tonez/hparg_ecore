@@ -7,13 +7,7 @@
 #include "network_exception_handler.h"
 #include "network_uma.h"
 #include "network_tile_member_getsetter.h"
-
-//need to decide whether C or C++ approach - exception_t or throw exception()
-//C++ approach is cleaner - yet requires extra dyanmic memory allocation for throwing exception - this is a design problem 
-//C approach is explicit, legacy
-//I would say that this core should be somewhere from 100-200K lines of code 
-//takes me probably 3 months if I code days and nights
-//
+#include "network_memops_uma.h"
 
 namespace dg::network_tile_initialization_static{
     
@@ -23,7 +17,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_leaf_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_leaf_reverter(ptr, SET_OPS_LEAF_OPERATABLE_ID | SET_OPS_LEAF_PONG_ADDR);
         
         set_leaf_operatable_id(ptr, operatable_id);
@@ -38,7 +32,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_mono_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_mono_reverter(ptr, SET_OPS_MONO_SRC | SET_OPS_MONO_DISPATCH_CONTROL | SET_OPS_MONO_OPERATABLE_ID | SET_OPS_MONO_PONG_COUNT | SET_OPS_MONO_PONG_ADDR);
         
         set_mono_src(ptr, src);
@@ -56,7 +50,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_pair_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_pair_reverter(ptr, SET_OPS_PAIR_LHS | SET_OPS_PAIR_RHS | SET_OPS_PAIR_DISPATCH_CONTROL | SET_OPS_PAIR_OPERATABLE_ID | SET_OPS_PAIR_PONG_COUNT | SET_OPS_PAIR_PONG_ADDR);
         
         set_pair_lhs(ptr, lhs);
@@ -75,7 +69,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_uacm_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_uacm_reverter(ptr, SET_OPS_UACM_SRC | SET_OPS_UACM_DISPATCH_CONTROL | SET_OPS_UACM_OPERATABLE_ID | SET_OPS_UACM_PONG_COUNT | SET_OPS_UACM_PONG_ADDR);
         
         set_uacm_src(ptr, src);
@@ -93,7 +87,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_pacm_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_pacm_reverter(ptr, SET_OPS_PACM_LHS | SET_OPS_PACM_RHS | SET_OPS_PACM_DISPATCH_CONTROL | SET_OPS_PACM_OPERATABLE_ID | SET_OPS_PACM_PONG_COUNT | SET_OPS_PACM_PONG_ADDR);
         
         set_pacm_lhs(ptr, lhs);
@@ -112,7 +106,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_crit_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_crit_reverter(ptr, SET_OPS_CRIT_SRC | SET_OPS_CRIT_DISPATCH_CONTROL | SET_OPS_CRIT_OPERATABLE_ID | SET_OPS_CRIT_PONG_COUNT | SET_OPS_CRIT_PONG_ADDR);
         
         set_crit_src(ptr, src);
@@ -130,7 +124,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_msgrfwd_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_msgrfwd_reverter(ptr, SET_OPS_MSGRFWD_SRC | SET_OPS_MSGRFWD_DISPATCH_CONTROL | SET_OPS_MSGRFWD_INJECTION_INFO | SET_OPS_MSGRFWD_PONG_COUNT | SET_OPS_MSGRFWD_PONG_ADDR);
         
         set_msgrfwd_src(ptr, src);
@@ -149,7 +143,7 @@ namespace dg::network_tile_initialization_static{
         using namespace network_tile_member_getsetguard; 
 
         uma_ptr_t rcu_addr  = get_msgrbwd_rcu_addr(ptr);
-        auto lck_grd        = network_uma::memacquire_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         auto reverter_grd   = dieguard_msgrbwd_reverter(ptr, SET_OPS_MSGRBWD_SRC | SET_OPS_MSGRBWD_DISPATCH_CONTROL | SET_OPS_MSGRBWD_OPERATABLE_ID | SET_OPS_MSGRBWD_GBPC | SET_OPS_MSGRBWD_INJECTION_INFO | SET_OPS_MSGRBWD_PONG_ADDR);
         
         set_msgrbwd_src(ptr, src);

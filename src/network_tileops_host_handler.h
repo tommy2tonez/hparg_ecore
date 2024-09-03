@@ -39,7 +39,7 @@ namespace dg::network_tileops_handler{
         
         uma_ptr_t dst_lck_addr              = get_mono_rcu_addr(dst); //
         uma_ptr_t src_lck_addr              = get_rcu_addr(src); //
-        auto lck_grd                        = dg::network_uma::memacquire_guard_many(dst_lck_addr, src_lck_addr); //
+        auto dst_lck_grd                    = dg::network_uma::memlock_guard_many(dst_lck_addr, src_lck_addr); //
         operatable_id_t dst_operatable_id   = get_mono_operatable_id(dst); //
         operatable_id_t src_operatable_id   = get_operatable_id(src);
 
@@ -51,9 +51,9 @@ namespace dg::network_tileops_handler{
         uma_ptr_t src_logit_umaptr                      = get_logit_addr(src);
         dispatch_control_t dispatch_control             = get_mono_dispatch_control(dst);
         auto [dst_vd_id, src_vd_id, dst_dispatch_id]    = dg::network_dispatch_control::decode_mono(dispatch_control);
-        auto dst_logit_vmaptr_map                       = dg::network_uma::map_wait(dst_logit_umaptr, dst_vd_id);
-        auto dst_logit_vmaptr_map_relgrd                = dg::network_uma::map_relguard(dst_logit_vmaptr_map); 
-        auto src_logit_vmaptr_map                       = dg::network_uma::map_wait(src_logit_umaptr, src_vd_id);
+        // auto dst_logit_vmaptr_map                       = dg::network_uma::map_wait(dst_logit_umaptr, dst_vd_id);
+        // auto dst_logit_vmaptr_map_relgrd                = dg::network_uma::map_relguard(dst_logit_vmaptr_map); 
+        // auto src_logit_vmaptr_map                       = dg::network_uma::map_wait(src_logit_umaptr, src_vd_id);
         auto src_logit_vmaptr_map_relgrd                = dg::network_uma::map_relguard(src_logit_vmaptr_map);
         vma_ptr_t dst_logit_vmaptr                      = dg::network_uma::get_vma_ptr(dst_logit_vmaptr_map);
         vma_ptr_t src_logit_vmaptr                      = dg::network_uma::get_vma_const_ptr(src_logit_vmaptr_map);
@@ -92,7 +92,7 @@ namespace dg::network_tileops_handler{
         uma_ptr_t dst_lck_addr              = get_pair_rcu_addr(dst);
         uma_ptr_t lhs_lck_addr              = get_rcu_addr(lhs);
         uma_ptr_t rhs_lck_addr              = get_rcu_addr(rhs);
-        auto lck_grd                        = dg::network_uma::memacquire_guard_many(dst_lck_addr, lhs_lck_addr, rhs_lck_addr); //
+        auto lck_grd                        = dg::network_uma::memlock_guard_many(dst_lck_addr, lhs_lck_addr, rhs_lck_addr); //
         operatable_id_t dst_operatable_id   = get_pair_operatable_id(dst);
         operatable_id_t lhs_operatable_id   = get_operatable_id(lhs);
         operatable_id_t rhs_operatable_id   = get_operatable_id(rhs);

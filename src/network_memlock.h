@@ -14,6 +14,8 @@
 #include "network_log.h" 
 #include "network_exception.h"
 #include "network_segcheck_bound.h"
+#include <vector>
+#include <unordered_set>
 
 namespace dg::network_memlock{
     
@@ -47,6 +49,15 @@ namespace dg::network_memlock{
         static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
             T::acquire_transfer_wait(new_ptr, old_ptr);
+        }
+    };
+
+    template <class T>
+    struct MemoryRegionLockInterface: MemoryLockInterface<T>{
+
+        static auto memregion_size() noexcept -> size_t{
+
+            return T::memregion_size();
         }
     };
 
@@ -94,73 +105,7 @@ namespace dg::network_memlock{
             return T::transfer_try(new_ptr, old_ptr);
         }
     };
-
-    template <class T>
-    struct MemoryLockXInterface{
-
-        using interface_t   = MemoryLockXInterface; 
-        using ptr_t         = typename T::ptr_t;
-        static_assert(dg::is_pointer_v<ptr_t>); 
-
-        static auto acquire_try(ptr_t * ptr) noexcept -> bool{
-
-            return T::acquire_try(ptr);
-        }
-
-        static void acquire_wait(ptr_t * ptr) noexcept{
-
-            T::acquire_wait(ptr);
-        } 
-
-        static void acquire_release(ptr_t * ptr) noexcept{
-
-            T::acquire_release(ptr);
-        }
-
-        static auto acquire_transfer_try(ptr_t * new_ptr, ptr_t * old_ptr) noexcept -> bool{
-
-            return T::transfer_try(new_ptr, old_ptr);
-        } 
-
-        static void acquire_transfer_wait(ptr_t * new_ptr, ptr_t * old_ptr) noexcept{
-
-            T::acquire_transfer_wait(new_ptr, old_ptr);
-        }
-    };
-
-    template <class T>
-    struct MemoryReferenceXInterface{
-
-        using interface_t   = MemoryReferenceXInterface<T>; 
-        using ptr_t         = typename T::ptr_t;
-        static_assert(dg::is_pointer_v<ptr_t>); 
-
-        static auto reference_try(ptr_t * ptr) noexcept -> bool{
-
-            return T::reference_try(ptr);
-        }
-
-        static void reference_wait(ptr_t * ptr) noexcept {
-
-            T::reference_wait(ptr);
-        } 
-
-        static void reference_release(ptr_t * ptr) noexcept{
-
-            T::reference_release(ptr);
-        }
-
-        static auto reference_transfer_try(ptr_t * new_ptr, ptr_t * old_ptr) noexcept -> bool{
-
-            return T::reference_transfer_try(new_ptr, old_ptr);
-        } 
-
-        static void reference_transfer_wait(ptr_t * new_ptr, ptr_t * old_ptr) noexcept{
-
-            T::reference_transfer_wait(new_ptr, old_ptr);
-        }
-    };
-} 
+}
 
 namespace dg::network_memlock_host{
 
@@ -171,7 +116,7 @@ namespace dg::network_memlock_host{
     struct AtomicFlagLock{}; 
 
     template <class ID, size_t MEMREGION_SZ, class PtrT>
-    struct AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryLockInterface<AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
+    struct AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
         
         public:
 
@@ -221,9 +166,14 @@ namespace dg::network_memlock_host{
 
                 size_t lck_table_sz = (pointer_cast<typename dg::ptr_info<ptr_t>::max_unsigned_t>(ptr) + sz) / MEMREGION_SZ;
                 lck_table           = new std::atomic_flag[lck_table_sz];
-                segcheck_ins::init(ptr, sz);
+                segcheck_ins::init(ptr, memult::advance(ptr, sz));
                 log_scope.release();
             } 
+
+            static auto memregion_size() noexcept -> size_t{
+
+                return MEMREGION_SZ;
+            }
 
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
                 
@@ -260,7 +210,7 @@ namespace dg::network_memlock_host{
     struct MtxLock{};
 
     template <class ID, size_t MEMREGION_SZ, class PtrT>
-    struct MtxLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryLockInterface<MtxLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
+    struct MtxLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<MtxLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
 
         public:
 
@@ -302,6 +252,11 @@ namespace dg::network_memlock_host{
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return lck_table[to_table_idx(ptr)].try_lock();
+            }
+
+            static auto memregion_size() noexcept -> size_t{
+
+                return MEMREGION_SZ;
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
@@ -652,148 +607,6 @@ namespace dg::network_memlock_host{
             }  
     };
 
-    template <class ID, class T, class MaxArgSize>
-    struct LockX_Unique{};
-
-    template <class ID, class T, size_t MAX_ARG_SIZE>
-    struct LockX_Unique<ID, MemoryLockInterface<T>, std::integral_constant<size_t, MAX_ARG_SIZE>>: MemoryLockXInterface<LockX_Unique<ID, MemoryLockInterface<T>, std::integral_constant<size_t, MAX_ARG_SIZE>>>{
-
-        using base  = MemoryLockInterface<T>;
-        using ptr_t = typename base::ptr_t;
-
-        static auto acquire_try(ptr_t * ptr) noexcept -> bool{
-
-            std::array<ptr_t, MAX_ARG_SIZE> acquired_arr{};
-            ptr_t * last = acquired_arr.data();
-
-            while (static_cast<bool>(*ptr)){
-                if (!base::acquire_try(*ptr)){
-                    break;
-                }
-
-                *(last++) = *(ptr++);
-            }
-
-            if (!static_cast<bool>(*ptr)){
-                return true;
-            }
-            
-            for (auto i = acquired_arr.data(); i != last; ++i){
-                base::acquire_release(*i);
-            }
-
-            return false;
-        }
-
-        static void acquire_wait(ptr_t * ptr) noexcept{
-
-            while (!acquire_try_many(ptr)){};
-        }
-
-        static void acquire_release(ptr_t * ptr) noexcept{
-
-            while (static_cast<bool>(*ptr)){
-                base::acquire_release(*ptr);
-                ++ptr;
-            }
-        } 
-
-        static auto acquire_transfer_try(ptr_t * dst, ptr_t * src) noexcept -> bool{
-            
-            while (static_cast<bool>(*dst)){
-                if (!base::transfer_try(*dst, *src)){
-                    return false;
-                }
-
-                ++dst;
-                ++src;
-            }
-
-            return true;
-        }
-
-        static void acquire_transfer_wait(ptr_t * dst, ptr_t * src) noexcept{
-
-            if (transfer_try_many(dst, src)){
-                return;
-            }
-
-            acquire_release(src);
-            acquire_wait(dst);
-        }
-    };
-
-    template <class ID, class T, class MaxArgSize>
-    struct ReferenceX_Unique{};
-
-    template <class ID, class T, size_t MAX_ARG_SIZE>
-    struct ReferenceX_Unique<ID, MemoryReferenceInterface<T>, std::integral_constant<size_t, MAX_ARG_SIZE>>: MemoryReferenceXInterface<ReferenceX_Unique<ID, MemoryReferenceInterface<T>, std::integral_constant<size_t, MAX_ARG_SIZE>>>{
-
-        using base  = MemoryReferenceInterface<T>;
-        using ptr_t = typename base::ptr_t;
-        
-        static auto reference_try(ptr_t * ptr) noexcept -> bool{
-
-            std::array<ptr_t, MAX_ARG_SIZE> acquired_arr{};
-            ptr_t * last = acquired_arr.data();
-
-            while (static_cast<bool>(*ptr)){
-                if (!base::reference_try(*ptr)){
-                    break;
-                }
-
-                *(last++) = *(ptr++);
-            }
-
-            if (!static_cast<bool>(*ptr)){
-                return true;
-            }
-            
-            for (auto i = acquired_arr.data(); i != last; ++i){
-                base::reference_release(*i);
-            }
-            
-            return false;
-        }
-
-        static void reference_wait(ptr_t * ptr) noexcept{
-
-            while (!reference_try_many(ptr)){}
-        }
-
-        static void reference_release(ptr_t * ptr) noexcept{
-
-            while (static_cast<bool>(*ptr)){
-                base::reference_release(*ptr);
-                ++ptr;
-            }
-        }
-
-        static auto reference_transfer_try(ptr_t * dst, ptr_t * src) noexcept -> bool{
-            
-            while (static_cast<bool>(*dst)){
-                if (!base::transfer_try(*dst, *src)){
-                    return false;
-                }
-
-                ++dst;
-                ++src;
-            }
-
-            return true;
-        }
-
-        static void reference_transfer_wait(ptr_t * dst, ptr_t * src) noexcept{
-
-            if (reference_transfer_try(dst, src)){
-                return;
-            }
-
-            reference_release(src);
-            reference_wait(dst);
-        }
-    };
-
     static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true; 
     
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
@@ -812,15 +625,126 @@ namespace dg::network_memlock_host{
 namespace dg::network_memlock_utility{
 
     template <class T, class ptr_t>
-    auto lock_guard(const dg::network_memlock::MemoryLockInterface<T>, ptr_t ptr){
+    auto lock_guard(const dg::network_memlock::MemoryLockInterface<T>, ptr_t ptr) noexcept{
+
+        using memlock_ins   = dg::network_memlock::MemoryLockInterface<T>;
+        using lock_ptr_t    = typename memlock_ins::ptr_t; 
+        static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
+
+        static int i        = 0;
+        auto destructor = [=](int *) noexcept{
+            memlock_ins::acquire_release(ptr);
+        };
+
+        memlock_ins::acquire_wait(ptr);
+        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+    }
+
+    template <class T>
+    struct RecursiveLockResource{};
+
+    template <class T>
+    struct RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>{
+
+        public:
+
+            using resource_t            = std::unordered_set<ptr_t>;
+
+        private:
+
+            using self                  = RecursiveLockResource; 
+            using id                    = self;
+            using ptr_t                 = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t;
+            using singleton_obj_t       = std::array<resource_t, dg::network_concurrency::THREAD_COUNT>;
+            using singleton_container   = dg::network_genult::singleton<id, singleton_obj_t>;
+        
+        public:
+
+            static inline auto get() noexcept -> resource_t&{
+
+                return singleton_container::get()[dg::network_concurrency::this_thread_idx()];
+            }
+    };
+
+    template <class T, class ptr_t>
+    auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T>, ptr_t ptr) noexcept{
+        
+        using memlock_ins   = dg::network_memlock::MemoryRegionLockInterface<T>;
+        using lock_ptr_t    = typename memlock_ins::ptr_t;
+        using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
+        static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
+
+        std::unordered_set<lock_ptr_t> * ptr_set = &resource_ins::get();
+        bool responsibility_flag    = false;
+        lock_ptr_t ptr_region       = dg::memult::region(ptr, memlock_ins::memregion_size()); 
+        bool try_success_flag       = true;
+
+        if (ptr_set->find(ptr_region) == ptr_set->end()){            
+            if (memlock_ins::acquire_try(ptr_region)){
+                responsibility_flag = true;
+                ptr_set->add(ptr_region);
+            } else{
+                try_success_flag = false; 
+            }
+        }
 
         static int i    = 0;
         auto destructor = [=](int *) noexcept{
-            dg::network_memlock::MemoryLockInterface<T>::acquire_release(ptr);
+            if (responsibility_flag){
+                ptr_set->remove(ptr_region);
+                memlock_ins::acquire_release(ptr_region);
+            }
+        };
+        
+        if (try_success_flag){
+            return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor)); 
+        }
+
+        return std::unique_ptr<int, decltype(destructor)>(nullptr, std::move(destructor));
+    }
+
+    template <class T, class ptr_t>
+    auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, ptr_t ptr) noexcept{
+
+        while (true){
+            if (auto rs = recursive_trylock_guard(lock_ins, ptr); static_cast<bool>(rs)){
+                return rs;
+            }
+        }
+    }
+
+    template <class T, class ...Args>
+    auto recursive_lock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
+
+        auto args_tup   = std::make_tuple(args...);
+        auto try_lambda = [=]<class Self, size_t IDX>(Self self, const std::integral_constant<size_t, IDX>){
+            if constexpr(IDX == sizeof...(Args)){
+                return bool{true};
+            } else{                
+                using successor_ret_t   = decltype(self(self, std::integral_constant<size_t, IDX + 1>{}));
+                using lck_t             = decltype(recursive_trylock_guard(lock_ins, std::get<IDX>(args_tup)));
+                using ret_t             = std::pair<lck_t, successor_ret_t>;
+                using opt_ret_t         = std::optional<ret_t>;
+                auto successor_rs       = self(self, std::integral_constant<size_t, IDX + 1>{});
+
+                if (!static_cast<bool>(successor_rs)){
+                    return opt_ret_t{std::nullopt};
+                } else{
+                    auto cur_lck = recursive_trylock_guard(lock_ins, std::get<IDX>(args_tup));
+                    if (!static_cast<bool>(cur_lck)){
+                        return opt_ret_t{std::nullopt};
+                    } else{
+                        return opt_ret_t{ret_t{std::move(cur_lck), std::move(successor_rs)}};
+                    }
+                }
+            }
         };
 
-        dg::network_memlock::MemoryLockInterface<T>::acquire_wait(ptr);
-        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+        while (true){
+            if (auto rs = try_lambda(try_lambda, std::integral_constant<size_t, 0u>{}); static_cast<bool>(rs)){
+                return rs;
+            }
+        }
     }
 }
 

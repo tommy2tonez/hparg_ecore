@@ -37,16 +37,22 @@ namespace dg::network_exception{
     };
     
     static inline constexpr exception_t SUCCESS                         = 0u;
+    static inline constexpr exception_t CRITICAL_FAILURE                = 0u;
+    static inline constexpr exception_t OCCUPIED_MEMREGION              = 0u;
+    static inline constexpr exception_t UNWAITABLE_EXCEPTION            = 0u;
     static inline constexpr exception_t SEGFAULT                        = 0u;
     static inline constexpr exception_t INTERNAL_CORRUPTION             = 0u;
     static inline constexpr exception_t CUDA_DEVICE_NOT_FOUND           = 0u;
     static inline constexpr exception_t CUDA_DEVICE_NOT_SUPPORTED       = 0u;
     static inline constexpr exception_t UNMET_PRECOND                   = 0u; 
     static inline constexpr exception_t RECOVERABLE_OUT_OF_MEMORY       = 0u;
-    static inline constexpr exception_t UNRECOVERABLE_OUT_OF_MEMORY     = 0u;  
+    static inline constexpr exception_t OUT_OF_MEMORY                   = 0u;  
     static inline constexpr exception_t INVALID_SERIALIZATION_FORMAT    = 0u;
+    static inline constexpr exception_t INVALID_VMAPTR_FORMAT           = 0u;
     static inline constexpr exception_t INVALID_DICTIONARY_KEY          = 0u;
     static inline constexpr exception_t INVALID_TABLE_DISPATCH_CODE     = 0u;
+    static inline constexpr exception_t INCOMPATIBLE_OPERATABLE_ID      = 0u;
+    static inline constexpr exception_t BAD_TILE_MEMBER_ACCESS          = 0u; 
 
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 

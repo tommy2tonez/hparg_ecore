@@ -1,5 +1,5 @@
-#ifndef __NETWORK_X_MATH_H__
-#define __NETWORK_X_MATH_H__
+#ifndef __NETWORK_XMATH_HOST_H__
+#define __NETWORK_XMATH_HOST_H__
 
 #include <stddef.h>
 #include <stdint.h>
@@ -48,6 +48,10 @@ namespace dg::network_x_math{
     }
 
     inline auto sqrt(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+
+    }
+
+    inline auto invsqrt() noexcept{
 
     }
 
