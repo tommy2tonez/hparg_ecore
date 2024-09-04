@@ -4,21 +4,14 @@
 #include <iostream>
 #include <memory>
 
-void fooo(int *){
+struct Bar{
+    int i;
+};
 
-}
-
-auto make(){
-
-    
-    int * i = new int;
-    return std::unique_ptr<int, void (*)(int *)>(i, fooo);
-}
 int main(){
 
-    decltype(fooo) obj = fooo;
+    std::optional<Bar> bar{};
 
-    auto ptr = make();
-    auto ptr2 = std::move(ptr);
+    bar->i;
     // std::unique_ptr<int, decltype(foo)> handle;
 }

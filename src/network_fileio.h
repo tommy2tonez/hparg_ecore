@@ -132,6 +132,8 @@ namespace dg::network_fileio{
         dg::network_exception_handler::nothrow_log(dg_read_binary_direct(fp, dst, dst_cap));
     } 
 
+    //not atomic (write all or none to fp) - if atomic is required, extension or nothrow should be used as replacement 
+    //an implementation of atomic here is immature - break single responsibility
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
 
         auto raii_fd = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC);

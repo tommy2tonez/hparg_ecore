@@ -57,12 +57,19 @@ namespace dg::network_kernelmap_x_impl1::interface{
 
     using namespace network_kernelmap_x_impl1::model; 
 
+    //there are two types of interfaces:
+    //interface that summarizes a component
+    //interface that declares expectations of a component 
+
+    //this interface is an expectation of some component rather than a summary of some component
     struct FsysLoaderInterface{
         virtual ~FsysLoaderInterface() = default;
-        virtual auto load(MemoryNode&, fsys_ptr_t) const noexcept -> exception_t = 0;
-        virtual auto unload(MemoryNode&) const noexcept -> exception_t = 0;
+        virtual auto load(MemoryNode&, fsys_ptr_t) noexcept -> exception_t = 0; //atomicity (either load all or none)
+        virtual void unload(MemoryNode&) noexcept = 0;
     };
 
+    //this interface is a summary rather than an expectation
+    //given a fsys_ptr_t, return a host_ptr whose reachability is a superset of the arg
     struct MapInterface{
         virtual ~MapInterface() = default;
         virtual auto map(fsys_ptr_t) noexcept -> std::expected<MapResource, exception_t> = 0;
@@ -71,7 +78,7 @@ namespace dg::network_kernelmap_x_impl1::interface{
 
     struct MapDistributionInterface{
         virtual ~MapDistributionInterface() = default;
-        virtual auto id(fsys_ptr_t) const noexcept -> std::expected<size_t, exception_t> = 0;
+        virtual auto id(fsys_ptr_t) noexcept -> std::expected<size_t, exception_t> = 0;
     };
 }
 
@@ -127,7 +134,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                                       size_t memregion_sz) noexcept: stable_storage_dict(std::move(stable_storage_dict)),
                                                                      memregion_sz(memregion_sz){}
 
-            auto load(MemoryNode& root, fsys_ptr_t region) const noexcept -> exception_t{
+            auto load(MemoryNode& root, fsys_ptr_t region) noexcept -> exception_t{
 
                 if (static_cast<bool>(root.fsys_ptr_info)){
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
@@ -152,7 +159,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 return dg::network_exception::SUCCESS;
             }
 
-            auto unload(MemoryNode& root) const noexcept -> exception_t{
+            void unload(MemoryNode& root) noexcept{
 
                 if (!static_cast<bool>(root.fsys_ptr_info)){
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
@@ -180,8 +187,6 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                 root.fsys_ptr_info  = std::nullopt;
                 root.timestamp      = dg::network_genult::unix_timestamp();
-
-                return dg::network_exception::SUCCESS;
             }
 
         private:
@@ -345,20 +350,14 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                 if (static_cast<bool>(this->priority_queue[0u]->fsys_ptr_info)){
                     if (this->priority_queue[0u]->fsys_ptr_info->reference == 0u){
-                        exception_t create_err_code     = this->fsys_loader->load(this->tmp_space, ptr_region);
+                        exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region);
 
-                        if (dg::network_exception::is_failed(create_err_code)){
-                            return std::unexpected(create_err_code);
+                        if (dg::network_exception::is_failed(err)){
+                            return std::unexpected(err);
                         }
 
-                        fsys_ptr_t removing_region      = this->priority_queue[0u]->fsys_ptr_info->ptr;
-                        exception_t release_err_code    = this->fsys_loader->unload(*priority_queue[0u]);
-                        
-                        if (dg::network_exception::is_failed(release_err_code)){
-                            tmp_space.fsys_ptr_info = std::nullopt;
-                            return std::unexpected(release_err_code);
-                        }
-
+                        fsys_ptr_t removing_region  = this->priority_queue[0u]->fsys_ptr_info->ptr;
+                        this->fsys_loader->unload(*priority_queue[0u]);
                         this->allocation_dict_remove_entry(removing_region);
                         this->allocation_dict_add_entry(ptr_region, priority_queue[0u].get());
                         std::swap(static_cast<MemoryNode&>(*this->priority_queue[0u]), this->tmp_space);
@@ -370,10 +369,10 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return std::unexpected(dg::network_exception::OUT_OF_MEMORY);
                 }
 
-                exception_t create_err_code = this->fsys_loader->load(*priority_queue[0u], ptr_region);
+                exception_t err = this->fsys_loader->load(*priority_queue[0u], ptr_region);
                 
-                if (dg::network_exception::is_failed(create_err_code)){
-                    return std::unexpected(create_err_code);
+                if (dg::network_exception::is_failed(err)){
+                    return std::unexpected(err);
                 }
                 
                 this->allocation_dict_add_entry(ptr_region, priority_queue[0u].get());
@@ -401,7 +400,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             explicit StdMapDistribution(std::unordered_map<fsys_ptr_t, size_t> region_id_dict,
                                         std::integral_constant<size_t, MEMREGION_SZ>) noexcept: region_id_dict(std::move(region_id_dict)){}
 
-            auto id(fsys_ptr_t ptr) const noexcept -> std::expected<size_t, exception_t>{
+            auto id(fsys_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
                 fsys_ptr_t ptr_region   = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
                 auto dict_ptr           = this->region_id_dict.find(ptr_region);
