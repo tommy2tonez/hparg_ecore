@@ -24,7 +24,7 @@ namespace dg::network_memlock{
 
         using interface_t   = MemoryLockInterface<T>;
         using ptr_t         = typename T::ptr_t;
-        static_assert(dg::is_pointer_v<ptr_t>); 
+        static_assert(dg::is_ptr_v<ptr_t>); 
 
         static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
@@ -66,7 +66,7 @@ namespace dg::network_memlock{
 
         using interface_t   = MemoryReferenceInterface<T>; 
         using ptr_t         = typename T::ptr_t;
-        static_assert(dg::is_pointer_v<ptr_t>); 
+        static_assert(dg::is_ptr_v<ptr_t>); 
 
         static auto reference_try(ptr_t ptr) noexcept -> bool{
 

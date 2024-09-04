@@ -53,6 +53,12 @@ namespace dg::network_exception{
     static inline constexpr exception_t INVALID_TABLE_DISPATCH_CODE     = 0u;
     static inline constexpr exception_t INCOMPATIBLE_OPERATABLE_ID      = 0u;
     static inline constexpr exception_t BAD_TILE_MEMBER_ACCESS          = 0u; 
+    static inline constexpr exception_t BAD_PTR_ACCESS                  = 0u;
+    static inline constexpr exception_t BAD_OPTIONAL_ACCESS             = 0u; 
+    static inline constexpr exception_t BAD_RAII_ACCESS                 = 0u;
+    static inline constexpr exception_t BAD_ALIGNMENT                   = 0u;
+    static inline constexpr exception_t BUFFER_OVERFLOW                 = 0u;
+    static inline constexpr exception_t RUNTIME_FILEIO_ERROR            = 0u; 
 
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 

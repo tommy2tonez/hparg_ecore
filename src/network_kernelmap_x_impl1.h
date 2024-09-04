@@ -8,12 +8,19 @@
 #include <vector>
 #include <unordered_map>
 #include <nutex>
+#include <atomic>
 #include "network_exception.h"
 #include "network_log.h"
+#include "network_fileio.h"
 
 namespace dg::network_kernelmap_x_impl1::model{
 
     using fsys_ptr_t = uint64_t;
+    using Lock  = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED,
+                                     std::atomic_flag,
+                                     std::mutex>;  
+
+    static_assert(dg::is_ptr_v<fsys_ptr_t>);
 
     struct FSysPtrInfo{
         fsys_ptr_t ptr;
@@ -21,7 +28,7 @@ namespace dg::network_kernelmap_x_impl1::model{
     };
 
     struct MemoryNode{
-        std::unique_ptr<char[]> cptr; //
+        std::unique_ptr<char[]> cptr; //deallocator
         std::optional<FSysPtrInfo> fsys_ptr_info;
         std::chrono::nanoseconds timestamp;
     };
@@ -58,8 +65,7 @@ namespace dg::network_kernelmap_x_impl1::interface{
 
     struct MapInterface{
         virtual ~MapInterface() = default;
-        virtual auto map_try(fsys_ptr_t) noexcept -> std::expected<MapResource, exception_t> = 0;
-        virtual auto map_wait(fsys_ptr_t) noexcept -> MapResource = 0;
+        virtual auto map(fsys_ptr_t) noexcept -> std::expected<MapResource, exception_t> = 0;
         virtual void map_release(MapResource) noexcept = 0;
     };
 
@@ -108,19 +114,18 @@ namespace dg::network_kernelmap_x_impl1::implementation{
         } 
     };
 
-    template <size_t MEMREGION_SZ>
     class DirectFsysLoader: public virtual FsysLoaderInterface{
 
         private:
 
             std::unordered_map<fsys_ptr_t, std::filesystem::path> stable_storage_dict;
+            size_t memregion_sz;
 
         public:
 
-            static_assert(dg::filesystem::is_met_io_direct_requirement(MEMREGION_SZ));
-
             explicit DirectFsysLoader(std::unordered_map<fsys_ptr_t, std::filesystem::path> stable_storage_dict,
-                                      std::integral_constant<size_t, MEMREGION_SZ>) noexcept: stable_storage_dict(std::move(stable_storage_dict)){}
+                                      size_t memregion_sz) noexcept: stable_storage_dict(std::move(stable_storage_dict)),
+                                                                     memregion_sz(memregion_sz){}
 
             auto load(MemoryNode& root, fsys_ptr_t region) const noexcept -> exception_t{
 
@@ -138,14 +143,11 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 const std::filesystem::path& inpath = dict_ptr->second;
                 const char * cstr_path              = inpath.c_str();
                 void * dst                          = root.cptr.get();
-                exception_t err_code                = dg::filesystem::readfile_binary_direct(cstr_path, dst, MEMREGION_SZ);
                 
-                if (dg::network_exception::is_failed(err_code)){
-                    return err_code;
-                }
-
+                dg::network_fileio::dg_read_binary_direct_nothrow(cstr_path, dst, this->memregion_sz);
+                
                 root.fsys_ptr_info  = VMAPtrInfo{region, 0u};
-                root.timestamp      = dg::utility::unix_timestamp();
+                root.timestamp      = dg::network_genult::unix_timestamp();
 
                 return dg::network_exception::SUCCESS;
             }
@@ -173,26 +175,23 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 const std::filesystem::path& opath  = dict_ptr->second;
                 const char * cstr_path              = outpath.c_str();
                 const void * src                    = root.cptr.get();
-                exception_t err_code                = dg::filesystem::writefile_binary_direct(cstr_path, src, MEMREGION_SZ);
-
-                if (dg::network_exception::is_failed(err_code)){
-                    return err_code;
-                }
+                
+                dg::network_fileio::dg_write_binary_direct_nothrow(cstr_path, src, this->memregion_sz);
 
                 root.fsys_ptr_info  = std::nullopt;
-                root.timestamp      = dg::utility::unix_timestamp();
+                root.timestamp      = dg::network_genult::unix_timestamp();
 
                 return dg::network_exception::SUCCESS;
             }
 
         private:
 
-            inline auto stable_storage_dict_find_entry(fsys_ptr_t key) const noexcept{
+            inline auto stable_storage_dict_find_entry(fsys_ptr_t key) const noexcept{ //return type
 
                 return this->stable_storage_dict.find(key);
             }
 
-            inline auto stable_storage_dict_end() const noexcept{
+            inline auto stable_storage_dict_end() const noexcept{ //return type
 
                 return this->stable_storage_dict.end();
             }
@@ -207,7 +206,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             std::unordered_map<fsys_ptr_t, HeapNode *> allocation_dict;
             std::unique_ptr<FsysLoaderInterface> fsys_loader;
             MemoryNode tmp_space;
-            std::mutex mtx;
+            std::unique_ptr<Lock> lck;
 
         public:
 
@@ -217,60 +216,34 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                          std::unordered_map<fsys_ptr_t, HeapNode *> allocation_dict,
                          std::unique_ptr<FsysLoaderInterface> fsys_loader,
                          MemoryNode tmp_space,
+                         std::unique_ptr<Lock> lck,
                          std::integral_constant<size_t, MEMREGION_SZ>) noexcept: priority_queue(std::move(priority_queue)),
                                                                                  allocation_dict(std::move(allocation_dict)),
                                                                                  fsys_loader(std::move(fsys_loader)),
                                                                                  tmp_space(std::move(tmp_space)),
-                                                                                 mtx(){}
+                                                                                 lck(std::move(lck)){}
 
-            auto map_try(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
+            auto map(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
-                auto lck_grd = std::lock_guard<std::mutex>(this->mtx);
-                return this->internal_map_try(ptr);
+                auto lck_grd = dg::genult::lock_guard(*this->lck);
+                return this->internal_map(ptr);
             }
-
-            auto map_wait(fsys_ptr_t ptr) noexcept -> MapResource{
-
-                while (true){
-                    auto rs = map_try(ptr);
-                     
-                    if (rs.has_value()){
-                        return rs.value();
-                    }
-
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(rs.error()));
-                    std::abort();
-                }
-            } 
 
             void map_release(MapResource map_resource) noexcept{
 
-                auto lck_grd = std::lock_guard<std::mutex>(this->mtx);
+                auto lck_grd = dg::genult::lock_guard(*this->lck);
                 this->internal_map_release(map_resource);
             }
 
         private:
 
-            inline auto region(fsys_ptr_t ptr) noexcept -> fsys_ptr_t{
-                
-                using ptr_arithmetic_t = typename ptr_info<fsys_ptr_t>::max_unsigned_t;
-                constexpr ptr_arithmetic_t BITMASK = ~(static_cast<ptr_arithmetic_t>(MEMREGION_SZ) - 1); 
-                return pointer_cast<fsys_ptr_t>(pointer_cast<ptr_arithmetic_t>(ptr) & BITMASK);
-            }
-
-            inline auto region_offset(fsys_ptr_t ptr) noexcept -> size_t{
-
-                using ptr_arithmetic_t = typename ptr_info<fsys_ptr_t>::max_unsigned_t;
-                return pointer_cast<ptr_arithmetic_t>(ptr) % static_cast<ptr_arithmetic_t>(MEMREGION_SZ);
-            }
-
-            inline void heap_swap(std::unique_ptr<HeapNode>& lhs, std::unique_ptr<HeapNode>& rhs) const noexcept{
+            void heap_swap(std::unique_ptr<HeapNode>& lhs, std::unique_ptr<HeapNode>& rhs) const noexcept{
 
                 std::swap(lhs->idx, rhs->idx);
                 std::swap(lhs, rhs);
             } 
 
-            inline void heap_push_up_at(size_t idx) noexcept{
+            void heap_push_up_at(size_t idx) noexcept{
                 
                 if (idx == 0u){
                     return;
@@ -286,7 +259,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 this->heap_push_up_at(c);
             }
 
-            inline void heap_push_down_at(size_t idx) noexcept{
+            void heap_push_down_at(size_t idx) noexcept{
 
                 size_t c = idx * 2 + 1;
 
@@ -306,15 +279,15 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 this->heap_push_down_at(c);
             }
 
-            inline void heap_push_updown_at(size_t idx) noexcept{
+            void heap_push_updown_at(size_t idx) noexcept{
 
                 this->heap_push_up_at(idx);
                 this->heap_push_down_at(idx);
             }
 
-            inline void heap_increase_reference(HeapNode * node) noexcept{
+            void heap_increase_reference(HeapNode * node) noexcept{
 
-                if (!static_cast<bool>(dg::safe_ptr_access(node)->fsys_ptr_info)){
+                if (!static_cast<bool>(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info)){
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
@@ -323,9 +296,9 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 heap_push_updown_at(node->idx);
             }
 
-            inline void heap_decrease_reference(HeapNode * node) noexcept{
+            void heap_decrease_reference(HeapNode * node) noexcept{
 
-                if (!static_cast<bool>(dg::safe_ptr_access(node)->fsys_ptr_info)){
+                if (!static_cast<bool>(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info)){
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
@@ -336,38 +309,38 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 }
 
                 node->fsys_ptr_info->reference -= 1;
-                node->timestamp = dg::utility::unix_timestamp();
+                node->timestamp = dg::network_genult::unix_timestamp();
                 heap_push_updown_at(node->idx);
             }
 
-            inline void allocation_dict_remove_entry(fsys_ptr_t key) noexcept{
+            void allocation_dict_remove_entry(fsys_ptr_t key) noexcept{
 
                 this->allocation_dict.erase(key);
             } 
 
-            inline void allocation_dict_add_entry(fsys_ptr_t key, HeapNode * value) noexcept{
+            void allocation_dict_add_entry(fsys_ptr_t key, HeapNode * value) noexcept{
 
                 this->allocation_dict[key] = value;
             }
 
-            inline auto allocation_dict_find_entry(fsys_ptr_t key) noexcept{
+            auto allocation_dict_find_entry(fsys_ptr_t key) noexcept{ //return type
 
                 return this->allocation_dict.find(key);
             }
 
-            inline auto allocation_dict_end() noexcept{
+            auto allocation_dict_end() noexcept{ //return type
 
                 return this->allocation_dict.end();
             }
 
-            inline auto internal_map_try(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
+            auto internal_map(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
-                fsys_ptr_t ptr_region   = this->region(ptr);
+                fsys_ptr_t ptr_region   = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
                 auto dict_ptr           = this->allocation_dict_find_entry(ptr_region);
 
                 if (dict_ptr != this->allocation_dict_end()){
                     heap_increase_reference(dict_ptr->second);
-                    return MapResource{dict_ptr->second, region_offset(ptr)};
+                    return MapResource{dict_ptr->second, dg::memult::region_offset(ptr, std::integral_constant<size_t, MEMREGION_SZ>{})};
                 }
 
                 if (static_cast<bool>(this->priority_queue[0u]->fsys_ptr_info)){
@@ -391,7 +364,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         std::swap(static_cast<MemoryNode&>(*this->priority_queue[0u]), this->tmp_space);
                         this->heap_push_down_at(0u);
 
-                        return this->internal_map_try(ptr);
+                        return this->internal_map(ptr);
                     }
 
                     return std::unexpected(dg::network_exception::OUT_OF_MEMORY);
@@ -405,10 +378,10 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 
                 this->allocation_dict_add_entry(ptr_region, priority_queue[0u].get());
                 this->heap_push_down_at(0u);
-                return this->internal_map_try(ptr);
+                return this->internal_map(ptr);
             }
 
-            inline void internal_map_release(MapResource map_resource) noexcept{
+            void internal_map_release(MapResource map_resource) noexcept{
 
                 heap_decrease_reference(map_resource.node);
             } 
@@ -430,22 +403,14 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             auto id(fsys_ptr_t ptr) const noexcept -> std::expected<size_t, exception_t>{
 
-                auto dict_ptr = this->region_id_dict.find(this->region(ptr));
+                fsys_ptr_t ptr_region   = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                auto dict_ptr           = this->region_id_dict.find(ptr_region);
 
                 if (dict_ptr == this->region_id_dict.end()){
-                    return dg::network_exception::INVALID_DICTIONARY_KEY;
+                    return std::unexpected(dg::network_exception::INVALID_DICTIONARY_KEY);
                 }
 
                 return dict_ptr->second;
-            }
-        
-        private:
-
-            inline auto region(fsys_ptr_t ptr) const noexcept -> fsys_ptr_t{
-
-                using ptr_arithmetic_t = typename dg::ptr_info<fsys_ptr_t>::max_unsigned_t;
-                constexpr ptr_arithmetic_t BITMASK  = ~(static_cast<ptr_arithmetic_t>(MEMREGION_SZ) - 1); 
-                return pointer_cast<fsys_ptr_t>(pointer_cast<ptr_arithmetic_t>(ptr) & BITMASK); 
             }
     };
 
@@ -462,35 +427,23 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                                    std::unique_ptr<MapDistributionInterface> map_distributor) noexcept: map_table(std::move(map_table)),
                                                                                                         map_distributor(std::move(map_distributor)){}
 
-            auto map_try(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
+            auto map(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
                 auto rs = this->map_distributor->id(ptr);
 
-                if (!static_cast<bool>(rs)){
+                if (!rs.has_value()){
                     return std::unexpected(rs.error());
                 }
 
-                return map_table[rs.value()]->map_try(ptr);
+                return map_table[rs.value()]->map(ptr);
             }
-
-            auto map_wait(fsys_ptr_t ptr) noexcept -> MapResource{
-
-                auto rs = this->map_distributor->id(ptr);
-
-                if (!static_cast<bool>(rs)){
-                    dg::network_log_stackdump::critical(network_exception::verbose(rs.error()));
-                    std::abort();
-                }
-
-                return map_table[rs.value()]->map_wait(ptr);
-            }
-
+            
             void map_release(MapResource map_resource) noexcept{
                 
-                fsys_ptr_t ptr  = dg::safe_pointer_access(map_resource.node)->fsys_ptr_info->ptr;
+                fsys_ptr_t ptr  = dg::network_genult::safe_pointer_access(map_resource.node)->fsys_ptr_info->ptr;
                 auto rs         = this->map_distributor->id(ptr);
 
-                if (!static_cast<bool>(rs)){
+                if (!rs.has_value()){
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }

@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdfloat>
 
-namespace dg::network_x_math{
+namespace dg::network_xmath_host{
      
     inline auto sign(std::bfloat16_t value) noexcept -> std::bfloat16_t{
 

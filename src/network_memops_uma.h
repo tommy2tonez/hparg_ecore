@@ -14,11 +14,14 @@ namespace dg::network_memops_uma{
 
     }
 
+    //assume(valid(ptr)) - too compilated for memlock_guard to return exception_t - user should do external check - undefined if reqs aren't met 
+    //this is inconsistent, compared to other apis - should reconsider next iteration
     auto memlock_guard(uma_ptr_t ptr) noexcept{
 
         return dg::network_memlock_utility::recursive_lock_guard(uma_lock_instance{}, ptr);
     } 
     
+    //assume(valid(args...))
     template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same<Args, uma_ptr_t>...>, bool> = true>
     auto memlock_guard_many(Args... args) noexcept{
 
@@ -27,15 +30,13 @@ namespace dg::network_memops_uma{
 
     auto memcpy_uma_to_vma(vma_ptr_t dst, uma_ptr_t src, size_t n) noexcept -> exception_t{
 
-        auto src_maptoken   = dg::network_uma::map_wait(src);
+        auto src_map_rs     = dg::network_uma::map_wait_safe(src);
 
-        if (!src_maptoken.has_value()){
-            return src_maptoken.error();
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
         }
 
-        auto relgrd         = dg::network_uma::map_relguard(src_maptoken.value());
-        vma_ptr_t src_vptr  = dg::network_uma::get_vma_const_ptr(src_maptoken.value());
-        
+        vma_ptr_t src_vptr  = dg::network_uma::get_vma_const_ptr(src_map_rs.value().value());        
         return dg::network_memops_virt::memcpy(dst, src_vptr, n);
     }
 
@@ -46,15 +47,13 @@ namespace dg::network_memops_uma{
 
     auto memcpy_vma_to_uma(uma_ptr_t dst, vma_ptr_t src, size_t n) noexcept -> exception_t{
 
-        auto dst_maptoken   = dg::network_uma::map_wait(dst);
+        auto dst_map_rs     = dg::network_uma::map_wait_safe(dst);
 
-        if (!dst_maptoken.has_value()){
-            return dst_maptoken.error();
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
         }
 
-        auto relgrd         = dg::network_uma::map_relguard(dst_maptoken.value());
-        vma_ptr_t dst_vptr  = dg::network_uma::get_vma_ptr(dst_maptoken.value());
-
+        vma_ptr_t dst_vptr  = dg::network_uma::get_vma_ptr(dst_map_rs.value().value());
         return dg::network_memops_virt::memcpy(dst_vptr, src, n);
     }
 
@@ -76,15 +75,13 @@ namespace dg::network_memops_uma{
 
     auto memset(uma_ptr_t dst, int c, size_t n) noexcept -> exception_t{
 
-        auto dst_maptoken   = dg::network_uma::map_wait(dst);
+        auto dst_map_rs     = dg::network_uma::map_wait_safe(dst);
         
-        if (!dst_maptoken.has_value()){
-            return dst_maptoken.error();
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
         }
 
-        auto relgrd         = dg::network_uma::map_relguard(dst_maptoken.value());
-        vma_ptr_t dst_vptr  = dg::network_uma::get_vma_ptr(dst_maptoken.value());
-
+        vma_ptr_t dst_vptr  = dg::network_uma::get_vma_ptr(dst_map_rs.value().value());
         return dg::network_memops_virt::memset(dst_vptr, c, n);
     }
 

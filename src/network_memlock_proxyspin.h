@@ -19,6 +19,10 @@ namespace dg::network_memlock_proxyspin{
 
     //maybe I should consider removing static - thats a decision that will be made in the future - when I do optimization and profiling 
 
+    using Lock = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED,
+                                    std::atomic_flag,
+                                    std::mutex>; 
+
     template <class T>
     struct ReferenceLockInterface{
 
@@ -177,11 +181,12 @@ namespace dg::network_memlock_proxyspin{
 
             static void init(ptr_t * region, proxy_id_t * initial_proxy, size_t n){
 
+                auto logger = dg::network_log_scope::critical_terminate(); 
+                
                 if (n == 0u){
-                    return;
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto log_scope          = dg::network_log_scope::critical_error_terminate(); 
                 ptr_t back_region       = *std::max_element(region, region + n);
                 ptr_t last_region       = memult::advance(back_region, MEMREGION_SZ);
                 size_t lck_table_sz     = pointer_cast<typename dg::pointer_info<ptr_t>::max_unsigned_t>(last_region) / MEMREGION_SZ; 
@@ -191,7 +196,7 @@ namespace dg::network_memlock_proxyspin{
 
                 for (size_t i = 0u; i < n; ++i){
                     if (memregion_offset(region[i]) != 0u || memregion_slot(region[i]) == 0u){
-                        throw dg::network_exception::invalid_init();
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
                     internal_acquire_release(to_table_idx(region[i]), initial_proxy[i]);
                 }
@@ -238,15 +243,16 @@ namespace dg::network_memlock_proxyspin{
         
         private:
 
-            static_assert(std::is_unsigned_v<refcount_t>);
             using refcount_t    = RefCountType; 
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;
+
+            static_assert(std::is_unsigned_v<refcount_t>);
 
             static inline constexpr refcount_t REFERENCE_ACQUIRED_VALUE = ~refcount_t{0u}; 
             static inline constexpr refcount_t REFERENCE_EMPTY_VALUE    = refcount_t{0u};
     
             struct ControlUnit{
-                std::mutex mtx;
+                Lock lck;
                 proxy_id_t proxy_id;
                 refcount_t refcount;
             };
@@ -265,7 +271,7 @@ namespace dg::network_memlock_proxyspin{
 
             static inline auto internal_acquire_try(size_t table_idx) noexcept -> std::optional<proxy_id_t>{
 
-                auto lck_grd = std::lock_guard<std::mutex>(lck_table[table_idx].mtx);
+                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
 
                 if (lck_table[table_idx].refcount != REFERENCE_EMPTY_VALUE){
                     return std::nullopt;
@@ -286,14 +292,14 @@ namespace dg::network_memlock_proxyspin{
 
             static inline void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id) noexcept{
 
-                auto lck_grd = std::lock_guard<std::mutex>(lck_table[table_idx].mtx);
+                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
                 lck_table[table_idx].proxy_id = new_proxy_id;
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_VALUE;
             }
 
             static inline auto internal_reference_try(size_t table_idx, proxy_id_t expected_proxy_id) noexcept -> bool{
 
-                auto lck_grd = std::lock_guard<std::mutex>(lck_table[table_idx].mtx);
+                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
 
                 if (lck_table[table_idx].proxy_id != expected_proxy_id){
                     return false;
@@ -314,7 +320,7 @@ namespace dg::network_memlock_proxyspin{
 
             static inline void internal_reference_release(size_t table_idx) noexcept{
 
-                auto lck_grd = std::lock_guard<std::mutex>(lck_table[table_idx].mtx);
+                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
                 lck_table[table_idx].refcount -= 1;
             }
 
@@ -322,11 +328,12 @@ namespace dg::network_memlock_proxyspin{
 
             static void init(ptr_t * region, proxy_id_t * initial_proxy, size_t n){
 
+                auto log_scope  = dg::network_log_scope::critical_terminate();
+
                 if (n == 0u){
-                    return;
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto log_scope          = dg::network_log_scope::critical_error_terminate(); 
                 ptr_t back_region       = *std::max_element(region, region + n);
                 ptr_t last_region       = memult::advance(back_region, MEMREGION_SZ);
                 size_t lck_table_sz     = pointer_cast<typename dg::ptr_info<ptr_t>::max_unsigned_t>(last_region) / MEMREGION_SZ; 
@@ -336,7 +343,7 @@ namespace dg::network_memlock_proxyspin{
 
                 for (size_t i = 0u; i < n; ++i){
                     if (memregion_offset(region[i]) != 0u || memregion_slot(region[i]) == 0u){
-                        throw dg::network_exception::invalid_init();
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
                     internal_acquire_release(to_table_idx(region[i]), initial_proxy[i]);
                 }

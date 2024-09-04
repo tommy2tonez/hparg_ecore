@@ -103,13 +103,17 @@ namespace dg::network_memops_fsys{
 
     inline auto memcpy_host_to_fsys(fsys_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
-        auto map_rs             = dg::network_kernelmap_x::map_wait(dst);
-        auto map_guard          = dg::network_kernelmap_x::map_guard(map_rs);
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs);
-        exception_t cpy_err     = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src, sz);
+        auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
+        
+        if (!map_rs.has_value()){
+            return map_rs.error();
+        }
 
-        if (dg::network_exception::is_failed(cpy_err)){
-            return cpy_err;
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value().value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src, sz);
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
         }
 
         return dg::network_exception::SUCCESS;
@@ -117,13 +121,17 @@ namespace dg::network_memops_fsys{
 
     inline auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, cuda_device_id_t src_id, size_t sz) noexcept -> exception_t{
 
-        auto map_rs             = dg::network_kernelmap_x::map_wait(dst);
-        auto map_guard          = dg::network_kernelmap_x::map_relguard(map_rs);
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs);
-        exception_t cpy_err     = dg::network_memops_clib::memcpy_cuda_to_host(dst_cptr, src, src_id, sz);
+        auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
 
-        if (dg::network_exception::is_failed(cpy_err)){
-            return cpy_err;
+        if (!map_rs.has_value()){
+            return map_rs.error();
+        }
+
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value().value());
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_host(dst_cptr, src, src_id, sz);
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
         }
 
         return dg::network_exception::SUCCESS;
@@ -131,13 +139,17 @@ namespace dg::network_memops_fsys{
 
     inline auto memcpy_fsys_to_host(void * dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        auto map_rs             = dg::network_kernelmap_x::map_wait(src);
-        auto map_guard          = dg::network_kernelmap_x::map_relguard(map_rs);
-        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(map_rs);
-        exception_t cpy_err     = dg::network_memops_clib::memcpy_host_to_hst(dst, src_cptr, sz);
+        auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
-        if (dg::network_exception::is_failed(cpy_err)){
-            return cpy_err;
+        if (!map_rs.has_value()){
+            return map_rs.error();
+        }
+
+        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(map_rs.value().value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_hst(dst, src_cptr, sz);
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
         }
 
         return dg::network_exception::SUCCESS;
@@ -145,13 +157,17 @@ namespace dg::network_memops_fsys{
 
     inline auto memcpy_fsys_to_cuda(cuda_ptr_t dst, cuda_device_id_t dst_id, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        auto map_rs             = dg::network_kernelmap_x::map_wait(src);
-        auto map_guard          = dg::network_kernelmap_x::map_relguard(map_rs);
-        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(map_rs);
-        exception_t cpy_err     = dg::network_memops_clib::memcpy_host_to_cuda(dst, dst_id, src_cptr, sz);
+        auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
-        if (dg::network_exception::is_failed(cpy_err)){
-            return cpy_err;
+        if (!map_rs.has_value()){
+            return map_rs.error();
+        }
+
+        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(map_rs.value().value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_cuda(dst, dst_id, src_cptr, sz);
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
         }
 
         return dg::network_exception::SUCCESS;
@@ -159,16 +175,24 @@ namespace dg::network_memops_fsys{
 
     inline auto memcpy_fsys_to_fsys(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        auto dst_map_rs         = dg::network_kernelmap_x::map_wait(dst);
-        auto src_map_rs         = dg::network_kernelmap_x::map_wait(src);
-        auto dst_map_guard      = dg::network_kernelmap_x::map_relguard(dst_map_rs);
-        auto src_map_guard      = dg::network_kernelmap_x::map_relguard(src_map_rs);
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs);
-        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(src_map_rs);
-        exception_t cpy_err     = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src_cptr, sz);
+        auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
-        if (dg::network_exception::is_failed(cpy_err)){
-            return cpy_err;
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        auto src_map_rs         = dg::network_kernelmap_x::map_safe(src);
+
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
+        }
+
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value().value());
+        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(src_map_rs.value().value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src_cptr, sz);
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
         }
 
         return dg::network_exception::SUCCESS;
@@ -176,13 +200,17 @@ namespace dg::network_memops_fsys{
 
     inline auto memset_fsys(fsys_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
         
-        auto dst_map_rs         = dg::network_kernelmap_x::map_wait(dst);
-        auto dst_map_guard      = dg::network_kernelmap_x::map_guard(dst_map_rs);
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs);
-        exception_t set_err     = dg::network_memops_clib::memset_host(dst_cptr, c, sz);
+        auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
-        if (dg::network_exception::is_failed(set_err)){
-            return set_err;
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value().value());
+        exception_t err         = dg::network_memops_clib::memset_host(dst_cptr, c, sz);
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
         }
 
         return dg::network_exception::SUCCESS;

@@ -178,7 +178,7 @@ namespace dg::network_uma_tlb::exclusive{
 
             static void init(uma_ptr_t * host_region, device_ptr_t * device_region, device_id_t * device_id, bool * is_proxy_rep, size_t n){
 
-                auto logger                 = dg::network_log_scope::critical_error_terminate();
+                auto logger                 = dg::network_log_scope::critical_terminate();
                 auto injecting_host_region  = std::make_unique<uma_ptr_t[]>(n);
                 auto injecting_device_id    = std::make_unique<device_id_t[]>(n);
                 size_t injecting_sz         = 0u; 
