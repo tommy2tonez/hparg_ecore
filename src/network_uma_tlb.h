@@ -55,44 +55,6 @@ namespace dg::network_uma_tlb::interface{
             return T::remap_wait(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
         }
     };
-
-    template <class T>
-    struct ProxyTLBXInterface{
-
-        using interface_t   = ProxyTLBXInterface<T>;
-        using device_id_t   = typename T::device_id_t;
-        using uma_ptr_t     = typename T::uma_ptr_t;
-        using device_ptr_t  = typename T::device_ptr_t;
-
-        static_assert(std::is_unsigned_v<device_id_t>);
-        static_assert(dg::is_ptr_v<uma_ptr_t>);
-        static_assert(dg::is_ptr_v<device_ptr_t>);
-
-        static auto map_try(device_id_t device_id, uma_ptr_t * host_ptr, device_ptr_t * device_ptr) noexcept -> bool{
-
-            return T::map_try(device_id, host_ptr, device_ptr);
-        }  
-
-        static auto map_wait(device_id_t device_id, uma_ptr_t * host_ptr, device_ptr_t * device_ptr) noexcept{
-
-            T::map_wait(device_id, host_ptr, device_ptr);
-        }
-
-        static auto map_release(device_id_t device_id, uma_ptr_t * host_ptr) noexcept{
-
-            T::map_release(device_id, host_ptr);
-        }
-
-        static auto remap_try(device_id_t device_id, uma_ptr_t * new_host_ptr, uma_ptr_t * old_host_ptr, device_ptr_t * new_device_ptr, device_ptr_t * old_device_ptr) noexcept -> bool{
-
-            return T::remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
-        }
-
-        static void remap_wait(device_id_t device_id, uma_ptr_t * new_host_ptr, uma_ptr_t * old_host_ptr, device_ptr_t * new_device_ptr, device_ptr_t * old_device_ptr) noexcept{
-
-            T::remap_wait(device_id, new_host_ptr, old_host_ptr, new_device_ptr, old_device_ptr);
-        }
-    };
 }
 
 namespace dg::network_uma_tlb::memqualifier_taxonomy{
@@ -192,8 +154,7 @@ namespace dg::network_uma_tlb::exclusive{
                 }
                 
                 translation_table::init(host_region, device_region, device_id, n); 
-                uma_lock::init(injecting_host_region.get(), injecting_device_id.get(), injecting_sz);
-
+                vna_lock::init(injecting_host_region.get(), injecting_device_id.get(), injecting_sz);
                 logger.release();
             }
 
@@ -293,7 +254,7 @@ namespace dg::network_uma_tlb::direct{
 
             static auto remap_try(device_id_t device_id, uma_ptr_t new_host_ptr, uma_ptr_t old_host_ptr, device_ptr_t old_device_ptr) noexcept -> device_ptr_t{
 
-                if (memult::memregion_slot(old_host_ptr) == memregion_slot(new_host_ptr)){
+                if (memregion_slot(old_host_ptr) == memregion_slot(new_host_ptr)){
                     return memult::advance(old_device_ptr, memult::distance(old_host_ptr, new_host_ptr));
                 }
 
@@ -511,85 +472,6 @@ namespace dg::network_uma_tlb::dbe{ //direct - bijective - exclusive
                 return map_wait(device_id, new_host_ptr);
             }
     };
-
-    template <class ID, class T>
-    class ProxyTLBX{};
-
-    template <class ID, class T>
-    class ProxyTLBX<ID, ProxyTLBInterface<T>>: public ProxyTLBXInterface<ProxyTLBX<ID, ProxyTLBInterface<T>>>{
-
-        private:
-
-            using base = ProxyTLBInterface<T>;
-        
-        public:
-
-            using device_id_t   = typename base::device_id_t;
-            using uma_ptr_t     = typename base::uma_ptr_t;
-            using device_ptr_t  = typename base::device_ptr_t; 
-
-            static auto map_try(device_id_t device_id, uma_ptr_t * host_ptr, device_ptr_t * device_ptr) noexcept -> bool{
-
-                uma_ptr_t * last = host_ptr;
-
-                while (!memult::is_nullptr(*last)){ 
-                    *device_ptr = base::map_try(device_id, *last);
-
-                    if (memult::is_nullptr(device_ptr)){
-                        break;
-                    }
-
-                    ++last;
-                    ++device_ptr;
-                }
-
-                if (memult::is_nullptr(*last)){
-                    return true;
-                }
-
-                for (auto i = host_ptr; i != last; ++i){
-                    base::map_release(device_id, *i);
-                }
-
-                return false;
-            }
-
-            static void map_wait(device_id_t device_id, uma_ptr_t * host_ptr, device_ptr_t * device_ptr) noexcept{
-
-                while (!map_try(device_id, host_ptr, device_ptr)){}
-            }
-
-            static void map_release(device_id_t device_id, uma_ptr_t * host_ptr) noexcept{
-
-                while (memult::is_validptr(*host_ptr)){
-                    base::map_release(device_id, *host_ptr);
-                    ++host_ptr;
-                }
-            }
-
-            static auto remap_try(device_id_t device_id, uma_ptr_t * new_host_ptr, uma_ptr_t * old_host_ptr, device_ptr_t * new_device_ptr, device_ptr_t * old_device_ptr) noexcept -> bool{
-
-                while (memult::is_validptr(*new_host_ptr)){
-                    *new_device_ptr = base::remap_try(device_id, *new_host_ptr, *old_host_ptr, *old_device_ptr);
-
-                    if (memult::is_nullptr(*new_device_ptr)){
-                        return false;
-                    }
-
-                    ++new_host_ptr;
-                    ++old_host_ptr;
-                    ++new_device_ptr;
-                    ++old_device_ptr;
-                }
-
-                return true;
-            }
-
-            static void remap_wait(device_id_t device_id, uma_ptr_t * new_host_ptr, uma_ptr_t * old_host_ptr, device_ptr_t * new_device_ptr, device_ptr_t * old_device_ptr) noexcept{
-
-                while (!remap_try(device_id, new_host_ptr, old_host_ptr, new_device_ptr, old_device_ptr)){}
-            }
-    };
 }
 
 namespace dg::network_uma_tlb::v1{
@@ -673,6 +555,64 @@ namespace dg::network_uma_tlb::v1{
                 logger.release();
             }
     };
+}
+
+namespace dg::network_uma_tlb::wrapper{
+
+    template <class T>
+    struct ProxyTLBInterface{
+
+        using device_id_t           = typename T::device_id_t;
+        using uma_ptr_t             = typename T::uma_ptr_t;
+        using device_ptr_t          = typename T::device_ptr_t;
+        using map_resource_handle_t = typename T::map_resource_handle_t;
+
+        //preconds here - 
+
+        static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> std::optional<map_resource_handle_t>{
+
+            return T::map_try(device_id, host_ptr);
+        }
+
+        static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> map_resource_handle_t{
+
+            return T::map_wait(device_id, host_ptr);
+        }
+
+        static void map_release(map_resource_handle_t map_resource) noexcept{
+
+            T::map_release(map_resource);
+        }
+    
+        static auto get_vma_ptr(map_resource_handle_t map_resource) noexcept -> device_ptr_t{
+
+            return T::get_vma_ptr(map_resource);
+        }
+
+        static auto get_vma_const_ptr(map_resource_handle_t map_resource) -> device_ptr_t{
+
+            return T::get_vma_const_ptr(map_resource);
+        } 
+    };
+
+    template <class T>
+    struct SafePtrAccessInterface{
+
+        using device_id_t   = typename T::device_id_t
+        using uma_ptr_t     = typename T::uma_ptr_t; 
+
+        static auto access(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> exception_t{
+
+            return T::access(device_id, host_ptr);
+        }
+
+        static auto access(uma_ptr_t host_ptr) noexcept -> exception_t{
+
+            return T::access(host_ptr);
+        }
+    };
+    
+    //complicated - 
 }
 
 #endif

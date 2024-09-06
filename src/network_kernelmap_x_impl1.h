@@ -57,19 +57,12 @@ namespace dg::network_kernelmap_x_impl1::interface{
 
     using namespace network_kernelmap_x_impl1::model; 
 
-    //there are two types of interfaces:
-    //interface that summarizes a component
-    //interface that declares expectations of a component 
-
-    //this interface is an expectation of some component rather than a summary of some component
     struct FsysLoaderInterface{
         virtual ~FsysLoaderInterface() = default;
         virtual auto load(MemoryNode&, fsys_ptr_t) noexcept -> exception_t = 0; //atomicity (either load all or none)
         virtual void unload(MemoryNode&) noexcept = 0;
     };
 
-    //this interface is a summary rather than an expectation
-    //given a fsys_ptr_t, return a host_ptr whose reachability is a superset of the arg
     struct MapInterface{
         virtual ~MapInterface() = default;
         virtual auto map(fsys_ptr_t) noexcept -> std::expected<MapResource, exception_t> = 0;
@@ -459,6 +452,5 @@ namespace dg::network_kernelmap_x_impl1{
 
     }
 } 
-
 
 #endif

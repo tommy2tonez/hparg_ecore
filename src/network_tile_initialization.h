@@ -8,195 +8,180 @@
 #include "network_uma.h"
 #include "network_tile_member_getsetter.h"
 #include "network_memops_uma.h"
+#include "network_tile_member_access.h"
 
 namespace dg::network_tile_initialization_static{
     
+    //need to make sure these are nothrow_copy_cosntructible_v<...>-
+
     void init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
-
-        uma_ptr_t rcu_addr  = get_leaf_rcu_addr(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_leaf_reverter(ptr, SET_OPS_LEAF_OPERATABLE_ID | SET_OPS_LEAF_PONG_ADDR);
         
-        set_leaf_operatable_id(ptr, operatable_id);
-        set_leaf_pong_addr(ptr, DEFAULT_LEAF_PONG_ADDR);
-
-        reverter_grd.release();
+        ptr                 = dg::network_tile_member_access::throwsafe_leaf_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_leaf_rcu_addr_nothrow(ptr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
+        
+        set_leaf_operatable_id_nothrow(ptr, operatable_id);
+        set_leaf_pong_addr_nothrow(ptr, DEFAULT_LEAF_PONG_ADDR);
     }
 
     void init_mono(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
-        uma_ptr_t rcu_addr  = get_mono_rcu_addr(ptr);
+        ptr                 = dg::network_tile_member_access::throwsafe_mono_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_mono_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_mono_reverter(ptr, SET_OPS_MONO_SRC | SET_OPS_MONO_DISPATCH_CONTROL | SET_OPS_MONO_OPERATABLE_ID | SET_OPS_MONO_PONG_COUNT | SET_OPS_MONO_PONG_ADDR);
         
-        set_mono_src(ptr, src);
-        set_mono_dispatch_control(ptr, dispatch_control_id);
-        set_mono_operatable_id(ptr, operatable_id);
-        set_mono_pong_count(ptr, DEFAULT_MONO_PONG_COUNT);
-        set_mono_pong_addr(ptr, DEFAULT_MONO_PONG_ADDR); 
-
-        reverter_grd.release();
+        set_mono_src_nothrow(ptr, src);
+        set_mono_dispatch_control_nothow(ptr, dispatch_control_id);
+        set_mono_operatable_id_nothow(ptr, operatable_id);
+        set_mono_pong_count_nothow(ptr, DEFAULT_MONO_PONG_COUNT);
+        set_mono_pong_addr_nothrow(ptr, DEFAULT_MONO_PONG_ADDR); 
     }
 
     void init_pair(uma_ptr_t ptr, uma_ptr_t lhs, uma_ptr_t rhs, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
-        uma_ptr_t rcu_addr  = get_pair_rcu_addr(ptr);
+        ptr                 = dg::network_tile_member_access::throwsafe_pair_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_pair_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_pair_reverter(ptr, SET_OPS_PAIR_LHS | SET_OPS_PAIR_RHS | SET_OPS_PAIR_DISPATCH_CONTROL | SET_OPS_PAIR_OPERATABLE_ID | SET_OPS_PAIR_PONG_COUNT | SET_OPS_PAIR_PONG_ADDR);
         
-        set_pair_lhs(ptr, lhs);
-        set_pair_rhs(ptr, rhs);
-        set_pair_dispatch_control(ptr, dispatch_control_id);
-        set_pair_operatable_id(ptr, operatable_id);
-        set_pair_pong_count(ptr, DEFAULT_PAIR_PONG_COUNT);
-        set_pair_pong_addr(ptr, DEFAULT_PAIR_PONG_ADDR);
-        
-        reverter_grd.release();
+        set_pair_lhs_nothow(ptr, lhs);
+        set_pair_rhs_nothow(ptr, rhs);
+        set_pair_dispatch_control_nothow(ptr, dispatch_control_id);
+        set_pair_operatable_id_nothow(ptr, operatable_id);
+        set_pair_pong_count_nothrow(ptr, DEFAULT_PAIR_PONG_COUNT);
+        set_pair_pong_addr_nothow(ptr, DEFAULT_PAIR_PONG_ADDR);
     }
 
     void init_uacm(uma_ptr_t ptr, std::array<uma_ptr_t, UACM_COUNT> src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
-        uma_ptr_t rcu_addr  = get_uacm_rcu_addr(ptr);
+        ptr                 = dg::network_tile_member_access::throwsafe_uacm_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_uacm_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_uacm_reverter(ptr, SET_OPS_UACM_SRC | SET_OPS_UACM_DISPATCH_CONTROL | SET_OPS_UACM_OPERATABLE_ID | SET_OPS_UACM_PONG_COUNT | SET_OPS_UACM_PONG_ADDR);
         
-        set_uacm_src(ptr, src);
-        set_uacm_dispatch_control(ptr, dispatch_control_id);
-        set_uacm_operatable_id(ptr, operatable_id);
-        set_uacm_pong_count(ptr, DEFAULT_UACM_PONG_COUNT);
-        set_uacm_pong_addr(ptr, DEFAULT_UACM_PONG_ADDR);
-        
-        reverter_grd.release();
+        set_uacm_src_nothrow(ptr, src);
+        set_uacm_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_uacm_operatable_id_nothrow(ptr, operatable_id);
+        set_uacm_pong_count_nothrow(ptr, DEFAULT_UACM_PONG_COUNT);
+        set_uacm_pong_addr_nothrow(ptr, DEFAULT_UACM_PONG_ADDR);
     }
 
     void init_pacm(uma_ptr_t ptr, std::array<uma_ptr_t, PACM_COUNT> lhs, std::array<uma_ptr_t, PACM_COUNT> rhs, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
-        uma_ptr_t rcu_addr  = get_pacm_rcu_addr(ptr);
+        ptr                 = dg::network_tile_member_access::throwsafe_pacm_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_pacm_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_pacm_reverter(ptr, SET_OPS_PACM_LHS | SET_OPS_PACM_RHS | SET_OPS_PACM_DISPATCH_CONTROL | SET_OPS_PACM_OPERATABLE_ID | SET_OPS_PACM_PONG_COUNT | SET_OPS_PACM_PONG_ADDR);
         
-        set_pacm_lhs(ptr, lhs);
-        set_pacm_rhs(ptr, rhs);
-        set_pacm_dispatch_control(ptr, dispatch_control_id);
-        set_pacm_operatable_id(ptr, operatable_id);
-        set_pacm_pong_count(ptr, DEFAULT_PACM_PONG_COUNT);
-        set_pacm_pong_addr(ptr, DEFAULT_PACM_PONG_ADDR);
-        
-        reverter_grd.release();
+        set_pacm_lhs_nothrow(ptr, lhs);
+        set_pacm_rhs_nothrow(ptr, rhs);
+        set_pacm_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_pacm_operatable_id_nothrow(ptr, operatable_id);
+        set_pacm_pong_count_nothrow(ptr, DEFAULT_PACM_PONG_COUNT);
+        set_pacm_pong_addr_nothrow(ptr, DEFAULT_PACM_PONG_ADDR);
     }
 
     void init_crit(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
-        uma_ptr_t rcu_addr  = get_crit_rcu_addr(ptr);
+        ptr                 = dg::network_tile_member_access::throwsafe_crit_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_crit_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_crit_reverter(ptr, SET_OPS_CRIT_SRC | SET_OPS_CRIT_DISPATCH_CONTROL | SET_OPS_CRIT_OPERATABLE_ID | SET_OPS_CRIT_PONG_COUNT | SET_OPS_CRIT_PONG_ADDR);
         
-        set_crit_src(ptr, src);
-        set_crit_dispatch_control(ptr, dispatch_control_id);
-        set_crit_operatable_id(ptr, operatable_id);
-        set_crit_pong_count(ptr, DEFAULT_CRIT_PONG_COUNT);
-        set_crit_pong_addr(ptr, DEFAULT_CRIT_PONG_ADDR);
-        
-        reverter_grd.release();
+        set_crit_src_nothrow(ptr, src);
+        set_crit_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_crit_operatable_id_nothrow(ptr, operatable_id);
+        set_crit_pong_count_nothrow(ptr, DEFAULT_CRIT_PONG_COUNT);
+        set_crit_pong_addr_nothrow(ptr, DEFAULT_CRIT_PONG_ADDR);
     }
 
     void init_msgrfwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, injection_info_t injection_info){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
-        uma_ptr_t rcu_addr  = get_msgrfwd_rcu_addr(ptr);
+        ptr                 = dg::network_tile_member_access::throwsafe_msgrfwd_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_msgrfwd_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_msgrfwd_reverter(ptr, SET_OPS_MSGRFWD_SRC | SET_OPS_MSGRFWD_DISPATCH_CONTROL | SET_OPS_MSGRFWD_INJECTION_INFO | SET_OPS_MSGRFWD_PONG_COUNT | SET_OPS_MSGRFWD_PONG_ADDR);
         
-        set_msgrfwd_src(ptr, src);
-        set_msgrfwd_dispatch_control(ptr, dispatch_control_id);
-        set_msgrfwd_operatable_id(ptr, operatable_id);
-        set_msgrfwd_injection_info(ptr, injection_info);
-        set_msgrfwd_pong_count(ptr, DEFAULT_MSGRFWD_PONG_COUNT);
-        set_msgrfwd_pong_addr(ptr, DEFAULT_MSGRFWD_PONG_ADDR);
-        
-        reverter_grd.release();
+        set_msgrfwd_src_nothrow(ptr, src);
+        set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
+        set_msgrfwd_injection_info_nothrow(ptr, injection_info);
+        set_msgrfwd_pong_count_nothrow(ptr, DEFAULT_MSGRFWD_PONG_COUNT);
+        set_msgrfwd_pong_addr_nothrow(ptr, DEFAULT_MSGRFWD_PONG_ADDR);
     }
 
     void init_msgrbwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, gradient_rc_t least, injection_info_t injection_info){
 
         using namespace network_tile_member_getsetter;
-        using namespace network_tile_member_getsetguard; 
 
+        ptr                 = dg::network_tile_member_access::throwsafe_msgrbwd_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_msgrbwd_rcu_addr(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        auto reverter_grd   = dieguard_msgrbwd_reverter(ptr, SET_OPS_MSGRBWD_SRC | SET_OPS_MSGRBWD_DISPATCH_CONTROL | SET_OPS_MSGRBWD_OPERATABLE_ID | SET_OPS_MSGRBWD_GBPC | SET_OPS_MSGRBWD_INJECTION_INFO | SET_OPS_MSGRBWD_PONG_ADDR);
         
-        set_msgrbwd_src(ptr, src);
-        set_msgrbwd_dispatch_control(ptr, dispatch_control_id);
-        set_msgrbwd_operatable_id(ptr, operatable_id);
-        set_msgrbwd_gbpc(ptr, least); 
-        set_msgrbwd_injection_info(ptr, injection_info);
-        set_msgrbwd_pong_count(ptr, DEFAULT_MSGRBWD_PONG_COUNT);
-        set_msgrbwd_pong_addr(ptr, DEFAULT_MSGRBWD_PONG_ADDR);
-        
-        reverter_grd.release();
+        set_msgrbwd_src_nothrow(ptr, src);
+        set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
+        set_msgrbwd_gbpc_nothrow(ptr, least); 
+        set_msgrbwd_injection_info_nothrow(ptr, injection_info);
+        set_msgrbwd_pong_count_nothrow(ptr, DEFAULT_MSGRBWD_PONG_COUNT);
+        set_msgrbwd_pong_addr_nothrow(ptr, DEFAULT_MSGRBWD_PONG_ADDR);
     }
-
-    //having these methods as placeholder for future extension - require code duplication to actually recover recoverable 
 
     void init_leaf_nothrow(uma_ptr_t ptr, operatable_id_t id) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_leaf(ptr, id));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_leaf);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, id));
     }
 
     void init_mono_nothrow(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_id, operatable_id_t operatable_id) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_mono(ptr, src, dispatch_id, operatable_id));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_mono);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, src, dispatch_id, operatable_id));
     }
 
     void init_pair_nothrow(uma_ptr_t ptr, uma_ptr_t lhs, uma_ptr_t rhs, dispatch_control_t dispatch_id, operatable_id_t operatable_id) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_pair(ptr, lhs, rhs, dispatch_id, operatable_id));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_pair);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, lhs, rhs, dispatch_id, operatable_id));
     }
 
     void init_uacm_nothrow(uma_ptr_t ptr, uma_ptr_t * src, dispatch_control_t dispatch_id, operatable_id_t operatable_id) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_uacm(ptr, src, dispatch_id, operatable_id));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_uacm);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, src, dispatch_id, operatable_id));
     }
 
     void init_pacm_nothrow(uma_ptr_t ptr, uma_ptr_t * lhs, uma_ptr_t * rhs, dispatch_control_t dispatch_id, operatable_id_t operatable_id) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_pacm(ptr, lhs, rhs, dispatch_id, operatable_id));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_pacm);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, lhs, rhs, dispatch_id, operatable_id));
     }
 
     void init_crit_nothrow(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_id, operatable_id_t operatable_id) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_crit(ptr, src, dispatch_id, operatable_id));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_crit);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, src, dispatch_id, operatable_id));
     }
 
     void init_msgrfwd_nothrow(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_id, operatable_id_t operatable_id, injection_info_t injection_info) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_msgrfwd(ptr, src, dispatch_id, operatable_id, injection_info));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_msgrfwd);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, src, dispatch_id, operatable_id, injection_info));
     }
 
     void init_msgrbwd_nothrow(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_id, operatable_id_t operatable_id, gradient_rc_t least_rc, injection_info_t injection_info) noexcept{
 
-        dg::network_exception_handler::nothrow_log(init_msgrbwd(ptr, src, dispatch_id, operatable_id, least_rc, injection_info));
+        auto wrapped = dg::network_exception::to_cstyle_function(init_msgrbwd);
+        dg::network_exception_handler::nothrow_log(wrapped(ptr, src, dispatch_id, operatable_id, least_rc, injection_info));
     }
 }
 

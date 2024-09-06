@@ -14,10 +14,21 @@ namespace dg::network_uma{
     using namespace dg::network_uma_definition; 
     using namespace dg::network_uma_tlb::memqualifier_taxonomy;  
     
-    using tlb_factory           = dg::network_uma_tlb::v1::Factory<signature_dg_network_uma, device_id_t, uma_ptr_t, device_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>; 
-    using tlb_instance          = typename tlb_factory::tlb;
-    using tlbdirect_instance    = typename tlb_factory::tlb_direct;
-    using uma_metadata_instance = typename tlb_factory::uma_metadata; 
+    using tlb_factory               = dg::network_uma_tlb::v1::Factory<signature_dg_network_uma, device_id_t, uma_ptr_t, device_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>; 
+    using tlb_instance              = typename tlb_factory::tlb;
+    using tlbdirect_instance        = typename tlb_factory::tlb_direct;
+    using safecthrow_uma_ptr_access = typename tlb_factory::safecthrow_uma_ptr_access;
+    using metadata_getter           = typename tlb_factory::uma_metadata; 
+    using map_resource_handle_t     = typename tlb_factory::map_resource_handle_t; 
+
+    static_assert(std::is_trivial_v<map_resource_handle_t>);
+    static_assert(dg::is_immutable_resource_handle_v<map_resource_handle_t>);
+
+    //map <arg> -> <result>
+    //reachability(result) >= reachability(arg)
+    //reachability contract is either fulfilled by allocation or injecting data - up to the user to choose void init() method 
+    //<function_name> assumes all inputs
+    //<function_name>_nothrow assumes valid inputs, equivalents to __builtin_assume(is_precond_met(args...))
 
     void init(uma_ptr_t * host_region, vma_ptr_t * device_region, device_id_t * device_id, memqualifier_t * qualifier, size_t n){
 
@@ -26,32 +37,69 @@ namespace dg::network_uma{
     
     auto map_direct(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<vma_ptr_t, exception_t>{
 
+        excepion_t ptrchk = safecthrow_uma_ptr_access::access(device_id, ptr); 
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        }
+
+        auto map_rs     = tlbdirect_instance::map_wait(device_id, ptr); //map_direct returns the ptr by bypassing the internal resource trackkeeping
+        vma_ptr_t rs    = tlb_instance::get_vma_ptr(map_rs);
+        tlbdirect_instance::map_release(map_rs);
+
+        return rs; 
     }
 
     auto map_direct_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
-        return tlbdirect_instance::map_wait(device_id, ptr);
+        auto map_rs     = tlbdirect_instance::map_wait(device_id, ptr);
+        vma_ptr_t rs    = tlb_instance::get_vma_ptr(map_rs);
+        tlbdirect_instance::map_release(map_rs);
+
+        return rs; 
     } 
 
     auto map_try(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
+        exception_t ptrchk = safecthrow_uma_ptr_access::access(device_id, ptr);
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        }
+
+        std::optional<map_resource_handle_t> rs = tlb_instance::map_try(device_id, ptr);
+
+        if (!rs.has_value()){
+            return dg::network_exception::BAD_SPIN;
+        }
+
+        return rs.value();
     }
 
     auto map_try_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<map_resource_handle_t, exception_t>{
 
+        return tlb_instance::map_try(device_id, ptr);
     }
 
     auto map_wait(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
+        exception_t ptrchk = safecthrow_uma_ptr_access::access(device_id, ptr);
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        }
+
+        return tlb_instance::map_wait(device_id, ptr);
     }
 
     auto map_wait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> map_resource_handle_t{
 
+        return tlb_instance::map_wait(device_id, ptr);
     }
 
     void map_release(map_resource_handle_t map_resource) noexcept{
 
-        // tlb_instance::map_release(device_id, ptr);
+        tlb_instance::map_release(map_resource);
     }
 
     static inline auto map_release_lambda = [](map_resource_handle_t map_resource) noexcept{
@@ -74,6 +122,8 @@ namespace dg::network_uma{
         return dg::genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(device_id, ptr), map_release_lambda);
     }
 
+    //defined for every std::lock_guard<> use cases
+    //undefined otherwise
     auto map_relguard(map_resource_handle_t map_resource) noexcept{
 
         static int i    = 0;
@@ -86,68 +136,110 @@ namespace dg::network_uma{
 
     auto get_vma_ptr(map_resource_handle_t map_resource) noexcept -> vma_ptr_t{
 
+        return tlb_instance::get_vma_ptr(map_resource); //ub_fence - an attempt to acquire higher permission will maybe abort the program 
     } 
 
     auto get_vma_const_ptr(map_resource_handle_t map_resource) noexcept -> vma_ptr_t{ 
 
+        return tlb_instance::get_vma_const_ptr(map_resource); 
     } 
 
     auto device_count(uma_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
+        std::expected<uma_ptr_t, exception_t> ptrchk = safecthrow_uma_ptr_access::access(ptr);
+
+        if (!ptrchk.has_value()){
+            return ptrchk.error();
+        }
+
+        return metadata_getter::device_count(ptr);
     } 
 
     auto device_count_nothrow(uma_ptr_t ptr) noexcept -> size_t{
 
-        // return uma_metadata_instance::device_reference_count(ptr);
+        return metatdata_getter::device_count(ptr);
     }
 
     auto device_at(uma_ptr_t ptr, size_t idx) noexcept -> std::expected<device_id_t, exception_t>{
 
+        exception_t ptrchk = safecthrow_uma_ptr_access::access(ptr);
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        }
+
+        return metadata_getter::device_at(ptr, idx);
     } 
 
     auto device_at_nothrow(uma_ptr_t ptr, size_t idx) noexcept -> device_id_t{
 
-        // return uma_metadata_instance::device_at(ptr, idx);
+        return metadata_getter::device_at(ptr, idx);
     }
 
     auto device_strictest_at(uma_ptr_t ptr) noexcept -> std::expected<device_id_t, exception_t>{
->
-        return uma_metadata_instance::device_strictest_at(ptr);
+
+        exception_t ptrchk = safecthrow_uma_ptr_access::access(ptr);
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        }
+
+        return metadata_getter::device_strictest_at(ptr);
     }
 
     auto device_strictest_at_nothrow(uma_ptr_t ptr) noexcept -> device_id_t{
 
+        return metadata_getter::device_strictest_at(ptr);
     } 
 
     auto device_recent_at(uma_ptr_t ptr) noexcept -> std::expected<device_id_t, exception_t>{
 
+        exception_t ptrchk = safecthrow_uma_ptr_access::access(ptr);
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        }
+
+        return metadata_getter::device_recent_at(ptr);
     }
 
     auto device_recent_at_nothrow(uma_ptr_t ptr) noexcept -> device_id_t{
 
+        return metadata_getter::device_recent_at(ptr);
     }
 
     auto map_wait(uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
+        exception_t ptrchk = safecthrow_uma_ptr_access::access(ptr);
+
+        if (dg::network_exception::is_failed(ptrchk)){
+            return ptrchk;
+        } 
+
         while (true){
-            device_id_t id  = device_recent_at(ptr);
-            auto map_token  = map_try(id, ptr);
+            device_id_t id = device_recent_at_nothrow(ptr);
+            std::optional<map_resource_handle_t, exception_t> map_rs = map_try_nothrow(id, ptr);
 
-            if (map_token.has_value()){
-                return map_token.value();
-            }
-
-            if (map_token.error() == dg::network_exception::OCCUPIED_MEMREGION){
+            if (!map_rs.has_value()){
                 continue;
             }
 
-            return std::unexpected(map_token.error());
+            return map_rs.value();
         }
     }
 
     auto map_wait_nothrow(uma_ptr_t ptr) noexcept -> map_resource_handle_t{
 
-        return dg::network_exception_handler::nothrow_log(map_wait(ptr));
+         while (true){
+            device_id_t id = device_recent_at_nothrow(ptr);
+            std::optional<map_resource_handle_t, exception_t> map_rs = map_try_nothrow(id, ptr);
+
+            if (!map_rs.has_value()){
+                continue;
+            }
+
+            return map_rs.value();
+        }
     }
 
     auto map_wait_safe(uma_ptr_t ptr) noexcept -> std::expected<dg::genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{

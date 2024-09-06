@@ -6,9 +6,9 @@
 #include <stdlib.h> 
 #include <type_traits>
 
-namespace dg::network_exception{
+using exception_t = uint16_t; 
 
-    using exception_t = uint16_t; 
+namespace dg::network_exception{
 
     #ifdef __DG_NETWORK_CUDA_FLAG__
     using cuda_exception_t = cudaError_t;
@@ -57,6 +57,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t BAD_OPTIONAL_ACCESS             = 0u; 
     static inline constexpr exception_t BAD_RAII_ACCESS                 = 0u;
     static inline constexpr exception_t BAD_ALIGNMENT                   = 0u;
+    static inline constexpr exception_t BAD_SPIN                        = 0u;
     static inline constexpr exception_t BUFFER_OVERFLOW                 = 0u;
     static inline constexpr exception_t RUNTIME_FILEIO_ERROR            = 0u; 
 
@@ -92,6 +93,35 @@ namespace dg::network_exception{
         
     }
 
+    template <class Functor>
+    inline auto to_cstyle_function(Functor functor) noexcept{
+
+        static_assert(std::enable_if_t<std::is_nothrow_move_constructible<Functor>>); //should be header -
+
+        auto rs = [f = std::move(functor)]<class ...Args>(Args&& ...args) noexcept(noexcept(functor(std::forward<Args>(args)...))){
+            using ret_t = decltype(f(std::forward<Args>(args)...));
+
+            if constexpr(std::is_same_v<ret_t, void>){
+                try{
+                    f(std::forward<Args>(args)...);
+                    return SUCCESS;
+                } catch (...){
+                    return wrap_std_exception(std::current_exception());
+                }
+            } else{
+                try{
+                    static_assert(std::is_nothrow_move_constructible<ret_t>); //should be header -
+                    static_assert(std::is_same_v<ret_t, std::remove_const_t<std::remove_reference_t<ret_t>>>); //should be header -
+                    return std::expected<ret_t, exception_t>(f(std::forward<Args>(args)...));
+                } catch (...){
+                    return std::expected<ret_t, exception_t>(std::unexpected(wrap_std_exception(std::current_exception())));
+                }
+            }
+        };
+
+        return rs;
+    } 
+
     template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same_v<Args, exception_t>...>, bool> = true>
     inline auto disjunction(Args... args) noexcept -> exception_t{
         
@@ -105,13 +135,6 @@ namespace dg::network_exception{
 
         return rs;
     }
-
-    //WLOG, std::expected<size_t, exception_t>, std::expected<uint32_t, exception_t> -> std::expected<std::tuple<size_t, uint32_t>, exception_t> - to leverage auto [lhs, rhs] = expected.value() technique
-
-    template <class ...Args, std::enable_if_t<std::conjunction_v<is_expected<Args>...>, bool> = true>
-    inline auto disjunct_tuplize_expected() noexcept{ //weird semantics - 
-
-    } 
 
 }
 

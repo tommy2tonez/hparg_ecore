@@ -14,7 +14,7 @@ namespace dg::memult{
     static inline constexpr size_t HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE   = size_t{1} << 6;
     static inline constexpr size_t HARDWARE_CONSTRUCTIVE_INTERFERENCE_SIZE  = size_t{1} << 6;
     static inline constexpr size_t SIMD_ALIGN_SIZE                          = size_t{1} << 5;
-
+    static inline constexpr bool IS_STRONG_UB_PRUNE_ENABLED                 = true;
 
     static constexpr auto is_pow2(size_t val) noexcept -> bool{
 
@@ -39,7 +39,7 @@ namespace dg::memult{
         }
 
         throw std::bad_alloc();
-    } 
+    }
 
     constexpr auto align(uintptr_t buf, size_t alignment_sz) noexcept -> uintptr_t{
 

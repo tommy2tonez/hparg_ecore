@@ -909,88 +909,160 @@ namespace dg::network_tile_member_access{
         std::abort();
     }
 
-    auto safe_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_leaf_ptr_access_instance::access(ptr);
     }
 
-    auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_mono_ptr_access_instance::access(ptr);
     }
 
-    auto safe_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_pair_ptr_access_instance::access(ptr);
     }
 
-    auto safe_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_uacm_ptr_access_instance::access(ptr);
     }
 
-    auto safe_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_pacm_ptr_access_instance::access(ptr);
     }
 
-    auto safe_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_crit_ptr_access_instance::access(ptr);
     }
 
-    auto safe_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_msgrfwd_ptr_access_instance::access(ptr);
     }
 
-    auto safe_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_msgrbwd_ptr_access_instance::access(ptr);
     }
 
-    auto safe_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         return safe_tile_ptr_access_instance::access(ptr);
     }
 
-    auto throwsafe_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safe_leaf_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_leaf_ptr_access(ptr));
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_leaf_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
     }
 
-    auto throwsafe_mono_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_mono_ptr_access(ptr));
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_mono_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
     }
 
-    auto throwsafe_pair_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safe_pair_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_pair_ptr_access(ptr));
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_pair_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
     }
 
-    auto throwsafe_uacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safe_uacm_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_uacm_ptr_access(ptr));
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_uacm_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    auto safe_pacm_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_pacm_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    auto safe_crit_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_crit_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    auto safe_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_msgrfwd_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    auto safe_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(c safethrow_msgrbwd_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    auto safethrow_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_leaf_ptr_access(ptr));
+    }
+
+    auto safethrow_mono_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_mono_ptr_access(ptr));
+    }
+
+    auto safethrow_pair_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_pair_ptr_access(ptr));
+    }
+
+    auto safethrow_uacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_uacm_ptr_access(ptr));
     }
     
-    auto throwsafe_pacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safethrow_pacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_pacm_ptr_access(ptr));
+        return dg::network_exception_handler::throw_log(safecthrow_pacm_ptr_access(ptr));
     }
 
-    auto throwsafe_crit_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safethrow_crit_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_crit_ptr_access(ptr));
+        return dg::network_exception_handler::throw_log(safecthrow_crit_ptr_access(ptr));
     }
 
-    auto throwsafe_msgrfwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safethrow_msgrfwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_msgrfwd_ptr_access(ptr));
+        return dg::network_exception_handler::throw_log(safecthrow_msgrfwd_ptr_access(ptr));
     }
 
-    auto throwsafe_msgrbwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    auto safethrow_msgrbwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
-        return dg::network_exception_handler::throw_log(safe_msgrbwd_ptr_access(ptr));
+        return dg::network_exception_handler::throw_log(safecthrow_msgrbwd_ptr_access(ptr));
     }
 }

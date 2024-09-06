@@ -73,22 +73,6 @@ namespace dg::network_exception_handler{
     inline auto throw_log(std::expected<T, exception_t>) -> T{
 
     }
-
-    inline auto invoke_nothrow_nolog(Functor functor, Args&& ...args){
-
-    }
-
-    inline auto invoke_nothrow_log(){
-
-    }
-
-    inline auto invoke_throw_nolog(){
-
-    }
-
-    inline auto invoke_throw_log(){
-
-    }
 } 
 
 #endif

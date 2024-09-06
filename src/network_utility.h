@@ -7,6 +7,7 @@
 #include "network_log.h"
 #include "network_exception.h" 
 #include <type_traits>
+#include "network_atomic_x.h"
 
 namespace dg::network_genult{
 
@@ -75,10 +76,13 @@ namespace dg::network_genult{
 
         static int i    = 0;
         auto destructor = [&](int *) noexcept{
+            dg::network_atomic_x::thread_fence_optional();
             lck.clear(std::memory_order_acq_rel);
         };
 
         while (!lck.test_and_set(std::memory_order_acq_rel)){}
+        dg::network_atomic_x::thread_fence_optional();
+
         return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor));
     }
 
@@ -88,10 +92,13 @@ namespace dg::network_genult{
 
         static int i    = 0;
         auto destructor = [&](int *) noexcept{
+            dg::network_atomic_x::thread_fence_optional();
             lck.unlock();
         };
 
         lck.lock();
+        dg::network_atomic_x::thread_fence_optional();
+        
         return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor));
     }
 
@@ -121,7 +128,24 @@ namespace dg::network_genult{
 
     template <class Functor, class ...Args>
     static inline constexpr bool is_nothrow_invokable_v = is_nothrow_invokable<Functor, Args...>::value; 
-    
+
+    template <class Function, class ...Args, size_t ...IDX>
+    auto internal_tuple_invoke(Function& f, std::tuple<Args..>& tup, std::index_sequence<IDX...>) noexcept(is_nothrow_invokable_v<Function, Args...>) -> decltype(auto){
+
+        using ret_t = f(std::get<IDX>(tup)...);
+        if constexpr(std::is_same_v<ret_t, void>){
+            f(std::get<IDX>(tup)...);
+        } else{
+            return f(std::get<IDX>(tup)...);
+        }
+    }
+
+    template <class Function, class ...Args>
+    auto tuple_invoke(Function f, std::tuple<Args...> tup) noexcept(noexcept(internal_tuple_invoke(f, tup, std::make_index_sequence<sizeof...(Args)>{}))) -> decltype(auto){
+
+        return internal_tuple_invoke(f, tup, std::make_index_sequence<sizeof...(Args)>{});
+    }
+
     template <class ResourceType, class ResourceDeallocator, class = void>
     class nothrow_immutable_unique_raii_wrapper{}; 
 
@@ -156,7 +180,7 @@ namespace dg::network_genult{
 
             self& operator =(self&& other) noexcept{
 
-                if (this != std::addressof(other)){
+                if (this != &other){
                     this->release_responsibility();
                     this->resource              = other.resource;
                     this->deallocator           = std::move(other.deallocator);

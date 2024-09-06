@@ -141,7 +141,7 @@ namespace dg::network_memlock_host{
 
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
-                return lck_table[table_idx].test_and_set(std::memory_order_acq_rel);
+                return lck_table[table_idx].test_and_set(std::memory_order_acq_rel); //acquire
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
@@ -151,7 +151,7 @@ namespace dg::network_memlock_host{
 
             static void internal_acquire_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].clear(std::memory_order_acq_rel);
+                lck_table[table_idx].clear(std::memory_order_acq_rel); //release
             }
 
         public:
@@ -305,8 +305,8 @@ namespace dg::network_memlock_host{
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>; 
 
             static inline std::atomic<atomic_lock_t> * lck_table{};    
-            static inline atomic_lock_t MEMREGION_EMP_STATE = 0u;
-            static inline atomic_lock_t MEMREGION_ACQ_STATE = ~PAGE_EMP_STATE;
+            static inline constexpr atomic_lock_t MEMREGION_EMP_STATE = 0u;
+            static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE = ~PAGE_EMP_STATE;
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
@@ -330,12 +330,12 @@ namespace dg::network_memlock_host{
 
             static void internal_acquire_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].exchange(MEMREGION_EMP_STATE, std::memory_order_acq_rel);
+                lck_table[table_idx].exchange(MEMREGION_EMP_STATE, std::memory_order_acq_rel); //release
             }
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
-                atomic_lock_t cur_state  = lck_table[table_idx].load(std::memory_order_acquire);
+                atomic_lock_t cur_state  = lck_table[table_idx].load(std::memory_order_acquire); //relaxed
 
                 if (cur_state == MEMREGION_ACQ_STATE){
                     return false;
@@ -646,21 +646,18 @@ namespace dg::network_memlock_utility{
     template <class T>
     struct RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>{
 
-        public:
-
-            using resource_t            = std::unordered_set<ptr_t>;
-
         private:
 
             using self                  = RecursiveLockResource; 
             using id                    = self;
             using ptr_t                 = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t;
+            using resource_t            = std::unordered_set<ptr_t>;
             using singleton_obj_t       = std::array<resource_t, dg::network_concurrency::THREAD_COUNT>;
             using singleton_container   = dg::network_genult::singleton<id, singleton_obj_t>;
         
         public:
 
-            static inline auto get() noexcept -> resource_t&{
+            static inline auto get() noexcept -> std::unordered_set<ptr_t>&{
 
                 return singleton_container::get()[dg::network_concurrency::this_thread_idx()];
             }
