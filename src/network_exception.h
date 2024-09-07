@@ -60,7 +60,8 @@ namespace dg::network_exception{
     static inline constexpr exception_t BAD_SPIN                        = 0u;
     static inline constexpr exception_t BUFFER_OVERFLOW                 = 0u;
     static inline constexpr exception_t RUNTIME_FILEIO_ERROR            = 0u; 
-
+    static inline constexpr exception_t INVALID_INIT_ARG                = 0u;
+    
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
     static inline const char * INVALID_DICTIONARY_KEY_CSTR      = "invalid_dictionary_key";
@@ -74,6 +75,10 @@ namespace dg::network_exception{
     }
 
     inline auto wrap_core_exception(core_exception_t) noexcept -> exception_t{
+
+    }
+
+    inline auto wrap_std_errcode(...) -> exception_t{ 
 
     }
 
@@ -93,10 +98,30 @@ namespace dg::network_exception{
         
     }
 
+    template <class T>
+    struct base_type{
+        using type = T;
+    };
+
+    template <class T>
+    struct base_type<T&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<const T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<volatile T>: base_type<T>{};
+
+    template <class T>
+    using base_type_t = typename base_type<T>::type; 
+
     template <class Functor>
     inline auto to_cstyle_function(Functor functor) noexcept{
 
-        static_assert(std::enable_if_t<std::is_nothrow_move_constructible<Functor>>); //should be header -
+        static_assert(std::is_nothrow_move_constructible<Functor>);
 
         auto rs = [f = std::move(functor)]<class ...Args>(Args&& ...args) noexcept(noexcept(functor(std::forward<Args>(args)...))){
             using ret_t = decltype(f(std::forward<Args>(args)...));
@@ -110,8 +135,8 @@ namespace dg::network_exception{
                 }
             } else{
                 try{
-                    static_assert(std::is_nothrow_move_constructible<ret_t>); //should be header -
-                    static_assert(std::is_same_v<ret_t, std::remove_const_t<std::remove_reference_t<ret_t>>>); //should be header -
+                    static_assert(std::is_nothrow_move_constructible<ret_t>);
+                    static_assert(std::is_same_v<ret_t, base_type_t<ret_t>>);
                     return std::expected<ret_t, exception_t>(f(std::forward<Args>(args)...));
                 } catch (...){
                     return std::expected<ret_t, exception_t>(std::unexpected(wrap_std_exception(std::current_exception())));

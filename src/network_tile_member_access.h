@@ -9,6 +9,9 @@
 #include "network_exception_handler.h"
 #include "network_memops_uma.h"
 
+//5hrs
+//done today
+
 namespace dg::network_tile_member_access_template{
     
     using uma_ptr_t = dg::network_uma::uma_ptr_t;
@@ -1020,7 +1023,7 @@ namespace dg::network_tile_member_access{
     auto safe_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
-            return dg::network_exception_handler::nothrow_log(c safethrow_msgrbwd_ptr_access(ptr));
+            return dg::network_exception_handler::nothrow_log(safecthrow_msgrbwd_ptr_access(ptr));
         } else{
             return ptr;
         }

@@ -7,12 +7,15 @@
 #include "network_exception.h"
 #include "network_kernelmap_x_impl1.h" 
 #include "network_utility.h"
+#include "network_type_traits_x.h"
 
 namespace dg::network_kernelmap_x{
     
     using fsys_ptr_t                = uint32_t; 
     using exception_t               = dg::network_exception::exception_t;  
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::MapResource;
+
+    static_assert(dg::is_immutable_resource_handle_v<map_resource_handle_t>);
 
     inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::MapInterface> map_instance{}; 
 
@@ -44,7 +47,7 @@ namespace dg::network_kernelmap_x{
     };
 
     auto map_relguard(map_resource_handle_t map_resource) noexcept{
-
+    
         static int i    = 0;
         auto destructor = [=](int *) noexcept{
             map_release(map_resource);
@@ -58,7 +61,7 @@ namespace dg::network_kernelmap_x{
         auto map_rs = map(ptr);
 
         if (!map_rs.has_value()){
-            return map_rs.error();
+            return std::unexpected(map_rs.error());
         }
 
         return dg::genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
@@ -74,7 +77,7 @@ namespace dg::network_kernelmap_x{
         return map_resource.ptr();
     }
 
-    auto get_host_const_ptr(map_resource_handle_t map_resource) noexcept -> const void *{
+    auto get_host_const_ptr(map_resource_handle_t map_resource) noexcept -> const void *{ //deprecate usage of const void * - for interface consistency
 
         return map_resource.const_ptr();
     }

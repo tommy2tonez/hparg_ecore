@@ -8,6 +8,7 @@
 #include "network_exception.h" 
 #include <type_traits>
 #include "network_atomic_x.h"
+#include "network_type_traits_x.h"
 
 namespace dg::network_genult{
 
@@ -117,20 +118,9 @@ namespace dg::network_genult{
             }
     }
 
-    template <class Functor, class Tup, class = void>
-    struct is_nothrow_invokable_helper: std::false_type{};
-
-    template <class Functor, class ...Args>
-    struct is_nothrow_invokable_helper<Functor, std::tuple<Args...>, std::enable_if_t<noexcept(std::declval<Functor>()(std::declval<Args>()...))>>: std::true_type{}; 
-
-    template <class Functor, class ...Args>
-    struct is_nothrow_invokable: is_nothrow_invokable_helper<Functor, std::tuple<Args...>>{}; 
-
-    template <class Functor, class ...Args>
-    static inline constexpr bool is_nothrow_invokable_v = is_nothrow_invokable<Functor, Args...>::value; 
 
     template <class Function, class ...Args, size_t ...IDX>
-    auto internal_tuple_invoke(Function& f, std::tuple<Args..>& tup, std::index_sequence<IDX...>) noexcept(is_nothrow_invokable_v<Function, Args...>) -> decltype(auto){
+    auto internal_tuple_invoke(Function& f, std::tuple<Args..>& tup, std::index_sequence<IDX...>) noexcept(dg::network_type_traits_x::is_nothrow_invokable_v<Function, Args...>) -> decltype(auto){
 
         using ret_t = f(std::get<IDX>(tup)...);
         if constexpr(std::is_same_v<ret_t, void>){
@@ -181,7 +171,9 @@ namespace dg::network_genult{
             self& operator =(self&& other) noexcept{
 
                 if (this != &other){
-                    this->release_responsibility();
+                    if (this->responsibility_flag){
+                        this->deallocator(this->resource);
+                    }      
                     this->resource              = other.resource;
                     this->deallocator           = std::move(other.deallocator);
                     this->responsibility_flag   = other.responsibility_flag;
@@ -193,14 +185,18 @@ namespace dg::network_genult{
 
             ~nothrow_immutable_unique_raii_wrapper() noexcept{
 
-                this->release_responsibility();
+                if (this->responsibility_flag){
+                    this->deallocator(this->resource);
+                }            
             }
 
             auto value() const noexcept -> ResourceType{
 
-                if (!this->responsibility_flag){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_RAII_ACCESS));
-                    std::abort();
+                if constexpr(IS_SAFE_ACCESS_ENABLED){
+                    if (!this->responsibility_flag){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_RAII_ACCESS));
+                        std::abort();
+                    }
                 }
 
                 return this->resource;
@@ -209,16 +205,6 @@ namespace dg::network_genult{
             auto has_value() const noexcept -> bool{
 
                 return this->responsibility_flag;
-            }
-        
-        private:
-
-            void release_responsibility() noexcept{
-                                
-                if (this->responsibility_flag){
-                    this->deallocator(this->resource);
-                    this->responsibility_flag = false;
-                }
             }
     };
 }

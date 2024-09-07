@@ -632,7 +632,7 @@ namespace dg::network_memlock_utility{
         static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
 
         static int i        = 0;
-        auto destructor = [=](int *) noexcept{
+        auto destructor     = [=](int *) noexcept{
             memlock_ins::acquire_release(ptr);
         };
 

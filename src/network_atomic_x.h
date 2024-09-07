@@ -68,7 +68,6 @@ namespace dg::network_atomic_x{
         static_assert(std::is_trivial_v<T>);
         dg_thread_fence_optional();
         decltype(auto) rs = obj.compare_exchange_weak(obj, expected, new_value, std::memory_order_release);
-        dg_thread_fence_optional();
 
         return rs;
     }

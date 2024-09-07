@@ -41,14 +41,14 @@ namespace dg::network_kernelmap_x_impl1::model{
         HeapNode * node;
         size_t off;
     
-        inline auto ptr() const noexcept -> void *{
+        auto ptr() const noexcept -> void *{
 
-            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr, this->off);
+            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr.get(), this->off);
         }
 
-        inline auto const_ptr() const noexcept -> const void *{
+        auto const_ptr() const noexcept -> const void *{
 
-            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr, this->off);
+            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr.get(), this->off);
         }
     };
 }
@@ -129,7 +129,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             auto load(MemoryNode& root, fsys_ptr_t region) noexcept -> exception_t{
 
-                if (static_cast<bool>(root.fsys_ptr_info)){
+                if (static_cast<bool>(root.fsys_ptr_info)){ //INTERNAL_CORRUPTION should only be checked in debug mode
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
@@ -144,7 +144,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 const char * cstr_path              = inpath.c_str();
                 void * dst                          = root.cptr.get();
                 
-                dg::network_fileio::dg_read_binary_direct_nothrow(cstr_path, dst, this->memregion_sz);
+                dg::network_fileio::dg_read_binary_direct_nothrow(cstr_path, dst, this->memregion_sz); //fine - should return kernel_runtime_error
                 
                 root.fsys_ptr_info  = VMAPtrInfo{region, 0u};
                 root.timestamp      = dg::network_genult::unix_timestamp();
@@ -152,14 +152,14 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 return dg::network_exception::SUCCESS;
             }
 
-            void unload(MemoryNode& root) noexcept{
+            void unload(MemoryNode& root) noexcept{ //correct: this is a reverse operation of load - should be void (...) noexcept 
 
-                if (!static_cast<bool>(root.fsys_ptr_info)){
+                if (!static_cast<bool>(root.fsys_ptr_info)){ //INTERNAL_CORRUPTION should only be checked in debug mode
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
 
-                if (root.fsys_ptr_info->reference != 0u){
+                if (root.fsys_ptr_info->reference != 0u){ //INTERNAL_CORRUPTION should only be checked in debug mode
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
@@ -167,13 +167,13 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 fsys_ptr_t host_region  = root.fsys_ptr_info->ptr;
                 auto dict_ptr           = this->stable_storage_dict_find_entry(host_region);
 
-                if (dict_ptr == this->stable_storage_dict_end()){
+                if (dict_ptr == this->stable_storage_dict_end()){ //INTERNAL_CORRUPTION should only be checked in debug mode
                     dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
 
                 const std::filesystem::path& opath  = dict_ptr->second;
-                const char * cstr_path              = outpath.c_str();
+                const char * cstr_path              = opath.c_str();
                 const void * src                    = root.cptr.get();
                 
                 dg::network_fileio::dg_write_binary_direct_nothrow(cstr_path, src, this->memregion_sz);
@@ -277,46 +277,40 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 this->heap_push_down_at(c);
             }
 
-            void heap_push_updown_at(size_t idx) noexcept{
-
-                this->heap_push_up_at(idx);
-                this->heap_push_down_at(idx);
-            }
-
             void heap_increase_reference(HeapNode * node) noexcept{
 
-                if (!static_cast<bool>(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
-                }
-
+                dg::network_genult::safe_optional_access(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info);
                 node->fsys_ptr_info->reference += 1;
-                heap_push_updown_at(node->idx);
+                heap_push_down_at(node->idx);
             }
 
             void heap_decrease_reference(HeapNode * node) noexcept{
+                
+                dg::network_genult::safe_optional_access(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info);
 
-                if (!static_cast<bool>(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
-                }
-
-                if (node->fsys_ptr_info->reference == 0u){
+                if (node->fsys_ptr_info->reference == 0u){ //INTERNAL_CORRUPTION should only be checked in debug mode
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
 
                 node->fsys_ptr_info->reference -= 1;
                 node->timestamp = dg::network_genult::unix_timestamp();
-                heap_push_updown_at(node->idx);
+                heap_push_up_at(node->idx);
             }
 
             void allocation_dict_remove_entry(fsys_ptr_t key) noexcept{
+                
+                auto map_ptr = this->allocation_dict.find(key);
 
-                this->allocation_dict.erase(key);
+                if (map_ptr == this->allocation_dict.end()){ //INTERNAL_CORRUPTION should only be checked in debug mode
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+
+                this->allocation_dict.erase(map_ptr);
             } 
 
-            void allocation_dict_add_entry(fsys_ptr_t key, HeapNode * value) noexcept{
+            void allocation_dict_add_entry(fsys_ptr_t key, HeapNode * value) noexcept{ //correct: good to have a noexcept to avoid bad_alloc
 
                 this->allocation_dict[key] = value;
             }
@@ -353,7 +347,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         this->fsys_loader->unload(*priority_queue[0u]);
                         this->allocation_dict_remove_entry(removing_region);
                         this->allocation_dict_add_entry(ptr_region, priority_queue[0u].get());
-                        std::swap(static_cast<MemoryNode&>(*this->priority_queue[0u]), this->tmp_space);
+                        std::swap(static_cast<MemoryNode&>(*this->priority_queue[0u]), this->tmp_space); //fine - does not affect ptr() and const_ptr() - assume that those methods are invoked when user is in charge of the map_resource
                         this->heap_push_down_at(0u);
 
                         return this->internal_map(ptr);
@@ -379,7 +373,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             } 
     };
     
-    template <size_t MEMREGION_SZ>
+    template <size_t MEMREGION_SZ> //fine - inherit a virtual interface - this is not bad practice
     class StdMapDistribution: public virtual MapDistributionInterface{
 
         private:
@@ -432,7 +426,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             
             void map_release(MapResource map_resource) noexcept{
                 
-                fsys_ptr_t ptr  = dg::network_genult::safe_pointer_access(map_resource.node)->fsys_ptr_info->ptr;
+                fsys_ptr_t ptr  = dg::network_genult::safe_optional_access(dg::network_genult::safe_pointer_access(map_resource.node)->fsys_ptr_info)->ptr;
                 auto rs         = this->map_distributor->id(ptr);
 
                 if (!rs.has_value()){
