@@ -32,8 +32,6 @@ namespace dg::network_uma{
     //reachability contract is either fulfilled by allocation or injecting data - up to the user to choose void init() method 
     //<function_name> assumes all inputs
     //<function_name>_nothrow assumes valid inputs, equivalents to __builtin_assume(is_precond_met(args...))
-
-    //brb - 15m break
     
     void init(uma_ptr_t * host_region, vma_ptr_t * device_region, device_id_t * device_id, size_t n){
 

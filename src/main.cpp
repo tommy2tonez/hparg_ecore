@@ -5,11 +5,20 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <iostream>
+#include <tuple>
+
+template <class ...Args>
+void bar(Args ...){
+
+}
+
+template <class ...Args, class ...AArgs>
+void foo(std::tuple<Args...>, std::tuple<AArgs...>){
+
+    bar(Args()..., AArgs()...);
+}
 
 int main(){
-
-    int fd = open("/home/tommy2tonez/dg_projects/dg_polyobjects/src/network_virtual_device.h", O_RDONLY, S_IRWXU);
-    int sz = lseek(fd, 0L, SEEK_END);
-
-    std::cout << sz << std::endl;
+    
+    foo(std::tuple<int, int>{}, std::tuple<int, int>{});
 }

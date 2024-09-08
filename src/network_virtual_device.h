@@ -256,6 +256,9 @@ namespace dg::network_virtual_device{
     using ptr_arithmetic_t      = typename dg::ptr_info<>::max_unsigned_t; 
 
     static inline constexpr virtual_device_id_t HOST_VIRTUAL_DEVICE_ID = 0u; 
+    static inline constexpr size_t HOST_PTR_FLAG = 0u;
+    static inline constexpr size_t CUDA_PTR_FLAG = 0u;
+    static inline constexpr size_t FSYS_PTR_FLAG = 0u; 
 
     // void init(device_t * device, device_id_t * device_id, size_t n){
 
@@ -332,6 +335,11 @@ namespace dg::network_virtual_device{
     auto is_fsys_ptr(virtual_ptr_t) noexcept -> bool{
 
     }
+
+    auto is_ptr(virtual_ptr_t, ptr_check_flag_t) noexcept -> bool{
+
+    }
+
 
     auto virtualize_cuda_ptr(cuda_ptr_t ptr, cuda_device_id_t id) noexcept -> virtual_ptr_t{
 

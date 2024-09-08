@@ -52,9 +52,11 @@ namespace dg::network_genult{
     template <class T>
     auto safe_ptr_access(T * ptr) noexcept -> T *{
 
-        if (ptr == nullptr){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_PTR_ACCESS));
-            std::abort();
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            if (ptr == nullptr){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_PTR_ACCESS));
+                std::abort();
+            }
         }
 
         return ptr;
@@ -63,9 +65,11 @@ namespace dg::network_genult{
     template <class T>
     auto safe_optional_access(std::optional<T>& obj) noexcept -> std::optional<T>&{
 
-        if (!obj.has_value()){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_OPTIONAL_ACCESS));
-            std::abort();
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            if (!obj.has_value()){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_OPTIONAL_ACCESS));
+                std::abort();
+            }
         }
 
         return obj;
@@ -118,11 +122,160 @@ namespace dg::network_genult{
             }
     }
 
+    template <class T, class = void>
+    struct or_reduce{};
 
-    template <class Function, class ...Args, size_t ...IDX>
-    auto internal_tuple_invoke(Function& f, std::tuple<Args..>& tup, std::index_sequence<IDX...>) noexcept(dg::network_type_traits_x::is_nothrow_invokable_v<Function, Args...>) -> decltype(auto){
+    template <class T>
+    struct or_reduce<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>{
+ 
+        constexpr auto operator()(T lhs, T rhs) const noexcept -> T{
 
-        using ret_t = f(std::get<IDX>(tup)...);
+            return lhs | rhs;
+        }
+    };
+
+    template <class T, class = void>
+    struct and_reduce{};
+
+    template <class T>
+    struct and_reduce<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>{
+
+        constexpr auto operator()(T lhs, T rhs) const noexcept -> T{
+
+            return lhs & rhs;
+        }
+    };
+
+    //correct:
+    //sfinae are usually used for two things: 
+    //first:    validate if the providing args are compile-time valid for a specific function
+    //second:   different dispatch for different types
+
+    //(first):  if pure auto return type == no header precond required (std::enable_if_t<precond, bool> = true)
+    //(first):  if explicit return type then header precond declaration is required
+    //(second): if the function name is tuple_reduce, second usage of sfinae is not required(precond as function signature)  
+    //(second): if the function name is reduce - then sfinae is required for tuple dispatch - in this case function reduce with sfinae header invokes tuple_reduce 
+    //(second): never do type overloading when sfinae header could be used - to disable implicit init (this is where most developer fails)
+    //add(double, dobule), add(size_t, size_t) -> add(T, T) enable_if_t<std::is_same_v<T, double>, bool> = true
+
+    template <class T, class Functor>
+    auto tuple_reduce(T&& tup, Functor&& functor){ //noexcept(auto) - feature request 
+        
+        using tup_t = dg::network_type_traits_x::base_type_t<T>;
+        static_assert(std::tuple_size_v<tup_t> != 0u);
+
+        auto lambda = [&]<class Self, size_t IDX>(Self self, const std::integral_constant<size_t, IDX>){ //Self -> Self& next iteration, feature request decltype(auto) return type - wrong otherwise
+            if constexpr(IDX == std::tuple_size_v<tup_t> - 1){
+                return std::get<IDX>(tup);
+            } else{
+                return functor(std::get<IDX>(tup), lambda(self, std::integral_constant<size_t, IDX + 1>{}));
+            }
+        };
+
+        return lambda(lambda, std::integral_constant<size_t, 0u>{});
+    }
+
+    template <class ...Args>
+    auto tuple_join(Args&& ...args){ //noexcept(auto) - feature request
+
+        static_assert(sizeof...(Args) != 0u);
+
+        auto fwd_tup    = std::forward_as_tuple(std::forward<Args>(args)...); 
+        auto lambda     = [&]<class Self, size_t IDX>(Self self, const std::integral_constant<size_t, IDX>){ //capture fwd_tup as [=], & is slow - next iteration, Self -> Self&
+            if constexpr(IDX == sizeof...(Args) - 1){
+                //good to put a precond here - to catch undefined behavior compile-time - this, however, is not required - tuple_join semantically means that (type(args) == type(tuple_and_friends))...
+                static_assert(dg::network_type_traits_x::is_tuple_v<dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, decltype(fwd_tup)>>);
+                return std::get<IDX>(fwd_tup);
+            } else{
+                auto successor                      = self(self, std::integral_constant<size_t, IDX + 1>{});
+                auto cur                            = std::get<IDX>(fwd_tup); //should be decltype(auto) - not necessary
+                using successor_t                   = decltype(successor);
+                using cur_t                         = decltype(cur);
+                constexpr size_t successor_tuple_sz = std::tuple_size_v<successor_t>;
+                constexpr size_t cur_tuple_sz       = std::tuple_size_v<cur_t>>;
+
+                return [&]<size_t ...LHS_IDX, size_t ...RHS_IDX>(const std::index_sequence<LHS_IDX...>, const std::index_sequence<RHS_IDX...>){
+                    static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<std::tuple_element_t<LHS_IDX, successor_t>>, std::tuple_element_t<LHS_IDX, successor_t>>...>);
+                    static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<std::tuple_element_t<RHS_IDX, cur_t>>, std::tuple_element_t<RHS_IDX, cur_t>>...>);
+                    return std::make_tuple(std::get<LHS_IDX>(successor)..., std::get<RHS_IDX>(cur)...); //make sure that all joining element_types are base_type - lesser the requirement next iteration 
+                }(std::make_index_sequence<successor_tuple_sz>{}, std::make_index_sequence<cur_tuple_sz>{});
+            }
+        };
+
+        return lambda(lambda, std::integral_constant<size_t, 0u>{});
+    }
+
+    template <class T, size_t SZ>
+    auto tuple_peek(T&& tup, const std::integral_constant<size_t, SZ>){ //noexcept(auto) - feature request
+
+        static_assert(SZ != 0u);
+        using tup_t = dg::network_type_traits_x::base_type_t<T>; 
+
+        return [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, tup_t>>, std::tuple_element_t<IDX, tup_t>>...>);
+            return std::make_tuple(std::get<IDX>(tup)...); //consider forward_as_tuple next iteration -
+        }(std::make_index_sequence<SZ>{});
+    }
+
+    template <class T, class FirstIArg, class ...IArgs>
+    auto tuple_peek_many(T&& arg, FirstIArg first_iarg, IArgs... iargs){ //noexcept(auto) - feature request
+
+        if constexpr(sizeof...(IArgs) == 0u){
+            return tuple_peek(arg, first_iarg);
+        } else{
+            return tuple_join(std::make_tuple(tuple_peek(arg, first_iarg)), tuple_peek_many(arg, iargs...));
+        }
+    }
+
+    template <class T, class T1>
+    auto tuple_zip(T&& lhs, T1&& rhs){ //noexcept(auto) - feature request 
+
+        using lhs_tup_t = dg::network_type_traits_x::base_type_t<T>;
+        using rhs_tup_t = dg::network_type_traits_x::base_type_t<T1>;
+
+        static_assert(std::tuple_size_v<lhs_tup_t> == std::tuple_size_v<rhs_tup_t>);
+
+        return [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            static_assert(std::conjunction_v<std::is_same<std::tuple_element_t<IDX, lhs_tup_t>, dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, lhs_tup_t>>>...>); //stricter req - remove next iteration
+            static_assert(std::conjunction_v<std::is_same<std::tuple_element_t<IDX, rhs_tup_t>, dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, rhs_tup_t>>>...>); //stricter req - remove next iteration
+            return std::make_tuple(std::make_tuple(std::get<IDX>(lhs), std::get<IDX>(rhs))...);
+        }(std::make_index_sequence<std::tuple_size_v<lhs_tup_t>>{});
+    }
+
+    template <class T, class Functor>
+    auto tuple_transform(T&& tup, Functor&& functor){ //noexcept(auto) - feature request
+
+        using tup_t = dg::network_type_traits_x::base_type_t<T>; //
+        
+        return [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<decltype(functor(std::get<IDX>(tup)))>, decltype(functor(std::get<IDX>(tup)))>...>);
+            return std::make_tuple(functor(std::get<IDX>(tup))...);
+        }(std::make_index_sequence<std::tuple_size_v<tup_t>>{});
+    }
+
+    template <class T>
+    auto tuple_to_array(T&& tup){ //noexcept(auto) - feature request
+        
+        using tup_t = dg::network_type_traits_x::base_type_t<T>;
+
+        return [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            using type = dg::network_type_traits_x::mono_reduction_type_t<std::tuple_element_t<IDX, tup_t>...>; 
+            static_assert(std::is_same_v<type, dg::network_type_traits_x::base_type_t<type>>); //stricter_req - remove next iteration
+            return std::array<type, std::tuple_size_v<tup_t>>{std::get<IDX>(tup)...};
+        }(std::make_index_sequence<std::tuple_size_v<tup_t>>{});
+    }
+
+    template <class ...Args>
+    auto has_same_value(Args&& ...args) -> bool{ //noexcept(auto) - feature request
+        
+        return (args == ...);
+    }
+
+    template <class Functor, class T, size_t ...IDX>
+    auto internal_tuple_invoke(Functor&& f, T&& tup, const std::index_sequence<IDX...>) -> decltype(auto){ //noexcept(auto) - feature request, decltype(auto) lambda - feature request
+
+        using ret_t = decltype(f(std::get<IDX>(tup)...));
+   
         if constexpr(std::is_same_v<ret_t, void>){
             f(std::get<IDX>(tup)...);
         } else{
@@ -130,8 +283,8 @@ namespace dg::network_genult{
         }
     }
 
-    template <class Function, class ...Args>
-    auto tuple_invoke(Function f, std::tuple<Args...> tup) noexcept(noexcept(internal_tuple_invoke(f, tup, std::make_index_sequence<sizeof...(Args)>{}))) -> decltype(auto){
+    template <class Functor, class T>
+    auto tuple_invoke(Functor&& f, T&& tup) -> decltype(auto){ //noexcept(auto) - feature request
 
         return internal_tuple_invoke(f, tup, std::make_index_sequence<sizeof...(Args)>{});
     }
@@ -154,6 +307,7 @@ namespace dg::network_genult{
 
             using self = nothrow_immutable_unique_raii_wrapper;
 
+            //<ResourceType, ResourceDeallocator> sufficiently describes the component - remove explicit next iteration
             explicit nothrow_immutable_unique_raii_wrapper(ResourceType resource,
                                                            ResourceDeallocator deallocator) noexcept: resource(resource),
                                                                                                       deallocator(std::move(deallocator)),
