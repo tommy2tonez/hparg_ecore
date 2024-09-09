@@ -23,7 +23,7 @@ namespace dg::network_memops_uma{
     
     //assume(valid(args...))
     template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same<Args, uma_ptr_t>...>, bool> = true>
-    auto memlock_guard_many(Args... args) noexcept{
+    auto memlock_many_guard(Args... args) noexcept{
 
         return dg::network_memlock_utility::recursive_lock_guard_many(uma_lock_instance{}, args...);
     }

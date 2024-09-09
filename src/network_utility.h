@@ -12,6 +12,8 @@
 
 namespace dg::network_genult{
 
+    static inline constexpr bool IS_SAFE_ACCESS_ENABLED = true; 
+
     class unix_timepoint{
 
         private:
@@ -123,10 +125,10 @@ namespace dg::network_genult{
     }
 
     template <class T, class = void>
-    struct or_reduce{};
+    struct mono_reduce_or{};
 
     template <class T>
-    struct or_reduce<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>{
+    struct mono_reduce_or<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>{
  
         constexpr auto operator()(T lhs, T rhs) const noexcept -> T{
 
@@ -135,10 +137,10 @@ namespace dg::network_genult{
     };
 
     template <class T, class = void>
-    struct and_reduce{};
+    struct mono_reduce_and{};
 
     template <class T>
-    struct and_reduce<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>{
+    struct mono_reduce_and<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>{
 
         constexpr auto operator()(T lhs, T rhs) const noexcept -> T{
 
@@ -266,9 +268,24 @@ namespace dg::network_genult{
     }
 
     template <class ...Args>
-    auto has_same_value(Args&& ...args) -> bool{ //noexcept(auto) - feature request
+    auto is_same_value(Args&& ...args) -> bool{ //noexcept(auto) - feature request
         
-        return (args == ...);
+        auto fwd_tup    = std::forward_as_tuple(args...); 
+        auto lambda     = [&]<class Self, size_t IDX>(Self self, const std::integral_constant<size_t, IDX>){
+            if constexpr(IDX == sizeof...(Args)){
+                return true;
+            } else{
+                if constexpr(IDX != 0u){
+                    using ret_t = decltype(std::get<IDX - 1>(fwd_tup) == std::get<IDX>(fwd_tup));
+                    static_assert(std::is_same_v<ret_t, bool>);
+                    return (std::get<IDX - 1>(fwd_tup) == std::get<IDX>(fwd_tup)) && self(self, std::integral_constant<size_t, IDX + 1>{}); 
+                } else{
+                    return self(self, std::integral_constant<size_t, IDX + 1>{});
+                }
+            }
+        };
+
+        return lambda(lambda, std::integral_constant<size_t, 0u>{});
     }
 
     template <class Functor, class T, size_t ...IDX>
@@ -294,7 +311,7 @@ namespace dg::network_genult{
 
     template <class ResourceType, class ResourceDeallocator>
     class nothrow_immutable_unique_raii_wrapper<ResourceType, ResourceDeallocator, std::void_t<std::enable_if_t<std::conjunction_v<std::is_trivial<ResourceType>,
-                                                                                                                                   is_nothrow_invokable<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>, 
+                                                                                                                                   dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>, 
                                                                                                                                    std::is_nothrow_move_constructible<ResourceDeallocator>>>>>{
 
         private:
@@ -354,6 +371,11 @@ namespace dg::network_genult{
                 }
 
                 return this->resource;
+            }
+
+            operator ResourceType() const noexcept{
+
+                return this->value();
             }
 
             auto has_value() const noexcept -> bool{

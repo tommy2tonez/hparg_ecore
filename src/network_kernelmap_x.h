@@ -76,11 +76,6 @@ namespace dg::network_kernelmap_x{
 
         return map_resource.ptr();
     }
-
-    auto get_host_const_ptr(map_resource_handle_t map_resource) noexcept -> const void *{ //deprecate usage of const void * - for interface consistency
-
-        return map_resource.const_ptr();
-    }
 }
 
 #endif

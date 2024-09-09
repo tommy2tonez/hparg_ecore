@@ -109,7 +109,7 @@ namespace dg::network_memops_fsys{
             return map_rs.error();
         }
 
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value().value());
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src, sz);
 
         if (dg::network_exception::is_failed(err)){
@@ -127,7 +127,7 @@ namespace dg::network_memops_fsys{
             return map_rs.error();
         }
 
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value().value());
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_cuda_to_host(dst_cptr, src, src_id, sz);
 
         if (dg::network_exception::is_failed(err)){
@@ -145,8 +145,8 @@ namespace dg::network_memops_fsys{
             return map_rs.error();
         }
 
-        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(map_rs.value().value());
-        exception_t err         = dg::network_memops_clib::memcpy_host_to_hst(dst, src_cptr, sz);
+        const void * src_cptr   = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst, src_cptr, sz);
 
         if (dg::network_exception::is_failed(err)){
             return err;
@@ -163,7 +163,7 @@ namespace dg::network_memops_fsys{
             return map_rs.error();
         }
 
-        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(map_rs.value().value());
+        const void * src_cptr   = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_host_to_cuda(dst, dst_id, src_cptr, sz);
 
         if (dg::network_exception::is_failed(err)){
@@ -187,8 +187,8 @@ namespace dg::network_memops_fsys{
             return src_map_rs.error();
         }
 
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value().value());
-        const void * src_cptr   = dg::network_kernelmap_x::get_host_const_ptr(src_map_rs.value().value());
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value());
+        const void * src_cptr   = dg::network_kernelmap_x::get_host_ptr(src_map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src_cptr, sz);
 
         if (dg::network_exception::is_failed(err)){
@@ -206,7 +206,7 @@ namespace dg::network_memops_fsys{
             return dst_map_rs.error();
         }
 
-        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value().value());
+        void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value());
         exception_t err         = dg::network_memops_clib::memset_host(dst_cptr, c, sz);
 
         if (dg::network_exception::is_failed(err)){
