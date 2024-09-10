@@ -214,20 +214,24 @@ namespace dg::network_device_virtualizer::incremental{
             }
 
             static auto devirtualize_cuda_ptr(VirtualPtr ptr) noexcept -> std::tuple<cuda_ptr_t, cuda_device_id_t>{
-
-                if (!is_cuda_ptr(ptr)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                
+                if constexpr(SAFE_PTR_ACCESS_ENABLED){
+                    if (!is_cuda_ptr(ptr)){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 return {pointer_cast<cuda_ptr_t>(ptr.value), static_cast<cuda_device_id_t>(ptr.device_id)};
             }
 
             static auto devirtualize_fsys_ptr(VirtualPtr ptr) noexcept -> std::tuple<fsys_ptr_t, fsys_device_id_t>{
-
-                if (!is_fsys_ptr(ptr)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                
+                if constexpr(SAFE_PTR_ACCESS_ENABLED){
+                    if (!is_fsys_ptr(ptr)){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 return {pointer_cast<fsys_ptr_t>(ptr.ptr_value), static_cast<fsys_device_id_t>(ptr.device_id)};
@@ -235,11 +239,13 @@ namespace dg::network_device_virtualizer::incremental{
 
             static auto devirtualize_host_ptr(VirtualPtr ptr) noexcept -> std::tuple<host_ptr_t, host_device_id_t>{
 
-                if (!is_host_ptr(ptr)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
-                }  
-
+                if constexpr(SAFE_PTR_ACCESS_ENABLED){
+                    if (!is_host_ptr(ptr)){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } 
+                }
+ 
                 return {pointer_cast<host_ptr_t>(ptr.ptr_value), static_cast<host_device_id_t>(ptr.device_id)};
             };
     };
@@ -340,30 +346,30 @@ namespace dg::network_virtual_device{
 
     }
 
+    //having ids here break single responsibility
+    //ptr semantically encapsulates id - reconsider 
 
-    auto virtualize_cuda_ptr(cuda_ptr_t ptr, cuda_device_id_t id) noexcept -> virtual_ptr_t{
+    auto virtualize_cuda_ptr(cuda_ptr_t ptr) noexcept -> virtual_ptr_t{
 
-        return virtualizer::virtualize_ptr(ptr, id);
     }
 
-    auto virtualize_host_ptr(host_ptr_t ptr, host_device_id_t id) noexcept -> virtual_ptr_t{
+    auto virtualize_host_ptr(host_ptr_t ptr) noexcept -> virtual_ptr_t{
 
     } 
 
-    auto virtualize_fsys_ptr(fsys_ptr_t ptr, fsys_device_id_t id) noexcept -> virtual_ptr_t{
+    auto virtualize_fsys_ptr(fsys_ptr_t ptr) noexcept -> virtual_ptr_t{
 
     }
 
-    auto devirtualize_cuda_ptr(virtual_ptr_t ptr) noexcept -> std::tuple<cuda_ptr_t, cuda_device_id_t>{
-
-        return virtualizer::devirtualize_ptr(ptr);
-    }
-
-    auto devirtualize_host_ptr(virtual_ptr_t ptr) noexcept -> std::tuple<host_ptr_t, host_device_id_t>{
+    auto devirtualize_cuda_ptr(virtual_ptr_t ptr) noexcept -> cuda_ptr_t{
 
     }
 
-    auto devirtualize_fsys_ptr(virtual_ptr_t ptr) noexcept -> std::tuple<fsys_ptr_t, fsys_device_id_t>{
+    auto devirtualize_host_ptr(virtual_ptr_t ptr) noexcept -> host_ptr_t{
+
+    }
+
+    auto devirtualize_fsys_ptr(virtual_ptr_t ptr) noexcept -> fsys_ptr_t{
 
     }
 }

@@ -325,10 +325,10 @@ namespace dg::network_genult{
             using self = nothrow_immutable_unique_raii_wrapper;
 
             //<ResourceType, ResourceDeallocator> sufficiently describes the component - remove explicit next iteration
-            explicit nothrow_immutable_unique_raii_wrapper(ResourceType resource,
-                                                           ResourceDeallocator deallocator) noexcept: resource(resource),
-                                                                                                      deallocator(std::move(deallocator)),
-                                                                                                      responsibility_flag(true){}
+            nothrow_immutable_unique_raii_wrapper(ResourceType resource,
+                                                  ResourceDeallocator deallocator) noexcept: resource(resource),
+                                                                                             deallocator(std::move(deallocator)),
+                                                                                             responsibility_flag(true){}
             
             nothrow_immutable_unique_raii_wrapper(const self&) = delete;
             nothrow_immutable_unique_raii_wrapper(self&& other) noexcept: resource(other.resource),

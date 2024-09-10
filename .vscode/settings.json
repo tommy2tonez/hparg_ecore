@@ -71,6 +71,7 @@
         "fstream": "cpp",
         "iomanip": "cpp",
         "network_tile_member_accessh": "c",
-        "stacktrace": "cpp"
+        "stacktrace": "cpp",
+        "variant": "cpp"
     }
 }

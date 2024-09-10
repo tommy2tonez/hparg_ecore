@@ -15,20 +15,20 @@ namespace dg::network_memops_clib{
 
     #ifdef __DG_NETWORK_CUDA_FLAG__
 
-    inline auto memcpy_host_to_cuda(cuda_ptr_t, cuda_device_id_t, void *, size_t) noexcept -> exception_t{
+    inline auto memcpy_host_to_cuda(cuda_ptr_t, void *, size_t) noexcept -> exception_t{
 
         // cudaMemcpy();
     }
 
-    inline auto memcpy_cuda_to_host(void *, cuda_ptr_t, cuda_device_id_t, size_t) noexcept -> exception_t{
+    inline auto memcpy_cuda_to_host(void *, cuda_ptr_t, size_t) noexcept -> exception_t{
 
     }
 
-    inline auto memcpy_cuda_to_cuda(cuda_ptr_t, cuda_device_id_t, cuda_ptr_t, cuda_device_id_t, size_t) noexcept -> exception_t{
+    inline auto memcpy_cuda_to_cuda(cuda_ptr_t, cuda_ptr_t, size_t) noexcept -> exception_t{
 
     }
 
-    inline auto memset_cuda(cuda_ptr_t, cuda_device_id_t, int, size_t) noexcept -> exception_t{
+    inline auto memset_cuda(cuda_ptr_t, int, size_t) noexcept -> exception_t{
 
     }
 
@@ -68,19 +68,19 @@ namespace dg::network_memops_clib{
         return dg::network_exception::SUCCESS;
     }
 
-    inline void memcpy_host_to_cuda_nothrow(cuda_ptr_t dst, cuda_device_id_t dst_id, void * src, size_t sz) noexcept{
+    inline void memcpy_host_to_cuda_nothrow(cuda_ptr_t dst, void * src, size_t sz) noexcept{
         
-        dg::network_error_handler::nothrow_log(memcpy_host_to_cuda(dst, dst_id, src, sz));
+        dg::network_error_handler::nothrow_log(memcpy_host_to_cuda(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_host_nothrow(void * dst, cuda_ptr_t src, cuda_device_id_t src_id, size_t sz) noexcept{
+    inline void memcpy_cuda_to_host_nothrow(void * dst, cuda_ptr_t src, size_t sz) noexcept{
 
-        dg::network_error_handler::nothrow_log(memcpy_cuda_to_host(dst, src, src_id, sz));
+        dg::network_error_handler::nothrow_log(memcpy_cuda_to_host(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_cuda_nothrow(cuda_ptr_t dst, cuda_device_id_t dst_id, cuda_ptr_t src, cuda_device_id_t src_id, size_t sz) noexcept{
+    inline void memcpy_cuda_to_cuda_nothrow(cuda_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
 
-        dg::network_error_handler::nothrow_log(memcpy_cuda_to_cuda(dst, dst_id, src, src_id, sz));
+        dg::network_error_handler::nothrow_log(memcpy_cuda_to_cuda(dst, src, sz));
     }
     
     inline void memcpy_host_to_host_nothrow(void * dst, const void * src, size_t sz) noexcept{
@@ -88,9 +88,9 @@ namespace dg::network_memops_clib{
         dg::network_error_handler::nothrow_log(memcpy_host_to_host(dst, src, sz));
     }
 
-    inline void memset_cuda_nothrow(cuda_ptr_t dst, cuda_device_id_t dst_id, int c, size_t sz) noexcept{
+    inline void memset_cuda_nothrow(cuda_ptr_t dst, int c, size_t sz) noexcept{
 
-        dg::network_error_handler::nothrow_log(memset_cuda(dst, dst_id, c, sz));
+        dg::network_error_handler::nothrow_log(memset_cuda(dst, c, sz));
     }
 
     inline void memset_host_nothrow(void * dst, int c, size_t sz) noexcept{
@@ -112,14 +112,10 @@ namespace dg::network_memops_fsys{
         void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src, sz);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        return dg::network_exception::SUCCESS;
+        return err;
     }
 
-    inline auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, cuda_device_id_t src_id, size_t sz) noexcept -> exception_t{
+    inline auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
 
@@ -128,13 +124,9 @@ namespace dg::network_memops_fsys{
         }
 
         void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
-        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_host(dst_cptr, src, src_id, sz);
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_host(dst_cptr, src, sz);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        return dg::network_exception::SUCCESS;
+        return err;
     }
 
     inline auto memcpy_fsys_to_host(void * dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
@@ -148,14 +140,10 @@ namespace dg::network_memops_fsys{
         const void * src_cptr   = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst, src_cptr, sz);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        return dg::network_exception::SUCCESS;
+        return err;
     }
 
-    inline auto memcpy_fsys_to_cuda(cuda_ptr_t dst, cuda_device_id_t dst_id, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
+    inline auto memcpy_fsys_to_cuda(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
@@ -164,13 +152,9 @@ namespace dg::network_memops_fsys{
         }
 
         const void * src_cptr   = dg::network_kernelmap_x::get_host_ptr(map_rs.value());
-        exception_t err         = dg::network_memops_clib::memcpy_host_to_cuda(dst, dst_id, src_cptr, sz);
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_cuda(dst, src_cptr, sz);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        return dg::network_exception::SUCCESS;
+        return err;
     }
 
     inline auto memcpy_fsys_to_fsys(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
@@ -191,11 +175,7 @@ namespace dg::network_memops_fsys{
         const void * src_cptr   = dg::network_kernelmap_x::get_host_ptr(src_map_rs.value());
         exception_t err         = dg::network_memops_clib::memcpy_host_to_host(dst_cptr, src_cptr, sz);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        return dg::network_exception::SUCCESS;
+        return err;
     }
 
     inline auto memset_fsys(fsys_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
@@ -209,11 +189,7 @@ namespace dg::network_memops_fsys{
         void * dst_cptr         = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value());
         exception_t err         = dg::network_memops_clib::memset_host(dst_cptr, c, sz);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        return dg::network_exception::SUCCESS;
+        return err;
     }
 
     inline void memcpy_host_to_fsys_nothrow(fsys_ptr_t dst, const void * src, size_t sz) noexcept{
@@ -221,9 +197,9 @@ namespace dg::network_memops_fsys{
         dg::network_error_handler::nothrow_log(memcpy_host_to_fsys(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_fsys_nothrow(fsys_ptr_t dst, cuda_ptr_t src, cuda_device_id_t src_id, size_t sz) noexcept{
+    inline void memcpy_cuda_to_fsys_nothrow(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
 
-        dg::network_error_handler::nothrow_log(memcpy_cuda_to_fsys(dst, src, src_id, sz));
+        dg::network_error_handler::nothrow_log(memcpy_cuda_to_fsys(dst, src, sz));
     }
 
     inline void memcpy_fsys_to_host_nothrow(void * dst, fsys_ptr_t src, size_t sz) noexcept{
@@ -231,9 +207,9 @@ namespace dg::network_memops_fsys{
         dg::network_error_handler::nothrow_log(memcpy_fsys_to_host(dst, src, sz));
     }
 
-    inline void memcpy_fsys_to_cuda_nothrow(cuda_ptr_t dst, cuda_device_id_t dst_id, fsys_ptr_t src, size_t sz) noexcept{
+    inline void memcpy_fsys_to_cuda_nothrow(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
 
-        dg::network_error_handler::nothrow_log(memcpy_fsys_to_cuda(dst, dst_id, src, sz));
+        dg::network_error_handler::nothrow_log(memcpy_fsys_to_cuda(dst, src, sz));
     }
 
     inline void memcpy_fsys_to_fsys_nothrow(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
@@ -247,6 +223,182 @@ namespace dg::network_memops_fsys{
     }
 }
 
+namespace dg::network_memops_cufs{
+
+    inline auto memcpy_host_to_cufs(cufs_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
+
+        auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        cuda_ptr_t dst_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(dst_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_cuda(dst_cuptr, src, sz);
+
+        return err;
+    } 
+
+    inline auto memcpy_cuda_to_cufs(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
+
+        auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        cuda_ptr_t dst_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(dst_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_cuda(dst_cuptr, src, sz);
+
+        return err;
+    }
+
+    inline auto memcpy_fsys_to_cufs(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
+
+        auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        auto src_map_rs         = dg::network_kernelmap_x::map_safe(src);
+
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
+        }
+
+        cuda_ptr_t dst_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(dst_map_rs.value());
+        void * src_hostptr      = dg::network_kernelmap_x::get_host_ptr(src_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_host_to_cuda(dst_cuptr, src_hostptr, sz);
+
+        return err;
+    }
+
+    inline auto memcpy_cufs_to_cufs(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+
+        auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        } 
+
+        auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
+        }
+
+        cuda_ptr_t dst_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(dst_map_rs.value());
+        cuda_ptr_t src_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(src_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_cuda(dst_cuptr, src_cuptr, sz);
+
+        return err;
+    }
+
+    inline auto memcpy_cufs_to_host(void * dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+
+        auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
+        } 
+
+        cuda_ptr_t src_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(src_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_host(dst, src_cuptr, sz);
+
+        return err;
+    }
+
+    inline auto memcpy_cufs_to_cuda(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+
+        auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
+        }
+
+        cuda_ptr_t src_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(src_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_cuda(dst, src_cuptr, sz);
+
+        return err; 
+    }
+
+    inline auto memcpy_cufs_to_fsys(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+
+        auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
+
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+
+        if (!src_map_rs.has_value()){
+            return src_map_rs.error();
+        }
+
+        void * dst_hostptr      = dg::network_kernelmap_x::get_host_ptr(dst_map_rs.value());
+        cuda_ptr_t src_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(src_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memcpy_cuda_to_host(dst_hostptr, src_cuptr, sz);
+
+        return err;
+    }
+
+    inline auto memset_cufs(cufs_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
+
+        auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+
+        if (!dst_map_rs.has_value()){
+            return dst_map_rs.error();
+        }
+
+        cuda_ptr_t dst_cuptr    = dg::network_cudafsmap_x::get_cuda_ptr(dst_map_rs.value());
+        exception_t err         = dg::network_memops_clib::memset_cuda(dst_cuptr, c, sz);
+
+        return err;
+    }
+
+    inline void memcpy_host_to_cufs_nothrow(cufs_ptr_t dst, const void * src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_host_to_cufs(dst, src, sz));
+    }
+
+    inline void memcpy_cuda_to_cufs_nothrow(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_cuda_to_cufs(dst, src, sz));
+    }
+
+    inline void memcpy_fsys_to_cufs_nothrow(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_fsys_to_cufs(dst, src, sz));
+    }
+
+    inline void memcpy_cufs_to_cufs_nothrow(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_cufs_to_cufs(dst, src, sz));
+    }
+
+    inline void memcpy_cufs_to_host_nothrow(void * dst, cufs_ptr_t src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_cufs_to_host(dst, src, sz));
+    }
+
+    inline void memcpy_cufs_to_cuda_nothrow(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_cufs_to_cuda(dst, src, sz));
+    }
+
+    inline void memcpy_cufs_to_fsys_nothrow(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memcpy_cufs_to_fsys(dst, src, sz));
+    }
+
+    inline void memset_cufs_nothrow(cufs_ptr_t dst, int c, size_t sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(memset_cufs(dst, c, sz));
+    }
+} 
+
 namespace dg::network_memops_virt{
 
     using vma_ptr_t = uint32_t; 
@@ -256,60 +408,102 @@ namespace dg::network_memops_virt{
         using namespace dg::network_virtual_device; 
         
         if (is_host_ptr(dst) && is_host_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_host_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_host_ptr(src);
+            auto dst_ptr = devirtualize_host_ptr(dst);
+            auto src_ptr = devirtualize_host_ptr(src);
             return network_memops_clib::memcpy_host_to_host(dst_ptr, src_ptr, sz);
         } 
 
         if (is_host_ptr(dst) && is_cuda_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_host_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_cuda_ptr(src);
-            return network_memops_clib::memcpy_cuda_to_host(dst_ptr, src_ptr, src_id, sz);
+            auto dst_ptr = devirtualize_host_ptr(dst);
+            auto src_ptr = devirtualize_cuda_ptr(src);
+            return network_memops_clib::memcpy_cuda_to_host(dst_ptr, src_ptr, sz);
         }
         
         if (is_host_ptr(dst) && is_fsys_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_host_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_fsys_ptr(src);
+            auto dst_ptr = devirtualize_host_ptr(dst);
+            auto src_ptr = devirtualize_fsys_ptr(src);
             return network_memops_fsys::memcpy_fsys_to_host(dst_ptr, src_ptr, sz);
         }
 
+        if (is_host_ptr(dst) && is_cufs_ptr(src)){
+            auto dst_ptr = devirtualize_host_ptr(dst);
+            auto src_ptr = devirtualize_cufs_ptr(src);
+            return network_memops_cufs::memcpy_cufs_to_host(dst_ptr, src_ptr, sz);
+        }
+        
         if (is_cuda_ptr(dst) && is_host_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_cuda_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_host_ptr(src);
-            return network_memops_clib::memcpy_host_to_cuda(dst_ptr, dst_id, src_ptr, sz);
+            auto dst_ptr = devirtualize_cuda_ptr(dst);
+            auto src_ptr = devirtualize_host_ptr(src);
+            return network_memops_clib::memcpy_host_to_cuda(dst_ptr, src_ptr, sz);
         }
 
         if (is_cuda_ptr(dst) && is_cuda_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_cuda_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_cuda_ptr(src);
-            return network_memops_clib::memcpy_cuda_to_cuda(dst_ptr, dst_id, src_ptr, src_id, sz);
+            auto dst_ptr = devirtualize_cuda_ptr(dst);
+            auto src_ptr = devirtualize_cuda_ptr(src);
+            return network_memops_clib::memcpy_cuda_to_cuda(dst_ptr, src_ptr, sz);
         }
 
         if (is_cuda_ptr(dst) && is_fsys_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_cuda_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_fsys_ptr(src);
-            return network_memops_fsys::memcpy_fsys_to_cuda(dst_ptr, dst_id, src, sz);
+            auto dst_ptr = devirtualize_cuda_ptr(dst);
+            auto src_ptr = devirtualize_fsys_ptr(src);
+            return network_memops_fsys::memcpy_fsys_to_cuda(dst_ptr, src_ptr, sz);
+        }
+
+        if (is_cuda_ptr(dst) && is_cufs_ptr(src)){
+            auto dst_ptr = devirtualize_cuda_ptr(dst);
+            auto src_ptr = devirtualize_cufs_ptr(src);
+            return network_memops_cufs::memcpy_cufs_to_cuda(dst_ptr, src_ptr, sz);
         }
 
         if (is_fsys_ptr(dst) && is_host_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_fsys_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_host_ptr(src);
+            auto dst_ptr = devirtualize_fsys_ptr(dst);
+            auto src_ptr = devirtualize_host_ptr(src);
             return network_memops_fsys::memcpy_host_to_fsys(dst_ptr, src_ptr, sz);
         }
 
         if (is_fsys_ptr(dst) && is_cuda_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_fsys_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_cuda_ptr(src);
-            return network_memops_fsys::memcpy_cuda_to_fsys(dst_ptr, src_ptr, src_id, sz);
+            auto dst_ptr = devirtualize_fsys_ptr(dst);
+            auto src_ptr = devirtualize_cuda_ptr(src);
+            return network_memops_fsys::memcpy_cuda_to_fsys(dst_ptr, src_ptr, sz);
         }
 
         if (is_fsys_ptr(dst) && is_fsys_ptr(src)){
-            auto [dst_ptr, dst_id] = devirtualize_fsys_ptr(dst);
-            auto [src_ptr, src_id] = devirtualize_fsys_ptr(src);
+            auto dst_ptr = devirtualize_fsys_ptr(dst);
+            auto src_ptr = devirtualize_fsys_ptr(src);
             return network_memops_fsys::memcpy_fsys_to_fsys(dst_ptr, src_ptr, sz);
         }
 
-        return dg::network_exception::INVALID_VMAPTR_FORMAT;
+        if (is_fsys_ptr(dst) && is_cufs_ptr(src)){
+            auto dst_ptr = devirtualize_fsys_ptr(dst);
+            auto src_ptr = devirtualize_cufs_ptr(src);
+            return network_memops_cufs::memcpy_cufs_to_fsys(dst_ptr, src_ptr, sz);
+        }
+
+        if (is_cufs_ptr(dst) && is_host_ptr(src)){
+            auto dst_ptr = devirtualize_cufs_ptr(dst);
+            auto src_ptr = devirtualize_host_ptr(src);
+            return network_memops_cufs::memcpy_host_to_cufs(dst_ptr, src_ptr, sz);
+        }
+
+        if (is_cufs_ptr(dst) && is_cuda_ptr(src)){
+            auto dst_ptr = devirtualize_cufs_ptr(dst);
+            auto src_ptr = devirtualize_cuda_ptr(src);
+            return network_memops_cufs::memcpy_cuda_to_cufs(dst_ptr, src_ptr, sz);
+        }
+
+        if (is_cufs_ptr(dst) && is_fsys_ptr(src)){
+            auto dst_ptr = devirtualize_cufs_ptr(dst);
+            auto src_ptr = devirtualize_fsys_ptr(src);
+            return network_memops_cufs::memcpy_fsys_to_cufs(dst_ptr, src_ptr, sz);
+        }
+
+        if (is_cufs_ptr(dst) && is_cufs_ptr(src)){
+            auto dst_ptr = devirtualize_cufs_ptr(dst);
+            auto src_ptr = devirtualize_cufs_ptr(src);
+            return network_memops_cufs::memcpy_cufs_to_cufs(dst_ptr, src_ptr, sz);
+        }
+
+        return dg::network_exception::INVALID_SERIALIZATION_FORMAT;
     }
 
     inline void memcpy_nothrow(vma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept{
@@ -322,18 +516,23 @@ namespace dg::network_memops_virt{
         using namespace dg::network_virtual_device;
 
         if (is_host_ptr(dst)){
-            auto [dst_ptr, dst_id] = devirtualize_host_ptr(dst);
+            auto dst_ptr = devirtualize_host_ptr(dst);
             return network_memops_clib::memset_host(dst_ptr, c, sz);
         } 
 
         if (is_cuda_ptr(dst)){
-            auto [dst_ptr, dst_id] = devirtualize_cuda_ptr(dst);
-            return network_memops_clib::memset_cuda(dst_ptr, dst_id, c, sz);
+            auto dst_ptr = devirtualize_cuda_ptr(dst);
+            return network_memops_clib::memset_cuda(dst_ptr, c, sz);
         }
 
         if (is_fsys_ptr(dst)){
-            auto [dst_ptr, dst_id] = devirtualize_fsys_ptr(dst);
-            return network_memops_fsys::memset_fsys(dst, c, sz);
+            auto dst_ptr = devirtualize_fsys_ptr(dst);
+            return network_memops_fsys::memset_fsys(dst_ptr, c, sz);
+        }
+
+        if (is_cufs_ptr(dst)){
+            auto dst_ptr = devirtualize_cufs_ptr(dst);
+            return network_memops_cufs::memset_cufs(dst_ptr, c, sz);
         }
 
         return dg::network_exception::INVALID_SERIALIZATION_FORMAT;
