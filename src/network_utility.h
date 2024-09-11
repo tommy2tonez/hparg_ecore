@@ -64,6 +64,25 @@ namespace dg::network_genult{
         return ptr;
     }
 
+    template <class T, class T1, std::enable_if_t<std::conjunction_v<dg::network_type_traits_x::is_stdprimitive_integer<T>, 
+                                                                     dg::network_type_traits_x::is_stdprimitive_integer<T1>>, bool> = true>
+    auto safe_integer_cast(T1 value) -> T{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            if (value > std::numeric_limits<T>::max()){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_NUMERIC_CAST));
+                std::abort();
+            }
+
+            if (value < std::numeric_limtis<T>::min()){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_NUMERIC_CAST));
+                std::abort();
+            }
+        }
+
+        return value;
+    }
+
     template <class T>
     auto safe_optional_access(std::optional<T>& obj) noexcept -> std::optional<T>&{
 
@@ -197,8 +216,8 @@ namespace dg::network_genult{
                 constexpr size_t cur_tuple_sz       = std::tuple_size_v<cur_t>>;
 
                 return [&]<size_t ...LHS_IDX, size_t ...RHS_IDX>(const std::index_sequence<LHS_IDX...>, const std::index_sequence<RHS_IDX...>){
-                    static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<std::tuple_element_t<LHS_IDX, successor_t>>, std::tuple_element_t<LHS_IDX, successor_t>>...>);
-                    static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<std::tuple_element_t<RHS_IDX, cur_t>>, std::tuple_element_t<RHS_IDX, cur_t>>...>);
+                    static_assert(std::conjunction_v<dg::network_type_traits_x::is_base_type<std::tuple_element_t<LHS_IDX, successor_t>>...>);
+                    static_assert(std::conjunction_v<dg::network_type_traits_x::is_base_type<std::tuple_element_t<RHS_IDX, cur_t>>...>);
                     return std::make_tuple(std::get<LHS_IDX>(successor)..., std::get<RHS_IDX>(cur)...); //make sure that all joining element_types are base_type - lesser the requirement next iteration 
                 }(std::make_index_sequence<successor_tuple_sz>{}, std::make_index_sequence<cur_tuple_sz>{});
             }
@@ -214,7 +233,7 @@ namespace dg::network_genult{
         using tup_t = dg::network_type_traits_x::base_type_t<T>; 
 
         return [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
-            static_assert(std::conjunction_v<std::is_same<dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, tup_t>>, std::tuple_element_t<IDX, tup_t>>...>);
+            static_assert(std::conjunction_v<dg::network_type_traits_x::is_base_type<std::tuple_element_t<IDX, tup_t>>...>);
             return std::make_tuple(std::get<IDX>(tup)...); //consider forward_as_tuple next iteration -
         }(std::make_index_sequence<SZ>{});
     }
@@ -238,8 +257,8 @@ namespace dg::network_genult{
         static_assert(std::tuple_size_v<lhs_tup_t> == std::tuple_size_v<rhs_tup_t>);
 
         return [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
-            static_assert(std::conjunction_v<std::is_same<std::tuple_element_t<IDX, lhs_tup_t>, dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, lhs_tup_t>>>...>); //stricter req - remove next iteration
-            static_assert(std::conjunction_v<std::is_same<std::tuple_element_t<IDX, rhs_tup_t>, dg::network_type_traits_x::base_type_t<std::tuple_element_t<IDX, rhs_tup_t>>>...>); //stricter req - remove next iteration
+            static_assert(std::conjunction_v<dg::network_type_traits_x::is_base_type<std::tuple_element_t<IDX, lhs_tup_t>>...>); //stricter req - remove next iteration
+            static_assert(std::conjunction_v<dg::network_type_traits_x::is_base_type<std::tuple_element_t<IDX, rhs_tup_t>>...>); //stricter req - remove next iteration
             return std::make_tuple(std::make_tuple(std::get<IDX>(lhs), std::get<IDX>(rhs))...);
         }(std::make_index_sequence<std::tuple_size_v<lhs_tup_t>>{});
     }
@@ -308,11 +327,12 @@ namespace dg::network_genult{
 
     template <class ResourceType, class ResourceDeallocator, class = void>
     class nothrow_immutable_unique_raii_wrapper{}; 
-
+    
     template <class ResourceType, class ResourceDeallocator>
     class nothrow_immutable_unique_raii_wrapper<ResourceType, ResourceDeallocator, std::void_t<std::enable_if_t<std::conjunction_v<std::is_trivial<ResourceType>,
                                                                                                                                    dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>, 
-                                                                                                                                   std::is_nothrow_move_constructible<ResourceDeallocator>>>>>{
+                                                                                                                                   std::is_nothrow_move_constructible<ResourceDeallocator>,
+                                                                                                                                   dg::network_type_traits_x::is_base_type_v<ResourceDeallocator>>>>>{
 
         private:
 
@@ -324,7 +344,11 @@ namespace dg::network_genult{
 
             using self = nothrow_immutable_unique_raii_wrapper;
 
-            //<ResourceType, ResourceDeallocator> sufficiently describes the component - remove explicit next iteration
+            template <class ResourceDeallocatorArg = ResourceDeallocator, std::enable_if_t<std::is_nothrow_default_constructible_v<ResourceDeallocatorArg>, bool> = true>
+            nothrow_immutable_unique_raii_wrapper() noexcept: resource(), 
+                                                              deallocator(), 
+                                                              responsibility_flag(false){}
+
             nothrow_immutable_unique_raii_wrapper(ResourceType resource,
                                                   ResourceDeallocator deallocator) noexcept: resource(resource),
                                                                                              deallocator(std::move(deallocator)),
@@ -335,6 +359,13 @@ namespace dg::network_genult{
                                                                           deallocator(std::move(other.deallocator)),
                                                                           responsibility_flag(other.responsibility_flag){
                 other.responsibility_flag = false;
+            }
+
+            ~nothrow_immutable_unique_raii_wrapper() noexcept{
+
+                if (this->responsibility_flag){
+                    this->deallocator(this->resource);
+                }            
             }
 
             self& operator =(const self&) = delete;
@@ -354,13 +385,6 @@ namespace dg::network_genult{
                 return *this;
             }
 
-            ~nothrow_immutable_unique_raii_wrapper() noexcept{
-
-                if (this->responsibility_flag){
-                    this->deallocator(this->resource);
-                }            
-            }
-
             auto value() const noexcept -> ResourceType{
 
                 if constexpr(IS_SAFE_ACCESS_ENABLED){
@@ -376,6 +400,98 @@ namespace dg::network_genult{
             operator ResourceType() const noexcept{
 
                 return this->value();
+            }
+
+            auto has_value() const noexcept -> bool{
+
+                return this->responsibility_flag;
+            }
+    };
+
+    template <class ResourceType, class ResourceDeallocator, class = void>
+    class nothrow_unique_raii_wrapper{};
+
+    template <class ResourceType, class ResourceDeallocator>
+    class nothrow_unique_raii_wrapper<ResourceType, ResourceDeallocator, std::void_t<std::enable_if_t<std::conjunction_v<std::is_nothrow_move_constructible<ResourceType>,
+                                                                                                                         dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, ResourceType>,
+                                                                                                                         std::is_nothrow_move_constructible<ResourceDeallocator>,
+                                                                                                                         dg::network_type_traits_x::is_base_type_v<ResourceType>,
+                                                                                                                         dg::network_type_traits_x::is_base_type_v<ResourceDeallocator>>>>>{
+        
+        private:
+
+            ResourceType resource;
+            ResourceDeallocator deallocator;
+            bool responsibility_flag;
+        
+        public:
+
+            using self = nothrow_unique_raii_wrapper; 
+
+            template <class ResourceArg = ResourceType, class DeallocatorArg = ResourceDeallocator, std::enable_if_t<std::conjunction_v<std::is_nothrow_default_constructible<ResourceArg>, std::is_nothrow_default_constructible<DeallocatorArg>>, bool> = true>
+            nothrow_unique_raii_wrapper() noexcept: resource(),
+                                                    deallocator(),
+                                                    responsibility_flag(false){}
+
+            nothrow_unique_raii_wrapper(ResourceType resource, 
+                                        ResourceDeallocator deallocator) noexcept: resource(std::move(resource)),
+                                                                                   deallocator(std::move(deallocator)),
+                                                                                   responsibility_flag(true){}
+
+            nothrow_unique_raii_wrapper(const self& other) = delete;
+
+            nothrow_unique_raii_wrapper(self&& other) noexcept: resource(std::move(other.resource)),
+                                                                deallocator(std::move(other.deallocator)),
+                                                                responsibility_flag(other.responsibility_flag){
+                
+                other.responsibility_flag = false;
+            }
+
+            ~nothrow_unique_raii_wrapper() noexcept{
+
+                if (this->responsibility_flag){
+                    this->deallocator(std::move(this->resource));
+                }
+            }
+
+            self& operator =(const self&) = delete;
+
+            self& operator =(self&& other) noexcept{
+
+                if (this != &other){
+                    if (this->responsibility_flag){
+                        this->deallocator(std::move(this->resource));
+                    }
+
+                    this->resource              = std::move(other.resource);
+                    this->deallocator           = std::move(other.deallocator);
+                    this->responsibility_flag   = other.responsibility_flag;
+                    other.responsibility_flag   = false;
+                }
+
+                return *this;
+            }
+
+            auto value() const noexcept -> const ResourceType&{
+
+                if constexpr(IS_SAFE_ACCESS_ENABLED){
+                    if (!this->responsibility_flag){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    }
+                }
+
+                return this->resource;
+            }
+
+            auto value() noexcept -> ResourceType&{
+
+                if constexpr(IS_SAFE_ACCESS_ENABLED){
+                    if (!this->responsibility_flag){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    }
+                }
+
+                return this->resource;
             }
 
             auto has_value() const noexcept -> bool{

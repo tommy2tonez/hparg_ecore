@@ -43,12 +43,14 @@ namespace dg::network_kernelmap_x_impl1::model{
     
         auto ptr() const noexcept -> void *{
 
-            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr.get(), this->off);
+            using namespace dg::network_genult;
+            return dg::memult::advance(safe_ptr_access(safe_ptr_access(this->node)->cptr.get()), this->off);
         }
 
         auto const_ptr() const noexcept -> const void *{
 
-            return dg::memult::advance(dg::network_genult::safe_ptr_access(this->node)->cptr.get(), this->off);
+            using namespace dg::network_genult;
+            return dg::memult::advance(safe_ptr_access(safe_ptr_access(this->node)->cptr.get()), this->off);
         }
     };
 }
@@ -59,7 +61,7 @@ namespace dg::network_kernelmap_x_impl1::interface{
 
     struct FsysLoaderInterface{
         virtual ~FsysLoaderInterface() = default;
-        virtual auto load(MemoryNode&, fsys_ptr_t) noexcept -> exception_t = 0; //atomicity (either load all or none)
+        virtual auto load(MemoryNode&, fsys_ptr_t) noexcept -> exception_t = 0;
         virtual void unload(MemoryNode&) noexcept = 0;
     };
 
@@ -69,8 +71,8 @@ namespace dg::network_kernelmap_x_impl1::interface{
         virtual void map_release(MapResource) noexcept = 0;
     };
 
-    struct MapDistributionInterface{
-        virtual ~MapDistributionInterface() = default;
+    struct MapDistributorInterface{
+        virtual ~MapDistributorInterface() = default;
         virtual auto id(fsys_ptr_t) noexcept -> std::expected<size_t, exception_t> = 0;
     };
 }
@@ -128,10 +130,12 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                                                                      memregion_sz(memregion_sz){}
 
             auto load(MemoryNode& root, fsys_ptr_t region) noexcept -> exception_t{
-
-                if (static_cast<bool>(root.fsys_ptr_info)){ //INTERNAL_CORRUPTION should only be checked in debug mode
-                    dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (static_cast<bool>(root.fsys_ptr_info)){
+                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 auto dict_ptr = this->stable_storage_dict_find_entry(region);
@@ -144,7 +148,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 const char * cstr_path              = inpath.c_str();
                 void * dst                          = root.cptr.get();
                 
-                dg::network_fileio::dg_read_binary_direct_nothrow(cstr_path, dst, this->memregion_sz); //fine - should return kernel_runtime_error
+                dg::network_fileio::dg_read_binary_direct_nothrow(cstr_path, dst, this->memregion_sz);
                 
                 root.fsys_ptr_info  = VMAPtrInfo{region, 0u};
                 root.timestamp      = dg::network_genult::unix_timestamp();
@@ -154,22 +158,26 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             void unload(MemoryNode& root) noexcept{ //correct: this is a reverse operation of load - should be void (...) noexcept 
 
-                if (!static_cast<bool>(root.fsys_ptr_info)){ //INTERNAL_CORRUPTION should only be checked in debug mode
-                    dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
-                }
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!static_cast<bool>(root.fsys_ptr_info)){
+                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
 
-                if (root.fsys_ptr_info->reference != 0u){ //INTERNAL_CORRUPTION should only be checked in debug mode
-                    dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                    if (root.fsys_ptr_info->reference != 0u){
+                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 fsys_ptr_t host_region  = root.fsys_ptr_info->ptr;
                 auto dict_ptr           = this->stable_storage_dict_find_entry(host_region);
 
-                if (dict_ptr == this->stable_storage_dict_end()){ //INTERNAL_CORRUPTION should only be checked in debug mode
-                    dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (dict_ptr == this->stable_storage_dict_end()){
+                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 const std::filesystem::path& opath  = dict_ptr->second;
@@ -288,9 +296,11 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 
                 dg::network_genult::safe_optional_access(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info);
 
-                if (node->fsys_ptr_info->reference == 0u){ //INTERNAL_CORRUPTION should only be checked in debug mode
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (node->fsys_ptr_info->reference == 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 node->fsys_ptr_info->reference -= 1;
@@ -302,9 +312,11 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 
                 auto map_ptr = this->allocation_dict.find(key);
 
-                if (map_ptr == this->allocation_dict.end()){ //INTERNAL_CORRUPTION should only be checked in debug mode
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == this->allocation_dict.end()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 this->allocation_dict.erase(map_ptr);
@@ -374,7 +386,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
     };
     
     template <size_t MEMREGION_SZ> //fine - inherit a virtual interface - this is not bad practice
-    class StdMapDistribution: public virtual MapDistributionInterface{
+    class StdMapDistributor: public virtual MapDistributorInterface{
 
         private:
 
@@ -384,8 +396,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             static_assert(dg::memult::is_pow2(MEMREGION_SZ));
 
-            explicit StdMapDistribution(std::unordered_map<fsys_ptr_t, size_t> region_id_dict,
-                                        std::integral_constant<size_t, MEMREGION_SZ>) noexcept: region_id_dict(std::move(region_id_dict)){}
+            explicit StdMapDistributor(std::unordered_map<fsys_ptr_t, size_t> region_id_dict,
+                                       std::integral_constant<size_t, MEMREGION_SZ>) noexcept: region_id_dict(std::move(region_id_dict)){}
 
             auto id(fsys_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
@@ -405,12 +417,12 @@ namespace dg::network_kernelmap_x_impl1::implementation{
         private:
 
             std::vector<std::unique_ptr<MapInterface>> map_table;
-            std::unique_ptr<MapDistributionInterface> map_distributor;
+            std::unique_ptr<MapDistributorInterface> map_distributor;
         
         public:
 
             explicit ConcurrentMap(std::vector<std::unique_ptr<MapInterface>> map_table,
-                                   std::unique_ptr<MapDistributionInterface> map_distributor) noexcept: map_table(std::move(map_table)),
+                                   std::unique_ptr<MapDistributorInterface> map_distributor) noexcept: map_table(std::move(map_table)),
                                                                                                         map_distributor(std::move(map_distributor)){}
 
             auto map(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
@@ -429,9 +441,11 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 fsys_ptr_t ptr  = dg::network_genult::safe_optional_access(dg::network_genult::safe_pointer_access(map_resource.node)->fsys_ptr_info)->ptr;
                 auto rs         = this->map_distributor->id(ptr);
 
-                if (!rs.has_value()){
-                    dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!rs.has_value()){
+                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 map_table[rs.value()]->map_release(map_resource);

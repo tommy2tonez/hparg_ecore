@@ -35,6 +35,15 @@ namespace dg::network_type_traits_x{
     using base_type_t = typename base_type<T>::type;
     
     template <class T, class = void>
+    struct is_base_type: std::false_type{}; 
+
+    template <class T>
+    struct is_base_type<T, std::void_t<std::enable_if_t<std::is_same_v<T, base_type_t<T>>>>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_base_type_v = is_base_type<T>::value;
+
+    template <class T, class = void>
     struct is_tuple: std::false_type{};
 
     template <class T>
@@ -42,6 +51,15 @@ namespace dg::network_type_traits_x{
 
     template <class T>
     static inline constexpr bool is_tuple_v = is_tuple<T>::value;
+
+    template <class T, class = void>
+    struct is_stdprimitive_integer: std::false_type{};
+
+    template <class T>
+    struct is_stdprimitive_integer<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>: std::true_type{}; 
+
+    template <class T>
+    static inline constexpr bool is_stdprimitive_integer_v = is_stdprimitive_integer<T>::value; 
 
     template <class T>
     struct mono_reduction_type_helper{};

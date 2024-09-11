@@ -15,8 +15,6 @@ namespace dg::network_kernelmap_x{
     using exception_t               = dg::network_exception::exception_t;  
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::MapResource;
 
-    static_assert(dg::is_immutable_resource_handle_v<map_resource_handle_t>);
-
     inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::MapInterface> map_instance{}; 
 
     template <size_t MEMREGION_SZ>
