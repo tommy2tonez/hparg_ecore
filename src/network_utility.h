@@ -133,7 +133,7 @@ namespace dg::network_genult{
 
         private:
 
-            static inline T obj{};
+            static inline T obj{}; //important to do make_unique<> here - this is rather a decision that will be made later - 
         
         public:
 
@@ -344,7 +344,7 @@ namespace dg::network_genult{
 
             using self = nothrow_immutable_unique_raii_wrapper;
 
-            template <class ResourceDeallocatorArg = ResourceDeallocator, std::enable_if_t<std::is_nothrow_default_constructible_v<ResourceDeallocatorArg>, bool> = true>
+            template <class DelArg = ResourceDeallocator, std::enable_if_t<std::is_nothrow_default_constructible_v<DelArg>, bool> = true>
             nothrow_immutable_unique_raii_wrapper() noexcept: resource(), 
                                                               deallocator(), 
                                                               responsibility_flag(false){}
@@ -413,8 +413,8 @@ namespace dg::network_genult{
 
     template <class ResourceType, class ResourceDeallocator>
     class nothrow_unique_raii_wrapper<ResourceType, ResourceDeallocator, std::void_t<std::enable_if_t<std::conjunction_v<std::is_nothrow_move_constructible<ResourceType>,
-                                                                                                                         dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, ResourceType>,
                                                                                                                          std::is_nothrow_move_constructible<ResourceDeallocator>,
+                                                                                                                         dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, std::add_rvalue_reference_t<ResourceType>>, //this is strange + confusing - rather to do dynamic allocation 
                                                                                                                          dg::network_type_traits_x::is_base_type_v<ResourceType>,
                                                                                                                          dg::network_type_traits_x::is_base_type_v<ResourceDeallocator>>>>>{
         
@@ -428,7 +428,7 @@ namespace dg::network_genult{
 
             using self = nothrow_unique_raii_wrapper; 
 
-            template <class ResourceArg = ResourceType, class DeallocatorArg = ResourceDeallocator, std::enable_if_t<std::conjunction_v<std::is_nothrow_default_constructible<ResourceArg>, std::is_nothrow_default_constructible<DeallocatorArg>>, bool> = true>
+            template <class ResourceArg = ResourceType, class DelArg = ResourceDeallocator, std::enable_if_t<std::conjunction_v<std::is_nothrow_default_constructible<ResourceArg>, std::is_nothrow_default_constructible<DelArg>>, bool> = true>
             nothrow_unique_raii_wrapper() noexcept: resource(),
                                                     deallocator(),
                                                     responsibility_flag(false){}

@@ -155,7 +155,7 @@ namespace dg::network_fileio_linux{
         size_t fsz  = dg_file_size_nothrow(fd); //this is an error that user should not know of - internal corruption if failed (think of a successful file open guarantees a successful read of metadata)
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache_nothrow(raii_fd.value()); //this is an error that user should not know of - internal corruption if failed
+            dg_fadvise_nocache_nothrow(fd); //this is an error that user should not know of - internal corruption if failed
         }
 
         if (!is_met_direct_dgio_blksz_requirement(fsz)){
@@ -171,7 +171,7 @@ namespace dg::network_fileio_linux{
         }
 
         if (read(fd, dst, fsz) != fsz){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RUNTIME_FILEIO_ERROR)); //this is where the exception + abort line is blurred - yet i think this should be abort (open_file guarantees successful immutable operations - if not then its the cuopen_file problem) - global-mtx-lockguard is required internally - external modification is UB 
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RUNTIME_FILEIO_ERROR)); //this is where the exception + abort line is blurred - yet i think this should be abort (open_file guarantees successful immutable operations - if not then its the open_file problem) - global-mtx-lockguard is required internally - external modification is UB 
             std::abort();
         }
 
@@ -181,7 +181,55 @@ namespace dg::network_fileio_linux{
     void dg_read_binary_direct_nothrow(const char * fp, void * dst, size_t dst_cap) noexcept{
 
         dg::network_exception_handler::nothrow_log(dg_read_binary_direct(fp, dst, dst_cap));
+    }
+
+    auto dg_read_binary_indirect(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
+
+        auto raii_fd = dg_open_file(fp, O_RDONLY | O_TRUNC);
+
+        if (!raii_fd.has_value()){
+            return raii_fd.error();
+        }        
+
+        int fd      = raii_fd.value();
+        size_t fsz  = dg_file_size_nothrow(fd);
+
+        if (dst_cap < fsz){
+            return dg::network_exception::BUFFER_OVERFLOW;
+        }
+
+        if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
+            dg_fadvise_nocache_nothrow(fd);
+        }
+
+        if (read(fd, dst, fsz) != fsz){
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RUNTIME_FILEIO_ERROR));
+            std::abort();
+        }
+
+        return dg::network_exception::SUCCESS;
     } 
+
+    void dg_read_binary_indirect_nothrow(const char * fp, void * dst, size_t dst_cap) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg_read_binary_indirect(fp, dst, dst_cap));
+    }
+
+    auto dg_read_binary(const char * fp, void * dst, size_t dst_cap) -> exception_t{
+
+        exception_t err = dg_read_binary_direct(fp, dst, dst_cap);
+
+        if (dg::network_exception::is_success(err)){
+            return dg::network_exception::SUCCESS;
+        }
+
+        return dg_read_binary_indirect(fp, dst, dst_cap);
+    }
+
+    void dg_read_binary_nothrow(const char * fp, void * dst, size_t dst_cap) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg_read_binary(fp, dst, dst_cap));
+    }
 
     //not atomic (write all or none to fp) - if atomic is required, extension or nothrow should be used as replacement 
     //an implementation of atomic here is immature - break single responsibility
@@ -215,6 +263,46 @@ namespace dg::network_fileio_linux{
     void dg_write_binary_direct_nothrow(const char * fp, const void * src, size_t src_sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(dg_write_binary_direct(fp, src, src_sz));
+    }
+
+    auto dg_write_binary_indirect(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
+
+        auto raii_fd = dg_open_file(fp, O_WRONLY | O_TRUNC);
+
+        if (!raii_fd.has_value()){
+            return raii_fd.error();
+        }
+
+        if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
+            dg_fadvise_nocache_nothrow(raii_fd.value());
+        }
+
+        if (write(raii_fd.value(), src, src_sz) != src_sz){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    void dg_write_binary_indirect_nothrow(const char * fp, const void * src, size_t src_sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg_write_binary_indirect(fp, src, src_sz));
+    }
+
+    auto dg_write_binary(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
+
+        exception_t err = dg_write_binary_direct(fp, src, src_sz);
+
+        if (dg::network_exception::is_success(err)){
+            return dg::network_exception::SUCCESS;
+        }
+
+        return dg_write_binary_indirect(fp, src, src_sz);
+    }
+
+    void dg_write_binary_nothrow(const char * fp, const void * src, size_t src_sz) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg_write_binary(fp, src, src_sz));
     }
 }
 
