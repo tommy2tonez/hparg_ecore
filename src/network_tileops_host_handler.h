@@ -15,52 +15,25 @@
 
 namespace dg::network_tileops_handler{
 
-    //scenerios:
-    //devices:
-    //fsys-fsys
-    //fsys-host
-    //host-host
-    //cuda-cuda
-    
-    //dispatch_t:
-    //float8-float8
-    //float8-float16
-    //float16-float8
-    //float16-float16
-
-    //all commitables are dismissibles
-    //dismissibles are logged as optional or returned as exception_t - or return exception_t then logged as optional
-    //the decision of writing directly to uma_ptr_t region and not using a dictionary is a design decision - uma_ptr_t is just another memory region - like void *, this is to reduce the complexity of the program - somewhat - a direct read to uma_ptr_t could be optimized -> a direct read to void *
-    //this decision is a set-up for an easy serialization, replication feature
-    //this decision could affect performance where mutable is preferred to immutable datatype  
-    //the decision of using array<> instead of vector<> is
-    //(1): fault-tolerance (fixed memory usage per tile) 
-    //(2): fixed-runtime per tile
-    //(3): easy-serialization (every datatype has static layout)
-    //(4): declare intention - such could be achieved via vector yet it does not explicitly declare intention (fixed size) 
-
-    //drawbacks: might overflow if misuse
-    //harder to write code that works and easy to follow (one might argue to convert -> vector then do the magics yet it's still confusing)
-    //without loss of generality - will be back for implementation
-
     using namespace dg::network_tileops_poly::taxonomy;
     using dispatch_t = poly_t;
-
+    
+    //open a hackathon son, see who could exploit hardware built-in malware first
+    //then software built-in malware by sandboxing the environment and observe the virtual machine
 
     auto forward_mono(uma_ptr_t dst) noexcept -> bool{
         
-        using namespace dg::network_tile_member_getsetter; //namespace should only be used once - to avoid namespace collision -
+        using namespace dg::network_tile_member_getsetter;
         
         uma_ptr_t dst_lck_addr  = get_mono_rculock_addr_nothrow(dst);
         uma_ptr_t src           = {}; 
 
-        //fine - refactor later
         {
             auto lck_grd = dg::network_memops_uma::memlock_guard(dst_lck_addr); 
             src = get_mono_src_nothrow(src);
         }
 
-        auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr); //deadlock recipe
+        auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
         operatable_id_t dst_operatable_id   = get_mono_operatable_id_nothrow(dst);
         operatable_id_t src_operatable_id   = get_operatable_id_nothrow(src);
 
@@ -72,7 +45,7 @@ namespace dg::network_tileops_handler{
         uma_ptr_t src_logit_umaptr                          = get_logit_addr_nothrow(src);
         dispatch_control_t dispatch_control                 = get_mono_dispatch_control_nothrow(dst);
         auto [dst_vd_id, src_vd_id, dp_device, tileops_dp]  = dg::network_dispatch_control::decode_mono(dispatch_control);
-        auto [dst_map_resource, src_map_resource]           = dg::network_uma::mapsafe_recursivewait_many<2u>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}}); //deadlock recipe 
+        auto [dst_map_resource, src_map_resource]           = dg::network_uma::mapsafe_recursivewait_many<2u>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}}); //weird - I mean this could combined with vmamap - yet I have yet wanted to complicate this further
         auto dst_logit_vmaptr                               = dg::network_uma::get_vma_ptr(dst_map_resource);
         auto src_logit_vmaptr                               = dg::network_uma::get_vma_ptr(src_map_resource); 
         auto dst_logit_vmamap                               = dg::network_vmamap::mapsafe_nothrow(dst_logit_vmaptr);
@@ -122,7 +95,7 @@ namespace dg::network_tileops_handler{
             return false;
         }
 
-        uma_ptr_t dst_logit_umaptr              = get_pair_logit_addr_nothrow(dst); //I'll fix the tabs later by running a syntax program - just to keep my sanity - I need the alignment - 
+        uma_ptr_t dst_logit_umaptr              = get_pair_logit_addr_nothrow(dst);
         uma_ptr_t lhs_logit_umaptr              = get_logit_addr_nothrow(lhs);
         uma_ptr_t rhs_logit_umaptr              = get_logit_addr_nothrow(rhs);
         dispatch_control_t dispatch_control     = get_pair_dispatch_control_nothrow(dst);

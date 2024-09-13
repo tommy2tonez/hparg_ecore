@@ -116,7 +116,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
         } 
     };
 
-    class DirectFsysLoader: public virtual CuFSLoaderInterface{
+    class FsysLoader: public virtual CuFSLoaderInterface{
 
         private:
 
@@ -125,9 +125,9 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
         public:
 
-            explicit DirectFsysLoader(std::unordered_map<cufs_ptr_t, std::filesystem::path> stable_storage_dict,
-                                      size_t memregion_sz) noexcept: stable_storage_dict(std::move(stable_storage_dict)),
-                                                                     memregion_sz(memregion_sz){}
+            explicit FsysLoader(std::unordered_map<cufs_ptr_t, std::filesystem::path> stable_storage_dict,
+                                size_t memregion_sz) noexcept: stable_storage_dict(std::move(stable_storage_dict)),
+                                                               memregion_sz(memregion_sz){}
 
             auto load(MemoryNode& root, cufs_ptr_t region) noexcept -> exception_t{
 
@@ -148,7 +148,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 const char * cstr_path              = inpath.c_str();
                 cuda_ptr_t dst                      = root.cuptr.get();
                 
-                dg::network_cufsio::dg_read_binary_direct_nothrow(cstr_path, dst, this->memregion_sz);
+                dg::network_cufsio::dg_read_binary_nothrow(cstr_path, dst, this->memregion_sz);
                 
                 root.fsys_ptr_info  = VMAPtrInfo{region, 0u};
                 root.timestamp      = dg::network_genult::unix_timestamp();
@@ -156,7 +156,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 return dg::network_exception::SUCCESS;
             }
 
-            void unload(MemoryNode& root) noexcept{ //correct: this is a reverse operation of load - should be void (...) noexcept 
+            void unload(MemoryNode& root) noexcept{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (!static_cast<bool>(root.fsys_ptr_info)){
@@ -184,7 +184,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 const char * cstr_path              = opath.c_str();
                 cuda_ptr_t src                      = root.cuptr.get();
                 
-                dg::network_cufsio::dg_write_binary_direct_nothrow(cstr_path, src, this->memregion_sz);
+                dg::network_cufsio::dg_write_binary_nothrow(cstr_path, src, this->memregion_sz);
 
                 root.fsys_ptr_info  = std::nullopt;
                 root.timestamp      = dg::network_genult::unix_timestamp();

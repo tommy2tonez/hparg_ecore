@@ -17,9 +17,9 @@
 
 namespace dg::network_fileio_linux{
 
-    static constexpr inline auto DG_FILEIO_MODE             = S_IRWXU; //user-configurable - compile-payload
-    static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ = size_t{1} << 15; //user-configurable - compile-payload
-    static constexpr inline bool NO_KERNEL_FSYS_CACHE_FLAG  = false;
+    static constexpr inline auto DG_FILEIO_MODE                 = S_IRWXU; //user-configurable - compile-payload
+    static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ     = size_t{1} << 20; //user-configurable - compile-payload
+    static constexpr inline bool NO_KERNEL_FSYS_CACHE_FLAG      = false;
 
     constexpr auto is_met_direct_dgio_blksz_requirement(size_t blk_sz) noexcept -> bool{
 
@@ -90,6 +90,9 @@ namespace dg::network_fileio_linux{
     }
 
     //user-space-
+    //next iteration - include offset -> fp - use directionary to decode <fname, offset> to avoid file pollution 
+    //yet its better to do separate file - to guarantee kernel concurrent support on all system
+
     auto dg_file_exists(const char * fp) noexcept -> std::expected<bool, exception_t>{ //noexcept is important - abort program if bad_alloc
 
         std::error_code err{};
@@ -155,7 +158,7 @@ namespace dg::network_fileio_linux{
         size_t fsz  = dg_file_size_nothrow(fd); //this is an error that user should not know of - internal corruption if failed (think of a successful file open guarantees a successful read of metadata)
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache_nothrow(fd); //this is an error that user should not know of - internal corruption if failed
+            dg_fadvise_nocache(fd); //this is an error that user should not know of - internal corruption if failed
         }
 
         if (!is_met_direct_dgio_blksz_requirement(fsz)){
@@ -199,7 +202,7 @@ namespace dg::network_fileio_linux{
         }
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache_nothrow(fd);
+            dg_fadvise_nocache(fd);
         }
 
         if (read(fd, dst, fsz) != fsz){
@@ -242,7 +245,7 @@ namespace dg::network_fileio_linux{
         }
         
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache_nothrow(raii_fd.value()); //this is an error that user should not know of - internal corruption if failed
+            dg_fadvise_nocache(raii_fd.value()); //this is an error that user should not know of - internal corruption if failed
         }
 
         if (!is_met_direct_dgio_blksz_requirement(src_sz)){
@@ -274,7 +277,7 @@ namespace dg::network_fileio_linux{
         }
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache_nothrow(raii_fd.value());
+            dg_fadvise_nocache(raii_fd.value());
         }
 
         if (write(raii_fd.value(), src, src_sz) != src_sz){

@@ -84,6 +84,25 @@ namespace dg::network_genult{
     }
 
     template <class T>
+    struct safe_integer_cast_wrapper{
+
+        static_assert(std::numeric_limits<T>::is_integer);
+        T value;
+
+        template <class U>
+        operator U() const noexcept{
+
+            return safe_integer_cast<U>(this->value);
+        }
+    };
+
+    template <class T>
+    auto wrap_safe_integer_cast(T value) noexcept{
+
+        return safe_integer_cast_wrapper<T>{value};
+    }
+
+    template <class T>
     auto safe_optional_access(std::optional<T>& obj) noexcept -> std::optional<T>&{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
@@ -126,6 +145,20 @@ namespace dg::network_genult{
         dg::network_atomic_x::thread_fence_optional();
         
         return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor));
+    }
+
+    template <class Destructor>
+    auto resource_guard(Destructor destructor) noexcept{
+        
+        static_assert(std::is_nothrow_copy_constructible_v<Destructor>);
+        static_assert(dg::network_type_traits_x::is_nothrow_invokable_v<Destructor>);
+
+        static int i    = 0;
+        auto backout_ld = [=](int *) noexcept{
+            destructor();
+        };
+
+        return std::unique_ptr<int, decltype(backout_ld)>(&i, backout_ld);
     }
 
     template <class ID, class T>
