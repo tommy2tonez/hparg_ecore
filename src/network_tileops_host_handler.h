@@ -49,7 +49,7 @@ namespace dg::network_tileops_handler{
         auto dst_logit_vmaptr                               = dg::network_uma::get_vma_ptr(dst_map_resource);
         auto src_logit_vmaptr                               = dg::network_uma::get_vma_ptr(src_map_resource); 
         auto dst_logit_vmamap                               = dg::network_vmamap::mapsafe_nothrow(dst_logit_vmaptr);
-        auto src_logit_vmamap                               = dg::network_vmamap::mapsafe_nothrow(src_logit_vmaptr); 
+        auto src_logit_vmamap                               = dg::network_vmamap::mapsafe_nothrow(src_logit_vmaptr);
 
         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
             dg::network_tileops_cuda_poly::fwd_mono(dg::network_vmamap::get_cuda_ptr(dst_logit_vmamap), dg::network_vmamap::get_cuda_ptr(src_logit_vmamap), tileops_dp);
