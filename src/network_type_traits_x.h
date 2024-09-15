@@ -14,7 +14,7 @@ namespace dg::network_type_traits_x{
     template <class ...Args>
     struct tags{};
 
-    struct empty_tag{}; 
+    struct empty{}; 
 
     template <class T>
     struct base_type: std::enable_if<true, T>{};
@@ -53,6 +53,15 @@ namespace dg::network_type_traits_x{
     static inline constexpr bool is_tuple_v = is_tuple<T>::value;
 
     template <class T, class = void>
+    struct is_std_hashable: std::false_type{};
+
+    template <class T>
+    struct is_std_hashable<T, std::void_t<std::hash<T>>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_std_hashable_v = is_std_hashable<T>::value;
+
+    template <class T, class = void>
     struct is_stdprimitive_integer: std::false_type{};
 
     template <class T>
@@ -67,7 +76,7 @@ namespace dg::network_type_traits_x{
     template <class First, class Second, class ...Args>
     struct mono_reduction_type_helper<tags<First, Second, Args...>>: std::conditional_t<std::is_same_v<First, Second>, 
                                                                                         mono_reduction_type_helper<tags<Second, Args...>>,
-                                                                                        empty_tag>{}; //this is not sfinae - consider std::void_t<> - this is a bad hack
+                                                                                        empty>{}; //this is not sfinae - consider std::void_t<> - this is a bad hack
 
     template <class T>
     struct mono_reduction_type_helper<tags<T>>: std::enable_if<true, T>{};

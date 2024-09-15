@@ -72,6 +72,8 @@
         "iomanip": "cpp",
         "network_tile_member_accessh": "c",
         "stacktrace": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "map": "cpp",
+        "set": "cpp"
     }
 }

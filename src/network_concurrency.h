@@ -10,6 +10,9 @@
 
 namespace dg::network_concurrency{
 
+    //I wish I was writing the kernel
+    //
+    
     struct WorkerInterface{
 
         virtual ~WorkerInterface() noexcept = default;
@@ -17,8 +20,7 @@ namespace dg::network_concurrency{
     };
 
 
-    using daemon_t      = uint8_t; 
-    using daemon_id_t   = size_t;
+    using daemon_t = uint8_t; 
 
     enum daemon_option: daemon_t{
         COMPUTING_DAEMON        = 0,
@@ -27,16 +29,9 @@ namespace dg::network_concurrency{
         HEARTBEAT_DAEMON        = 3
     };
 
-    //need kernel magic to make this work
-    //if shared thread then risking deadlock
-    //if not shared thread then there are thread pollution
-    //need to reimplement kernel scheduler - tmr 
-
     struct DaemonRunnerInterface{
-
         virtual ~DaemonRunnerInterface() noexcept = default;
-        virtual auto next_id(daemon_t) noexcept -> daemon_id_t = 0;
-        virtual void register_daemon(daemon_id_t, std::unique_ptr<WorkerInterface>) noexcept  = 0;
+        virtual auto _register(daemon_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0;
         virtual void deregister(size_t) noexcept = 0;
     };
 
@@ -61,33 +56,33 @@ namespace dg::network_concurrency{
         
     }
 
-    inline auto daemon_next_id(daemon_t daemon) noexcept -> daemon_id_t{
+    inline auto daemon_register(daemon_t daemon, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
 
-        return daemon_runner->next_id(daemon);
+        daemon_runner->_register(daemon, std::move(worker));
     }
 
-    inline void daemon_register(daemon_id_t id, std::unique_ptr<WorkerInterface> worker) noexcept{
-
-        daemon_runner->register_daemon(id, std::move(worker));
-    }
-
-    inline void daemon_deregister(daemon_id_t id) noexcept{
+    inline void daemon_deregister(size_t id) noexcept{
 
         daemon_runner->deregister(id);
     }
 
-    using daemon_dynamic_unregister_t = void (*)(daemon_id_t *) noexcept; 
-    using daemon_raii_handle_t = std::unique_ptr<daemon_id_t, daemon_dynamic_unregister_t>;  
+    using daemon_dynamic_unregister_t = void (*)(size_t *) noexcept; 
+    using daemon_raii_handle_t = std::unique_ptr<size_t, daemon_dynamic_unregister_t>;  
 
-    inline auto daemon_saferegister(daemon_id_t id, std::unique_ptr<WorkerInterface> worker) noexcept -> std::unique_ptr<daemon_id_t, daemon_dynamic_unregister_t>{
+    inline auto daemon_saferegister(daemon_t daemon, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<std::unique_ptr<size_t, daemon_dynamic_unregister_t>, exception_t>{
 
-        auto destructor = [](daemon_id_t * arg_id) noexcept{
+        auto destructor = [](size_t * arg_id) noexcept{
             daemon_deregister(*arg_id);
             delete arg_id;
         };
 
-        daemon_register(id, std::move(worker));
-        return {new daemon_id_t{id}, destructor};
+        std::expected<size_t, exception_t> handle = daemon_register(daemon, std::move(worker));
+        
+        if (!handle.has_value()){
+            return std::unexpected(handle.error());
+        }
+
+        return {std::in_place_t{}, new size_t{handle.value()}, destructor};
     }
 };
 
