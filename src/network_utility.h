@@ -21,6 +21,7 @@ namespace dg::network_genult{
             std::chrono::nanoseconds ts;
 
             friend auto unix_timestamp() noexcept -> unix_timepoint; 
+            friend auto utc_timestamp() noexcept -> unix_timepoint;
             explicit unix_timepoint(std::chrono::nanoseconds ts) noexcept: ts(std::move(ts)){}
 
         public:
@@ -49,6 +50,10 @@ namespace dg::network_genult{
     auto unix_timestamp() noexcept -> unix_timepoint{
 
         return unix_timepoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()));
+    }
+
+    auto utc_timestamp() noexcept -> unix_timepoint{
+
     }
 
     template <class T>
@@ -101,6 +106,24 @@ namespace dg::network_genult{
 
         return safe_integer_cast_wrapper<T>{value};
     }
+
+    template <class T, class T1>
+    auto safe_non_negative_integer_sub(T lhs, T1 rhs) noexcept -> decltype(lhs - rhs){
+
+        static_assert(dg::network_type_traits_x::is_stdprimitive_integer_v<T>);
+        static_assert(dg::network_type_traits_x::is_stdprimitive_integer_v<T1>);
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){ //weird
+            if (lhs < rhs){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                return lhs - rhs;
+            }
+        } else{
+            return lhs - rhs;
+        }
+    } 
 
     template <class T>
     auto safe_optional_access(std::optional<T>& obj) noexcept -> std::optional<T>&{

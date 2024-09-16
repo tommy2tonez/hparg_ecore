@@ -53,15 +53,6 @@ namespace dg::network_type_traits_x{
     static inline constexpr bool is_tuple_v = is_tuple<T>::value;
 
     template <class T, class = void>
-    struct is_std_hashable: std::false_type{};
-
-    template <class T>
-    struct is_std_hashable<T, std::void_t<std::hash<T>>>: std::true_type{};
-
-    template <class T>
-    static inline constexpr bool is_std_hashable_v = is_std_hashable<T>::value;
-
-    template <class T, class = void>
     struct is_stdprimitive_integer: std::false_type{};
 
     template <class T>

@@ -13,6 +13,7 @@
 #include <bit>
 #include <optional>
 #include <numeric>
+#include "network_type_traits_x.h"
 
 namespace dg::network_compact_serializer::constants{
 
@@ -126,7 +127,7 @@ namespace dg::network_compact_serializer::types_space{
     static constexpr bool is_reflectible_v  = is_reflectible<T>::value;
 
     template <class T>
-    using base_type                         = std::remove_const_t<std::remove_reference_t<T>>;
+    using base_type_t                       = dg::network_type_traits_x::base_type_t<T>;
 
     template <class T>
     static constexpr bool is_dg_arithmetic_v    = is_dg_arithmetic<T>::value;
@@ -243,14 +244,14 @@ namespace dg::network_compact_serializer::utility{
         return inserter;
     }
 
-    template <class LHS, class ...Args, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type<LHS>>, bool> = true>
+    template <class LHS, class ...Args, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<LHS>>, bool> = true>
     void initialize(LHS&& lhs, Args&& ...args){
 
         using pointee_type = std::remove_reference_t<decltype(*lhs)>;
         lhs = std::make_unique<pointee_type>(std::forward<Args>(args)...);
     }
 
-    template <class LHS, class ...Args, std::enable_if_t<types_space::is_optional_v<types_space::base_type<LHS>>, bool> = true>
+    template <class LHS, class ...Args, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<LHS>>, bool> = true>
     void initialize(LHS&& lhs, Args&& ...args){
 
         using pointee_type  = std::remove_reference_t<decltype(*lhs)>;
@@ -260,6 +261,24 @@ namespace dg::network_compact_serializer::utility{
 
 namespace dg::network_compact_serializer::archive{
 
+    struct IsSerializable{
+
+        template <class T>
+        constexpr auto is_serializable(T&& data) const noexcept -> bool{
+
+            using base_t = types_space::base_type_t<T>;
+
+            if constexpr(types_space::is_dg_arithmetic_v<base_t>){
+                return true;
+            } else if constexpr(types_space::is_nillable_v<base_t>){
+                return is_serializable(data.value())
+            } else if constexpr(types_space::is_container_v<base_t>){
+                return is_serializable()
+            }
+
+        }
+    };
+
     template <class BaseArchive>
     struct Forward{
         
@@ -268,14 +287,14 @@ namespace dg::network_compact_serializer::archive{
 
         Forward(BaseArchive base_archive): base_archive(base_archive){} 
 
-        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
             
             static_assert(noexcept(this->base_archive(buf, std::forward<T>(data))));
             this->base_archive(buf, std::forward<T>(data));
         }
 
-        template <class T, std::enable_if_t<types_space::is_nillable_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_nillable_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
 
             put(buf, static_cast<bool>(data));
@@ -285,10 +304,10 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
-        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
 
-            using btype         = types_space::base_type<T>;
+            using btype         = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<btype>>{};
 
             []<size_t ...IDX>(const Self& _self, char *& buf, T&& data, const std::index_sequence<IDX...>){
@@ -296,7 +315,7 @@ namespace dg::network_compact_serializer::archive{
             }(*this, buf, std::forward<T>(data), idx_seq);
         }
 
-        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
             
             put(buf, static_cast<types::size_type>(data.size())); 
@@ -306,7 +325,7 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
-        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
 
             auto _self      = Self(this->base_archive);
@@ -323,16 +342,16 @@ namespace dg::network_compact_serializer::archive{
 
         using Self  = Backward;
 
-        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, T&& data) const{
 
-            using btype     = types_space::base_type<T>;
+            using btype     = types_space::base_type_t<T>;
             using _MemIO    = utility::SyncedEndiannessService;
             data            = _MemIO::load<btype>(buf);
             buf             += sizeof(btype);
         }
 
-        template <class T, std::enable_if_t<types_space::is_nillable_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_nillable_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, T&& data) const{
 
             using obj_type  = std::remove_reference_t<decltype(*data)>;
@@ -348,10 +367,10 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
-        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, T&& data) const{
 
-            using btype         = types_space::base_type<T>;
+            using btype         = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<btype>>{};
 
             []<size_t ...IDX>(const Self& _self, const char *& buf, T&& data, const std::index_sequence<IDX...>){
@@ -359,10 +378,10 @@ namespace dg::network_compact_serializer::archive{
             }(*this, buf, std::forward<T>(data), idx_seq);
         }
 
-        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, T&& data) const{
             
-            using btype     = types_space::base_type<T>;
+            using btype     = types_space::base_type_t<T>;
             using elem_type = decltype(types_space::containee_type<btype>());
             auto sz         = types::size_type{}; 
             auto isrter     = utility::get_inserter<btype>();
@@ -377,7 +396,7 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
-        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, T&& data) const{
 
             auto archiver   = [&buf]<class ...Args>(Args&& ...args){
@@ -392,18 +411,12 @@ namespace dg::network_compact_serializer::archive{
 namespace dg::network_compact_serializer{
 
     template <class T>
-    struct is_serializable{};
-    
-    template <class T>
-    static inline constexpr bool is_serializable_v = is_serializable<T>::value; 
-
-    template <class T>
     auto size(const T& obj) noexcept -> size_t{ //not sfinae-qualified
 
         char * buf          = nullptr;
         size_t bcount       = 0u;
         auto counter_lambda = [&]<class U>(char *&, U&& val) noexcept{
-            bcount += sizeof(types_space::base_type<U>);
+            bcount += sizeof(types_space::base_type_t<U>);
         };
         archive::Forward _seri_obj(counter_lambda);
         _seri_obj.put(buf, obj);
@@ -415,10 +428,10 @@ namespace dg::network_compact_serializer{
     auto serialize_into(char * buf, const T& obj) noexcept -> char *{ //not sfinae-qualified 
 
         auto base_lambda    = []<class U>(char *& buf, U&& val) noexcept{
-            using base_type = types_space::base_type<U>;
+            using base_type_t = types_space::base_type_t<U>;
             using _MemUlt   = utility::SyncedEndiannessService;
             _MemUlt::dump(buf, std::forward<U>(val));
-            buf += sizeof(base_type);
+            buf += sizeof(base_type_t);
         };
 
         archive::Forward _seri_obj(base_lambda);

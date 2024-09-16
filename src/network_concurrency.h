@@ -10,15 +10,11 @@
 
 namespace dg::network_concurrency{
 
-    //I wish I was writing the kernel
-    //
-    
     struct WorkerInterface{
 
         virtual ~WorkerInterface() noexcept = default;
         virtual bool run_one_epoch() noexcept = 0; 
     };
-
 
     using daemon_t = uint8_t; 
 

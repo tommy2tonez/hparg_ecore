@@ -28,14 +28,16 @@
 #include <math.h>
 #include <iostream>
 #include "assert.h"
+#include "network_std_container.h"
 
 namespace dg::network_kernel_mailbox_ack::types{
 
-    using port_t                 = uint16_t;
-    using ip_t                   = std::string;
-    using packet_content_t       = std::string;
-    using timepoint_t            = uint64_t;
-    using timelapsed_t           = int64_t;
+    using port_t                    = uint16_t;
+    using ip_t                      = std::string;
+    using packet_content_t          = std::string;
+    using timepoint_t               = uint64_t;
+    using timelapsed_t              = int64_t;
+    using factory_id_t              = std::array<char, 24>;
 }
 
 namespace dg::network_kernel_mailbox_ack::model{
@@ -66,15 +68,15 @@ namespace dg::network_kernel_mailbox_ack::model{
 
     struct GlobalPacketIdentifier{
         local_packet_id_t local_packet_id;
-        std::array<char, 10> factory_id;
+        factory_id_t factory_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(local_packet_id, factory_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(local_packet_id, factory_id);
         }
     };
@@ -138,7 +140,7 @@ namespace dg::network_kernel_mailbox_ack::memory{
         public:
 
             virtual ~Allocatable() noexcept = default;
-            virtual char * malloc(size_t) noexcept = 0; //extend responsibility of malloc here - force noexcept - recoverability is component's optional responsibility
+            virtual char * malloc(size_t) noexcept = 0;
             virtual void free(void *) noexcept = 0;
     };
 } 
@@ -149,6 +151,8 @@ namespace dg::network_kernel_mailbox_ack::data_structure{
     class unordered_set_interface{
 
         public:
+
+            static_assert(std::is_trivial_v<T>);
 
             virtual ~unordered_set_interface() noexcept = default;
             virtual void insert(T key) noexcept = 0;
@@ -286,16 +290,16 @@ namespace dg::network_kernel_mailbox_ack::utility{
     } 
 
     static inline std::string ipv4_hostip_val = ipv4_hostip();
-
+    
     static auto unix_timestamp() noexcept -> timepoint_t{
 
-        using namespace std::chrono;
-        return duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count();
+        std::chrono::nanoseconds ts = dg::network_genult::utc_timestamp();
+        return ts.count();
     }
 
     static auto subtract_timepoint(timepoint_t tp, timelapsed_t dur) noexcept -> timepoint_t{
 
-        return tp - dur; //
+        return tp - dur;
     }
 
     static auto frequency_to_period(double f) noexcept -> timelapsed_t{
@@ -359,9 +363,11 @@ namespace dg::network_kernel_mailbox_ack::socket_service{
 
         struct sockaddr_in server{};
         
-        if (sz > constants::MAXIMUM_MSG_SIZE){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-            std::abort();
+        if constexpr(DEBUG_MODE_FLAG){
+            if (sz > constants::MAXIMUM_MSG_SIZE){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
         }
 
         if (inet_pton(sock.sin_fam, to_addr.ip.data(), &server.sin_addr) == -1){
@@ -403,13 +409,13 @@ namespace dg::network_kernel_mailbox_ack::data_structure{
 
         private:
 
-            std::unordered_set<T, dg::network_hasher::hasher<T>> hashset;
+            dg::network_std_container::unordered_set<T> hashset;
             std::deque<T> entries;
             size_t cap;
 
         public:
 
-            temporal_unordered_set(std::unordered_set<T, dg::network_hasher::hasher<T>> hashset,
+            temporal_unordered_set(dg::network_std_container::unordered_set<T> hashset,
                                    std::deque<T> entries, 
                                    size_t cap) noexcept: hashset(std::move(hashset)),
                                                          entries(std::move(entries)),
@@ -447,11 +453,11 @@ namespace dg::network_kernel_mailbox_ack::data_structure{
 
         private:
 
-            std::unordered_set<T, dg::network_hasher::hasher<T>> hashset;
+            dg::network_std_container::unordered_set<T> hashset;
         
         public:
 
-            std_unordered_set(std::unordered_set<T, dg::network_hasher::hasher<T>> hashset) noexcept: hashset(std::move(hashset)){}
+            std_unordered_set(dg::network_std_container::unordered_set<T> hashset) noexcept: hashset(std::move(hashset)){}
 
             void insert(T key) noexcept{
 
@@ -487,15 +493,17 @@ namespace dg::network_kernel_mailbox_ack::packet_service{
 
     static auto get_transit_time(const model::Packet& pkt) noexcept -> types::timelapsed_t{
 
-        if (pkt.port_stamps.size() % 2 != 0){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-            std::abort();
+        if constexpr(DEBUG_MODE_FLAG){
+            if (pkt.port_stamps.size() % 2 != 0){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
         }
 
         types::timelapsed_t lapsed{};
 
         for (size_t i = 1; i < pkt.port_stamps.size(); i += 2){
-            lapsed += pkt.port_stamps[i] - pkt.port_stamps[i - 1]; //need safe_cast here to avoid overflow ub
+            lapsed += dg::network_genult::safe_non_negative_integer_sub(pkt.port_stamps[i], pkt.port_stamps[i - 1]);
         }
 
         return lapsed;
@@ -613,13 +621,13 @@ namespace dg::network_kernel_mailbox_ack::packet_controller{
         private:
 
             local_packet_id_t last_pkt_id;
-            std::array<char, 10> factory_id;
+            factory_id_t factory_id;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
             IDGenerator(local_packet_id_t last_pkt_id,
-                        std::array<char, 10> factory_id,
+                        factory_id_t factory_id,
                         std::unique_ptr<std::mutex> mtx) noexcept: last_pkt_id(last_pkt_id),
                                                                    factory_id(factory_id),
                                                                    mtx(std::move(mtx)){}
@@ -629,7 +637,7 @@ namespace dg::network_kernel_mailbox_ack::packet_controller{
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
                 return model::GlobalPacketIdentifier{this->last_pkt_id++, this->factory_id};
             }
-    }
+    };
     
     class PacketGenerator: public virtual PacketGeneratorInterface{
 
