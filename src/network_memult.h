@@ -26,6 +26,12 @@ namespace dg::memult{
         return size_t{1} << bit_offset;
     }
 
+    template <class T, std::enable_if_t<std::is_trivial_v<T>, bool> = true>
+    inline auto start_lifetime_as(void * buf) noexcept -> T{
+
+        return new (buf) T{};
+    } 
+
     template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - 
     inline auto start_lifetime_as_array(void * arr, size_t n) noexcept -> T *{
 

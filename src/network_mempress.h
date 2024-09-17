@@ -19,10 +19,7 @@
 
 namespace dg::network_mempress{
     
-    //move from stricter -> less stricter unique_ptr<> next iteration - this is likely not going to be the bottleneck 
-    //strongly suggest this
-    //yet there are so many problem not being addressed 
-    //- normal interface does not support template types
+    //move from stricter -> less stricter unique_ptr<> next iteration - this is likely not going to be the bottleneck
 
     template <class T>
     struct Notifiable{

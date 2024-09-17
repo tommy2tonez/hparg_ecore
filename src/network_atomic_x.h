@@ -4,17 +4,7 @@
 #include <atomic>
 
 namespace dg::network_atomic_x{
-
-    //atomicity is an extremely hard problem that std and the implementors did not take the right turn
-    //atomic variable and friends could be loosely explained as quantum entanglement
-    //when the state of a variable is "deducable" by another state of variable via the usage of release + acquire
     
-    //release guarantees that the releasing local variable could be used for deducing their friends in the global_context
-    //acquire guarantees that the acquiring global variable could be used for deducing their friends in the local_context
-
-    //the friends definition is not done correctly by the std and the implementors
-    //it's almost extremely hard - impossible to build a depedency tree with the current implementation
-
     static inline constexpr bool IS_STRONG_UB_PRUNE_ENABLED = true;
 
     void dg_thread_fence_optional() noexcept{

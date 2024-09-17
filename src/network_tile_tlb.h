@@ -3,8 +3,6 @@
 
 namespace dg::network_tile_tlb{
 
-    //this is the case where template types aren't necesaary - if tile_tlb only has 1 implementation ver then this should not be a constraint
-
     class TileTLBInterface{
 
         public:

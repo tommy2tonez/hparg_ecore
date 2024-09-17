@@ -6,6 +6,9 @@
 #include "network_trivial_serializer.h"
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
+#include <string>
+#include "network_allocation.h"
 
 namespace dg::network_std_container{
 
@@ -267,10 +270,15 @@ namespace dg::network_std_container{
     using optional_type_t = typename optional_type<T>::type; 
 
     template <class T>
-    using unordered_set = std::unordered_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>>;
+    using unordered_set = std::unordered_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>>;
 
     template <class Key, class Value>
-    using unordered_map = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>>;
+    using unordered_map = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
+
+    template <class T>
+    using vector = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
+
+    using string = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
 }
 
 #endif

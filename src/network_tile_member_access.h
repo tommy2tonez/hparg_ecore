@@ -550,6 +550,9 @@ namespace dg::network_tile_member_access{
     using msgrbwd16_accessor_t      = void *;
     using msgrbwd32_accessor_t      = void *;
 
+    //this is an overkill - yet it's memory efficient - not very with tile_sz increases - the balance is hard to know
+    //i'd love to keep everything on the same buffer for now
+
     auto is_leaf_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_leaf_8) || (id == id_leaf_16) || (id == id_leaf_32);
