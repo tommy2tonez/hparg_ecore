@@ -65,6 +65,31 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
             }
     };
 
+    template <size_t BUFFER_CENTER_SZ>
+    class ConcurrentBufferCenter: public virtual BufferCenterInterface{
+
+        private:
+
+            dg::network_std_container::vector<std::unique_ptr<BufferCenterInterface>> buffer_center;
+        
+        public:
+
+            ConcurrentBufferCenter(dg::network_std_container::vector<std::unique_ptr<BufferCenterInterface>> buffer_center,
+                                   const std::integral_constant<size_t, BUFFER_CENTER_SZ>) noexcept: buffer_center(std::move(buffer_center)){}
+            
+            void push(dg::network_std_container::string data) noexcept{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, BUFFER_CENTER_SZ>{});
+                this->buffer_center[idx]->push(std::move(data));
+            }
+
+            auto pop() noexcept -> std::optional<dg::network_std_container::string>{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, BUFFER_CENTER_SZ>{});
+                return this->buffer_center[idx]->pop();
+            }
+    };
+
     class HeartBeatMonitor: public virtual HeartBeatMonitorInterface{
 
         private:
@@ -121,7 +146,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
             auto make_missing_heartbeat_error_msg(const Address& addr) const noexcept -> dg::network_std_container::string{ //global memory pool - better to be noexcept here
 
-                const char * fmt = "heartbeat not detected from {}:{}";
+                const char * fmt = "heartbeat not detected from {}:{}"; //ip-resolve is done externally - via log_reading - virtual ip is required to spawn proxy (if a node is not responding)
                 return std::format(fmt, addr.ip, size_t{addr.port});
             }
 
@@ -130,20 +155,19 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
                 const char * fmt = "foreign heartbeat from {}:{}";
                 return std::format(fmt, addr.ip, size_t{addr.port});
             }
-
     };
 
     class HeartBeatBroadcaster: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::vector<Address> addr_table;
+            dg::network_std_container::vector<Address> addr_table;
             dg::network_std_container::string heartbeat_packet;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> mailbox;
         
         public:
 
-            HeartBeatBroadcaster(std::vector<Address> addr_table,
+            HeartBeatBroadcaster(dg::network_std_container::vector<Address> addr_table,
                                  dg::network_std_container::string heartbeat_packet,
                                  std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> mailbox) noexcept addr_table(std::move(addr_table)),
                                                                                                                              heartbeat_packet(std::move(heartbeat_packet)),
@@ -219,7 +243,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
         private:
 
-            std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
+            dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox;
             std::shared_ptr<BufferCenterInterface> ib_buffer_center;
 

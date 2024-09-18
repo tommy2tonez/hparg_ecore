@@ -8,6 +8,7 @@
 #include <bit>
 #include <assert.h>
 #include <memory>
+#include <limits.h>
 
 namespace dg::memult{
 
@@ -16,20 +17,32 @@ namespace dg::memult{
     static inline constexpr size_t SIMD_ALIGN_SIZE                          = size_t{1} << 5;
     static inline constexpr bool IS_STRONG_UB_PRUNE_ENABLED                 = true;
 
-    static constexpr auto is_pow2(size_t val) noexcept -> bool{
+    constexpr auto is_pow2(size_t val) noexcept -> bool{ //type coercion - static_assert subset - 
 
         return val != 0u && (val & (val - 1)) == 0u; 
     }
 
-    static constexpr auto pow2(size_t bit_offset) noexcept -> size_t{
+    constexpr auto pow2(size_t bit_offset) noexcept -> size_t{
 
         return size_t{1} << bit_offset;
     }
 
+    constexpr auto least_pow2_greater_eq_than(size_t sz) noexcept -> size_t{ //type coercion - static_assert subset - 
+
+        for (size_t i = 0u; i < sizeof(size_t) * CHAR_BIT; ++i){
+            size_t cand = size_t{1} << i;
+            if (cand >= sz){
+                return cand;
+            }
+        }
+
+        return 1; //wrap around
+    }
+    
     template <class T, std::enable_if_t<std::is_trivial_v<T>, bool> = true>
     inline auto start_lifetime_as(void * buf) noexcept -> T{
 
-        return new (buf) T{};
+        return std::launder(static_cast<T *>(std::memmove(buf, buf, sizeof(T))));
     } 
 
     template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - 
@@ -99,6 +112,11 @@ namespace dg::memult{
     static consteval auto simd_align_val_max() noexcept -> size_t{
 
         return simd_align_val<std::max_align_t>();
+    }
+
+    template <class T>
+    auto badvance() noexcept -> T{
+
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true> //

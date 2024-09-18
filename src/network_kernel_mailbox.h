@@ -25,6 +25,10 @@ namespace dg::network_kernel_mailbox{
 
     }
 
+    //important to build a bridge here
+    //not dependency injection - for error recovery (by using a lck)
+    //this is however - not a good practice - yet it's possible
+
     auto send(Address addr, dg::network_std_container::string msg) noexcept -> exception_t{
 
         if (msg.size() > dg::network_kernel_mailbox_impl1::constants::MAXIMUM_MSG_SIZE){

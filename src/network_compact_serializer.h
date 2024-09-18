@@ -15,6 +15,8 @@
 #include <numeric>
 #include "network_type_traits_x.h"
 #include "network_exception.h"
+#include "network_hash.h"
+#include <type_traits>
 
 namespace dg::network_compact_serializer::constants{
 
@@ -190,35 +192,10 @@ namespace dg::network_compact_serializer::utility{
         static inline const auto bswap_lambda   = []<class ...Args>(Args&& ...args){return bswap(std::forward<Args>(args)...);}; 
     };
 
-    auto checksum(const char * buf, size_t sz) noexcept -> hash_type{
-
-        auto accumulator    = [](hash_type cur, char nnext){return cur + std::bit_cast<uint8_t>(nnext);};
-        return std::accumulate(buf, buf + sz, hash_type{0u}, accumulator);
-    } 
-
-    auto hash(const char * buf, size_t sz) noexcept -> hash_type{ //2nd world implementation
-    
-        using _MemIO        = SyncedEndiannessService;
-
-        const char * ibuf   = buf; 
-        const char * ebuf   = buf + sz;
-        const size_t CYCLES = sz / sizeof(hash_type);
-        const hash_type MOD = std::numeric_limits<hash_type>::max() >> 1;
-        hash_type total     = {};
-        hash_type cur       = {};
-
-        for (size_t i = 0; i < CYCLES; ++i){
-            cur     = _MemIO::load<hash_type>(ibuf);
-            cur     %= MOD;
-            total   += cur;
-            total   %= MOD;
-            ibuf    += sizeof(hash_type); 
-        }
-
-        auto rem_sz         = static_cast<size_t>(std::distance(ibuf, ebuf));
-        auto rem            = checksum(ibuf, rem_sz) % MOD;
+    auto hash(const char * buf, size_t sz) noexcept -> hash_type{
         
-        return total + rem;
+        static_assert(std::is_same_v<hash_type, size_t>); //stricter req for now
+        return dg::network_hash::hash_bytes(buf, sz);
     }
 
     template <class T, std::enable_if_t<std::disjunction_v<types_space::is_vector<T>, 
@@ -261,24 +238,6 @@ namespace dg::network_compact_serializer::utility{
 }
 
 namespace dg::network_compact_serializer::archive{
-
-    struct IsSerializable{
-
-        template <class T>
-        constexpr auto is_serializable(T&& data) const noexcept -> bool{
-
-            using base_t = types_space::base_type_t<T>;
-
-            if constexpr(types_space::is_dg_arithmetic_v<base_t>){
-                return true;
-            } else if constexpr(types_space::is_nillable_v<base_t>){
-                return is_serializable(data.value())
-            } else if constexpr(types_space::is_container_v<base_t>){
-                return is_serializable()
-            }
-
-        }
-    };
 
     template <class BaseArchive>
     struct Forward{

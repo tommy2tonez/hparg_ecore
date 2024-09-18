@@ -2,251 +2,363 @@
 #define __NETWORK_EXTERNAL_HANDLER_H__
 
 #include "network_log.h"
+#include "network_concurrency.h"
+#include "network_tile_queue.h" 
+#include "network_tile_initialization.h"
+#include "network_std_container.h"
+#include "network_tile_injection.h"
+#include "network_tile_signal.h"
+#include "network_kernel_mailbox.h"
 
-//change semantics 
-namespace dg::network_memcommit_kernel_handler{
+namespace dg::network_extmemcommit_kernel_handler{
 
-    using event_loop_register_t = void (*)(void (*)(void) noexcept); 
-    using payload_taxonomy_t    = uint8_t; 
+    using event_taxo_t = uint8_t;
+
+    enum event_option: event_taxo_t{
+        signal_event    = 0u,
+        inject_event    = 1u,
+        init_event      = 2u
+    };
+
+    struct SignalEvent{
+        dg::network_tile_signal_poly::virtual_payload_t payload;
+    };
+
+    struct InjectEvent{
+        dg::network_tile_injection_poly::virtual_payload_t payload;
+    };
+
+    struct InitEvent{
+        dg::network_tile_initialization_poly::virtual_payload_t payload;
+    };
+
+    struct poly_event_t = std::variant<SignalEvent, InjectEvent, InitEvent>; 
     
-    enum payload_taxonomy: payload_taxonomy_t{
-        payload_tile_signal         = 0u,
-        payload_tile_inject         = 1u, //inject foreign vma_addr or leaf + crit logit tiles
-        payload_tile_init           = 2u, //addr_init only (light-weight) 
-        payload_tile_fwd_request    = 3u, //might or might not fulfill the request - offload to peers if network stress is high - might be destructive interference for allocation optimizer 
-        payload_tile_bwd_request    = 4u  //might or might not fulfill the request - offload to peers if network stress is high - might be destructive interference for allocation optimizer
+    struct EventBalancerInterface{
+        virtual ~EventBalancerInterface() noexcept = default;
+        virtual void push(dg::network_std_container::vector<poly_event_t>) noexcept = 0;
+        virtual auto pop(event_taxo_t) noexcept -> std::optional<dg::network_std_container::vector<poly_event_t>> = 0;
     };
 
-    //remove interface - 1hr 
-
-    template <class T>
-    struct TileControllerInterface{
-
-        static inline void add_translation_rule(vma_ptr_t new_addr, vma_ptr_t old_addr) noexcept{
-
-            T::add_translation_rule(new_addr, old_addr);
-        }
-    
-        static inline auto locate(vma_ptr_t ptr) noexcept -> virtual_device_id_t{
-
-            return T::locate(ptr);
-        }
-
-        static inline void init(vma_ptr_t ptr, tile_init_payload payload) noexcept{
-
-            T::init(ptr, payload);
-        }
-    
-        static inline auto next(virtual_device_id_t device_id, tile_taxonomy_t tile_type) noexcept -> vma_ptr_t{
-
-            return T::next(device_id, tile_type);
-        } 
+    struct KernelProducerInterface{
+        virtual ~KernelProducerInterface() noexcept = 0;
+        virtual auto get() noexcept -> std::optional<dg::network_std_container::string> = 0;    
     };
 
-    template <class T>
-    struct KernelPayloadDeserializerInterface{
-
-        static inline auto is_correct_format(const char * buf, size_t sz) noexcept -> bool{
-
-            return T::is_correct_format(buf, sz);
-        }
-   
-        static inline auto get_payload_taxonomy(const char * buf, size_t sz) noexcept -> payload_taxonomy_t{
-
-            return T::get_payload_taxonomy(buf, sz);
-        }
-
-        static inline auto get_payload(const char * buf, size_t sz) noexcept -> std::pair<const char *, size_t>{
-
-            return T::get_payload(buf, sz);
-        }
+    struct InitEventProducerInterface{
+        virtual ~InitEventProducerInterface() noexcept = default;
+        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<InitEvent>> = 0; 
     };
 
-    template <class T>
-    struct MemorySignalEventDeserializerInterface{
-
-        static inline auto get_event(size_t idx, const char * buf, size_t sz) noexcept -> memory_event_t{
-
-            return T::get_event(idx, buf, sz);
-        }
-
-        static inline auto get_notifying_addr(size_t idx, const char * buf, size_t sz) noexcept -> vma_ptr_t{
-            
-            return T::get_notifying_addr(idx, buf, sz);
-        }
-
-        static inline auto size(const char * buf, size_t sz) noexcept -> size_t{
-
-            return T::size(buf, sz);
-        }
+    struct InjectEventProducerInterface{
+        virtual ~InjectEventProducerInterface() noexcept = default;
+        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<InjectEvent>> = 0;
     };
 
-    template <class T>
-    struct MemoryInjectionEventDeserializerInterface{
-
-        static inline auto get_event(size_t idx, const char * buf, size_t sz) noexcept -> memory_event_t{
-
-            return T::get_event(idx, buf, sz);
-        }
-
-        static inline auto get_notifying_addr(size_t idx, const char * buf, size_t sz) noexcept -> vma_ptr_t{
-            
-            return T::get_notifying_addr(idx, buf, sz);
-        }
-
-        static inline auto get_injector_addr(size_t idx, const char * buf, size_t sz) noexcept -> vma_ptr_t{
-
-            return T::get_injector_addr(idx, buf, sz);
-        } 
-
-        static inline auto get_injector_taxonomy(size_t idx, const char * buf, size_t sz) noexcept -> tile_taxonomy_t{
-
-            return T::get_injector_taxonomy(idx, buf, sz);
-        }
-        
-        static inline void get_injector(size_t idx, vma_ptr_t dst, const char * buf, size_t sz) noexcept{ //decouple dependency here
-
-            T::get_injector(idx, dst, buf, sz);
-        }
-
-        static inline auto size(const char * buf, size_t sz) noexcept -> size_t{
-
-            return T::size(buf, sz);
-        }
+    struct SignalEventProducerInterface{
+        virtual ~SignalEventProducerInterface() noexcept = default;
+        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<SignalEvent>> = 0;
     };
 
-    template <class T>
-    struct MemoryInitializationEventDeserializerInterface{
+    class SynchronousEventBalancer: public virtual EventBalancerInterface{
 
-        static inline auto get_init_addr(size_t idx, const char * buf, size_t sz) noexcept -> vma_ptr_t{
+        private:
 
-            return T::get_init_addr(idx, buf, sz);
-        } 
-
-        static inline auto get_init_payload(size_t idx, const char * buf, size_t sz) noexcept -> tile_init_payload{
-
-            return T::get_init_payload(idx, buf, sz);
-        }
-
-        static inline auto size(const char * buf, size_t sz) noexcept -> size_t{
-
-            return T::size(buf, sz);
-        }
-    };
-
-    template <class T>
-    struct MemoryEventObserverInterface{
-
-        static inline void notify(vma_ptr_t ptr, memory_event_t event) noexcept{ //delivery handler - offload to memcommit_dropbox
-
-            T::notify(ptr, event);
-        }
-    };
-
-    template <class T>
-    struct KernelProducerInterface: dg::network_producer_consumer::ProducerInterface<KernelProducerInterface<T>>{
-
-        using event_t = char; 
-
-        static inline void get(char * buf, size_t& sz, size_t cap) noexcept{
-
-            T::get(buf, sz, cap);
-        }
-    };
-
-    template <class ID, class T, class T1, class T2, class T3, class T4, class T5, class T6>
-    struct ExternalHandler{};
-
-    template <class ID, class T, class T1, class T2, class T3, class T4, class T5, class T6>
-    struct ExternalHandler<ID, TileControllerInterface<T>, KernelPayloadDeserializerInterface<T1>, MemorySignalEventDeserializerInterface<T2>, 
-                           MemoryInjectionEventDeserializerInterface<T3>, MemoryInitializationEventDeserializerInterface<T4>,
-                           MemoryEventObserverInterface<T5>, KernelProducerInterface<T6>>{
-        
-        private:    
-
-            using tile_controller                       = TileControllerInterface<T>;
-            using kernel_payload_deserializer           = KernelPayloadDeserializerInterface<T4>;
-            using memsignal_deserializer                = MemorySignalEventDeserializerInterface<T5>;
-            using meminject_deserializer                = MemoryInjectionEventDeserializerInterface<T6>;
-            using meminit_deserializer                  = MemoryInitializationEventDeserializerInterface<T7>;
-            using memevent_observer                     = MemoryEventObserverInterface<T8>;
-            using kernel_producer                       = KernelProducerInterface<T9>;
-
-            static inline void resolve_tile_signal(const char * buf, size_t buf_sz) noexcept{
-
-                size_t sz = memsignal_deserializer::size(buf, buf_sz);
-
-                for (size_t i = 0; i < sz; ++i){
-                    auto memevent       = memsignal_deserializer::get_event(i, buf, buf_sz);
-                    auto notifying_vma  = memsignal_deserializer::get_notifying_addr(i, buf, buf_sz);
-                    memevent_observer::notify(notifying_vma, memevent);
-                }
-            }
-
-            static inline void resolve_tile_inject(const char * buf, size_t buf_sz) noexcept{
-
-                size_t sz = meminject_deserializer::size(buf, buf_sz);
-
-                for (size_t i = 0; i < sz; ++i){
-                    auto memevent       = meminject_deserializer::get_event(i, buf, buf_sz);
-                    auto notifying_vma  = meminject_deserializer::get_notifying_addr(i, buf, buf_sz);
-                    auto injector_vma   = meminject_deserializer::get_injector_addr(i, buf, buf_sz);
-                    auto injector_taxo  = meminject_deserializer::get_injector_taxonomy(i, buf, buf_sz);
-                    auto injecting_cand = tile_controller::next(tile_controller::locate(notifying_vma), injector_taxo);
-                    meminject_deserializer::get_injector(i, injecting_cand, buf, buf_sz);
-                    tile_controller::add_translation_rule(injecting_cand, injector_vma);
-                    memevent_observer::notify(notifying_vma, memevent);
-                }
-            }
-
-            static inline void resolve_tile_init(const char * buf, size_t buf_sz) noexcept{
-
-                size_t sz = meminit_deserializer::size(buf, buf_sz);
-
-                for (size_t i = 0; i < sz; ++i){
-                    auto init_vma       = meminit_deserializer::get_init_addr(i, buf, buf_sz);
-                    auto init_payload   = meminit_deserializer::get_init_payload(i, buf, buf_sz);
-                    tile_controller::init(init_vma, init_payload);
-                }
-            }
+            dg::network_std_container::unordered_map<event_taxo_t, dg::network_std_container::vector<poly_event_t>> event_dict;
+            dg::network_std_container::unordered_map<event_taxo_t, size_t> pop_cap_dict;
+            std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            static void run() noexcept{
+            SynchronousEventBalancer(dg::network_std_container::unordered_map<event_taxo_t, dg::network_std_container::vector<Event>> event_dict, 
+                                     dg::network_std_container::unordered_map<event_taxo_t, size_t> pop_cap_dict,
+                                     std::unique_ptr<std::mutex> mtx) noexcept: event_dict(std::move(event_dict)),
+                                                                                pop_cap_dict(std::move(pop_cap_dict)),
+                                                                                mtx(std::move(mtx)){}
+            
+            void push(dg::network_std_container::vector<poly_event_t> events) noexcept{
 
-                char * buf      = {};
-                size_t buf_sz   = {};
-                size_t BUF_CAP  = {};
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
 
-                kernel_producer::get(buf, buf_sz, BUF_CAP);
+                for (auto& event: events){
+                    if (std::holds_alternative<SignalEvent>(event)){
+                        event_dict[signal_event].push_back(std::move(event));
+                        continue;
+                    }
 
-                if (!kernel_payload_deserializer::is_correct_format(buf, buf_sz)){
-                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::UNRECOGNIZED_KERNEL_PAYLOAD_SERIALIZATION_FORMAT);
-                    return;
-                }
-   
-                payload_taxonomy_t payload_taxonomy = kernel_payload_deserializer::get_payload_taxonomy(buf, buf_sz);
-                std::tie(buf, buf_sz)               = kernel_payload_deserializer::get_payload(buf, buf_sz); 
+                    if (std::holds_alternative<InjectEvent>(event)){
+                        event_dict[inject_event].push_back(std::move(event));
+                        continue;
+                    }
 
-                switch (payload_taxonomy){
-                    case payload_tile_signal:
-                        resolve_tile_signal(buf, buf_sz);
-                        break;
-                    case payload_tile_inject:
-                        resolve_tile_inject(buf, buf_sz);
-                        break;
-                    case payload_tile_init:
-                        resolve_tile_init(buf, buf_sz);
-                        break;
-                    default:
+                    if (std::holds_alternative<InitEvent>(event)){
+                        event_dict[init_event].push_back(std::move(event));
+                        continue;
+                    }
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
-                        break;
+                    }
                 }
             }
 
-            static void init(event_loop_register_t event_loop_register) noexcept{
+            auto pop(event_taxo_t event_taxo) noexcept -> std::optional<dg::network_std_container::vector<poly_event_t>>{
 
-                event_loop_register(run);
+                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto dict_ptr   = this->event_dict.find(event_taxo);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (dict_ptr == this->event_dict.end()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (dict_ptr->second.size() == 0u){
+                    return std::nullopt;
+                }
+
+                size_t pop_sz = std::min(this->pop_cap_dict[event_taxo], dict_ptr->second.size());
+                auto rs = dg::network_std_container::vector<poly_event_t>(pop_sz);
+
+                for (size_t i = 0u; i < pop_sz; ++i){
+                    rs[i] = std::move(dict_ptr->second.back());
+                    dict_ptr->second.pop_back();
+                }
+
+                return rs;
+            }
+    };
+    
+    class KernelProducer: public virtual KernelProducerInterface{
+
+        public:
+
+            auto get() noexcept -> std::optional<dg::network_std_container::string>{
+
+                return dg::network_kernel_mailbox::recv();
+            }
+    };
+
+    template <size_t BALANCER_SZ>
+    class ConcurrentEventBalancer: public virtual EventBalancerInterface{
+
+        private:
+
+            dg::network_std_container::vector<std::unique_ptr<EventBalancerInterface>> event_balancer;
+
+        public:
+
+            ConcurrentEventBalancer(dg::network_std_container::vector<std::unique_ptr<EventBalancerInterface>> event_balancer,
+                                    const std::integral_constant<size_t, BALANCER_SZ>) noexcept: event_balancer(std::move(event_balancer)){}
+            
+            void push(dg::network_std_container::vector<poly_event_t> events) noexcept{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, BALANCER_SZ>{});
+                this->event_balancer[idx]->push(std::move(events));
+            }
+
+            auto pop(event_taxo_t event_taxo) noexcept -> std::optional<dg::network_std_container::vector<poly_event_t>>{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, BALANCER_SZ>{});
+                return this->event_balancer[idx]->pop(event_taxo);
+            }
+    };
+
+    class BalancerWrappedInitEventProducer: public virtual InitEventProducerInterface{
+
+        private:
+
+            std::shared_ptr<EventBalancerInterface> event_balancer;
+        
+        public:
+
+            BalancerWrappedInitEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
+
+            auto get() noexcept -> std::optional<dg::network_std_container::vector<InitEvent>>{
+
+                std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(init_event);
+
+                if (!static_cast<bool>(poly_event_arr)){
+                    return std::nullopt;
+                }
+
+                dg::network_std_container::vector<InitEvent> rs(poly_event_arr->size());
+
+                for (size_t i = 0u; i < rs.size(); ++i){
+                    rs[i] = std::move(std::get<InitEvent>(poly_event_arr->operator[](i)));
+                }
+
+                return rs;
+            }
+    };
+
+    class BalancerWrappedSignalEventProducer: public virtual SignalEventProducerInterface{
+
+        private:
+
+            std::shared_ptr<EventBalancerInterface> event_balancer;
+        
+        public:
+
+            BalancerWrappedSignalEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
+
+            auto get() noexcept -> std::optional<dg::network_std_container::vector<SignalEvent>>{
+
+                std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(signal_event);
+
+                if (!static_cast<bool>(poly_event_arr)){
+                    return std::nullopt;
+                }
+
+                dg::network_std_container::vector<SignalEvent> rs(poly_event_arr->size());
+
+                for (size_t i = 0u; i < rs.size(); ++i){
+                    rs[i] = std::move(std::get<SignalEvent>(poly_event_arr->operator[](i)));
+                }
+
+                return rs;
+            }
+    };
+
+    class BalancerWrappedInjectEventProducer: public virtual InjectEventProducerInterface{
+
+        private:
+
+            std::shared_ptr<EventBalancerInterface> event_balancer;
+
+        public:
+
+            BalancerWrappedInjectEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
+
+            auto get() noexcept -> std::optional<dg::network_std_container::vector<InjectEvent>>{
+
+                std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(signal_event);
+
+                if (!static_cast<bool>(poly_event_arr)){
+                    return std::nullopt;
+                }
+
+                dg::network_std_container::vector<InjectEvent> rs(poly_event_arr->size());
+
+                for (size_t i = 0u; i < rs.size(); ++i){
+                    rs[i] = std::move(std::get<InjectEvent>(poly_event_arr->operator[](i)));
+                }
+
+                return rs;
+            } 
+    };
+
+    class KernelConsumer: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<EventBalancerInterface> event_balancer;
+            std::unique_ptr<KernelProducerInterface> kernel_producer;
+        
+        public:
+
+            KernelConsumer(std::shared_ptr<EventBalancerInterface> event_balancer,
+                                  std::unique_ptr<KernelProducerInterface> kernel_producer) noexcept: event_balancer(std::move(event_balancer)),
+                                                                                                      kernel_producer(std::move(kernel_producer)){}
+            
+            bool run_one_epoch() noexcept{
+
+                std::optional<dg::network_std_container::string> kernel_data = this->kernel_producer->get(); 
+
+                if (!static_cast<bool>(kernel_data)){
+                    return false;
+                }
+
+                dg::network_std_container::vector<poly_event_t> event_payload{};
+                std::expected<const char *, exception_t> rs = dg::network_compact_serializer::integrity_deserialize_into(event_payload, kernel_data->data(), kernel_data->size()); //defensive programming - make sure that this is a reverse operation of compact_serializer
+
+                if (!rs.has_value()){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(rs.error()));
+                    std::abort();
+                }
+
+                this->event_balancer->push(std::move(event_payload));
+                return true;
+            }
+    };
+
+    class InitEventConsumer: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<InitEventProducerInterface> producer;
+
+        public:
+
+            InitEventConsumer(std::shared_ptr<InitEventProducerInterface> producer) noexcept: producer(std::move(producer)){}
+
+            bool run_one_epoch() noexcept{
+
+                std::optional<dg::network_std_container::vector<InitEvent>> init_events = this->producer->get();
+
+                if (!static_cast<bool>(init_events)){
+                    return false;
+                }
+
+                for (auto& init_event: init_events.value()){
+                    dg::network_tile_init_poly::load_nothrow(std::move(init_event.payload));
+                }
+
+                return true;
+            }
+    };
+
+    class SignalEventConsumer: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<SignalEventProducerInterface> producer;
+        
+        public:
+
+            SignalEventConsumer(std::shared_ptr<SignalEventProducerInterface> producer) noexcept: producer(std::move(producer)){}
+
+            bool run_one_epoch() noexcept{
+
+                std::optional<dg::network_std_container::vector<SignalEvent>> signal_events = this->producer->get();
+
+                if (!static_cast<bool>(signal_events)){
+                    return false;
+                }
+
+                for (auto& signal_event: signal_events.value()){
+                    dg::network_tile_signal_poly::load_nothrow(std::move(signal_event.payload));
+                }
+
+                return true;
+            }
+    };
+
+    class InjectEventConsumer: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<InjectEventProducerInterface> producer;
+        
+        public:
+
+            InjectEventConsumer(std::shared_ptr<InjectEventProducerInterface> producer) noexcept: producer(std::move(producer)){}
+
+            bool run_one_epoch() noexcept{
+
+                std::optional<dg::network_std_container::vector<InjectEvent>> inject_events = this->producer->get();
+
+                if (!static_cast<bool>(inject_events)){
+                    return false;
+                }
+
+                for (auto& inject_event: inject_events.value()){
+                    dg::network_tile_inject_poly::load_nothrow(std::move(inject_event.payload));
+                }
+
+                return true;
             }
     };
 } 

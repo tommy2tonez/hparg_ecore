@@ -118,7 +118,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint8_t priority;
         uint8_t taxonomy; 
         dg::network_std_container::string content;
-        std::vector<timepoint_t> port_stamps;
+        dg::network_std_container::vector<timepoint_t> port_stamps;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
@@ -212,7 +212,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual ~RetransmissionManagerInterface() noexcept = default;
             virtual void add_retriable(Packet) noexcept = 0;
             virtual void ack(global_packet_id_t) noexcept = 0;
-            virtual auto get_retriables() noexcept -> std::vector<Packet> = 0;
+            virtual auto get_retriables() noexcept -> dg::network_std_container::vector<Packet> = 0;
     };
 
     class PacketCenterInterface{
@@ -517,6 +517,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
     
+    //reimplementation required - need to include success rate
+    //success rate for time slice [a, b] = schedule_sz(ip, a, b) / feedback_sz(ip, a, b)
+    //abstractize lck -> atomic_flag, mutex, nolock - by using Lock<T> - and lock guard takes in Lock<T>& as arg
+
     class StdScheduler: public virtual SchedulerInterface{
 
         private:
@@ -712,19 +716,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 this->pkt_deque.push_back(std::make_pair(std::move(ts), std::move(pkt))); 
             }
 
-            void ack(global_packet_id_t pkt_id_t) noexcept{
+            void ack(global_packet_id_t pkt_id) noexcept{
                 
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
-                this->acked_id->insert(std::move(pkt_id_t));
+                this->acked_id->insert(std::move(pkt_id));
             }
 
-            auto get_retriables() noexcept -> std::vector<Packet>{
+            auto get_retriables() noexcept -> dg::network_std_container::vector<Packet>{
 
                 auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
                 auto ts         = utility::unix_timestamp();
                 auto lb_key     = std::make_pair(utility::subtract_timepoint(ts, this->transmission_delay_time), Packet{});
                 auto last       = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), lb_key, [](const auto& lhs, const auto& rhs){return lhs.first < rhs.first;});
-                auto rs         = std::vector<Packet>(); 
+                auto rs         = dg::network_std_container::vector<Packet>(); 
                 
                 for (auto it = this->pkt_deque.begin(); it != last; ++it){
                     if (!this->acked_id->contains(it->second.id)){
@@ -741,12 +745,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
             
-            std::vector<Packet> packet_vec;
+            dg::network_std_container::vector<Packet> packet_vec;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            PriorityPacketCenter(std::vector<Packet> packet_vec,
+            PriorityPacketCenter(dg::network_std_container::vector<Packet> packet_vec,
                                  std::unique_ptr<std::mutex> mtx) noexcept: packet_vec(std::move(packet_vec)),
                                                                             mtx(std::move(mtx)){}
 
@@ -779,13 +783,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::vector<ScheduledPacket> packet_vec;
+            dg::network_std_container::vector<ScheduledPacket> packet_vec;
             std::shared_ptr<SchedulerInterface> scheduler;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
-            ScheduledPacketCenter(std::vector<ScheduledPacket> packet_vec, 
+            ScheduledPacketCenter(dg::network_std_container::vector<ScheduledPacket> packet_vec, 
                                   std::shared_ptr<SchedulerInterface> scheduler,
                                   std::unique_ptr<std::mutex> mtx) noexcept: packet_vec(std::move(packet_vec)),
                                                                              scheduler(std::move(scheduler)),
@@ -956,6 +960,34 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    //this is most likely not necessary - a packet is usually 32kb in size - so concurrency is not playing a crucial role here - 
+    //yet it's fine to have it here to approx true concurrency
+
+    template <size_t PACKET_CENTER_SZ>
+    class ConcurrentPacketCenter: public virtual PacketCenterInterface{
+
+        private:
+
+            dg::network_std_container<std::unique_ptr<PacketCenterInterface>> packet_center;
+        
+        public:
+
+            ConcurrentPacketCenter(dg::network_std_container<std::unique_ptr<PacketCenterInterface>> packet_center,
+                                   const std::integral_constant<size_t, PACKET_CENTER_SZ>) noexcept: packet_center(std::move(packet_center)){} //weird - yet it's important to do const prop here - inheriting an interface is not a bad practice
+            
+            void push(Packet pkt) noexcept{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, PACKET_CENTER_SZ>{});
+                this->packet_center[idx]->push(std::move(pkt));
+            }
+
+            auto pop() noexcept -> std::optional<Packet>{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, PACKET_CENTER_SZ>{});
+                return this->packet_center[idx]->pop();
+            }
+    };
+
     struct ComponentFactory{
 
         static auto get_std_scheduler(double max_frequency, double min_frequency,
@@ -1065,12 +1097,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_priority_packet_center() -> std::unique_ptr<PacketCenterInterface>{
 
-            return std::make_unique<PriorityPacketCenter>(std::vector<Packet>{}, std::make_unique<std::mutex>());
+            return std::make_unique<PriorityPacketCenter>(dg::network_std_container::vector<Packet>{}, std::make_unique<std::mutex>());
         }
 
         static auto get_scheduled_packet_center(std::shared_ptr<SchedulerInterface> scheduler) -> std::unique_ptr<PacketCenterInterface>{
 
-            return std::make_unique<ScheduledPacketCenter>(std::vector<ScheduledPacket>{}, scheduler, std::make_unique<std::mutex>());
+            return std::make_unique<ScheduledPacketCenter>(dg::network_std_container::vector<ScheduledPacket>{}, scheduler, std::make_unique<std::mutex>());
         }
 
         static auto get_inbound_packet_center() -> std::unique_ptr<PacketCenterInterface>{
@@ -1155,7 +1187,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             bool run_one_epoch() noexcept{
                 
-                std::vector<Packet> packets = this->retransmission_manager->get_retriables();
+                dg::network_std_container::vector<Packet> packets = this->retransmission_manager->get_retriables();
 
                 if (packets.empty()){
                     return false;
@@ -1268,7 +1300,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
         private:
 
-            std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
+            dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
             std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen;
             std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager;
             std::shared_ptr<packet_controller::PacketCenterInterface> ob_packet_center;
@@ -1276,7 +1308,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
         public:
 
-            RetransmittableMailBoxController(std::vector<std::unique_ptr<dg::network_concurrency::daemon_raii_handle_t>> daemons, 
+            RetransmittableMailBoxController(dg::network_std_container::vector<std::unique_ptr<dg::network_concurrency::daemon_raii_handle_t>> daemons, 
                                              std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
                                              std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager,
                                              std::shared_ptr<packet_controller::PacketCenterInterface> ob_packet_center,
@@ -1307,7 +1339,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
     struct ComponentFactory{
 
-        static auto spawn_retransmittable_mailbox_controller(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons, 
+        static auto spawn_retransmittable_mailbox_controller(dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemons, 
                                                              std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
                                                              std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager,
                                                              std::shared_ptr<packet_controller::PacketCenterInterface> ob_packet_center,
@@ -1350,7 +1382,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
     auto spawn(Config config) -> std::unique_ptr<core::MailboxInterface>{
         
-        std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons{};
+        dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemons{};
         std::shared_ptr<model::SocketHandle> sock_handle{}; 
         std::shared_ptr<packet_controller::SchedulerInterface> scheduler{};
         std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager{};
