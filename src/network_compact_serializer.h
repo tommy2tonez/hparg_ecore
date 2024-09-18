@@ -418,7 +418,7 @@ namespace dg::network_compact_serializer{
 
         using _MemIO    = utility::SyncedEndiannessService;
         auto bbuf       = buf + sizeof(types::hash_type); 
-        auto ebuf       = serialize(obj, bbuf);
+        auto ebuf       = serialize_into(bbuf, obj);
         auto sz         = static_cast<size_t>(std::distance(bbuf, ebuf)); 
         auto hashed     = utility::hash(bbuf, sz);
 
@@ -443,7 +443,7 @@ namespace dg::network_compact_serializer{
             return std::unexpected(dg::network_exception::INVALID_SERIALIZATION_FORMAT);
         }
 
-        return deserialize(data, obj);
+        return deserialize_into(obj, data);
     }
 }
 

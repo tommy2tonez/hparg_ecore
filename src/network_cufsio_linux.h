@@ -9,6 +9,7 @@
 #include "network_utility.h"
 #include <mutex>
 #include <thread>
+#include "network_std_container.h"
 
 namespace dg::network_cufsio_linux::constants{
 
@@ -632,24 +633,24 @@ namespace dg::network_cufsio_linux::implementation{
 
             auto cuda_read_binary(const char * fp, cuda_ptr_t dst, size_t dst_cap) noexcept -> exception_t{
 
-                auto buf        = std::make_unique<char[]>(dst_cap); //dedicated_buffer - or affinity allocator
-                exception_t err = dg::network_fileio_linux::dg_read_binary(fp, buf.get(), dst_cap); 
+                auto buf        = dg::network_std_container::string(dst_cap);
+                exception_t err = dg::network_fileio_linux::dg_read_binary(fp, buf.data(), dst_cap); 
 
                 if (dg::network_exception::is_failed(err)){
                     return err;
                 }
 
-                err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(dst, buf.get(), dst_cap, cudaMemcpyHostToDevice)); //change dst_cap -> file_sz
+                err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(dst, buf.data(), dst_cap, cudaMemcpyHostToDevice)); //change dst_cap -> file_sz
                 dg::network_exception_handler::nothrow_log(err);
             }
 
             auto cuda_write_binary(const char * fp, cuda_ptr_t src, size_t src_sz) noexcept -> exception_t{
  
-                auto buf        = std::make_unique<char[]>(src_sz); //dedicated_buffer - or affinity allocator
-                exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(buf.get(), src, src_sz, cudaMemcpyDeviceToHost));
+                auto buf        = dg::network_std_container::string(src_sz);
+                exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(buf.data(), src, src_sz, cudaMemcpyDeviceToHost));
                 dg::network_exception_handler::nothrow_log(err);
 
-                return dg::network_fileio_linux::dg_write_binary(fp, buf.get(), src_sz);
+                return dg::network_fileio_linux::dg_write_binary(fp, buf.data(), src_sz);
             }
     };
 

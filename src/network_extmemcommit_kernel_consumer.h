@@ -41,7 +41,7 @@ namespace dg::network_extmemcommit_kernel_handler{
     };
 
     struct KernelProducerInterface{
-        virtual ~KernelProducerInterface() noexcept = 0;
+        virtual ~KernelProducerInterface() noexcept = default;
         virtual auto get() noexcept -> std::optional<dg::network_std_container::string> = 0;    
     };
 

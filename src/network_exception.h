@@ -67,6 +67,10 @@ namespace dg::network_exception{
     static inline constexpr exception_t UNSUPPORTED_DAEMON_MODE         = 0u;
     static inline constexpr exception_t NO_DAEMON_EXECUTOR_AVAILABLE    = 0u;
     static inline constexpr exception_t INVALID_ARGUMENT                = 0u;
+    static inline constexpr exception_t UNIDENTIFIED_EXCEPTION          = 0u;
+    static inline constexpr exception_t PTHREAD_EFAULT                  = 0u;
+    static inline constexpr exception_t PTHREAD_EINVAL                  = 0u;
+    static inline constexpr exception_t PTHREAD_ESRCH                   = 0u;
     
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
