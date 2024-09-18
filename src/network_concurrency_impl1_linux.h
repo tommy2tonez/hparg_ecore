@@ -14,9 +14,9 @@
 
 namespace dg::network_concurrency_impl1_linux::daemon_option_ns{
 
-    using daemon_t = uint8_t; 
+    using daemon_kind_t = uint8_t; 
 
-    enum daemon_option: daemon_t{
+    enum daemon_option: daemon_kind_t{
         COMPUTING_DAEMON        = 0u,
         TRANSPORTATION_DAEMON   = 1u,
         IO_DAEMON               = 2u,
@@ -45,7 +45,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonControllerInterface{
         virtual ~DaemonControllerInterface() noexcept = default;
-        virtual auto _register(daemon_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0;
+        virtual auto _register(daemon_kind_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0;
         virtual void deregister(size_t) noexcept = 0;
     };
 
@@ -183,19 +183,19 @@ namespace dg::network_concurrency_impl1_linux{
 
         private:
 
-            std::unordered_map<daemon_t, std::vector<size_t>> daemon_id_map;
-            std::vector<std::unique_ptr<DaemonRunnerInterface>> daemon_runner_table;
+            std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map;
+            std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            DaemonController(std::unordered_map<daemon_t, std::vector<size_t>> daemon_id_map,
-                             std::vector<std::unique_ptr<DaemonRunnerInterface>> daemon_runner_table,
+            DaemonController(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
+                             std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map,
                              std::unique_ptr<std::mutex> mtx) noexcept: daemon_id_map(std::move(daemon_id_map)),
-                                                                        daemon_runner_table(std::move(daemon_runner_table)),
+                                                                        id_runner_map(std::move(id_runner_map)),
                                                                         mtx(std::move(mtx)){}
 
-            auto _register(daemon_t daemon, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
+            auto _register(daemon_kind_t daemon, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
                 
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
                 auto map_ptr = this->daemon_id_map.find(daemon);
@@ -210,7 +210,7 @@ namespace dg::network_concurrency_impl1_linux{
 
                 size_t id = map_ptr->second.back();
                 map_ptr->second.pop_back(); 
-                this->daemon_runner_table[id].set_worker(std::move(worker));
+                this->id_runner_map[id]->set_worker(std::move(worker));
 
                 return id;
             }
@@ -220,7 +220,7 @@ namespace dg::network_concurrency_impl1_linux{
                 auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
                 auto worker     = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(WorkerFactory::spawn_rest)());
 
-                this->daemon_runner_table[id].set_worker(std::move(worker));
+                this->id_runner_map[id]->set_worker(std::move(worker));
             }
     };
 
@@ -253,9 +253,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonFactory{
 
-        //this requires internal knowledge + ver control - a decision made by user at compile time - not the program - kernel reserves cores to run processes -  
-
-        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set, std::unique_ptr<ReschedulerInterface> rescheduler) -> std::unique_ptr<DaemonRunnerInterface>{
+        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set, std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{ //i think its fine to abstractize std::thread::id - and return it here - one could argue to include std::thread::id as part of the interface 
             
             auto px_cpu_set     = internal_make_cpuset(cpu_set);
             auto mtx            = std::make_unique<std::atomic_flag>();
@@ -267,6 +265,7 @@ namespace dg::network_concurrency_impl1_linux{
                 daemon_runner->run();
             };
             auto thr_resource   = std::make_unique<std::thread>(std::move(executable));
+            auto thr_id         = thr_resource->get_id();
             int err             = pthread_setaffinity_np(thr_resource->native_handle(), sizeof(cpu_set_t), &px_cpu_set);
             
             if (err != 0){
@@ -283,10 +282,10 @@ namespace dg::network_concurrency_impl1_linux{
                 dg::network_exception::throw_exception(dg::network_exception::UNIDENTIFIED_EXCEPTION);
             }
 
-            return std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill);
+            return {std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill), std::move(thr_id)};
         }
 
-        static auto spawn_daemon_runner(std::unique_ptr<ReschedulerInterface> rescheduler) -> std::unique_ptr<DaemonRunnerInterface>{
+        static auto spawn_daemon_runner(std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
 
             auto mtx            = std::make_unique<std::atomic_flag>();
             mtx->clear();
@@ -297,8 +296,18 @@ namespace dg::network_concurrency_impl1_linux{
                 daemon_runner->run();
             };
             auto thr_resource   = std::make_unique<std::thread>(std::move(executable));
+            auto thr_id         = thr_resource->get_id();
 
-            return std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill);
+            return {std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill), std::move(thr_id)};
+        }
+    };
+
+    struct ControllerFactory{
+
+        static auto spawn_daemon_controller(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
+                                            std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map) -> std::unique_ptr<DaemonControllerInterface>{
+
+            return std::make_unique<DaemonController>(std::move(daemon_id_map), std::move(id_runner_map), std::make_unique<std::mutex>());
         }
     };
 } 
