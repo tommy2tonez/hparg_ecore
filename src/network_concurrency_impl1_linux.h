@@ -129,7 +129,7 @@ namespace dg::network_concurrency_impl1_linux{
 
                 while (!this->load_poison_pill()){
                     auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
-                    bool run_flag   = this->worker->run_one_epoch();
+                    bool run_flag   = this->worker->run_one_epoch(); //dangy to have lck_grd reaches this
 
                     if (!run_flag){
                         this->rescheduler->reschedule();
@@ -249,11 +249,15 @@ namespace dg::network_concurrency_impl1_linux{
 
             return std::make_unique<SleepyRescheduler>(sleep_dur);
         }
-    }; 
+    };
 
     struct DaemonFactory{
 
-        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set, std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{ //i think its fine to abstractize std::thread::id - and return it here - one could argue to include std::thread::id as part of the interface 
+        //i think its fine to abstractize std::thread::id - and return it here - one could argue to include std::thread::id as part of the interface 
+        //this is to allow future extension (flexible extension) - such that all the derived classes do not rely on std::thread::id
+        //an extension like DedicatedDaemonRunnerInterface: DaemonRunnerInterface - is fine - yet it would complicate things further in the direction of polymorphic mess
+
+        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set, std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{ 
             
             auto px_cpu_set     = internal_make_cpuset(cpu_set);
             auto mtx            = std::make_unique<std::atomic_flag>();
@@ -285,6 +289,12 @@ namespace dg::network_concurrency_impl1_linux{
             return {std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill), std::move(thr_id)};
         }
 
+        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
+
+            using namespace std::chrono_literals;
+            return spawn_affine_daemon_runner(cpu_set, ReschedulerFactory::spawn_sleepy_rescheduler(150ms)); //I feel like this is internal responsibility - 
+        } 
+
         static auto spawn_daemon_runner(std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
 
             auto mtx            = std::make_unique<std::atomic_flag>();
@@ -299,6 +309,12 @@ namespace dg::network_concurrency_impl1_linux{
             auto thr_id         = thr_resource->get_id();
 
             return {std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill), std::move(thr_id)};
+        }
+
+        static auto spawn_daemon_runner() -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
+
+            using namespace std::chrono_literals;
+            return spawn_daemon_runner(ReschedulerFactory::spawn_sleepy_rescheduler(150ms)); //I feel like this is internal responsibility - 
         }
     };
 

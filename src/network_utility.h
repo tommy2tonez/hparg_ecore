@@ -189,13 +189,13 @@ namespace dg::network_genult{
 
         private:
 
-            static inline T obj{}; //important to do make_unique<> here - this is rather a decision that will be made later - 
+            static inline std::unique_ptr<T> obj = std::make_unique<T>();
         
         public:
 
             static inline auto get() noexcept -> T&{
 
-                return obj;
+                return *obj;
             }
     }
 
