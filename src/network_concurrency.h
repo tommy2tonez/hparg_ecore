@@ -18,12 +18,8 @@ namespace dg::network_concurrency{
     using affine_policy_option_t    = dg::network_concurrency_impl1_app::affine_policy_option_t; 
     using WorkerInterface           = dg::network_concurrency_impl1::WorkerInterface; 
 
-    static inline constexpr affine_policy_option_t AFFINE_POLICY            = dg::network_concurrency_impl1_app::kernel_overwrite_affine;
-    static inline constexpr size_t THREAD_COUNT                             = 32;
-    static inline constexpr size_t COMPUTING_DAEMON_NETWORK_THREAD_COUNT    = 8;
-    static inline constexpr size_t IO_DAEMON_THREAD_COUNT                   = 8;
-    static inline constexpr size_t TRANSPORTATION_DAEMON_THREAD_COUNT       = 8; 
-    static inline constexpr size_t HEARTBEAT_DAEMON_THREAD_COUNT            = 8;
+    //fine to not include these - or making these not part of the external interface - user need to rely on exception to spawn workers or abort system
+    static inline constexpr size_t THREAD_COUNT = 32; //this is - however - is necessary - 
 
     struct signature_dg_network_concurrency{}; 
 
@@ -45,7 +41,7 @@ namespace dg::network_concurrency{
         auto [controller, thr_vec]                              = dg::network_concurrency_impl1_app::spawn(config); 
         thr_vec                                                 = dg::network_genult::enumerate(std::move(thr_vec));
         concurrency_resource_container::get().daemon_controller = std::move(controller);
-        concurrency_resource_container::get().thrid_to_idx_map  = jg::dense_hash_map<std::thread::id, size_t>(thr_vec.begin(), thr_vec.end(), thr_vec.size()); 
+        concurrency_resource_container::get().thrid_to_idx_map  = jg::dense_hash_map<std::thread::id, size_t>(thr_vec.begin(), thr_vec.end(), thr_vec.size());
     }
 
     void deinit() noexcept{

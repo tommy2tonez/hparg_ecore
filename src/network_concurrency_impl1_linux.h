@@ -28,6 +28,11 @@ namespace dg::network_concurrency_impl1_linux{
 
     using namespace daemon_option_ns;
 
+    struct StdDaemonRunnableInterface{
+        virtual ~StdDaemonRunnableInterface() noexcept = default;
+        virtual void run() noexcept = 0; 
+    };
+
     struct WorkerInterface{
         virtual ~WorkerInterface() noexcept = default;
         virtual bool run_one_epoch() noexcept = 0; 
@@ -41,6 +46,11 @@ namespace dg::network_concurrency_impl1_linux{
     struct DaemonRunnerInterface{
         virtual ~DaemonRunnerInterface() noexcept = default;
         virtual void set_worker(std::unique_ptr<WorkerInterface>) noexcept = 0;
+    };
+
+    struct DaemonDedicatedRunnerInterface: DaemonRunnerInterface{
+        virtual ~DaemonDedicatedRunnerInterface() noexcept = default;
+        virtual auto id() noexcept -> std::thread::id = 0;
     };
 
     struct DaemonControllerInterface{
@@ -100,13 +110,14 @@ namespace dg::network_concurrency_impl1_linux{
             }
     };
 
-    class StdDaemonRunner: public virtual DaemonRunnerInterface{
+    class StdDaemonRunner: public virtual DaemonRunnerInterface,
+                           public virtual StdDaemonRunnableInterface{
 
         private:
 
             std::shared_ptr<std::atomic<bool>> poison_pill; //whatever - this is hard to implement correctly - ask std - not me
             std::unique_ptr<std::atomic_flag> mtx;
-            std::unique_ptr<WorkerInterface> worker;
+            std::shared_ptr<WorkerInterface> worker;
             std::unique_ptr<ReschedulerInterface> rescheduler; 
 
         public:
@@ -121,15 +132,13 @@ namespace dg::network_concurrency_impl1_linux{
 
             void set_worker(std::unique_ptr<WorkerInterface> worker) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
-                this->worker = std::move(worker);
+                this->internal_set_worker(std::move(worker));
             }
 
             void run() noexcept{
 
                 while (!this->load_poison_pill()){
-                    auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
-                    bool run_flag   = this->worker->run_one_epoch(); //dangy to have lck_grd reaches this
+                    bool run_flag = this->internal_get_worker()->run_one_epoch();
 
                     if (!run_flag){
                         this->rescheduler->reschedule();
@@ -149,15 +158,27 @@ namespace dg::network_concurrency_impl1_linux{
 
                 return false;
             }
+
+            void internal_set_worker(std::shared_ptr<WorkerInterface> worker) noexcept{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                this->worker = std::move(worker);
+            }
+
+            void internal_get_worker() noexcept -> std::shared_ptr<WorkerInterface>{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                return this->worker;
+            }
     };
 
-    class StdRaiiDaemonRunner: public virtual DaemonRunnerInterface{
+    class StdRaiiDaemonRunner: public virtual DaemonDedicatedRunnerInterface{
 
         private:
 
-            std::shared_ptr<DaemonRunnerInterface> daemon_runner; //daemon_runner is referenced by both std::thread and raii - 
+            std::shared_ptr<DaemonRunnerInterface> daemon_runner;
             std::unique_ptr<std::thread> thread;
-            std::shared_ptr<std::atomic<bool>> runner_poison; //fine - not a good practice here - yet this is interface implementation - usable for a specific usecase only - the art of engineering is actually being specific - keep it simple stupid - don't over complicate things
+            std::shared_ptr<std::atomic<bool>> runner_poison;
         
         public:
 
@@ -177,6 +198,11 @@ namespace dg::network_concurrency_impl1_linux{
 
                 this->daemon_runner->set_worker(std::move(worker));
             }
+
+            auto id() noexcept -> std::thread::id{
+ 
+                return this->thread->get_id();
+            }
     };
 
     class DaemonController: public virtual DaemonControllerInterface{
@@ -195,48 +221,56 @@ namespace dg::network_concurrency_impl1_linux{
                                                                         id_runner_map(std::move(id_runner_map)),
                                                                         mtx(std::move(mtx)){}
 
-            auto _register(daemon_kind_t daemon, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
+            auto _register(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
                 
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
-                auto map_ptr = this->daemon_id_map.find(daemon);
+                auto map_ptr = this->daemon_id_map.find(daemon_kind);
 
                 if (map_ptr == this->daemon_id_map.end()){
-                    return std::unexpected(dg::network_exception::UNSUPPORTED_DAEMON_MODE);
+                    return std::unexpected(dg::network_exception::UNSUPPORTED_DAEMON_KIND);
                 }
 
                 if (map_ptr->second.size() == 0u){
-                    return std::unexpected(dg::network_exception::NO_DAEMON_EXECUTOR_AVAILABLE);
+                    return std::unexpected(dg::network_exception::NO_DAEMON_RUNNER_AVAILABLE);
                 }
 
                 size_t id = map_ptr->second.back();
                 map_ptr->second.pop_back(); 
                 this->id_runner_map[id]->set_worker(std::move(worker));
 
-                return id;
+                return this->encode(id, daemon_kind);
             }
 
-            auto deregister(size_t id) noexcept{
+            auto deregister(size_t encoded) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
-                auto worker     = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(WorkerFactory::spawn_rest)());
-
+                auto lck_grd            = dg::network_genult::lock_guard(*this->mtx);
+                auto [id, daemon_kind]  = this->decode(encoded);
+                auto worker             = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(WorkerFactory::spawn_rest)());
+                
+                this->daemon_id_map[daemon_kind].push_back(id);
                 this->id_runner_map[id]->set_worker(std::move(worker));
             }
+        
+        private:
+
+            auto encode(size_t id, daemon_kind_t daemon_kind) noexcept -> size_t{
+
+                static_assert(sizeof(size_t) + sizeof(daemon_kind_t) <= sizeof(dg::max_unsigned_t));
+                static_assert(std::is_unsigned_v<daemon_kind_t>);
+                dg::max_unsigned_t promoted_encoded = (static_cast<dg::max_unsigned_t>(id) << (sizeof(daemon_kind_t) * CHAR_BIT)) | static_cast<dg::max_unsigned_t>(daemon_kind); 
+
+                return dg::network_genult::wrap_safe_integer_cast(promoted_encoded);
+            }
+
+            auto decode(size_t encoded) noexcept -> std::pair<size_t, daemon_kind_t>{
+                
+                static_assert(std::is_unsigned_v<daemon_kind_t>);
+                size_t id                   = encoded >> (sizeof(daemon_kind_t) * CHAR_BIT);   
+                daemon_kind_t daemon_kind   = encoded & low<size_t>(std::integral_constant<size_t, (sizeof(daemon_kind_t) * CHAR_BIT)>{});
+
+                return {id, daemon_kind};
+            }
     };
-
-    static auto internal_make_cpuset(std::vector<int> cpu_set) noexcept -> cpu_set_t{ //linux (posix) internal interface 
-
-        //preconds cpu_set - might overflow
-
-        cpu_set_t rs{};
-        CPU_ZERO(&rs);
-
-        for (int cpu: cpu_set){
-            CPU_SET(cpu, &rs);
-        }
-
-        return rs;
-    }
 
     struct ReschedulerFactory{
 
@@ -251,26 +285,46 @@ namespace dg::network_concurrency_impl1_linux{
         }
     };
 
-    struct DaemonFactory{
+    static void dg_legacy_cpuset_free(cpu_set_t * cpu_set) noexcept{
 
-        //i think its fine to abstractize std::thread::id - and return it here - one could argue to include std::thread::id as part of the interface 
-        //this is to allow future extension (flexible extension) - such that all the derived classes do not rely on std::thread::id
-        //an extension like DedicatedDaemonRunnerInterface: DaemonRunnerInterface - is fine - yet it would complicate things further in the direction of polymorphic mess
+        CPU_FREE(cpu_set);
+    } 
 
-        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set, std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{ 
+    using dg_legacy_cpuset_free_t = void (*)(cpu_set_t *) noexcept; 
+
+    struct NonLegacyPosixCpuSet{
+        std::unique_ptr<cpu_set_t, dg_legacy_cpuset_free_t> legacy_cpusetp;
+        size_t alloc_sz;
+    };
+
+    struct NonLegacyPosixCPUSetController{
+
+        static auto make_cpuset(size_t cpu_sz) -> std::unique_ptr<NonLegacyPosixCpuSet>{
+
+            std::unique_ptr<cpu_set_t, dg_legacy_cpuset_free_t> legacy_cpusetup = {CPU_ALLOC(cpu_sz), dg_legacy_cpuset_free};
+
+            if (!legacy_cpusetup){
+                dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
+            }
             
-            auto px_cpu_set     = internal_make_cpuset(cpu_set);
-            auto mtx            = std::make_unique<std::atomic_flag>();
-            mtx->clear();
-            auto poison_pill    = std::make_shared<std::atomic<bool>>(bool{false});
-            auto worker         = WorkerFactory::spawn_rest();
-            auto daemon_runner  = std::make_shared<StdDaemonRunner>(poison_pill, std::move(mtx), std::move(worker), std::move(rescheduler));
-            auto executable     = [=] noexcept{
-                daemon_runner->run();
-            };
-            auto thr_resource   = std::make_unique<std::thread>(std::move(executable));
-            auto thr_id         = thr_resource->get_id();
-            int err             = pthread_setaffinity_np(thr_resource->native_handle(), sizeof(cpu_set_t), &px_cpu_set);
+            size_t alloc_sz = CPU_ALLOC_SIZE(cpu_sz);
+            CPU_ZERO_S(alloc_sz, legacy_cpusetup.get()); 
+
+            return std::make_unique<NonLegacyPosixCpuSet>(NonLegacyPosixCpuSet{std::move(legacy_cpusetup), alloc_sz});
+        }
+
+        static auto add_cpu_to_cpuset(NonLegacyPosixCpuSet * dst, int cpu_id){
+
+            CPU_SET_S(cpu_id, dst->alloc_sz, dst->legacy_cpusetp.get());
+        }
+    };
+
+    struct StdThreadFactory{
+
+        template <class T>
+        static void internal_pthread_setaffinity_np(T&& thr_handle, NonLegacyPosixCpuSet * cpusetp){
+
+            int err = pthread_setaffinity_np(std::forward<T>(thr_handle), cpusetp->alloc_sz, cpusetp->legacy_cpusetp.get());
             
             if (err != 0){
                 if (err == EFAULT){
@@ -285,41 +339,71 @@ namespace dg::network_concurrency_impl1_linux{
 
                 dg::network_exception::throw_exception(dg::network_exception::UNIDENTIFIED_EXCEPTION);
             }
-
-            return {std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill), std::move(thr_id)};
         }
 
-        static auto spawn_affine_daemon_runner(std::vector<int> cpu_set) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
+        static auto spawn_thread(std::shared_ptr<StdDaemonRunnableInterface> runnable, std::vector<int> cpu_vec) -> std::unique_ptr<std::thread>{
+
+            auto executable = [=]() noexcept{
+                runnable->run();
+            };
+
+            std::unique_ptr<std::thread> thr_instance       = std::make_unique<std::thread>(std::move(executable));
+            std::unique_ptr<NonLegacyPosixCpuSet> cpu_set   = NonLegacyPosixCPUSetController::make_cpuset(cpu_vec.size()); 
+
+            for (int cpu_id: cpu_vec){
+                NonLegacyPosixCPUSetController::add_cpu_to_cpuset(cpu_set.get(), cpu_id);
+            }
+            
+            internal_pthread_setaffinity_np(thr_instance->native_handle(), cpu_set.get());
+            return thr_instance;
+        }
+
+        static auto spawn_thread(std::shared_ptr<StdDaemonRunnableInterface> runnable) -> std::unique_ptr<std::thread>{
+
+            auto executable = [=]() noexcept{
+                runnable->run();
+            };
+
+            return std::make_unique<std::thread>(std::move(executable));
+        }
+    };
+
+    struct DaemonRunnerFactory{
+
+        static auto spawn_std_daemon_affine_runner(std::vector<int> cpu_set) -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
 
             using namespace std::chrono_literals;
-            return spawn_affine_daemon_runner(cpu_set, ReschedulerFactory::spawn_sleepy_rescheduler(150ms)); //I feel like this is internal responsibility - 
-        } 
-
-        static auto spawn_daemon_runner(std::unique_ptr<ReschedulerInterface> rescheduler) -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
-
+             
+            auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(150ms);
             auto mtx            = std::make_unique<std::atomic_flag>();
             mtx->clear();
             auto poison_pill    = std::make_shared<std::atomic<bool>>(bool{false});
             auto worker         = WorkerFactory::spawn_rest();
             auto daemon_runner  = std::make_shared<StdDaemonRunner>(poison_pill, std::move(mtx), std::move(worker), std::move(rescheduler));
-            auto executable     = [=] noexcept{
-                daemon_runner->run();
-            };
-            auto thr_resource   = std::make_unique<std::thread>(std::move(executable));
-            auto thr_id         = thr_resource->get_id();
+            auto thr_instance   = StdThreadFactory::spawn_thread(daemon_runner, cpu_set); 
+            auto raii_runner    = std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_instance), poison_pill); 
 
-            return {std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_resource), poison_pill), std::move(thr_id)};
-        }
+            return raii_runner;
+        } 
 
-        static auto spawn_daemon_runner() -> std::pair<std::unique_ptr<DaemonRunnerInterface>, std::thread::id>{
+        static auto spawn_std_daemon_runner() -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
 
             using namespace std::chrono_literals;
-            return spawn_daemon_runner(ReschedulerFactory::spawn_sleepy_rescheduler(150ms)); //I feel like this is internal responsibility - 
+             
+            auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(150ms);
+            auto mtx            = std::make_unique<std::atomic_flag>();
+            mtx->clear();
+            auto poison_pill    = std::make_shared<std::atomic<bool>>(bool{false});
+            auto worker         = WorkerFactory::spawn_rest();
+            auto daemon_runner  = std::make_shared<StdDaemonRunner>(poison_pill, std::move(mtx), std::move(worker), std::move(rescheduler));
+            auto thr_instance   = StdThreadFactory::spawn_thread(daemon_runner); 
+            auto raii_runner    = std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_instance), poison_pill); 
+
+            return raii_runner;
         }
     };
 
     struct ControllerFactory{
-
         static auto spawn_daemon_controller(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
                                             std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map) -> std::unique_ptr<DaemonControllerInterface>{
 

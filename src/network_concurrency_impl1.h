@@ -41,13 +41,6 @@ namespace dg::network_concurrency_impl1_app{
         kernel_overwrite_affine_policy  = 0u, //this assumes that all cores are isolated for the application -  
         kernel_decide_affine_policy     = 1u;
     };
-
-    //this heuristic does not work very well - without a specific implementation of scheduler - this renders useless
-    //WLOG assume every affine distribution problem could be viewed as  
-    //dict[(core_id, daemon_kind)] = core_usage
-    //dict[[core_id, daemon_kind]] = list(threads)
-    //len(list(threads)) / total_thread(core_id) = core_usage
-    //the number of threads then - is dynamic (runtime determined) - not static - yet one could argue that it's runtime-determined-compile-time-deterministic
     
     struct MonoAffineDaemonPlanMaker{
 
@@ -166,7 +159,7 @@ namespace dg::network_concurrency_impl1_app{
                     std::unordered_map<int, double> affine_dist{};
 
                     while (true){
-                        if (core_speed_vec.size() == 0u){
+                        if (core_speed_vec.size() == 0u){ //
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                             std::abort();
                         }
@@ -296,7 +289,7 @@ namespace dg::network_concurrency_impl1_app{
                 return *this;
             }
 
-            auto make_plan() -> std::vector<std::tuple<daemon_kind_t, std::optional<std::vector<int>>>>{
+            auto make_plan() -> std::unordered_map<daemon_kind_t, std::vector<std::vector<int>>>{
 
                 if (!static_cast<bool>(policy)){
                     this->set_affine_policy(kernel_decide_affine_policy);
@@ -344,7 +337,7 @@ namespace dg::network_concurrency_impl1_app{
         
         private:
 
-            auto internal_make_overwrite_affine_plan() -> std::vector<std::tuple<daemon_kind_t, std::optional<std::vector<int>>>>{
+            auto internal_make_overwrite_affine_plan() -> std::unordered_map<daemon_kind_t, std::vector<std::vector<int>>>{
 
                 size_t core_count = std::thread::hardware_concurrency();
 
@@ -352,7 +345,7 @@ namespace dg::network_concurrency_impl1_app{
                     dg::network_exception::throw_exception(dg::network_exception::UNDEFINED_HARDWARE_CONCURRENCY); //better to throw exception here 
                 }
                 
-                auto rs                         = std::vector<std::tuple<daemon_kind_t, std::optional<std::vector<int>>>>();
+                auto rs                         = std::unordered_map<daemon_kind_t, std::vector<std::vector<int>>>();;
                 double high_compute_sum         = this->computing_cpu_usage.value() + this->kernel_io_cpu_usage.value();
                 double high_parallel_sum        = this->transportation_cpu_usage.value() + this->heartbeat_cpu_usage.value(); 
                 double total_sum                = high_compute_sum + high_parallel_sum;
@@ -377,26 +370,71 @@ namespace dg::network_concurrency_impl1_app{
                 high_parallel_plan_maker.set_thread_per_core(this->high_parallel_low_compute_thr_per_core.value())
                                         .set_cpu_usage(TRANSPORATION_DAEMON, this->transportation_cpu_usage.value())
                                         .set_cpu_usage(HEARTBEAT_DAEMON, this->heartbeat_cpu_usage.value());
+                
+                auto high_compute_plan  = high_compute_plan_maker.make_plan();
+                auto high_parallel_plan = high_parallel_plan_maker.make_plan();
 
-                for (const auto& outter_iter: high_compute_plan_maker.make_plan()){
-                    for (const auto& inner_iter: outer_iter->second){
-                        rs.push_back(std::make_tuple(outter_iter->first, inner_iter));
-                    }
-                }
-
-                for (const auto& outer_iter: high_paralell_plan_maker.make_plan()){
-                    for (const auto& inner_iter: outer_iter->second){
-                        rs.push_back(std::make_tuple(outter_iter->first, inner_iter));
-                    }
-                }
+                rs.insert(high_compute_plan.begin(), high_compute_plan.end());
+                rs.insert(high_parallel_plan.begin(), high_parallel_plan.end());
 
                 return rs;
             }
 
-            auto internal_make_kerneldecide_affine_plan() -> std::vector<std::tuple<daemon_kind_t, std::optional<std::vector<int>>>>{
+            auto internal_make_kerneldecide_affine_plan() -> std::unordered_map<daemon_kind_t, std::vector<std::vector<int>>>{
+                
+                auto rs             = std::unordered_map<daemon_kind_t, std::vector<std::vector<int>>>{};
+                size_t core_count   = std::thread::hardware_concurrency();
 
+                if (core_count == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::UNDEFINED_HARDWARE_CONCURRENCY); //better to throw exception here
+                }
+
+                size_t thr_per_core             = max_mixed_performance_hyperthread_count_per_core(); 
+                size_t thr_count                = core_count * thr_per_core; 
+                size_t computing_thr_count      = std::max(size_t{1}, static_cast<size_t>(thr_count * this->computing_cpu_usage.value()));
+                size_t kernel_io_thr_count      = std::max(size_t{1}, static_cast<size_t>(thr_count * this->kernel_io_cpu_usage.value()));
+                size_t transporation_thr_count  = std::max(size_t{1}, static_cast<size_t>(thr_count * this->transportation_cpu_usage.value()));
+                size_t heartbeat_thr_count      = std::max(size_t{1}, static_cast<size_t>(thr_count * this->heartbeat_cpu_usage.value())); 
+
+
+                for (size_t i = 0u; i < computing_thr_count; ++i){
+                    rs[COMPUTING_DAEMON].push_back(std::vector<int>{});
+                }
+
+                for (size_t i = 0u; i < kernel_io_thr_count; ++i){
+                    rs[IO_DAEMON].push_back(std::vector<int>{});
+                }
+
+                for (size_t i = 0u; i < transporation_thr_count; ++i){
+                    rs[TRANSPORTATION_DAEMON].push_back(std::vector<int>{});
+                }
+
+                for (size_t i = 0u; i < heartbeat_thr_count; ++i){
+                    rs[HEARTBEAT_DAEMON].push_back(std::vector<int>{});
+                }
+
+                return rs;
             }
     };
+     
+    static auto vectorize_plan(std::unordered_map<daemon_kind_t, std::vector<std::vector<int>>> plan) -> std::vector<daemon_kind_t, std::vector<int>>{
+
+        std::vector<daemon_kind_t, std::vector<int>> rs{};
+
+        for (const auto& pair_iter: plan){
+            for (std::vector<int>& cpuset: pair_iter->second){
+                rs.push_back(pair_iter->first, std::move(cpuset));
+            }
+        }
+
+        return rs;
+    }
+
+    static auto get_thread_id_numerical_representation(std::thread::id thr_id) noexcept -> size_t{ //usually std::thread::id is size_t - no idea if std will change this - I doubt that - yet move the maybe-obselete code -> one place for version control
+
+        static_assert(std::has_unique_object_representations_v<std::thread::id>);
+        return std::bit_cast<size_t>(thr_id);;
+    }
 
     struct Config{
         affine_policy_option_t policy;
@@ -418,20 +456,20 @@ namespace dg::network_concurrency_impl1_app{
                                                       .set_heartbeat_cpu_usage(config.heartbeat_cpu_usage)
                                                       .make_plan();
         
-        for (const auto& thr_metadata: plan){
-            auto [daemon_kind, optional_cpuset] = thr_metadata;
-            auto [daemon_runner, thr_id] = [&]{
-                if (optional_cpuset){
-                    return dg::network_concurrency_impl1::DaemonFactory::spawn_affine_daemon_runner(optional_cpuset.value());
-                } else{
-                    return dg::network_concurrency_impl1::DaemonFactory::spawn_daemon_runner();
-                }
-            }();
+        for (auto thr_metadata: vectorize_plan(plan)){
+            auto [daemon_kind, cpuset] = thr_metadata;
+            std::unique_ptr<dg::network_concurrency_impl1::DaemonDedicatedRunnerInterface> runner{};
 
-            static_assert(std::has_unique_object_representations_v<std::thread::id>);
-            size_t thr_numerical_rep = std::bit_cast<size_t>(thr_id);
+            if (cpuset.empty()){
+                runner = dg::network_concurrency_impl1::DaemonRunnerFactory::spawn_std_daemon_runner();
+            } else{
+                runner = dg::network_concurrency_impl1::DaemonRunnerFactory::spawn_std_daemon_affine_runner(cpuset);
+            }
+
+            std::thread::id thr_id = runner->id();
+            size_t thr_numerical_rep = get_thread_id_numerical_representation(thr_id);
             daemon_id_map[daemon_kind].push_back(thr_numerical_rep); 
-            id_runner_map[thr_numerical_rep] = std::move(daemon_runner);
+            id_runner_map[thr_numerical_rep] = std::move(runner);
             thr_vec.push_back(thr_id);
         }
 
@@ -439,9 +477,5 @@ namespace dg::network_concurrency_impl1_app{
         return {std::move(controller), std::move(thr_vec)};
     }
 }
-
-namespace dg::network_concurrency_impl1_manual{
-
-} 
 
 #endif

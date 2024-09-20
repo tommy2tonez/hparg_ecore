@@ -687,7 +687,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::deque<std::pair<timepoint_t, Packet>> pkt_deque;
             std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> acked_id;
             timelapsed_t transmission_delay_time;
-            size_t max_transmission;
+            size_t max_retransmission;
             std::unique_ptr<std::mutex> mtx;
 
         public:
@@ -695,18 +695,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             RetransmissionManager(std::deque<std::pair<timepoint_t, Packet>> pkt_deque,
                                   std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> acked_id,
                                   timelapsed_t transmission_delay_time,
-                                  size_t max_transmission,
+                                  size_t max_retransmission,
                                   std::unique_ptr<std::mutex> mtx) noexcept: pkt_deque(std::move(pkt_deque)),
                                                                              acked_id(std::move(acked_id)),
                                                                              transmission_delay_time(transmission_delay_time),
-                                                                             max_transmission(max_transmission),
+                                                                             max_retransmission(max_retransmission),
                                                                              mtx(std::move(mtx)){}
 
             void add_retriable(Packet pkt) noexcept{
 
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
 
-                if (pkt.retransmission_count == this->max_transmission){
+                if (pkt.retransmission_count == this->max_retransmission){
                     dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(dg::network_exception::LOST_RETRANSMISSION));
                     return;
                 }
@@ -960,9 +960,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    //this is most likely not necessary - a packet is usually 32kb in size - so concurrency is not playing a crucial role here - 
-    //yet it's fine to have it here to approx true concurrency
-
     template <size_t PACKET_CENTER_SZ>
     class ConcurrentPacketCenter: public virtual PacketCenterInterface{
 
@@ -1070,7 +1067,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<PacketGenerator>(get_ipv6_id_generator(), utility::ipv6_hostip_val, port);
         }
 
-        static auto get_retransmission_manager(timelapsed_t delay, size_t max_transmission) -> std::unique_ptr<RetransmissionManagerInterface>{
+        static auto get_retransmission_manager(timelapsed_t delay, size_t max_retransmission) -> std::unique_ptr<RetransmissionManagerInterface>{
 
             using namespace std::chrono::literals; 
 
@@ -1084,14 +1081,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
             
-            if (std::clamp(max_transmission, MIN_MAX_RETRANSMISSION, MAX_MAX_RETRANSMISSION) != max_transmission){
+            if (std::clamp(max_retransmission, MIN_MAX_RETRANSMISSION, MAX_MAX_RETRANSMISSION) != max_retransmission){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             return std::make_unique<RetransmissionManager>(std::deque<std::pair<timepoint_t, Packet>>{},
                                                            data_structure::Factory::get_trivial_temporal_unordered_set<global_packet_id_t>(HASHSET_CAP),
                                                            delay, 
-                                                           max_transmission,
+                                                           max_retransmission,
                                                            std::make_unique<std::mutex>());
         } 
 
@@ -1159,9 +1156,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 } 
 
                 cur->port_stamps.push_back(utility::unix_timestamp());
-                size_t sz   = dg::network_compact_serializer::integrity_size(cur.value());
-                auto buf    = dg::network_std_container::string(sz); 
-                dg::network_compact_serializer::integrity_serialize_into(buf.data(), cur.value());
+                size_t sz = dg::network_compact_serializer::integrity_size(cur.value());
+                auto buf = dg::network_std_container::string(sz); 
+                dg::network_compact_serializer::integrity_serialize_into(buf.data(), cur.value()); //optimizable - important to make this from high_compute -> high_parallel
                 exception_t err = socket_service::nonblocking_send(*this->socket, cur->to_addr, buf.data(), sz);
                 
                 if (dg::network_exception::is_failed(err)){
@@ -1219,10 +1216,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           std::shared_ptr<packet_controller::PacketCenterInterface> ib_packet_center,
                           std::shared_ptr<packet_controller::SchedulerInterface> scheduler,
                           std::shared_ptr<model::SocketHandle> socket) noexcept: retransmission_manager(std::move(retransmission_manager)),
-                                                                                    ob_packet_center(std::move(ob_packet_center)),
-                                                                                    ib_packet_center(std::move(ib_packet_center)),
-                                                                                    scheduler(std::move(scheduler)),
-                                                                                    socket(std::move(socket)){}
+                                                                                 ob_packet_center(std::move(ob_packet_center)),
+                                                                                 ib_packet_center(std::move(ib_packet_center)),
+                                                                                 scheduler(std::move(scheduler)),
+                                                                                 socket(std::move(socket)){}
             
             bool run_one_epoch() noexcept{
                 
@@ -1236,7 +1233,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     return false;
                 }
 
-                auto expt_nxt_ptr   = dg::network_compact_serializer::integrity_deserialize_into(buf.data(), pkt, sz); 
+                auto expt_nxt_ptr   = dg::network_compact_serializer::integrity_deserialize_into(buf.data(), pkt, sz); //optimizable - important to make this from high-compute -> high parallel - 
                 
                 if (!expt_nxt_ptr.has_value()){
                     dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(expt_nxt_ptr.error()));
@@ -1412,7 +1409,7 @@ namespace dg::network_kernel_mailbox_impl1{
         retransmission_manager = packet_controller::ComponentFactory::get_transmission_manager(config.retransmission_delay_in_nanosecond, config.retransmission_count);
 
         if (config.inbound_exhaustion_control_sz){
-            ib_packet_center = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_center(packet_controller::ComponentFactory::get_inbound_packet_center(), config.inbound_exhaustion_control_sz.value());
+            // ib_packet_center = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_center(packet_controller::ComponentFactory::get_inbound_packet_center(), config.inbound_exhaustion_control_sz.value());
         } else{
             ib_packet_center = packet_controller::ComponentFactory::get_inbound_packet_center();
         }

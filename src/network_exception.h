@@ -64,8 +64,8 @@ namespace dg::network_exception{
     static inline constexpr exception_t RUNTIME_FILEIO_ERROR            = 0u; 
     static inline constexpr exception_t LOST_RETRANSMISSION             = 0u;
     static inline constexpr exception_t INVALID_INIT_ARG                = 0u;
-    static inline constexpr exception_t UNSUPPORTED_DAEMON_MODE         = 0u;
-    static inline constexpr exception_t NO_DAEMON_EXECUTOR_AVAILABLE    = 0u;
+    static inline constexpr exception_t UNSUPPORTED_DAEMON_KIND         = 0u;
+    static inline constexpr exception_t NO_DAEMON_RUNNER_AVAILABLE      = 0u;
     static inline constexpr exception_t INVALID_ARGUMENT                = 0u;
     static inline constexpr exception_t UNIDENTIFIED_EXCEPTION          = 0u;
     static inline constexpr exception_t PTHREAD_EFAULT                  = 0u;

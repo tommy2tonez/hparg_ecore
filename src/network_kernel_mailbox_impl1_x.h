@@ -4,7 +4,10 @@
 #include "network_kernel_mailbox_impl1.h"
 #include "network_trivial_serializer.h"
 #include "network_concurrency.h"
-#include "network_std_container.h" 
+#include "network_std_container.h"
+#include <chrono>
+#include "network_log.h"
+#include "network_concurrency.h"
 
 namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
@@ -146,13 +149,13 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
             auto make_missing_heartbeat_error_msg(const Address& addr) const noexcept -> dg::network_std_container::string{ //global memory pool - better to be noexcept here
 
-                const char * fmt = "heartbeat not detected from {}:{}"; //ip-resolve is done externally - via log_reading - virtual ip is required to spawn proxy (if a node is not responding)
+                const char * fmt = "[NETWORKSTACK_HEARTBEAT] heartbeat not detected from {}:{}"; //ip-resolve is done externally - via log_reading - virtual ip is required to spawn proxy (if a node is not responding)
                 return std::format(fmt, addr.ip, size_t{addr.port});
             }
 
             auto make_foreign_heartbeat_error_msg(const Address& addr) const noexcept -> dg::network_std_container::string{
 
-                const char * fmt = "foreign heartbeat from {}:{}";
+                const char * fmt = "[NETWORKSTACK_HEARTBEAT] foreign heartbeat from {}:{}";
                 return std::format(fmt, addr.ip, size_t{addr.port});
             }
     };
@@ -239,7 +242,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
             }
     };
 
-    class MailBox: public virtual dg::network_kernel_mailbox_impl1_heartbeatx::core::MailBoxInterface{
+    class MailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailBoxInterface{
 
         private:
 
@@ -263,6 +266,173 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
             auto recv() noexcept -> std::optional<dg::network_std_container::string>{
 
                 return this->ib_buffer_center->pop();
+            }
+    };
+}
+
+namespace dg::network_kernel_mailbox_impl1_concurrencyx{
+
+    template <size_t CONCURRENCY_SZ>
+    class ConcurrentMailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailBoxInterface{
+
+        private:
+
+            std::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>> mailbox_vec;
+        
+        public:
+
+            ConcurrentMailBox(std::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>> mailbox_vec,
+                              std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: mailbox_vec(std::move(mailbox_vec)){}
+
+            void send(Address addr, dg::network_std_container::string buf) noexcept{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
+                this->mailbox_vec[idx]->send(std::move(addr), std::move(buf));
+            }
+
+            auto recv() noexcept -> std::optional<std::network_std_container::string>{
+
+                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
+                return this->mailbox_vec[idx]->recv();
+            }
+    };
+}
+
+namespace dg::network_kernel_mailbox_impl1_meterlogx{
+
+    struct MeterInterface{
+        virtual ~MeterInterface() noexcept = default;
+        virtual void tick(size_t) noexcept = 0;
+        virtual auto get() noexcept -> std::pair<size_t, std::chrono::nanoseconds> = 0;
+    };
+
+    class MtxMeter: public virtual MeterInterface{
+        
+        private:
+
+            size_t count; 
+            std::chrono::nanoseconds unixstamp;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            MtxMeter(size_t coumt, 
+                     std::chrono::nanoseconds unixstamp, 
+                     st::unique_ptr<std::mutex> mtx) noexcept: count(count),
+                                                               unixstamp(unixstamp),
+                                                               mtx(std::move(mtx)){}
+            
+            void tick(size_t incoming_sz) noexcept{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                this->count += incoming_sz;
+            }
+
+            auto get() noexcept -> std::pair<size_t, std::chrono::nanoseconds>{
+
+                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto curstamp   = static_cast<std::chrono::nanoseconds>(dg::network_genult::unix_timestamp());
+                auto rs         = std::make_pair(this->count, dg::network_genult::timelapsed(curstamp, this->unixstamp));
+                this->count     = 0u;
+                this->unixstamp = curstamp;
+
+                return rs;
+            }
+    }; 
+
+    class MeterLogWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            dg::std_network_container::string device_id;
+            std::shared_ptr<MeterInterface> send_meter;
+            std::shared_ptr<MeterInterface> recv_meter;
+        
+        public:
+
+            MeterLogWorker(dg::std_network_container::string device_id,
+                           std::shared_ptr<MeterInterface> send_meter, 
+                           std::shared_ptr<MeterInterface> recv_meter) noexcept: device_id(std::move(device_id)),
+                                                                                 send_meter(std::move(send_meter)),
+                                                                                 recv_meter(std::move(recv_meter)){}
+            
+            bool run_one_epoch() noexcept{
+
+                auto [send_bsz, send_dur]   = this->send_meter->get();
+                auto [recv_bsz, recv_dur]   = this->recv_meter->get();
+                auto send_msg               = this->make_send_meter_msg(send_bsz, send_dur);
+                auto recv_msg               = this->make_recv_meter_msg(recv_bsz, recv_dur);
+
+                dg::network_log::journal_fast(send_msg.c_str());
+                dg::network_log::journal_fast(recv_msg.c_str());
+
+                return true;
+            }
+        
+        private:
+
+            auto make_send_meter_msg(size_t bsz, std::chrono::nanoseconds dur) noexcept -> dg::network_std_container::string{
+
+                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(dur);
+                size_t tick_sz = dur_in_seconds.count();
+
+                if (tick_sz == 0u){
+                    return std::format("[METER_REPORT] low meter precision resolution (device_id: {}, part: send_meter)", this->device_id);
+                } 
+
+                size_t bsz_per_s = bsz / tick_sz;
+                return std::format("[METER_REPORT] {} bytes/s sent to {}", bsz_per_s, this->device_id);
+            }
+
+            auto make_recv_meter_msg(size_t bsz, std::chrono::nanoseconds dur) noexcept -> dg::network_std_container::string{
+
+                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(dur);
+                size_t tick_sz = dur_in_seconds.count();
+
+                if (tick_sz == 0u){
+                    return std::format("[METER_REPORT] low meter precision resolution (device_id: {}, part: recv_meter)", this->device_id);
+                }
+
+                size_t bsz_per_s = bsz / tick_sz;
+                return std::format("[METER_REPORT] {} bytes/s recv from {}", bsz_per_s, this->device_id);
+            }
+    };
+
+    class MeteredMailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailboxInterface{
+
+        private:
+
+            std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
+            std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox;
+            std::shared_ptr<MeterInterface> send_meter;
+            std::shared_ptr<MeterInterface> recv_meter;
+        
+        public:
+
+            MeteredMailBox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons, 
+                           std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox,
+                           std::shared_ptr<MeterInterface> send_meter,
+                           std::shared_ptr<MeterInterface> recv_meter): daemons(std::move(daemons)),
+                                                                        mailbox(std::move(mailbox)),
+                                                                        send_meter(std::move(send_meter)),
+                                                                        recv_meter(std::move(recv_meter)){}
+            
+            void send(Address addr, dg::network_std_container::string buf) noexcept{
+
+                this->send_meter->tick(buf.size());
+                this->mailbox->send(std::move(addr), std::move(buf));
+            }
+
+            auto recv() -> std::optional<dg::network_std_container::string>{
+
+                std::optional<dg::network_std_container::string> rs = this->mailbox->recv(); 
+
+                if (!static_cast<bool>(rs)){
+                    return std::nullopt;
+                }
+
+                this->recv_meter->tick(rs->size());
+                return rs;
             }
     };
 }

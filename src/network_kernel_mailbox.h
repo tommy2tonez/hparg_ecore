@@ -15,19 +15,28 @@
 
 namespace dg::network_kernel_mailbox{
 
-    inline std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox; 
+    //this is probably moderately complicated
+    //(1): recovery by using serialized access to init + functors without compromising speed
+    //     recovery by compromising program + restart 
 
-    void norm_init(){
+    //(2): network stack calibration (single packet center - multiple sockets - multiple ports, 
+    //                                multiple packet_centers - single socket - single port, 
+    //                                multiple packet centers - multiple sockets - multiple ports 
+    //                                network_stack_buffer_sz/ socket,
+    //                                number of concurrent workers,
+    //                                cpu usage, etc.)
+    //Such knowledge is not compile-time deterministic
+    
+    //(3): program calibration - a maximized network stack calibration might have destructive interference
+    //(4): congestion control - this is another tough task - allocation is a natural congestion control - implementing a custom congestion control here might have destructive interference
+    //(5): recovery methods: - unresponding IP resolution: program_virtual_ip (program responsibility) or kernel_virtual_ip (kernel responsibility). If former, goto (1)
+    //                       - corrupted socket resolution (unlikely): goto (1)
 
-    } 
+    inline std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox;
 
-    void heartbeat_init(){
+    void init(){
 
     }
-
-    //important to build a bridge here
-    //not dependency injection - for error recovery (by using a lck)
-    //this is however - not a good practice - yet it's possible
 
     auto send(Address addr, dg::network_std_container::string msg) noexcept -> exception_t{
 
