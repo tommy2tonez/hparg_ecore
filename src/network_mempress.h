@@ -18,8 +18,8 @@
 #include "network_segcheck_bound.h"
 
 namespace dg::network_mempress{
-    
-    //move from stricter -> less stricter unique_ptr<> next iteration - this is likely not going to be the bottleneck
+
+    //I admit bare metal looks strange - I will reconsider this     
 
     template <class T>
     struct Notifiable{

@@ -73,7 +73,7 @@ namespace dg::network_concurrency{
             }
         }
 
-        daemon_runner->_register(daemon_kind, std::move(worker));
+        concurrency_resource_container::get().daemon_controller->_register(daemon_kind, std::move(worker));
     }
 
     void daemon_deregister(size_t id) noexcept{
@@ -86,7 +86,7 @@ namespace dg::network_concurrency{
             }
         }
 
-        daemon_runner->deregister(id);
+        concurrency_resource_container::get().daemon_controller->deregister(id);
     }
 
     using daemon_deregister_t = void (size_t) noexcept; 

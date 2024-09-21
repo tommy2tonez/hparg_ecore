@@ -116,7 +116,10 @@ namespace dg::network_std_container{
     using unordered_map = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class T>
-    using vector = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
+    using vector        = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
+
+    template <class T>
+    using deque         = std::deque<T, dg::network_allocation::NoExceptAllocator<T>>;
 
     using string = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
 }

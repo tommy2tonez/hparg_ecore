@@ -189,6 +189,7 @@ namespace dg::network_genult{
 
         private:
 
+            static_assert(std::is_nothrow_default_constructible_v<T>);
             static inline std::unique_ptr<T> obj = std::make_unique<T>();
         
         public:
@@ -197,7 +198,38 @@ namespace dg::network_genult{
 
                 return *obj;
             }
-    }
+    };
+
+    template <class ID, class T>
+    class serialized_singleton: private singleton<ID, T>{
+
+        private:
+
+            using base = singleton<ID, T>; 
+            static inline std::mutex mtx{}; 
+
+        public:
+
+            template <class U>
+            static inline auto assign(U&& arg) noexcept(std::is_nothrow_assignable_v<T&, U>){
+                
+                auto lck_grd = lock_guard(mtx);
+                base::get() = std::forward<U>(arg);
+            }
+
+            template <class Functor, class ...Args>
+            static inline auto invoke(Functor functor, Args&& ...args) noexcept(noexcept((base::get().*functor)(std::forward<Args>(args...)))) -> decltype(auto){
+
+                using ret_t = decltype((base::get().*functor)(std::forward<Args>(args)...)); 
+                auto lck_grd = lock_guard(mtx); 
+
+                if constexpr(std::is_same_v<ret_t, void>){
+                    (base::get().*functor)(std::forward<Args>(args)...);
+                } else{
+                    return (base::get().*functor)(std::forward<Args>(args)...);
+                }
+            }
+    };
 
     template <class T, class = void>
     struct mono_reduce_or{};

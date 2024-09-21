@@ -20,9 +20,7 @@ namespace dg::network_kernelmap_x{
     template <size_t MEMREGION_SZ>
     void init(fsys_ptr_t * region, std::filesystem::path * path, fsys_device_id_t * device_id, size_t n, std::integral_constant<size_t, MEMREGION_SZ>){
 
-        auto logger     = dg::network_log_scope::critical_terminate();
-        map_instance    = dg::network_kernelmap_x_impl1::make(region, path, device_id, n, std::integral_constant<size_t, MEMREGION_SZ>{});
-        logger.release();
+        map_instance = dg::network_kernelmap_x_impl1::make(region, path, device_id, n, std::integral_constant<size_t, MEMREGION_SZ>{});
     }
 
     auto map(fsys_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{

@@ -13,22 +13,24 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
     using namespace dg::network_kernel_mailbox_impl1::model; 
 
-    struct HeartBeatMonitorInterface{
+    struct ObserverInterface{
+        virtual ~ObserverInterface() noexcept = default;
+        virtual void notify() noexcept = 0;
+    };
 
+    struct HeartBeatMonitorInterface{
         virtual ~HeartBeatMonitorInterface() noexcept = default;
         virtual void recv_signal(const Address&) noexcept = 0;
-        virtual void check() noexcept = 0;
+        virtual bool check() noexcept = 0;
     };
 
     struct BufferCenterInterface{
-
         virtual ~BufferCenterInterface() noexcept = default;
         virtual void push(dg::network_std_container::string) noexcept = 0;
         virtual auto pop() noexcept -> std::optional<dg::network_std_container::string> = 0;
     };
 
     struct HeartbeatEncoderInterface{
-
         virtual ~HeartbeatEncoderInterface() noexcept = default;
         virtual auto encode(Address) noexcept ->  dg::network_std_container::string = 0;
         virtual auto decode(const void *, size_t) noexcept -> std::expected<Address, exception_t> = 0;
@@ -126,15 +128,17 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
                 ptr->second = dg::network_genult::unix_timestamp();
             }
 
-            void check() noexcept{
+            bool check() noexcept{
 
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
                 std::chrono::nanoseconds now = dg::network_genult::unix_timestamp(); 
+                bool status = true; 
 
                 for (const auto& pair: this->address_ts_dict){
                     if (dg::network_genult::timelapsed(pair.second, now) > this->error_threshold){
                         auto err_msg = this->make_missing_heartbeat_error_msg(pair.first); 
                         dg::network_log::error_fast(err_msg.c_str());
+                        status = false;
                     }
 
                     if (dg::network_genult::timelapsed(pair.second, now) > this->termination_threshold){
@@ -143,6 +147,8 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
                         std::abort();
                     }
                 }
+
+                return status;
             }
         
         private:
@@ -159,6 +165,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
                 return std::format(fmt, addr.ip, size_t{addr.port});
             }
     };
+
 
     class HeartBeatBroadcaster: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -230,14 +237,20 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
         private:
 
             std::shared_ptr<HeartBeatMonitorInterface> monitor;
-        
+            std::shared_ptr<ObserverInterface> observer;
+
         public:
 
-            HeartBeatChecker(std::shared_ptr<HeartBeatMonitorInterface> monitor) noexcept: monitor(std::move(monitor)){}
+            HeartBeatChecker(std::shared_ptr<HeartBeatMonitorInterface> monitor,
+                             std::shared_ptr<ObserverInterface> observer) noexcept: monitor(std::move(monitor)),
+                                                                                    observer(std::move(observer)){}
 
             bool run_one_epoch() noexcept{
 
-                this->monitor->check();
+                if (!this->monitor->check()){
+                    this->observer->notify();
+                }
+                
                 return true;
             }
     };
