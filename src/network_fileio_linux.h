@@ -141,7 +141,7 @@ namespace dg::network_fileio_linux{
         return dg::network_exception::SUCCESS;
     }
 
-    void dg_create_binary_nothrow(const char * fp, size_t fsz) noexcpet{
+    void dg_create_binary_nothrow(const char * fp, size_t fsz) noexcept{
 
         dg::network_exception_handler::nothrow_log(dg_create_binary(fp, fsz));
     }

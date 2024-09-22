@@ -74,7 +74,8 @@ namespace dg::network_exception{
     static inline constexpr exception_t PTHREAD_CAUSA_SUI               = 0u;
     static inline constexpr exception_t UNDEFINED_HARDWARE_CONCURRENCY  = 0u; 
     static inline constexpr exception_t FILE_NOT_FOUND                  = 0u;
-
+    static inline constexpr exception_t CORRUPTED_FILE                  = 0u;
+    
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
     static inline const char * INVALID_DICTIONARY_KEY_CSTR      = "invalid_dictionary_key";
