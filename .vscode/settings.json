@@ -74,6 +74,9 @@
         "stacktrace": "cpp",
         "variant": "cpp",
         "map": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "charconv": "cpp",
+        "format": "cpp",
+        "span": "cpp"
     }
 }

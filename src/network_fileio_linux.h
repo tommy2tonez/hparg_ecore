@@ -174,8 +174,7 @@ namespace dg::network_fileio_linux{
         }
 
         if (read(fd, dst, fsz) != fsz){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RUNTIME_FILEIO_ERROR)); //this is where the exception + abort line is blurred - yet i think this should be abort (open_file guarantees successful immutable operations - if not then its the open_file problem) - global-mtx-lockguard is required internally - external modification is UB 
-            std::abort();
+            return dg::network_exception::RUNTIME_FILEIO_ERROR; //this is where the exception + abort line is blurred - yet i think this should be abort (open_file guarantees successful immutable operations - if not then its the open_file problem) - global-mtx-lockguard is required internally - external modification is UB 
         }
 
         return dg::network_exception::SUCCESS;
@@ -206,8 +205,7 @@ namespace dg::network_fileio_linux{
         }
 
         if (read(fd, dst, fsz) != fsz){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RUNTIME_FILEIO_ERROR));
-            std::abort();
+            return dg::network_exception::RUNTIME_FILEIO_ERROR; //this is a very blurred line between exception + abort | yet I choose to not trust sys for now - propagate error to make some root function noexceptable
         }
 
         return dg::network_exception::SUCCESS;
@@ -234,8 +232,6 @@ namespace dg::network_fileio_linux{
         dg::network_exception_handler::nothrow_log(dg_read_binary(fp, dst, dst_cap));
     }
 
-    //not atomic (write all or none to fp) - if atomic is required, extension or nothrow should be used as replacement 
-    //an implementation of atomic here is immature - break single responsibility
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
 
         auto raii_fd = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC);

@@ -845,6 +845,8 @@ namespace dg::network_cufsio_linux{
 
         dg::network_exception_handler::nothrow_log(dg_host_write_binary(fp, src, src_sz));
     }
+
+    //extend this component to do replicas - 
 }
 
 #endif

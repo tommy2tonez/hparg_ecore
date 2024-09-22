@@ -2,6 +2,7 @@
 #define __NETWORK_ATOMIC_X_H__
 
 #include <atomic>
+#include <memory>
 
 namespace dg::network_atomic_x{
     
@@ -20,6 +21,17 @@ namespace dg::network_atomic_x{
 
         std::atomic_thread_fence(std::memory_order_acq_rel);
     }
+
+    auto dg_thread_fence_guard() noexcept{
+
+        static int i    = 0;
+        auto destructor = [](int *){
+            dg_thread_fence();
+        };
+
+        dg_thread_fence();
+        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+    } 
 
     template <class T>
     auto dg_compare_exchange_strong_acqrel(std::atomic<T>& obj, T expected, T new_value) noexcept -> bool{
