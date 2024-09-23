@@ -27,61 +27,113 @@ namespace dg::network_fileio_chksum_x{
 
     //separate header file is the right approach - not an intuitive one - yet the "not intuitive" is a problem to solve - not a problem to blame
     //don't argue with me about file and offset - that's also another problem to solve
-    //different files guarantee concurrent support from OS - I never get the "offset" thing 
+    //different files guarantee concurrent support from OS - I never get the "offset" thing
+    //this component is to solve one specific problem - hardware corrupted file - once in a bluemoon problem - don't use this component if you want to solve everything file-related - it's purely wrong
+    //this component is supposed to be used solely - such that a file created by this component is written, deleted, read by this component - an attempt to do these operations outside of this component scope is undefined behavior
+    //this component guarantees that open-close operation is atomic for the duration of the program - if contract cannot be fullfilled then program is aborted - a file recovery is required to snap the states back to valid - or a default initialization is required  
 
     struct FileHeader{
         uint64_t chksum;
-        uint64_t timestamp_in_nanoseconds; //validate with internal in-mem - if last_updated is not as up-to-date as in-mem == corrupted - this is maybe not neccessary 
+        uint64_t content_size; //not necessarily the file_sz - maybe a portion of a file - for performance
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const{
 
-            reflector(chksum, timestamp_in_nanoseconds);
+            reflector(chksum, content_size);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector){
 
-            reflector(chksum, timestamp_in_nanoseconds);
+            reflector(chksum, content_size);
         }
     };
 
     static inline std::string METADATA_SUFFIX = "DG_NETWORK_CHKSUM_X_METADATA"; 
 
-    auto dg_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
+    auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 
-        auto ext            = std::filesystem::path(fp).extension();
-        auto rawname        = std::filesystem::path(fp).replace_extension("").filename();
-        auto new_rawname    = std::format("{}_{}", rawname, METADATA_SUFFIX); 
-        auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(ext);
+        //unlikely yet memory exhaustion should be catched
 
-        return new_fp;
+        try{
+            auto ext            = std::filesystem::path(fp).extension();
+            auto rawname        = std::filesystem::path(fp).replace_extension("").filename();
+            auto new_rawname    = std::format("{}_{}", rawname, METADATA_SUFFIX); 
+            auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(ext);
+
+            return new_fp;
+        } catch (...){
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception_ptr(std::current_exception())));
+            std::abort();
+            return {};
+        }
     }
 
-    auto dg_file_exists(const char * fp) noexcept -> std::expected<bool, exception_t>{
+    auto dg_internal_read_metadata(const char * fp) noexcept -> std::expected<FileHeader, exception_t>{
 
-        std::filesystem::path metadata_path         = dg_get_metadata_fp(fp);
-        std::expected<bool, exception_t> f_status   = dg::network_fileio::dg_file_exists(fp);
+        constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{}); 
+        std::filesystem::path header_path   = dg_internal_get_metadata_fp(fp);
+        auto serialized_header              = std::array<char, HEADER_SZ>{};
+        exception_t err                     = dg::network_fileio::dg_read_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+
+        if (dg::network_exception::is_failed(err)){
+            return std::unexpected(err);
+        }
+
+        FileHeader header{};
+        dg::network_trivial_serializer::deserialize_into(header, serialized_header.data());
         
+        return header;
+    }
+
+    auto dg_internal_write_metadata(const char * fp, FileHeader metadata) -> exception_t{
+
+        constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{});
+        std::filesystem::path header_path   = dg_internal_get_metadata_fp(fp); 
+        auto serialized_header              = std::array<char, HEADER_SZ>{};
+        dg::network_trivial_serializer::serialize_into(serialized_header.data(), metadata);
+
+        return dg::network_fileio::dg_write_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+    }
+
+    auto dg_internal_is_file_creatable(const char * fp) noexcept -> std::expected<bool, exception_t>{
+
+        std::filesystem::path metadata_path     = dg_internal_get_metadata_fp(fp);
+        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_path.c_str());
+
         if (!status.has_value()){
             return std::unexpected(status.error());
         }
 
-        if (!status.value()){
+        if (status.value()){
             return false;
         }
 
-        std::expected<bool, exception_t> m_status   = dg::network_fileio::dg_file_exists(metadata_path.c_str());
+        status = dg::network_fileio::dg_file_exists(fp);
 
-        if (!m_status.has_value()){
-            return std::unexpected(m_status.error());
+        if (!status.has_value()){
+            return std::unexpected(status.error());
+        }
+
+        if (status.value()){
+            return false;
         }
         
-        if (!m_status.value()){
-            return false;
-        }
-
         return true;
+    }
+
+    //--user space--
+
+    auto dg_file_exists(const char * fp) noexcept -> std::expected<bool, exception_t>{
+
+        std::filesystem::path metadata_path     = dg_internal_get_metadata_fp(fp);
+        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_path.c_str());
+
+        if (!status.has_value()){
+            return std::unexpected(status.error());
+        }
+        
+        return status.value();
     }
 
     auto dg_file_exists_nothrow(const char * fp) noexcept -> bool{
@@ -109,37 +161,49 @@ namespace dg::network_fileio_chksum_x{
         return dg::network_exception_handler::nothrow_log(dg_file_size(fp));
     }
 
-    auto dg_create_binary(const char * fp, size_t fsz) noexcept -> exception_t{
+    //if exists - return error
+    //if not    - return SUCCESS if successfully created the file and its dependencies
+    //          - return error otherwise, atomicity is guaranteed by using abort
+    //cbinary = binary + memset(void *, 0, size_t) 
 
-        std::filesystem::path header_fname = dg_get_metadata_fp(fp); 
+    auto dg_create_cbinary(const char * fp, size_t fsz) noexcept -> exception_t{
+
+        std::expected<bool, exception_t> status = dg_internal_is_file_creatable(fp);
+
+        if (!status.has_value()){
+            return status.error();
+        }
+
+        if (!status.value()){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
+
+        std::filesystem::path header_path = dg_internal_get_metadata_fp(fp); 
         auto backout_lambda = [=]() noexcept{
             if (dg::network_fileio::dg_file_exists_nothrow(fp)){
-                dg::network_fileio::remove_nothrow(fp);
+                dg::network_fileio::dg_remove_nothrow(fp);
             }
 
-            if (dg::network_fileio::dg_file_exists_nothrow(header_fname.c_str())){
-                dg::network_fileio::remove_nothrow(header_fname.c_str());
+            if (dg::network_fileio::dg_file_exists_nothrow(header_path.c_str())){
+                dg::network_fileio::dg_remove_nothrow(header_path.c_str());
             }
         };
 
         auto backout_guard  = dg::network_genult::resource_guard(std::move(backout_lambda));
-        exception_t err     = dg::network_fileio::dg_create_binary(fp, fsz);
+        exception_t err     = dg::network_fileio::dg_create_cbinary(fp, fsz);
 
         if (dg::network_exception::is_failed(err)){
             return err;
         }
 
-        err = dg::network_fileio::dg_create_binary(header_fname.c_str(), SERIALIZATION_SZ);
+        err = dg::network_fileio::dg_create_binary(header_path.c_str(), 0u);
 
         if (dg::network_exception::is_failed(err)){
             return err;
         }
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(FileHeader{});
-        auto serialized_header = std::array<char, SERIALIZATION_SZ>{};
-        auto header = FileHeader{dg::network_hash::murmur_hash(nullptr, 0u), static_cast<std::chrono::nanoseconds>(dg::network_utility::utc_timestamp()).count()}; 
-        dg::network_trivial_serializer::serialize_into(serialized_header.data(), header);
-        err = dg::network_fileio::dg_write_binary_indirect(header_fname.c_str(), serialized_header.data(), SERIALIZATION_SZ);
+        auto header = FileHeader{dg::network_hash::cmurmur_hash(fsz), fsz}; 
+        err         = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){
             return err;
@@ -149,9 +213,28 @@ namespace dg::network_fileio_chksum_x{
         return dg::network_exception::SUCCESS;
     }
 
-    auto dg_create_binary_nothrow(const char * fp, size_t fsz) noexcept{
+    auto dg_create_cbinary_nothrow(const char * fp, size_t fsz) noexcept{
 
-        dg::network_exception_handler::nothrow_log(dg_create_binary(fp, fsz));
+        dg::network_exception_handler::nothrow_log(dg_create_cbinary(fp, fsz));
+    }
+
+    //this should always be noexcept - better to abort the program if unable to delete
+    //do not invoke this function to inverse create_binary - invoke nothrow version
+    auto dg_remove(const char * fp) noexcept -> exception_t{
+
+        std::filesystem::path header_path = dg_internal_get_metadata_fp(fp);
+        exception_t err = dg::network_fileio::dg_remove(fp); 
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
+        }
+        
+        return dg::network_fileio::dg_remove(header_path.c_str());
+    }
+
+    void dg_remove_nothrow(const char * fp) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg_remove(fp));
     }
 
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
@@ -172,26 +255,19 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{}); 
-        std::filesystem::path header_path   = dg_get_metadata_fp(fp);
-        auto serialized_header              = std::array<char, HEADER_SZ>{};
-        err = dg::network_fileio::dg_read_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+        std::expected<FileHeader, exception_t> header = dg_internal_read_metadata(fp); 
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
+        if (!header.has_value()){
+            return header.error();
         }
         
-        std::expected<size_t, exception_t> fsz = dg::network_fileio::dg_file_size(fp);
-
-        if (!fsz.has_value()){
-            return fsz.error();
+        if (header.value().content_size > dst_cap){
+            return dg::network_exception::CORRUPTED_FILE; //control flows reach here indicate that dst_cap >= file_sz, content_size <= file_sz (contract), dst_cap >= content_size - dst_cap < content_size == corrupted 
         }
 
-        FileHeader header{};
-        dg::network_trivial_serializer::deserialize_into(header, serialized_header.data());
-        uint64_t file_chksum = dg::network_hash::murmur_hash(dst, fsz.value()); 
+        uint64_t file_chksum = dg::network_hash::murmur_hash(reinterpret_cast<const char *>(dst), header.value().content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
 
-        if (file_chksum != header.chksum){
+        if (file_chksum != header.value().chksum){
             return dg::network_exception::CORRUPTED_FILE;
         }
 
@@ -221,26 +297,19 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{});
-        std::filesystem::path header_path   = dg_get_metadata_fp(fp);
-        auto serialized_header              = std::array<char, HEADER_SZ>{};
-        err = dg::network_fileio::dg_read_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+        std::expected<FileHeader, exception_t> header = dg_internal_read_metadata(fp);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
+        if (!header.has_value()){
+            return header.error();
         }
 
-        std::expected<size_t, exception_t> fsz = dg::network_fileio::dg_file_size(fp);
-
-        if (!fsz.has_value()){
-            return fsz.error();
+        if (header.value().content_size > dst_cap){
+            return dg::network_exception::CORRUPTED_FILE; //control flows reach here indicate that dst_cap >= file_sz, content_size <= file_sz (contract), dst_cap >= content_size - dst_cap < content_size == corrupted 
         }
 
-        FileHeader header{};
-        dg::network_trivial_serializer::deserialize_into(header, serialized_header.data());
-        uint64_t file_chksum = dg::network_hash::murmur_hash(dst, fsz.value());
+        uint64_t file_chksum = dg::network_hash::murmur_hash(reinterpret_cast<const char *>(dst), header.value().content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
 
-        if (file_chksum != header.chksum){
+        if (file_chksum != header.value().chksum){
             return dg::network_exception::CORRUPTED_FILE;
         }
 
@@ -286,12 +355,8 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{});    
-        std::filesystem::path header_path   = dg_get_metadata_fp(fp);
-        auto header                         = FileHeader{dg::network_hash::murmur_hash(src, src_sz), static_cast<std::chrono::nanoseconds>(dg::network_genult::utc_timestamp()).count()}; 
-        auto serialized_header              = std::array<char, HEADER_SZ>{};
-        dg::network_trivial_serializer::serialize_into(serialized_header.data(), header);
-        err = dg::network_fileio::dg_write_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+        FileHeader header{dg::network_hash::murmur_hash(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        err = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){
             return err;
@@ -323,12 +388,8 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{});
-        std::filesystem::path header_path   = dg_get_metadata_fp(fp);
-        auto header                         = FileHeader{dg::network_hash::murmur_hash(src, src_sz), static_cast<std::chrono::nanoseconds>(dg::network_genult::utc_timestamp()).count()};
-        auto serialized_header              = std::array<char, HEADER_SZ>{};
-        dg::network_trivial_serializer::serialize_into(serialized_header.data(), header);
-        err = dg::network_fileio::dg_write_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+        FileHeader header{dg::network_hash::murmur_hash(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        err = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){
             return err;

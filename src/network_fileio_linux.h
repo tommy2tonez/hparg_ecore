@@ -146,6 +146,14 @@ namespace dg::network_fileio_linux{
         dg::network_exception_handler::nothrow_log(dg_create_binary(fp, fsz));
     }
 
+    auto dg_create_cbinary(const char * fp, size_t fsz) noexcept -> exception_t{
+
+    }
+
+    void dg_create_cbinary_nothrow(const char * fp, size_t fsz) noexcept{
+
+    }
+    
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
         auto raii_fd = dg_open_file(fp, O_RDONLY | O_DIRECT | O_TRUNC);
