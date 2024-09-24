@@ -473,7 +473,7 @@ namespace dg::network_concurrency_impl1_app{
             thr_vec.push_back(thr_id);
         }
 
-        auto controller = dg::network_concurrency_impl1::ControllerFactory::spawn_daemon_controller(std::move(daemon_id_map), std::move(id_runner_map));
+        auto controller = dg::network_concurrency_impl1::ControllerFactory::spawn_daemon_controller(std::move(daemon_id_map), std::move(id_runner_map)); //
         return {std::move(controller), std::move(thr_vec)};
     }
 }

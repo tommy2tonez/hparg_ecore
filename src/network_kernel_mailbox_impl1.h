@@ -1270,7 +1270,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 cur->port_stamps.push_back(utility::unix_timestamp());
                 size_t sz = dg::network_compact_serializer::integrity_size(cur.value());
                 auto buf = dg::network_std_container::string(sz); 
-                dg::network_compact_serializer::integrity_serialize_into(buf.data(), cur.value()); //optimizable - important to make this from high_compute -> high_parallel
+                dg::network_compact_serializer::integrity_serialize_into(buf.data(), cur.value()); //consider convert -> unstable_addr str container that raii stable_addr - somewhat like realloc - to avoid computation
                 exception_t err = socket_service::nonblocking_send(*this->socket, cur->to_addr, buf.data(), sz);
                 
                 if (dg::network_exception::is_failed(err)){
@@ -1345,7 +1345,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     return false;
                 }
 
-                auto expected_nxt_ptr = dg::network_compact_serializer::integrity_deserialize_into(pkt, buf.data(), sz); //optimizable - important to make this from high-compute -> high parallel - 
+                auto expected_nxt_ptr = dg::network_compact_serializer::integrity_deserialize_into(pkt, buf.data(), sz); //consider convert -> unstable_addr str container that raii stable_addr - somewhat like realloc - to avoid computation - such that solely the kernel is responsible for populating the data
                 
                 if (!expected_nxt_ptr.has_value()){
                     dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(expected_nxt_ptr.error()));

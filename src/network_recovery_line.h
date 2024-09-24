@@ -174,7 +174,7 @@ namespace dg::network_recovery_line{
 
             void notify(size_t line_id) noexcept{
 
-                this->dispatch_ticket_container->push(line_id);
+                this->dispatch_ticket_container->push(line_id); //this will call recovery for the wrong component - yet it's expected - all recovery operation should not alter the program state - even if the component is not corrupted
             }
 
             void close(size_t line_id) noexcept{
@@ -190,11 +190,13 @@ namespace dg::network_recovery_line{
 
     }
 
+    //recovery_executable_interface is a defined-invokable-in-all-scenerios, exitable-in-all-scenerios component (even if the component does not invoke notify - this is strange - maybe there's a fix - yet it's a stricter req)
     auto get_recovery_line(std::shared_ptr<RecoveryExecutableInterface> recover_runnable) noexcept -> std::expected<size_t, exception_t>{
 
         return recovery_controller->get_recovery_line(std::move(recover_runnable));
     }
 
+    //notify the dispatcher to recover the component - dispatcher might or might not arrive - it's the caller and friends responsibility to compromise the component + abort the program after a certain threshold  
     void notify(size_t line_id) noexcept{
 
         recovery_controller->notify(line_id);

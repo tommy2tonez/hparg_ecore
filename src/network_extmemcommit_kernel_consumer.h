@@ -151,7 +151,7 @@ namespace dg::network_extmemcommit_kernel_handler{
         public:
 
             ConcurrentEventBalancer(dg::network_std_container::vector<std::unique_ptr<EventBalancerInterface>> event_balancer,
-                                    const std::integral_constant<size_t, BALANCER_SZ>) noexcept: event_balancer(std::move(event_balancer)){}
+                                    std::integral_constant<size_t, BALANCER_SZ>) noexcept: event_balancer(std::move(event_balancer)){}
             
             void push(dg::network_std_container::vector<poly_event_t> events) noexcept{
 
@@ -272,7 +272,7 @@ namespace dg::network_extmemcommit_kernel_handler{
                 }
 
                 dg::network_std_container::vector<poly_event_t> event_payload{};
-                std::expected<const char *, exception_t> rs = dg::network_compact_serializer::integrity_deserialize_into(event_payload, kernel_data->data(), kernel_data->size()); //defensive programming - make sure that this is a reverse operation of compact_serializer
+                std::expected<const char *, exception_t> rs = dg::network_compact_serializer::integrity_deserialize_into(event_payload, kernel_data->data(), kernel_data->size()); //consider convert -> unstable_addr str container that raii stable_addr - somewhat like realloc - to avoid computation
 
                 if (!rs.has_value()){
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(rs.error()));

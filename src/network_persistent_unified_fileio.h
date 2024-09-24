@@ -105,16 +105,49 @@ namespace dg::network_persistent_unified_fileio{
 
     inline std::unique_ptr<UnifiedFsysControllerInterface> controller{};
 
-    //replica is, like concurrency, a very hard problem to define
-    //where to compromise the component requires experts' opinion + specific use cases
-    //this component is rather a feature than a neccessity
+    //WLOG
+    //100GB for each f(x) -> x neural network 
+    //estimated compression rate = 1% on all dataset
+    //does a 10^4 networks like that
 
-    //this does empty initialization + snaps unified fsys controller to a defined state
-    //every external access to the physical files is undefined behavior and not the responsibility of this component - maybe another component inherits this component
-    //this component assumes that f(g(x)) = x, for f is read, g is write operation
-    //the contract is either guaranteed by the kernel or the network_fileio's internal mechanisms (checksum, timestamp and friends) - not this component responsibility
+    //let's build a filesystem
+    //precisely this
+    //the largest distributed filesystem the world has ever seen by using the new compression tech
+    //the idea is simple
+    //dictionary - middle layers - return true | false for compressible status - if true, route to compressed storage - if false - route to stable storage
 
-    void init(std::string * virtual_filepath, std::filesystem::path * physical_filepath, size_t * n, size_t replication_sz){
+    //interface:
+
+    //unstable interface
+    //read() - return true if the operation is completed, does not guarantee the integrity of the underlying content
+    //write() - return true if the operation is completed, does not guarantee the integrity of the underlying content
+    
+    //stable interface - inherit from unstable interface
+    //read() - return true if the operation is a true reverse operation of the last write push such that g(f(x)) = x - where x is the write's buffer arg
+    //write() - return true if the operation is completed, does not guarantee the integrity of the underlying content
+    //implementation - use checksum + runlength + timestamp and friends
+
+    //stable noexcept interface - this 
+    //ETA: 1 month - sharp
+    
+    //what does that mean for the future of data-warehousing (the very base of database)?
+    //what does that mean for the future of intra-planet communication? 
+    //what does that mean for the future of cloud computing (do you actually need that many physical idling servers? - or only a certain uptime servers - or if techno is advanced enough - can users actually work on the virtual buffer without any drawbacks?) 
+
+    //all datalake is stored in the DogeGraph filesystem
+    //each transaction is at least 10GB/ operation
+    //each transaction invokes an ingestion request from the actual database - if the data is not already in the processing system (this)
+
+    //imagine a system consists of:
+    //atomic_buffers + storage engines
+    //ingestion accelerators | ingestion gate (guarantee that transaction - one or many commits - is atomic - this is the sole interface to interact with atomic_buffers + storage engines)
+    //core - this
+    //allocators + decompression plan maker (provide a high level decompression plan + lifetime of decompression (to avoid overhead of moving data from/to storage engine + decompression time - this oversteps into the responsibility of cache))
+    //user_cache_system
+    //enduser
+
+
+    void init(std::filesystem::path * main_filepath, std::filesystem::path * replica_filepath, size_t * n, size_t replication_sz){
 
     }
 
@@ -319,20 +352,20 @@ namespace dg::network_persistent_unified_fileio{
         dg::network_exception_handler::nothrow_log(dg_write_binary_indirect(unified_fp, src, src_sz));
     }
 
-    auto dg_write_binary(const char * unfiied_fp, const void * src, size_t src_sz) noexcept -> exception_t{
+    auto dg_write_binary(const char * unified_fp, const void * src, size_t src_sz) noexcept -> exception_t{
 
-        exception_t err = dg_write_binary_direct(unfiied_fp, src, src_sz); 
+        exception_t err = dg_write_binary_direct(unified_fp, src, src_sz); 
 
         if (err == dg::network_exception::SUCCESS){
             return dg::network_exception::SUCCESS;
         }
 
-        return dg_write_binary_indirect(unfiied_fp, src, src_sz);
+        return dg_write_binary_indirect(unified_fp, src, src_sz);
     }
 
-    void dg_write_binary_nothrow(const char * unfiied_fp, const void * src, size_t src_sz) noexcept{
+    void dg_write_binary_nothrow(const char * unified_fp, const void * src, size_t src_sz) noexcept{
 
-        dg::network_exception_handler::nothrow_log(dg_write_binary(unfiied_fp, src, src_sz));
+        dg::network_exception_handler::nothrow_log(dg_write_binary(unified_fp, src, src_sz));
     }
 }
 

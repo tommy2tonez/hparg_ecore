@@ -15,7 +15,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
     struct ObserverInterface{
         virtual ~ObserverInterface() noexcept = default;
-        virtual void notify() noexcept = 0;
+        virtual void notify() noexcept = 0; //this has to be an exitable-in-all-scenerios-invoke - to enforce this - return a std::atomic<bool>& for notifier to set - it's the observer's worker responsibility to observe the std::atomic<bool>& intervally  
     };
 
     struct HeartBeatMonitorInterface{
@@ -165,7 +165,6 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
                 return std::format(fmt, addr.ip, size_t{addr.port});
             }
     };
-
 
     class HeartBeatBroadcaster: public virtual dg::network_concurrency::WorkerInterface{
 
