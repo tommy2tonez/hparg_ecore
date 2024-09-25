@@ -30,7 +30,7 @@ namespace dg::network_cudamap_x_impl1::model{
     struct MemoryNode{
         std::unique_ptr<cuda_ptr_t> cuptr; //deallocator
         std::optional<FSysPtrInfo> fsys_ptr_info;
-        std::chrono::nanoseconds timestamp;
+        std::chrono::nanoseconds last_modified;
     };
 
     struct HeapNode: MemoryNode{
@@ -53,6 +53,21 @@ namespace dg::network_cudamap_x_impl1::model{
             return dg::memult::advance(safe_ptr_access(safe_ptr_access(this->node)->cuptr.get()), this->off);
         }
     };
+
+    struct ConcurrentMapResource{
+        MapResource resource;
+        size_t distribution_id;
+
+        auto ptr() const noexcept -> void *{
+
+            return resource.ptr();
+        }
+
+        auto const_ptr() const noexcept -> const void *{
+
+            return resource.const_ptr();
+        }
+    };
 }
 
 namespace dg::network_cudamap_x_impl1::interface{
@@ -68,7 +83,13 @@ namespace dg::network_cudamap_x_impl1::interface{
     struct MapInterface{
         virtual ~MapInterface() = default;
         virtual auto map(cufs_ptr_t) noexcept -> std::expected<MapResource, exception_t> = 0;
-        virtual void map_release(MapResource) noexcept = 0;
+        virtual void unmap(MapResource) noexcept = 0;
+    };
+
+    struct ConcurrentMapInterface{
+        virtual ~ConcurrentMapInterface() = default;
+        virtual auto map(cufs_ptr_t) noexcept -> std::expected<ConcurrentMapResource, exception_t> = 0;
+        virtual void unmap(ConcurrentMap) noexcept = 0;
     };
 
     struct MapDistributorInterface{
@@ -104,11 +125,11 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 return 1;
             }
             
-            if (lhs.timestamp < rhs.timestamp){
+            if (lhs.last_modified < rhs.last_modified){
                 return -1;
             }
 
-            if (lhs.timestamp > rhs.timestamp){
+            if (lhs.last_modified > rhs.last_modified){
                 return 1;
             }
 
@@ -146,12 +167,12 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
                 const std::filesystem::path& inpath = dict_ptr->second;
                 const char * cstr_path              = inpath.c_str();
-                cuda_ptr_t dst                      = root.cuptr.get();
+                cuda_ptr_t dst                      = *root.cuptr;
                 
                 dg::network_cufsio::dg_read_binary_nothrow(cstr_path, dst, this->memregion_sz);
                 
-                root.fsys_ptr_info  = VMAPtrInfo{region, 0u};
-                root.timestamp      = dg::network_genult::unix_timestamp();
+                root.fsys_ptr_info  = FSysPtrInfo{region, 0u};
+                root.last_modified  = dg::network_genult::unix_timestamp();
 
                 return dg::network_exception::SUCCESS;
             }
@@ -182,12 +203,12 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
                 const std::filesystem::path& opath  = dict_ptr->second;
                 const char * cstr_path              = opath.c_str();
-                cuda_ptr_t src                      = root.cuptr.get();
+                cuda_ptr_t src                      = *root.cuptr;
                 
                 dg::network_cufsio::dg_write_binary_nothrow(cstr_path, src, this->memregion_sz);
 
                 root.fsys_ptr_info  = std::nullopt;
-                root.timestamp      = dg::network_genult::unix_timestamp();
+                root.last_modified  = dg::network_genult::unix_timestamp();
             }
 
         private:
@@ -203,7 +224,6 @@ namespace dg::network_cudamap_x_impl1::implementation{
             }
     };
 
-    template <size_t MEMREGION_SZ>
     class Map: public virtual MapInterface{
 
         private:
@@ -213,21 +233,21 @@ namespace dg::network_cudamap_x_impl1::implementation{
             std::unique_ptr<CuFSLoaderInterface> fsys_loader;
             MemoryNode tmp_space;
             std::unique_ptr<Lock> lck;
+            size_t memregion_sz;
 
         public:
-
-            static_assert(dg::memult::is_pow2(MEMREGION_SZ));
 
             explicit Map(std::vector<std::unique_ptr<HeapNode>> priority_queue, 
                          std::unordered_map<cufs_ptr_t, HeapNode *> allocation_dict,
                          std::unique_ptr<CuFSLoaderInterface> fsys_loader,
                          MemoryNode tmp_space,
                          std::unique_ptr<Lock> lck,
-                         std::integral_constant<size_t, MEMREGION_SZ>) noexcept: priority_queue(std::move(priority_queue)),
-                                                                                 allocation_dict(std::move(allocation_dict)),
-                                                                                 fsys_loader(std::move(fsys_loader)),
-                                                                                 tmp_space(std::move(tmp_space)),
-                                                                                 lck(std::move(lck)){}
+                         size_t memregion_sz) noexcept: priority_queue(std::move(priority_queue)),
+                                                        allocation_dict(std::move(allocation_dict)),
+                                                        fsys_loader(std::move(fsys_loader)),
+                                                        tmp_space(std::move(tmp_space)),
+                                                        lck(std::move(lck)),
+                                                        memregion_sz(memregion_sz){}
 
             auto map(cufs_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
@@ -235,10 +255,10 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 return this->internal_map(ptr);
             }
 
-            void map_release(MapResource map_resource) noexcept{
+            void unmap(MapResource map_resource) noexcept{
 
                 auto lck_grd = dg::genult::lock_guard(*this->lck);
-                this->internal_map_release(map_resource);
+                this->internal_unmap(map_resource);
             }
 
         private:
@@ -289,6 +309,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
                 dg::network_genult::safe_optional_access(dg::network_genult::safe_ptr_access(node)->fsys_ptr_info);
                 node->fsys_ptr_info->reference += 1;
+                node->last_modified = dg::network_genult::unix_timestamp();
                 heap_push_down_at(node->idx);
             }
 
@@ -304,7 +325,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 }
 
                 node->fsys_ptr_info->reference -= 1;
-                node->timestamp = dg::network_genult::unix_timestamp();
+                node->last_modified = dg::network_genult::unix_timestamp();
                 heap_push_up_at(node->idx);
             }
 
@@ -339,12 +360,12 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
             auto internal_map(cufs_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
-                cufs_ptr_t ptr_region   = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                cufs_ptr_t ptr_region   = dg::memult::region(ptr, this->memregion_sz);
                 auto dict_ptr           = this->allocation_dict_find_entry(ptr_region);
 
                 if (dict_ptr != this->allocation_dict_end()){
                     heap_increase_reference(dict_ptr->second);
-                    return MapResource{dict_ptr->second, dg::memult::region_offset(ptr, std::integral_constant<size_t, MEMREGION_SZ>{})};
+                    return MapResource{dict_ptr->second, dg::memult::region_offset(ptr, this->memregion_sz)};
                 }
 
                 if (static_cast<bool>(this->priority_queue[0u]->fsys_ptr_info)){
@@ -379,29 +400,28 @@ namespace dg::network_cudamap_x_impl1::implementation{
                 return this->internal_map(ptr);
             }
 
-            void internal_map_release(MapResource map_resource) noexcept{
+            void internal_unmap(MapResource map_resource) noexcept{
 
                 heap_decrease_reference(map_resource.node);
             } 
     };
     
-    template <size_t MEMREGION_SZ> //fine - inherit a virtual interface - this is not bad practice
     class StdMapDistribution: public virtual MapDistributorInterface{
 
         private:
 
             std::unordered_map<cufs_ptr_t, size_t> region_id_dict;
-        
+            size_t memregion_sz;
+
         public:
 
-            static_assert(dg::memult::is_pow2(MEMREGION_SZ));
-
             explicit StdMapDistribution(std::unordered_map<cufs_ptr_t, size_t> region_id_dict,
-                                        std::integral_constant<size_t, MEMREGION_SZ>) noexcept: region_id_dict(std::move(region_id_dict)){}
+                                        size_t memregion_sz) noexcept: region_id_dict(std::move(region_id_dict)),
+                                                                       memregion_sz(memregion_sz){}
 
             auto id(cufs_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
-                cufs_ptr_t ptr_region   = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                cufs_ptr_t ptr_region   = dg::memult::region(ptr, this->memregion_sz);
                 auto dict_ptr           = this->region_id_dict.find(ptr_region);
 
                 if (dict_ptr == this->region_id_dict.end()){
@@ -412,7 +432,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
             }
     };
 
-    class ConcurrentMap: public virtual MapInterface{
+    class ConcurrentMap: public virtual ConcurrentMapInterface{
 
         private:
 
@@ -425,7 +445,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
                                    std::unique_ptr<MapDistributorInterface> map_distributor) noexcept: map_table(std::move(map_table)),
                                                                                                        map_distributor(std::move(map_distributor)){}
 
-            auto map(cufs_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
+            auto map(cufs_ptr_t ptr) noexcept -> std::expected<ConcurrentMapResource, exception_t>{
 
                 auto rs = this->map_distributor->id(ptr);
 
@@ -433,22 +453,12 @@ namespace dg::network_cudamap_x_impl1::implementation{
                     return std::unexpected(rs.error());
                 }
 
-                return map_table[rs.value()]->map(ptr);
+                return ConcurrentMapResource{map_table[rs.value()]->map(ptr), rs.value()};
             }
             
-            void map_release(MapResource map_resource) noexcept{
+            void unmap(ConcurrentMapResource map_resource) noexcept{
                 
-                cufs_ptr_t ptr  = dg::network_genult::safe_optional_access(dg::network_genult::safe_pointer_access(map_resource.node)->fsys_ptr_info)->ptr;
-                auto rs         = this->map_distributor->id(ptr);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (!rs.has_value()){
-                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                map_table[rs.value()]->map_release(map_resource);
+                map_table[map_resource.distribution_id]->unmap(map_resource.resource);
             }
     };
 }

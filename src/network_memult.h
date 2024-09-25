@@ -51,14 +51,14 @@ namespace dg::memult{
         return static_cast<T *>(arr);
     }
 
-    inline auto aligned_alloc_cpp(size_t alignment_sz, size_t blk_sz){
+    // inline auto aligned_alloc_cpp(size_t alignment_sz, size_t blk_sz){
 
-        if (auto rs = std::aligned_alloc(alignment_sz, blk_sz); rs){
-            return rs;
-        }
+    //     if (auto rs = std::aligned_alloc(alignment_sz, blk_sz); rs){
+    //         return rs;
+    //     }
 
-        throw std::bad_alloc();
-    }
+    //     throw std::bad_alloc();
+    // }
 
     constexpr auto align(uintptr_t buf, size_t alignment_sz) noexcept -> uintptr_t{
 

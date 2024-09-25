@@ -225,7 +225,7 @@ namespace dg::network_allocation{
 
         assert(dg::memult::is_pow2(alignment));
 
-        size_t fwd_mul_factor   = std::max(static_cast<size_t>(alignment), static_cast<size_t>(LEAF_SZ)) / LEAF_SZ - 1; 
+        size_t fwd_mul_factor   = std::max(static_cast<size_t>(alignment), static_cast<size_t>(LEAF_SZ)) / LEAF_SZ - 1;
         size_t adj_blk_sz       = blk_sz + fwd_mul_factor * LEAF_SZ;
         ptr_type ptr            = allocator.malloc(adj_blk_sz);
 
@@ -312,15 +312,15 @@ namespace dg::network_allocation{
     template <class T>
     struct NoExceptAllocator{
  
-        using value_type        = T;
-        using pointer           = T *;
-        using const_pointer     = const T *;
-        using reference         = T&;
-        using const_reference   = const T&;
-        using size_type         = size_t;
-        using difference_type   = intmax_t;
-        using is_always_equal   = std::true_type;
-        using propagate_on_container_move_assignment = std::true_type;
+        using value_type                                = T;
+        using pointer                                   = T *;
+        using const_pointer                             = const T *;
+        using reference                                 = T&;
+        using const_reference                           = const T&;
+        using size_type                                 = size_t;
+        using difference_type                           = intmax_t;
+        using is_always_equal                           = std::true_type;
+        using propagate_on_container_move_assignment    = std::true_type;
         
         template <class U>
         struct rebind{
@@ -339,6 +339,10 @@ namespace dg::network_allocation{
         
         auto allocate(size_t n, const void * hint) -> pointer{ //noexcept is guaranteed internally - this is to comply with std
 
+            if (n == 0u){
+                return nullptr;
+            }
+
             void * buf = cmalloc(n * sizeof(T));
 
             if (!buf){
@@ -354,9 +358,16 @@ namespace dg::network_allocation{
             return allocate(n, std::add_pointer_t<const void>{});
         }
         
-        void deallocate(pointer p, size_t){ //noexcept is guaranteed internally - this is to comply with std
+        //according to std - deallocate arg is valid ptr - such that allocate -> std::optional<ptr_type>, void deallocate(ptr_type)
+        void deallocate(pointer p, size_t n){ //noexcept is guaranteed internally - this is to comply with std
 
-            cfree(static_cast<void *>(p));
+            //whatever std - 
+
+            if (n == 0u){
+                return;
+            }
+
+            cfree(static_cast<void *>(p)); //fine - a reverse operation of allocate
         }
 
         consteval auto max_size() const noexcept -> size_type{
@@ -377,14 +388,14 @@ namespace dg::network_allocation{
         }
     };
 
-    template <class T1, class T2>
-    constexpr bool operator==(const NoExceptAllocator<T1>&, const NoExceptAllocator<T2>&) noexcept{
+    template <class T, class T1>
+    constexpr auto operator==(const NoExceptAllocator<T>&, const NoExceptAllocator<T1>&) noexcept -> bool{
 
         return true;
     }
 
-    template<class T1, class T2>
-    constexpr bool operator!=(const NoExceptAllocator<T1>&, const NoExceptAllocator<T2>&) noexcept{
+    template<class T, class T1>
+    constexpr auto operator!=(const NoExceptAllocator<T>&, const NoExceptAllocator<T1>&) noexcept -> bool{
 
         return false;
     }

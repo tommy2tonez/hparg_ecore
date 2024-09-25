@@ -11,6 +11,7 @@
 #include <vector>
 #include "network_exception.h"
 #include "network_log.h"
+#include "network_utility.h"
 
 namespace dg::network_concurrency_impl1_linux::daemon_option_ns{
 
@@ -35,7 +36,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct WorkerInterface{
         virtual ~WorkerInterface() noexcept = default;
-        virtual bool run_one_epoch() noexcept = 0; 
+        virtual bool run_one_epoch() noexcept = 0; //precond - exitable-in-all-scenerios execution
     };
     
     struct ReschedulerInterface{
@@ -45,7 +46,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonRunnerInterface{
         virtual ~DaemonRunnerInterface() noexcept = default;
-        virtual void set_worker(std::unique_ptr<WorkerInterface>) noexcept = 0;
+        virtual void set_worker(std::unique_ptr<WorkerInterface>) noexcept = 0; //precond - valid_unique_ptr<> - need to enforce this by using function signature
     };
 
     struct DaemonDedicatedRunnerInterface: DaemonRunnerInterface{
@@ -55,7 +56,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonControllerInterface{
         virtual ~DaemonControllerInterface() noexcept = default;
-        virtual auto _register(daemon_kind_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0;
+        virtual auto _register(daemon_kind_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0; //precond - valid_unique_ptr<> - need to enforce this by using function signature
         virtual void deregister(size_t) noexcept = 0;
     };
 
@@ -115,7 +116,7 @@ namespace dg::network_concurrency_impl1_linux{
 
         private:
 
-            std::shared_ptr<std::atomic<bool>> poison_pill; //whatever - this is hard to implement correctly - ask std - not me
+            std::shared_ptr<std::atomic<bool>> poison_pill; //whatever - this is extremely hard to implement correctly - ask std - not me
             std::unique_ptr<std::atomic_flag> mtx;
             std::shared_ptr<WorkerInterface> worker;
             std::unique_ptr<ReschedulerInterface> rescheduler; 
@@ -293,7 +294,7 @@ namespace dg::network_concurrency_impl1_linux{
     using dg_legacy_cpuset_free_t = void (*)(cpu_set_t *) noexcept; 
 
     struct NonLegacyPosixCpuSet{
-        std::unique_ptr<cpu_set_t, dg_legacy_cpuset_free_t> legacy_cpusetp;
+        std::unique_ptr<cpu_set_t, dg_legacy_cpuset_free_t> legacy_cpusetup;
         size_t alloc_sz;
     };
 
@@ -315,7 +316,7 @@ namespace dg::network_concurrency_impl1_linux{
 
         static auto add_cpu_to_cpuset(NonLegacyPosixCpuSet * dst, int cpu_id){
 
-            CPU_SET_S(cpu_id, dst->alloc_sz, dst->legacy_cpusetp.get());
+            CPU_SET_S(cpu_id, dst->alloc_sz, dst->legacy_cpusetup.get());
         }
     };
 
@@ -324,7 +325,7 @@ namespace dg::network_concurrency_impl1_linux{
         template <class T>
         static void internal_pthread_setaffinity_np(T&& thr_handle, NonLegacyPosixCpuSet * cpusetp){
 
-            int err = pthread_setaffinity_np(std::forward<T>(thr_handle), cpusetp->alloc_sz, cpusetp->legacy_cpusetp.get());
+            int err = pthread_setaffinity_np(std::forward<T>(thr_handle), cpusetp->alloc_sz, cpusetp->legacy_cpusetup.get());
             
             if (err != 0){
                 if (err == EFAULT){
@@ -396,7 +397,7 @@ namespace dg::network_concurrency_impl1_linux{
             auto poison_pill    = std::make_shared<std::atomic<bool>>(bool{false});
             auto worker         = WorkerFactory::spawn_rest();
             auto daemon_runner  = std::make_shared<StdDaemonRunner>(poison_pill, std::move(mtx), std::move(worker), std::move(rescheduler));
-            auto thr_instance   = StdThreadFactory::spawn_thread(daemon_runner); 
+            auto thr_instance   = StdThreadFactory::spawn_thread(daemon_runner);
             auto raii_runner    = std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_instance), poison_pill); 
 
             return raii_runner;
@@ -404,6 +405,8 @@ namespace dg::network_concurrency_impl1_linux{
     };
 
     struct ControllerFactory{
+
+        //need to abstractize this
         static auto spawn_daemon_controller(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
                                             std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map) -> std::unique_ptr<DaemonControllerInterface>{
 

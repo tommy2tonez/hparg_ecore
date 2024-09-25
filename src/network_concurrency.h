@@ -28,7 +28,7 @@ namespace dg::network_concurrency{
         jg::dense_hash_map<std::thread::id, size_t> thrid_to_idx_map;
     };
 
-    using concurrency_resource_container = dg::network_genult::singleton<signature_dg_network_concurrency, ConcurrencyResource>;
+    inline ConcurrencyResource concurrency_resource{};
 
     void init(){
 
@@ -38,23 +38,23 @@ namespace dg::network_concurrency{
                                                                 TRANSPORTATION_DAEMON_THREAD_COUNT,
                                                                 HEARTBEAT_DAEMON_THREAD_COUNT};
 
-        auto [controller, thr_vec]                              = dg::network_concurrency_impl1_app::spawn(config); 
-        thr_vec                                                 = dg::network_genult::enumerate(std::move(thr_vec));
-        concurrency_resource_container::get().daemon_controller = std::move(controller);
-        concurrency_resource_container::get().thrid_to_idx_map  = jg::dense_hash_map<std::thread::id, size_t>(thr_vec.begin(), thr_vec.end(), thr_vec.size());
+        auto [controller, thr_vec]              = dg::network_concurrency_impl1_app::spawn(config); 
+        thr_vec                                 = dg::network_genult::enumerate(std::move(thr_vec));
+        concurrency_resource.daemon_controller  = std::move(controller);
+        concurrency_resource.thrid_to_idx_map   = jg::dense_hash_map<std::thread::id, size_t>(thr_vec.begin(), thr_vec.end(), thr_vec.size());
     }
 
     void deinit() noexcept{
 
-        concurrency_resource_container::get() = {};
+        concurrency_resource = {};
     }
 
     auto this_thread_idx() noexcept -> size_t{
         
-        auto ptr = concurrency_resource_container::get().thrid_to_idx_map.find(std::this_thread::get_id());
+        auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (ptr == concurrency_resource_container::get().thrid_to_idx_map.end()){
+            if (ptr == concurrency_resource.thrid_to_idx_map.end()){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
@@ -66,27 +66,27 @@ namespace dg::network_concurrency{
     auto daemon_register(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
 
         if constexpr(DEBUG_MODE_FLAG){
-            auto ptr = concurrency_resource_container::get().thrid_to_idx_map.find(std::this_thread::get_id());
-            if (ptr != concurrency_resource_container::get().thrid_to_idx_map.end()){
+            auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
+            if (ptr != concurrency_resource.thrid_to_idx_map.end()){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::PTHREAD_CAUSA_SUI));
                 std::abort();
             }
         }
 
-        concurrency_resource_container::get().daemon_controller->_register(daemon_kind, std::move(worker));
+        concurrency_resource.daemon_controller->_register(daemon_kind, std::move(worker));
     }
 
     void daemon_deregister(size_t id) noexcept{
 
         if constexpr(DEBUG_MODE_FLAG){
-            auto ptr = concurrency_resource_container::get().thrid_to_idx_map.find(std::this_thread::get_id());
-            if (ptr != concurrency_resource_container::get().thrid_to_idx_map.end()){
+            auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
+            if (ptr != concurrency_resource.thrid_to_idx_map.end()){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::PTHREAD_CAUSA_SUI));
                 std::abort();
             }
         }
 
-        concurrency_resource_container::get().daemon_controller->deregister(id);
+        concurrency_resource.daemon_controller->deregister(id);
     }
 
     using daemon_deregister_t = void (size_t) noexcept; 
