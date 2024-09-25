@@ -389,7 +389,7 @@ namespace dg::network_cufsio_linux::cufs_io{
         return dg::network_exception::SUCCESS; 
     }
 
-    auto dg_cuwrite_file(CudafileDescriptor& fd, cuda_legacy_ptr_t src, size_t sz, size_t file_off, size_t src_off) noexcept -> exception_t{ //TODO: add constness
+    auto dg_cuwrite_file(CudaFileDescriptor& fd, cuda_legacy_ptr_t src, size_t sz, size_t file_off, size_t src_off) noexcept -> exception_t{ //TODO: add constness
 
         auto err = cuFileWrite(fd.cf_handle, src, dg::network_genult::wrap_safe_integer_cast(sz), dg::network_genult::wrap_safe_integer_cast(file_off), dg::network_genult::wrap_safe_integer_cast(src_off));
 

@@ -8,6 +8,7 @@
 #include "network_exception.h"
 #include "network_log.h"
 #include <memory>
+#include "network_utility.h"
 
 namespace dg::network_allocation_clib{
 
@@ -75,22 +76,21 @@ namespace dg::network_allocation_clib{
 
         size_t adjusted_blk_sz = blk_sz + (alignment_sz - 1) + sizeof(cuda_ptr_header_t); //this guarantee that align(fwd(buf, cuda_ptr_header_t), alignment_sz) return aligned ptr - and write cuda_ptr_header_t to std::advance(ptr, -sizeof(cuda_ptr_header_t)) 
         void * rs{};
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaMalloc(&rs, adjusted_blk_sz));
+        exception_t err = dg::network_cuda_controller::cuda_malloc(&rs, adjusted_blk_sz);
 
         if (dg::network_exception::is_failed(err)){
             dg::network_exception::throw_exception(err);
         }
 
         auto mem_backout    = [rs]() noexcept{
-            exception_t err = dg::network_exception::wrap_cuda_exception(cudaFree(rs));
-            dg::network_exception_handler::nothrow_log(err);
+            dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::cuda_free(rs));
         };
         auto mem_guard      = dg::network_genult::resource_guard(std::move(mem_backout));
         void * aligned_ptr  = dg::memult::align(dg::memult::badvance(rs, sizeof(cuda_ptr_header_t)), alignment_sz);
         void * header_ptr   = dg::memult::badvance(aligned_ptr, -static_cast<intmax_t>(sizeof(cuda_ptr_header_t)));
         auto header         = static_cast<cuda_ptr_header_t>(dg::memult::distance(rs, aligned_ptr));
 
-        err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(header_ptr, &header, sizeof(cuda_ptr_header_t), cudaMemcpyHostToDevice));
+        err = dg::network_cuda_controller::cuda_memcpy(header_ptr, &header, sizeof(cuda_ptr_header_t), cudaMemcpyHostToDevice);
 
         if (dg::network_exception::is_failed(err)){
             dg::network_exception::throw_exception(err);
@@ -107,16 +107,16 @@ namespace dg::network_allocation_clib{
 
     void cuda_free(void * ptr) noexcept{
 
-        if (!ptr){ 
+        if (!ptr){
             return;
         }
 
         void * header_ptr   = dg::memult::badvance(ptr, -static_cast<intmax_t>(sizeof(cuda_ptr_header_t)));
         auto header         = cuda_ptr_header_t{};
-        exception_t err     = dg::network_exception::wrap_cuda_exception(cudaMemcpy(&header, header_ptr, sizeof(cuda_ptr_header_t), cudaMemcpyDeviceToHost));
+        exception_t err     = dg::network_cuda_controller::cuda_memcpy(&header, header_ptr, sizeof(cuda_ptr_header_t), cudaMemcpyDeviceToHost));
         dg::network_exception_handler::nothrow_log(err);
         void * org_ptr      = dg::memult::badvance(ptr, -static_cast<intmax_t>(header));
-        err                 = dg::network_exception::wrap_cuda_exception(cudaFree(org_ptr));
+        err                 = dg::network_cuda_controller::cuda_free(org_ptr);
         dg::network_exception_handler::nothrow_log(err);
     }
 
@@ -139,6 +139,63 @@ namespace dg::network_allocation_clib{
 
         return {cuda_aligned_malloc(alignment_sz, blk_sz), cuda_free};
     }
+}
+
+namespace dg::network_allocation_cuda_x{
+
+    //this should be the sole interface used for allocating cuda memory across the application - 
+    //don't ask me - ask cuda - 
+
+    struct CudaGlobalPtr{
+        int device_id;
+        void * dev_ptr;
+    };
+
+    using cuda_ptr_t = CudaGlobalPtr;
+
+    auto cuda_malloc(int device_id, size_t blk_sz) -> CudaGlobalPtr{
+
+        auto cuda_device_grd = dg::network_cuda_controller::get_cuda_device_guard(device_id);  
+        void * mem = dg::network_allocation_clib::cuda_malloc(blk_sz); 
+
+        return CudaGlobalPtr{device_id, mem};
+    }
+
+    auto cuda_aligned_malloc(int device_id, size_t alignment_sz, size_t blk_sz) -> CudaGlobalPtr{
+
+        auto cuda_device_grd = dg::network_cuda_controller::get_cuda_device_guard(device_id);
+        void * mem = dg::network_allocation_clib::cuda_aligned_malloc(alignment_sz, blk_sz);
+
+        return CudaGlobalPtr{device_id, mem};
+    }
+
+    auto cuda_free(CudaGlobalPtr ptr) noexcept{
+
+        auto cuda_device_grd = dg::network_cuda_controller::get_cuda_device_guard(ptr.device_id);
+        dg::network_allocation_clib::cuda_free(ptr.dev_ptr);
+    }
+
+    void cuda_memset(CudaGlobalPtr ptr, int c, size_t sz){
+
+        auto cuda_device_grd = dg::network_cuda_controller::get_cuda_device_guard(ptr.device_id);
+        dg::network_allocation_clib::cuda_memset(ptr.dev_ptr, c, sz);
+    }
+
+    void cuda_memcpy(CudaGlobalPtr dst, CudaGlobalPtr src, size_t sz){
+
+        dg::network_exception_handler::throw_nolog(dg::network_cuda_controller::cuda_mempy_peer(dst.dev_ptr, dst.device_id, src.dev_ptr, src.device_id, sz));
+    } 
+
+    auto cudaraii_malloc(int device_id, size_t blk_sz) -> dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaGlobalPtr, decltype(&cuda_free)>{ //i hate the nothrow_unique_raii yet this is the way
+
+        return {cuda_malloc(device_id, blk_sz), cuda_free};
+    }
+
+    auto cudaraii_aligned_malloc(int device_id, size_t alignment_sz, size_t blk_sz) -> dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaGlobalPtr, decltype(&cuda_free)>{
+
+        return {cuda_aligned_malloc(device_id, alignment_sz, blk_sz), cuda_free};
+    }
+    
 }
 
 #endif

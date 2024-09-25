@@ -26,7 +26,7 @@ namespace dg::network_cudamap_x_impl1::model{
         cufs_ptr_t ptr;
         size_t reference;
     };
-
+    
     struct MemoryNode{
         std::unique_ptr<cuda_ptr_t> cuptr; //deallocator
         std::optional<FSysPtrInfo> fsys_ptr_info;
@@ -469,5 +469,6 @@ namespace dg::network_cudamap_x_impl1{
     auto make(cufs_ptr_t * region, std::filesystem::path * path, fsys_device_id_t * device_id, size_t n, std::integral_constant<size_t, MEMREGION_SZ>) -> std::unique_ptr<interface::MapInterface>{
 
     }
-} 
+}
+
 #endif
