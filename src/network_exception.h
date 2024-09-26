@@ -36,46 +36,49 @@ namespace dg::network_exception{
         invalid_arg() noexcept: base_exception("invalid_arg"){}
     };
     
-    static inline constexpr exception_t SUCCESS                         = 0u;
-    static inline constexpr exception_t CRITICAL_FAILURE                = 0u;
-    static inline constexpr exception_t OCCUPIED_MEMREGION              = 0u;
-    static inline constexpr exception_t UNWAITABLE_EXCEPTION            = 0u;
-    static inline constexpr exception_t SEGFAULT                        = 0u;
-    static inline constexpr exception_t INTERNAL_CORRUPTION             = 0u;
-    static inline constexpr exception_t CUDA_DEVICE_NOT_FOUND           = 0u;
-    static inline constexpr exception_t CUDA_DEVICE_NOT_SUPPORTED       = 0u;
-    static inline constexpr exception_t UNMET_PRECOND                   = 0u; 
-    static inline constexpr exception_t RECOVERABLE_OUT_OF_MEMORY       = 0u;
-    static inline constexpr exception_t OUT_OF_MEMORY                   = 0u;  
-    static inline constexpr exception_t INVALID_SERIALIZATION_FORMAT    = 0u;
-    static inline constexpr exception_t INVALID_VMAPTR_FORMAT           = 0u;
-    static inline constexpr exception_t INVALID_DICTIONARY_KEY          = 0u;
-    static inline constexpr exception_t INVALID_TABLE_DISPATCH_CODE     = 0u;
-    static inline constexpr exception_t INCOMPATIBLE_OPERATABLE_ID      = 0u;
-    static inline constexpr exception_t BAD_TILE_MEMBER_ACCESS          = 0u; 
-    static inline constexpr exception_t BAD_PTR_ACCESS                  = 0u;
-    static inline constexpr exception_t BAD_OPTIONAL_ACCESS             = 0u; 
-    static inline constexpr exception_t BAD_RAII_ACCESS                 = 0u;
-    static inline constexpr exception_t BAD_ALIGNMENT                   = 0u;
-    static inline constexpr exception_t UNREGISTERED_CUFILE_PTR         = 0u;
-    static inline constexpr exception_t RUNTIME_SOCKETIO_ERROR          = 0u;
-    static inline constexpr exception_t BAD_SPIN                        = 0u;
-    static inline constexpr exception_t BUFFER_OVERFLOW                 = 0u;
-    static inline constexpr exception_t RUNTIME_FILEIO_ERROR            = 0u; 
-    static inline constexpr exception_t LOST_RETRANSMISSION             = 0u;
-    static inline constexpr exception_t INVALID_INIT_ARG                = 0u;
-    static inline constexpr exception_t UNSUPPORTED_DAEMON_KIND         = 0u;
-    static inline constexpr exception_t NO_DAEMON_RUNNER_AVAILABLE      = 0u;
-    static inline constexpr exception_t INVALID_ARGUMENT                = 0u;
-    static inline constexpr exception_t UNIDENTIFIED_EXCEPTION          = 0u;
-    static inline constexpr exception_t PTHREAD_EFAULT                  = 0u;
-    static inline constexpr exception_t PTHREAD_EINVAL                  = 0u;
-    static inline constexpr exception_t PTHREAD_ESRCH                   = 0u;
-    static inline constexpr exception_t PTHREAD_CAUSA_SUI               = 0u;
-    static inline constexpr exception_t UNDEFINED_HARDWARE_CONCURRENCY  = 0u; 
-    static inline constexpr exception_t FILE_NOT_FOUND                  = 0u;
-    static inline constexpr exception_t CORRUPTED_FILE                  = 0u;
-    
+    static inline constexpr exception_t SUCCESS                             = 0u;
+    static inline constexpr exception_t CRITICAL_FAILURE                    = 0u;
+    static inline constexpr exception_t OCCUPIED_MEMREGION                  = 0u;
+    static inline constexpr exception_t UNWAITABLE_EXCEPTION                = 0u;
+    static inline constexpr exception_t SEGFAULT                            = 0u;
+    static inline constexpr exception_t INTERNAL_CORRUPTION                 = 0u;
+    static inline constexpr exception_t CUDA_DEVICE_NOT_FOUND               = 0u;
+    static inline constexpr exception_t CUDA_DEVICE_NOT_SUPPORTED           = 0u;
+    static inline constexpr exception_t UNMET_PRECOND                       = 0u; 
+    static inline constexpr exception_t RECOVERABLE_OUT_OF_MEMORY           = 0u;
+    static inline constexpr exception_t OUT_OF_MEMORY                       = 0u;  
+    static inline constexpr exception_t INVALID_SERIALIZATION_FORMAT        = 0u;
+    static inline constexpr exception_t INVALID_VMAPTR_FORMAT               = 0u;
+    static inline constexpr exception_t INVALID_DICTIONARY_KEY              = 0u;
+    static inline constexpr exception_t INVALID_TABLE_DISPATCH_CODE         = 0u;
+    static inline constexpr exception_t INCOMPATIBLE_OPERATABLE_ID          = 0u;
+    static inline constexpr exception_t BAD_TILE_MEMBER_ACCESS              = 0u; 
+    static inline constexpr exception_t BAD_PTR_ACCESS                      = 0u;
+    static inline constexpr exception_t BAD_OPTIONAL_ACCESS                 = 0u; 
+    static inline constexpr exception_t BAD_RAII_ACCESS                     = 0u;
+    static inline constexpr exception_t BAD_ALIGNMENT                       = 0u;
+    static inline constexpr exception_t UNREGISTERED_CUFILE_PTR             = 0u;
+    static inline constexpr exception_t RUNTIME_SOCKETIO_ERROR              = 0u;
+    static inline constexpr exception_t BAD_SPIN                            = 0u;
+    static inline constexpr exception_t BUFFER_OVERFLOW                     = 0u;
+    static inline constexpr exception_t RUNTIME_FILEIO_ERROR                = 0u; 
+    static inline constexpr exception_t LOST_RETRANSMISSION                 = 0u;
+    static inline constexpr exception_t INVALID_INIT_ARG                    = 0u;
+    static inline constexpr exception_t UNSUPPORTED_DAEMON_KIND             = 0u;
+    static inline constexpr exception_t NO_DAEMON_RUNNER_AVAILABLE          = 0u;
+    static inline constexpr exception_t INVALID_ARGUMENT                    = 0u;
+    static inline constexpr exception_t UNIDENTIFIED_EXCEPTION              = 0u;
+    static inline constexpr exception_t PTHREAD_EFAULT                      = 0u;
+    static inline constexpr exception_t PTHREAD_EINVAL                      = 0u;
+    static inline constexpr exception_t PTHREAD_ESRCH                       = 0u;
+    static inline constexpr exception_t PTHREAD_CAUSA_SUI                   = 0u;
+    static inline constexpr exception_t UNDEFINED_HARDWARE_CONCURRENCY      = 0u; 
+    static inline constexpr exception_t FILE_NOT_FOUND                      = 0u;
+    static inline constexpr exception_t CORRUPTED_FILE                      = 0u;
+    static inline constexpr exception_t BAD_CUDA_DEVICE_ACCESS              = 0u;
+    static inline constexpr exception_t CUDA_LAUNCH_COMPLETED               = 0u; 
+    static inline constexpr exception_t CUDA_EXECUTABLE_WAITING_DISPATCH    = 0u; 
+
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
     static inline const char * INVALID_DICTIONARY_KEY_CSTR      = "invalid_dictionary_key";
@@ -103,6 +106,14 @@ namespace dg::network_exception{
     inline auto is_failed(exception_t) noexcept -> bool{
 
     }
+
+    inline auto has_exception(exception_t superset, exception_t subset) noexcept -> bool{
+
+    } 
+
+    inline auto join_exception(exception_t lhs, exception_t rhs) noexcept -> bool{
+
+    } 
 
     inline auto verbose(exception_t) noexcept -> const char *{
 

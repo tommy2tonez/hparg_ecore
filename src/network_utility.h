@@ -138,6 +138,25 @@ namespace dg::network_genult{
         return obj;
     } 
 
+    template <class T, std::enable_if_t<std::is_trivial_v<T>, bool> = true>
+    auto inplace_make_set(T * data, size_t sz) noexcept -> size_t{
+
+        if (sz == 0u){
+            return data;
+        }
+
+        std::sort(data, data + sz);
+        T * last = data + 1;
+
+        for (size_t i = 1u; i < sz; ++i){
+            if (data[i] != data[i - 1]){
+                *(last++) = data[i];
+            }
+        }
+
+        return std::distance(data, last);
+    }
+
     //defined for every std::lock_guard use cases
     //undefined otherwise
     auto lock_guard(std::atomic_flag& lck) noexcept{
