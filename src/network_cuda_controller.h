@@ -14,7 +14,8 @@
 
 namespace dg::network_cuda_controller{
     
-    //this is the sole interface to communicate with cuda_runtime lib - to allow synchronize accesses to cuda_runtime lib 
+    //this is the sole interface to communicate with cuda_runtime lib - to allow synchronized accesses to cuda_runtime lib 
+    //this is fine for the first draft - be back for improvement later
 
     struct ControllerResource{
         dg::network_std_container::vector<int> device;
@@ -50,6 +51,7 @@ namespace dg::network_cuda_controller{
 
     void deinit() noexcept{
 
+        //
     }
 
     auto cuda_stream_create() noexcept -> std::expected<cudaStream_t, exception_t>{
@@ -64,7 +66,7 @@ namespace dg::network_cuda_controller{
         return cuda_stream;
     }
 
-    void cuda_stream_close(cudaStream_t cuda_stream) noexcept{ //should be cudaStreamHandle_t then handle synchronization if presents in cuda_stream_create args - yet it violates single responsibility - fine for now 
+    void cuda_stream_close(cudaStream_t cuda_stream) noexcept{ //should be cudaStreamHandle_t then handle synchronization if presented in cuda_stream_create args - fine for now - definitely should consider if there's more usage
 
         dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(cuda_stream)));
     }
@@ -100,7 +102,7 @@ namespace dg::network_cuda_controller{
         }
 
         int count{};
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetDeviceCount(&count)); 
+        exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetDeviceCount(&count));
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
@@ -193,62 +195,37 @@ namespace dg::network_cuda_controller{
     auto cuda_env_lock_guard(int * device, size_t sz) noexcept{
 
         controller_resource->mtx->lock();
-        dg::network_std_container::vector<int> old_device = controller_resource->device;
+        auto old_device = controller_resource->device;
 
         auto resource_backout = [old_device]() noexcept{
             controller_resource->device = old_device;
-            exception_t err = dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(controller_resource->device.data(), controller_resource->device.size())); 
-            dg::network_exception_handler::nothrow_log(err);
+            dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(controller_resource->device.data(), controller_resource->device.size())));
             controller_resource->mtx->unlock();
         };
 
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(device, sz)); 
-        dg::network_exception_handler::nothrow_log(err);
-
+        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(device, sz)));
         return dg::network_genult::resource_guard(resource_backout); //not semantically accurate - yet functionally accurate - improvement required
     }
     //----
 }
 
-namespace dg::network_cuda_kernel_par_launcher::global_exception{
+namespace dg::network_cuda_kernel_par_launcher::exception{
 
-    struct signature_dg_network_cuda_kernel_par_launcher_global_exception{}; 
-    
     struct LaunchException{
         exception_t sys_err;
         bool is_completed;
     };
 
-    using launch_exception_t            = uint64_t; //
-    using exception_container_t         = std::array<LaunchException, dg::network_concurrency::THREAD_COUNT>; 
-    using exception_container_object    = dg::network_genult::singleton<signature_dg_network_cuda_kernel_par_launcher_global_exception, exception_container_t>; //important - to avoid overflow and friends - yet I think this is compiler responsibility
+    using launch_exception_t = LaunchException;
 
-    auto make_launch_exception_from_system_exception(exception_t sys_err) noexcept -> LaunchException{
+    auto make_from_syserr(exception_t sys_err) noexcept -> LaunchException{
 
         return {sys_err, false};
     }
 
-    auto get_system_exception(LaunchException err) noexcept -> exception_t{
+    auto get_syserr(LaunchException err) noexcept -> exception_t{
 
         return err.sys_err;
-    }
-
-    void set_exception(LaunchException err) noexcept{
-
-        size_t thr_idx = dg::network_concurrency::this_thread_idx();
-        exception_container_object::get()[thr_idx] = err;
-    }
-
-    auto last_exception() noexcept -> LaunchException{
-
-        size_t thr_idx = dg::network_concurrency::this_thread_idx();
-        return exception_container_object::get()[thr_idx];
-    }
-
-    void flush_exception() noexcept{
-
-        size_t thr_idx = dg;:network_concurrency::this_thread_idx();
-        exception_container_object::get()[thr_idx] = make_launch_exception_from_system_exception(dg::network_exception::SUCCESS);
     }
 
     auto mark_completed(LaunchException err) noexcept -> LaunchException{
@@ -272,10 +249,37 @@ namespace dg::network_cuda_kernel_par_launcher::global_exception{
     }
 }
 
-namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch parallel task
+namespace dg::network_cuda_kernel_par_launcher::global_exception{
+
+    struct signature_dg_network_cuda_kernel_par_launcher_global_exception{}; 
+
+    using launch_exception_t            = exception::launch_exception_t;  
+    using exception_container_t         = std::array<launch_exception_t, dg::network_concurrency::THREAD_COUNT>; 
+    using exception_container_object    = dg::network_genult::singleton<signature_dg_network_cuda_kernel_par_launcher_global_exception, exception_container_t>; //important - to avoid overflow and friends - yet I think this is compiler responsibility
+
+    void set_exception(launch_exception_t err) noexcept{
+
+        size_t thr_idx = dg::network_concurrency::this_thread_idx();
+        exception_container_object::get()[thr_idx] = err;
+    }
+
+    auto last_exception() noexcept -> launch_exception_t{
+
+        size_t thr_idx = dg::network_concurrency::this_thread_idx();
+        return exception_container_object::get()[thr_idx];
+    }
+}
+
+namespace dg::network_cuda_kernel_par_launcher{
+
+    //though I think concurrency could be/ have to be improved - like lock_guard and friends - I don't think it's going to be a bottleneck (this is a personal perspective - don't decide without proper instruments + usecases)
+    //consider that linear operation is very heavy (flops ~= 1 << 20  for tile_dim = 64x64)
+    //serialized access could be saturated at 1 << 30 launches/s (CPU flops) - each is at least 1 << 20 flops/launch -  so the total flops would be 1 << 50 per second ~= 1PB/ second - this should be fine for a single computation node (server)
+    //this application is multi-threaded (massive decompression - compression of terabytes of data) - so the influx/ outflux is somewhat independent of the synchronization lags
+    //this is fine for the first draft - be back for improvement later
 
     using wo_ticketid_t         = uint64_t; 
-    using launch_exception_t    = global_exception::launch_exception_t; 
+    using launch_exception_t    = exception::launch_exception_t; 
 
     struct ExecutableInterface{
         virtual ~ExecutableInterface() noexcept = default; 
@@ -284,7 +288,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
 
     struct WorkOrder{
         wo_ticketid_t ticket_id;
-        dg::network_std_container::vector<int> env;
+        dg::network_std_container::vector<int> env; //this is very futuristic - because usually operations can only be operated in the same environment
         std::unique_ptr<ExecutableInterface> executable;
         size_t runtime_complexity;
     };
@@ -303,8 +307,8 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
         virtual void close_ticket(wo_ticketid_t) noexcept = 0;
     };
 
-    struct KernelLauncherControllerInterface{
-        virtual ~KernelLauncherControllerInterface() noexcept = default;
+    struct KernelLaunchControllerInterface{
+        virtual ~KernelLaunchControllerInterface() noexcept = default;
         virtual auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t> = 0;
         virtual auto status(wo_ticketid_t) noexcept -> launch_exception_t = 0;
         virtual void close(wo_ticketid_t) noexcept = 0;
@@ -322,7 +326,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             static_assert(std::is_nothrow_destructible_v<Executable>);
             static_assert(std::is_nothrow_invokable_v<Executable>);
 
-            DynamicExecutable(Executable executable): executable(std::move(executable)){}
+            DynamicExecutable(Executable executable) noexcept(std::is_nothrow_move_constructible_v<Executable>): executable(std::move(executable)){}
 
             void run() noexcept{
 
@@ -337,7 +341,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             dg::network_std_container::deque<WorkOrder> work_order_vec;
             size_t min_complexity_thrhold;
             size_t suggested_max_complexity_thrhold;
-            std::chrono::nanoseconds last_consumed;
+            std::chrono::nanoseconds last_consumed_stamp;
             std::chrono::nanoseconds max_waittime_thrhold; 
             std::unique_ptr<std::mutex> mtx;
 
@@ -346,12 +350,12 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             LoadBalancedWorkOrderContainer(dg::network_std_container::deque<WorkOrder> work_order_vec,
                                            size_t min_complexity_thrhold,
                                            size_t suggested_max_complexity_thrhold,
-                                           std::chrono::nanoseconds last_consumed,
+                                           std::chrono::nanoseconds last_consumed_stamp,
                                            std::chrono::nanoseconds max_waittime_thrhold,
                                            std::unique_ptr<std::mutex> mtx) noexcept: work_order_vec(std::move(work_order_vec)),
                                                                                       min_complexity_thrhold(min_complexity_thrhold),
                                                                                       suggested_max_complexity_thrhold(suggested_max_complexity_thrhold),
-                                                                                      last_consumed(last_consumed),
+                                                                                      last_consumed_stamp(last_consumed_stamp),
                                                                                       max_waittime_thrhold(max_waittime_thrhold),
                                                                                       mtx(std::move(mtx)){}
             
@@ -370,7 +374,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
                 } 
 
                 auto rs = this->internal_pop();
-                this->last_consumed = dg::network_genult::unix_timestamp();
+                this->last_consumed_stamp = dg::network_genult::unix_timestamp();
                 return rs;
             }
         
@@ -379,12 +383,12 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             auto internal_pop() noexcept -> dg::network_std_container::vector<WorkOrder>{
 
                 size_t peek_complexity  = 0u; 
-                auto rs                 = g::network_std_container::vector<WorkOrder>{};
+                auto rs                 = dg::network_std_container::vector<WorkOrder>{};
 
                 while (!this->work_order_vec.empty()){
+                    peek_complexity += this->work_order_vec.front().runtime_complexity;
                     rs.push_back(std::move(this->work_order_vec.front()));
                     this->work_order_vec.pop_front();
-                    peek_complexity += this->work_order_vec.front().runtime_complexity;
 
                     if (peek_complexity > this->suggested_max_complexity_thrhold){
                         return rs;
@@ -397,7 +401,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             auto internal_is_due() const noexcept -> bool{
                 
                 std::chrono::nanoseconds now    = dg::network_genult::unix_timestamp();
-                std::chrono::nanoseconds lapsed = dg::network_genult::timelapsed(this->last_consumed, now); 
+                std::chrono::nanoseconds lapsed = dg::network_genult::timelapsed(this->last_consumed_stamp, now); 
 
                 if (lapsed > this->max_waittime_thrhold){
                     return true;
@@ -435,18 +439,18 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
 
             auto next_ticket() noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx); 
-                size_t nxt_id   = this->wo_sz;
-                this->wo_sz     += 1;
+                auto lck_grd            = dg::network_genult::lock_guard(*this->mtx); 
+                wo_ticketid_t nxt_id    = dg::network_genult::safe_integer_cast<wo_ticketid_t>(this->wo_sz);
+                this->wo_sz             += 1;
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->wo_status_map.find(nxt_id) != this->wo_status_map.end()){
-                        dg::network_log_stackdump::crticial(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
 
-                this->wo_status_map[nxt_id] = global_exception::make_launch_exception_from_system_exception(dg::network_exception::SUCCESS);
+                this->wo_status_map[nxt_id] = exception::make_from_syserr(dg::network_exception::SUCCESS);
                 return nxt_id;
             }
 
@@ -496,7 +500,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             }
     };
 
-    class KernelLauncherController: public virtual KernelLauncherControllerInterface{
+    class KernelLaunchController: public virtual KernelLaunchControllerInterface{
 
         private:
 
@@ -505,9 +509,9 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
         
         public:
 
-            KernelLauncherController(std::shared_ptr<WorkOrderContainerInterface> wo_container,
-                                     std::shared_ptr<WorkTicketControllerInterface> ticket_controller) noexcept: wo_container(std::move(wo_container)),
-                                                                                                                 ticket_controller(std::move(ticket_controller)){}
+            KernelLaunchController(std::shared_ptr<WorkOrderContainerInterface> wo_container,
+                                   std::shared_ptr<WorkTicketControllerInterface> ticket_controller) noexcept: wo_container(std::move(wo_container)),
+                                                                                                               ticket_controller(std::move(ticket_controller)){}
             
             auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
@@ -545,24 +549,25 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
     };
 
     template <size_t CONCURRENCY_SZ> //deprecate next iteration
-    class ConcurrentKernelLauncherController: public virtual KernelLauncherControllerInterface{
+    class ConcurrentKernelLaunchController: public virtual KernelLaunchControllerInterface{
 
         private:
 
-            dg::network_std_container::vector<std::unique_ptr<KernelLauncherControllerInterface>> controllers;
+            dg::network_std_container::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec;
 
         public:
 
+            static_assert(CONCURRENCY_SZ != 0u);
             static_assert(CONCURRENCY_SZ <= std::numeric_limits<uint8_t>::max());
 
-            ConcurrentKernelLauncherController(dg::network_std_container::vector<std::unique_ptr<KernelLauncherControllerInterface>> controllers, 
-                                               std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: controllers(std::move(controllers)){}
+            ConcurrentKernelLaunchController(dg::network_std_container::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec, 
+                                             std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: controller_vec(std::move(controller_vec)){}
 
 
             auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
                 size_t thr_idx = dg::network_concurrency::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
-                std::expected<wo_ticketid_t, exception_t> rs = this->controllers[thr_idx]->launch(std::move(executable), env, env_sz, runtime_complexity);
+                std::expected<wo_ticketid_t, exception_t> rs = this->controller_vec[thr_idx]->launch(std::move(executable), env, env_sz, runtime_complexity);
 
                 if (!rs.has_value()){
                     return std::unexpected(rs.error());
@@ -574,13 +579,13 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             auto status(wo_ticketid_t encoded_id) noexcept -> launch_exception_t{
 
                 auto [id, thr_id] = this->decode(encoded_id);
-                return this->controllers[thr_id]->status(id);
+                return this->controller_vec[thr_id]->status(id);
             }
 
             void close(wo_ticketid_t encoded_id) noexcept{
 
                 auto [id, thr_id] = this->decode(encoded_id);
-                this->controllers[thr_id]->close(encoded_id);
+                this->controller_vec[thr_id]->close(encoded_id);
             }
         
         private:
@@ -589,7 +594,7 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
 
                 static_assert(std::is_unsigned_v<wo_ticketid_t>);
                 using promoted_t = dg::max_unsigned_t;
-                static_assert(sizeof(wo_ticketid_t) + sizeof(uint8_t) <= promoted_t);
+                static_assert(sizeof(wo_ticketid_t) + sizeof(uint8_t) <= sizeof(promoted_t));
                 promoted_t encoded = (static_cast<promoted_t>(id) << (sizeof(uint8_t) * CHAR_BIT)) | static_cast<promoted_t>(thr_id);
 
                 return dg::network_genult::safe_integer_cast<wo_ticketid_t>(encoded);
@@ -619,35 +624,34 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<WorkOrder> wos = this->wo_container->pop();
+                dg::network_std_container::vector<WorkOrder> wo_vec = this->wo_container->pop();
 
-                if (wos.empty()){
+                if (wo_vec.empty()){
                     return false;
                 }
 
-                dg::network_std_container::vector<int> env = this->extract_environment(wos);
+                dg::network_std_container::vector<int> env = this->extract_environment(wo_vec);
                 auto grd = dg::network_cuda_controller::cuda_env_lock_guard(env.data(), env.size());
                 dg::network_cuda_controller::cuda_synchronize(); //flush cuda synchronization err
-                global_exception::flush_exception(); //flush exception
 
-                for (const auto& wo: wos){
+                for (const auto& wo: wo_vec){
                     wo.executable->run();
-                    launch_exception_t err = global_exception::last_exception();
+                    launch_exception_t err = global_exception::last_exception(); //this has to be a synchronous error, referring to the last kernel launch
 
-                    if (global_exception::is_failed(err)){
-                        ticket_controller->set_status(wo.ticket_id, global_exception::mark_completed(err));
+                    if (exception::is_failed(err)){
+                        this->ticket_controller->set_status(wo.ticket_id, exception::mark_completed(err));
                     }
                 }
 
                 exception_t err = dg::network_cuda_controller::cuda_synchronize();
 
                 if (dg::network_exception::is_failed(err)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(err)); //don't know what kind of error is returned here - rather abort - 
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(err)); //don't know what kind of error is returned/ to return here - rather abort - to avoid data races + undefined behaviors  
                     std::abort();
                 }
 
-                for (const auto& wo: wos){
-                    ticket_controller->set_status(wo.ticket_id, global_exception::mark_completed(global_exception::make_launch_exception_from_system_exception(dg::network_exception::SUCCESS)));
+                for (const auto& wo: wo_vec){
+                    this->ticket_controller->set_status(wo.ticket_id, exception::mark_completed(exception::make_from_syserr(dg::network_exception::SUCCESS)));
                 }
 
                 return true;
@@ -655,11 +659,11 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
         
         private:
 
-            auto extract_environment(const dg::network_std_container::vector<WorkOrder>& wos) noexcept -> dg::network_std_container::vector<int>{
+            auto extract_environment(const dg::network_std_container::vector<WorkOrder>& wo_vec) noexcept -> dg::network_std_container::vector<int>{
 
                 auto env_set = dg::network_std_container::unordered_set<int>{}; 
 
-                for (const auto& wo: wos){
+                for (const auto& wo: wo_vec){
                     env_set.insert(wo.env.begin(), wo.env.end());
                 }
 
@@ -667,20 +671,24 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
             }
     };
 
-    inline std::unique_ptr<KernelLauncherControllerInterface> kernel_launcher{}; 
+    inline std::unique_ptr<KernelLaunchControllerInterface> kernel_launcher{}; 
 
-    //this has to be a thin lambda wrapper solely, directly invoking __device__ __host__ <function_name> <<<cuda_config>>> - undefined otherwise - 
-    
+    //this has to be a thin lambda wrapper, solely, directly invoking __device__ __host__ <function_name> <<<cuda_config>>> - undefined otherwise - 
+    //cudaLaunchKernel is the new API - this is compiler's work - risk version control problem
+    //should do legacy invoke <function_name> <<<launch-config>>>()
+
     template <class Executable>
     auto make_kernel_launch_task(Executable executable) noexcept -> std::unique_ptr<ExecutableInterface>{
 
         static_assert(std::is_nothrow_move_constructible<Executable>); //
+        static_assert(std::is_same_v<void, decltype(executable())>); //precond enforcer - void
 
         auto lambda = [exec = std::move(executable)]() noexcept{
             static_assert(noexcept(exec()));
+            cudaGetLastError(); //flush error here
             exec();
             exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetLastError());
-            global_exception::set_exception(global_exception::make_launch_exception_from_system_exception(err));
+            global_exception::set_exception(exception::make_from_syserr(err)); //guarantee that global_excetpion::last_exception() is a synchronous exception referring to the last kernel launch - whether succeeded or not
         };
 
         return std::make_unique<DynamicExecutable<decltype(lambda)>>(std::move(lambda));
@@ -697,11 +705,11 @@ namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch paralle
         launch_exception_t err = {};
         auto synchronizable = [&err, id = launch_id.value()]() noexcept{
             err = kernel_launcher->status(id);
-            return global_exception::is_completed(err);
+            return exception::is_completed(err);
         };
 
         dg::network_asynchronous::wait(synchronizable);
-        return global_exception::get_system_exception(err);
+        return exception::get_syserr(err);
     }
 }
 
