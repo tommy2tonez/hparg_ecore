@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h> 
 #include <type_traits>
+#include <expected>
 
 using exception_t = uint16_t; 
 
@@ -107,14 +108,6 @@ namespace dg::network_exception{
     inline auto is_failed(exception_t) noexcept -> bool{
 
     }
-
-    inline auto has_exception(exception_t superset, exception_t subset) noexcept -> bool{
-
-    } 
-
-    inline auto join_exception(exception_t lhs, exception_t rhs) noexcept -> bool{
-
-    } 
 
     inline auto verbose(exception_t) noexcept -> const char *{
 
