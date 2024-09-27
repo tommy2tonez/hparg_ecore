@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 #include <deque>
+#include "network_concurrency.h"
 
 namespace dg::network_cuda_controller{
     
@@ -48,18 +49,55 @@ namespace dg::network_cuda_controller{
 
     void deinit() noexcept{
 
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaDeviceReset());
+    }
+
+    auto cuda_stream_create() noexcept -> std::expected<cudaStream_t, exception_t>{
+
+        cudaStream_t cuda_stream    = {};
+        exception_t err             = dg::network_exception::wrap_cuda_exception(cudaStreamCreate(&cuda_stream));
 
         if (dg::network_exception::is_failed(err)){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
-            std::abort();
+            return std::unexpected(err);
         }
 
-        controller_resource = {};
+        return cuda_stream;
+    }
+
+    void cuda_stream_close(cudaStream_t) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(cuda_stream)));
+    }
+
+    void cuda_stream_syncclose(cudaStream_t) noexcept{
+
+        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamSynchronize(cuda_stream)));
+        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(cuda_stream)));
+    }
+
+    //rs == raii + sync 
+    auto cuda_stream_rscreate() noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<cudaStream_t, decltype(&cuda_stream_syncclose)>, exception_t>{
+
+        std::expected<cudaStream_t, exception_t> stream = cuda_stream_create();
+
+        if (!stream.has_value()){
+            return std::unexpected(stream.error());
+        }
+
+        return {std::in_place_t{}, stream.value(), cuda_stream_syncclose};
     }
 
     auto cuda_is_valid_device(int * device, size_t sz) noexcept -> std::expected<bool, exception_t>{
+
+        if (sz == 0u){
+            return false;
+        }
+
+        dg::network_std_container::unordered_set<int> device_set(device, device + sz, sz);
         
+        if (device_set.size() != sz){
+            return false;
+        }
+
         int count{};
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetDeviceCount(&count)); 
 
@@ -74,18 +112,11 @@ namespace dg::network_cuda_controller{
             }
         }
 
-        sz = dg::network_genult::inplace_make_set(device, sz);
-
-        if (sz == 0u){
-            return false;
-        }
-
-        int * first             = device;
-        int * last              = first + sz; 
         const int MIN_DEVICE_ID = 0;
-        const int MAX_DEVICE_ID = count - 1; 
+        const int MAX_DEVICE_ID = count - 1;  
+        auto unmet_cond         = [=](int cur){return std::clamp(cur, MIN_DEVICE_ID, MAX_DEVICE_ID) != cur;};
 
-        return std::find_if(first, last, [=](int cur){return std::clamp(cur, MIN_DEVICE_ID, MAX_DEVICE_ID) != cur;}) != last;
+        return std::find_if(device_set.begin(), device_set.end(), unmet_cond) != device_set.end();
     }
 
     auto cuda_set_device(int * device, size_t sz) noexcept -> exception_t{
@@ -111,18 +142,22 @@ namespace dg::network_cuda_controller{
 
     auto cuda_free(void * ptr) noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(controller_resource->mtx);
+        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaFree(ptr));
 
         return err;
     }
 
-    auto cuda_memset(void * ptr, int value, size_t sz) noexcept -> exception_t{
+    auto cuda_memset(void * dst, int c, size_t sz) noexcept -> exception_t{
 
         auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemset(ptr, value, sz));
+        auto stream     = cuda_stream_rscreate();
 
-        return err;
+        if (!stream.has_value()){
+            return stream.error();
+        }
+
+        return dg::network_exception::wrap_cuda_exception(cudaMemsetAsync(dst, c, sz, stream.value()));
     } 
 
     auto cuda_memcpy(void * dst, const void * src, size_t sz, cudaMemcpyKind kind) noexcept -> exception_t{
@@ -135,10 +170,13 @@ namespace dg::network_cuda_controller{
 
     auto cuda_memcpy_peer(void * dst, int dst_id, const void * src, size_t src_id, size_t sz) noexcept -> exception_t{
 
-        // auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpyPeer(dst, dst_id, src, src_id, sz));
-        
-        return err;
+        auto stream = cuda_stream_rscreate();
+
+        if (!stream.has_value()){
+            return stream.error();
+        } 
+
+        return dg::network_exception::wrap_cuda_exception(cudaMemcpyPeerAsync(dst, dst_id, src, src_id, sz, stream.value()));
     }
    
     auto cuda_synchronize() noexcept -> exception_t{
@@ -166,28 +204,38 @@ namespace dg::network_cuda_controller{
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(device, sz)); 
         dg::network_exception_handler::nothrow_log(err);
 
-        return dg::network_genult::resource_guard(resource_backout);
+        return dg::network_genult::resource_guard(resource_backout); //not semantically accurate - yet functionally accurate - improvement required
     }
-
     //----
 }
 
-namespace dg::network_cuda_kernel_launcher{
+namespace dg::network_cuda_kernel_par_launcher::global_exception{
 
-    //-reimplement round robin today + tmr - 
-    //minimal viable products: (1): temporal locality of memory operation
-    //                         (2): device locality
-    //                         (3): fair scheduler of kernel launches
+    struct signature_dg_network_cuda_kernel_par_launcher_global_exception{}; 
     
-    //an attempt to solve locality here is premature - the sole goal of this component is to reduce synchronization calls to legacy api (saturate GPU flops)
-    //what is the goal of this component? - saturate GPU consumption
-    //where is the bottleneck ?
-    //if bottleneck is not enough asynchronous calls being launched - then it's the concurrent kernel_launcher + launch balancer problem - only works for parallel tasks
-    //what's an ideal kernel launch size? 256x256 or 64x64?
-    //I think for compression its 256x256
-    //for AGI its 64x64 - 64x64 is A LOT of contexts
-    //user inputs are tokenized into byte_stream, batched -> grid  
-    //massive processing of user inputs - instead of individual tokens
+    using exception_container_t         = std::array<exception_t, dg::network_concurrency::THREAD_COUNT>; 
+    using exception_container_object    = dg::network_genult::singleton<signature_dg_network_cuda_kernel_par_launcher_global_exception, exception_container_t>; //important - to avoid overflow and friends - yet I think this is compiler responsibility
+    
+    void set_exception(exception_t err) noexcept{
+
+        size_t thr_idx = dg::network_concurrency::this_thread_idx();
+        exception_container_object::get()[thr_idx] = err;
+    }
+
+    auto last_exception() noexcept -> exception_t{
+
+        size_t thr_idx = dg::network_concurrency::this_thread_idx();
+        return exception_container_object::get()[thr_id];
+    }
+
+    void flush_exception() noexcept{
+
+        size_t thr_idx = dg;:network_concurrency::this_thread_idx();
+        exception_container_object::get()[thr_idx] = dg::network_exception::SUCCESS;
+    }
+}
+
+namespace dg::network_cuda_kernel_par_launcher{ //this is only to launch parallel task
 
     using wo_ticketid_t = uint64_t; 
 
@@ -219,7 +267,7 @@ namespace dg::network_cuda_kernel_launcher{
 
     struct KernelLauncherControllerInterface{
         virtual ~KernelLauncherControllerInterface() noexcept = default;
-        virtual auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>;
+        virtual auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t> = 0;
         virtual auto status(wo_ticketid_t) noexcept -> exception_t = 0;
         virtual void close(wo_ticketid_t) noexcept = 0;
     };
@@ -542,11 +590,11 @@ namespace dg::network_cuda_kernel_launcher{
 
                 dg::network_std_container::vector<int> env = this->extract_environment(wos);
                 auto grd = dg::network_cuda_controller::cuda_env_lock_guard(env.data(), env.size());
-                dg::network_exception::flush_cuda_exception();
+                network_cuda_kernel_par_launcher::global_exception::flush_exception();
 
                 for (const auto& wo: wos){
                     wo.executable->run();
-                    exception_t err = dg::network_exception::get_last_cuda_exception();
+                    exception_t err = network_cuda_kernel_par_launcher::global_exception::last_exception();
 
                     if (dg::network_exception::is_failed(err)){
                         wo_container->set_status(wo.ticket_id, dg::network_exception::join_exception(dg::network_exception::CUDA_LAUNCH_COMPLETED, err));
@@ -584,68 +632,20 @@ namespace dg::network_cuda_kernel_launcher{
 
     inline std::unique_ptr<KernelLauncherControllerInterface> kernel_launcher{}; 
 
-    using dispatch_t = uint8_t; 
-
-    enum dispatch_option: dispatch_t{
-        par_launch  = 0u,
-        seq_launch = 1u
-    };
-
-    //this is important - allow grouping of tasks - reduce synchronization overhead - increase locality 
+    //this has to be a thin lambda wrapper solely, directly invoking __device__ __host__ <function_name> <<<cuda_config>>> - undefined otherwise - 
+    
     template <class Executable>
-    auto make_sequential_task(Executable executable) noexcept -> std::unique_ptr<ExecutableInterface>{
+    auto make_kernel_launch_task(Executable executable) noexcept -> std::unique_ptr<ExecutableInterface>{
 
-        //need to define responsibility + error communication here
-        static_assert(std::is_nothrow_move_constructible<Executable>);
-
-        auto lambda = [exec = std::move(executable)]() noexcept{
-            static_assert(noexcept(exec())); 
-            // static_assert(std::is_same_v<exception_t, decltype(exec())>);
-            // exec();
-            // dg::network_exception::set_last_cuda_exception(dg::network_exception::wrap_cuda_exception(cudaGetLastError()));
-            // exception_t err = dg::network_cuda_controller::cuda_synchronize();
-            // dg::network_exception::set_last_cuda_exception();
-            // dg::network_exception::set_last_cuda_exception(err);
-        };
-
-        return std::make_unique<DynamicExecutable<decltype(lambda)>>(std::move(lambda));
-    }
-
-    //this has to be a thin lambda wrapper to directly invoke cuda kernel_launch <<<>>>
-    template <class Executable>
-    auto make_parallel_task(Executable executable) noexcept -> std::unique_ptr<ExecutableInterface>{
-
-        //need to define responsibility + error communication here
         static_assert(std::is_nothrow_move_constructible<Executable>);
 
         auto lambda = [exec = std::move(executable)]() noexcept{
             static_assert(noexcept(exec()));
             exec();
-            dg::network_exception::set_last_cuda_exception(dg::network_exception::wrap_cuda_exception(cudaGetLastError()));
+            network_cuda_kernel_par_launcher::global_exception::set_exception(dg::network_exception::wrap_cuda_exception(cudaGetLastError()));
         };
 
         return std::make_unique<DynamicExecutable<decltype(lambda)>>(std::move(lambda));
-    }
-
-    template <class Executable>
-    auto make_task(Executable executable, dispatch_t dispatch) noexcept -> std::unique_ptr<ExecutableInterface>{
-
-        static_assert(std::is_nothrow_move_constructible<Executable>);
-
-        if (dispatch == par_launch){
-            return make_parallel_task(std::move(executable));
-        }
-
-        if (dispatch == seq_launch){
-            return make_sequential_task(std::move(executable));
-        }
-
-        if constexpr(DEBUG_MODE_FLAG){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-            std::abort();
-        }
-        
-        return {};
     }
 
     auto cuda_launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> exception_t{
