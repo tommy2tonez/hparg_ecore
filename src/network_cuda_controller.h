@@ -12,49 +12,16 @@
 #include "network_concurrency.h"
 #include "network_exception.h"
 
-namespace dg::network_cuda_controller{
-    
-    //this is the sole interface to communicate with cuda_runtime lib - to allow synchronized accesses to cuda_runtime lib 
-    //this is fine for the first draft - be back for improvement later
+namespace dg::network_cuda_stream{
 
-    struct ControllerResource{
-        dg::network_std_container::vector<int> device;
-        std::unique_ptr<std::recursive_mutex> mtx;
+    static inline constexpr uint8_t SYNC_FLAG = 0b001;
+
+    struct CudaStreamHandle{
+        cudaStream_t cuda_stream;
+        uint8_t flags;
     };
 
-    inline std::unique_ptr<ControllerResource> controller_resource{};
-
-    auto init() noexcept -> exception_t{
-
-        int count{};
-        int master_gpu_id = 0;
-
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetDeviceCount(&count));
-
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        if (count == 0){
-            return dg::network_exception::CUDA_NOT_SUPPORTED;
-        }
-
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaSetDevice(master_gpu_id)); //0 has to be the master gpu - if not then a wrapper function is required to make this happen - 
-
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
-
-        controller_resource = std::make_unique<ControllerResource>(ControllerResource{{master_gpu_id}, std::make_unique<std::recursive_mutex>()}); //resource allocation error need to be isolated and made noexcept - instead of relying on init noexcept (bad practice)
-        return dg::network_exception::SUCCESS;
-    }
-
-    void deinit() noexcept{
-
-        //
-    }
-
-    auto cuda_stream_create() noexcept -> std::expected<cudaStream_t, exception_t>{
+    auto cuda_stream_create(uint8_t flags) noexcept -> std::expected<CudaStreamHandle, exception_t>{
 
         cudaStream_t cuda_stream    = {};
         exception_t err             = dg::network_exception::wrap_cuda_exception(cudaStreamCreate(&cuda_stream));
@@ -63,60 +30,93 @@ namespace dg::network_cuda_controller{
             return std::unexpected(err);
         }
 
-        return cuda_stream;
+        return CudaStreamHandle{cuda_stream, flags};
     }
 
-    void cuda_stream_close(cudaStream_t cuda_stream) noexcept{ //should be cudaStreamHandle_t then handle synchronization if presented in cuda_stream_create args - fine for now - definitely should consider if there's more usage
+    void cuda_stream_close(CudaStreamHandle handle) noexcept{
 
-        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(cuda_stream)));
-    }
+        bool has_synchronization = (handle.flags & SYNC_FLAG) != 0u;
 
-    void cuda_stream_syncclose(cudaStream_t cuda_stream) noexcept{
-
-        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamSynchronize(cuda_stream)));
-        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(cuda_stream)));
-    }
-
-    //rs == raii + sync 
-    auto cuda_stream_rscreate() noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<cudaStream_t, decltype(&cuda_stream_syncclose)>, exception_t>{
-
-        std::expected<cudaStream_t, exception_t> stream = cuda_stream_create();
-
-        if (!stream.has_value()){
-            return std::unexpected(stream.error());
+        if (has_synchronization){
+            dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamSynchronize(handle.cuda_stream)));
         }
 
-        return {std::in_place_t{}, stream.value(), cuda_stream_syncclose};
+        dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(handle.cuda_stream)));
+    }
+ 
+    auto cuda_stream_raiicreate(uint8_t flags) noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaStreamHandle, decltype(&cuda_stream_close)>, exception_t>{
+
+        std::expected<CudaStreamHandle, exception_t> handle = cuda_stream_create(flags);
+
+        if (!handle.has_value()){
+            return std::unexpected(handle.error());
+        }
+
+        return {std::in_place_t{}, std::move(handle.value()), cuda_stream_close};
     }
 
-    auto cuda_is_valid_device(int * device, size_t sz) noexcept -> std::expected<bool, exception_t>{
+    auto cuda_stream_get_legacy(CudaStreamHandle handle) noexcept -> cudaStream_t{
+
+        return handle.cuda_stream;
+    }
+} 
+
+namespace dg::network_cuda_controller{
+    
+    //this is the sole interface to communicate with cuda_runtime lib - to allow synchronized accesses to cuda_runtime lib 
+    //this is fine for the first draft - be back for improvement later
+
+    struct ControllerResource{
+        dg::network_std_container::vector<int> device;
+        size_t total_device_count;
+        std::unique_ptr<std::recursive_mutex> mtx;
+    };
+
+    inline std::unique_ptr<ControllerResource> controller_resource{};
+
+    auto init() noexcept -> exception_t{
+
+        int count{};
+
+        exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetDeviceCount(&count));
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (count <= 0){
+            return dg::network_exception::CUDA_NOT_SUPPORTED;
+        }
+
+        exception_t err = dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(nullptr, 0u)); 
+
+        if (dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        controller_resource = std::make_unique<ControllerResource>(ControllerResource{{}, count, std::make_unique<std::recursive_mutex>()}); //resource allocation error need to be isolated and made noexcept - instead of relying on init noexcept (bad practice)
+        return dg::network_exception::SUCCESS;
+    }
+
+    void deinit() noexcept{
+
+        //cuda does not build this for deinitialization - sorry but that's the truth - rather this to be program-lifetime than to add redundant logics here
+    }
+
+    auto cuda_is_valid_device(int * device, size_t sz) noexcept -> std::expected<bool, exception_t>{ // fine - this is for interface consistency - does not neccessarily need to return error
 
         if (sz == 0u){
-            return false;
+            return true; //is default according to MAN
         }
 
         dg::network_std_container::unordered_set<int> device_set(device, device + sz, sz);
         
-        if (device_set.size() != sz){
+        if (device_set.size() != sz){ //MAN does not specify whether device *, size_t has to be as valid set or not - stricter req
             return false;
         }
 
-        int count{};
-        exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetDeviceCount(&count));
-
-        if (dg::network_exception::is_failed(err)){
-            return std::unexpected(err);
-        }
-        
-        if constexpr(DEBUG_MODE_FLAG){
-            if (count == 0){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
-        }
-
         const int MIN_DEVICE_ID = 0;
-        const int MAX_DEVICE_ID = count - 1;  
+        const int MAX_DEVICE_ID = controller_resource->total_device_count - 1;
         auto unmet_cond         = [=](int cur){return std::clamp(cur, MIN_DEVICE_ID, MAX_DEVICE_ID) != cur;};
 
         return std::find_if(device_set.begin(), device_set.end(), unmet_cond) != device_set.end();
@@ -154,13 +154,13 @@ namespace dg::network_cuda_controller{
     auto cuda_memset(void * dst, int c, size_t sz) noexcept -> exception_t{
 
         auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
-        auto stream     = cuda_stream_rscreate();
+        auto stream     = dg::network_cuda_stream::cuda_stream_raiicreate(dg::network_cuda_stream::SYNC_FLAG);
 
         if (!stream.has_value()){
             return stream.error();
         }
 
-        return dg::network_exception::wrap_cuda_exception(cudaMemsetAsync(dst, c, sz, stream.value()));
+        return dg::network_exception::wrap_cuda_exception(cudaMemsetAsync(dst, c, sz, dg::network_cuda_stream::cuda_stream_get_legacy(stream.value())));
     } 
 
     auto cuda_memcpy(void * dst, const void * src, size_t sz, cudaMemcpyKind kind) noexcept -> exception_t{
@@ -173,13 +173,13 @@ namespace dg::network_cuda_controller{
 
     auto cuda_memcpy_peer(void * dst, int dst_id, const void * src, size_t src_id, size_t sz) noexcept -> exception_t{
 
-        auto stream = cuda_stream_rscreate();
+        auto stream = network_cuda_stream::cuda_stream_raiicreate(dg::network_cuda_stream::SYNC_FLAG);
 
         if (!stream.has_value()){
             return stream.error();
         } 
 
-        return dg::network_exception::wrap_cuda_exception(cudaMemcpyPeerAsync(dst, dst_id, src, src_id, sz, stream.value()));
+        return dg::network_exception::wrap_cuda_exception(cudaMemcpyPeerAsync(dst, dst_id, src, src_id, sz, dg::network_cuda_stream::cuda_stream_get_legacy(stream.value())));
     }
    
     auto cuda_synchronize() noexcept -> exception_t{
@@ -192,7 +192,7 @@ namespace dg::network_cuda_controller{
 
     //this is protected interface - don't invoke if cannot guarantee lock hierarchical order - risking deadlock if done otherwise - bad practice
 
-    auto cuda_env_lock_guard(int * device, size_t sz) noexcept{
+    auto lock_env_guard(int * device, size_t sz) noexcept{
 
         controller_resource->mtx->lock();
         auto old_device = controller_resource->device;
@@ -204,7 +204,7 @@ namespace dg::network_cuda_controller{
         };
 
         dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(device, sz)));
-        return dg::network_genult::resource_guard(resource_backout); //not semantically accurate - yet functionally accurate - improvement required
+        return dg::network_genult::resource_guard(std::move(resource_backout)); //not semantically accurate - yet functionally accurate - improvement required
     }
     //----
 }
@@ -220,7 +220,7 @@ namespace dg::network_cuda_kernel_par_launcher::exception{
 
     auto make_from_syserr(exception_t sys_err) noexcept -> LaunchException{
 
-        return {sys_err, false};
+        return LaunchException{sys_err, false};
     }
 
     auto get_syserr(LaunchException err) noexcept -> exception_t{
@@ -230,43 +230,12 @@ namespace dg::network_cuda_kernel_par_launcher::exception{
 
     auto mark_completed(LaunchException err) noexcept -> LaunchException{
 
-        return {err.sys_err, true};
-    } 
-
-    auto is_failed(LaunchException err) noexcept -> bool{
-
-        return dg::network_exception::is_failed(err.sys_err);
-    }
-
-    auto is_success(LaunchException err) noexcept -> bool{
-
-        return dg::network_exception::is_success(err.sys_err);
+        return LaunchException{err.sys_err, true};
     }
 
     auto is_completed(LaunchException err) noexcept -> bool{
 
         return err.is_completed;
-    }
-}
-
-namespace dg::network_cuda_kernel_par_launcher::global_exception{
-
-    struct signature_dg_network_cuda_kernel_par_launcher_global_exception{}; 
-
-    using launch_exception_t            = exception::launch_exception_t;  
-    using exception_container_t         = std::array<launch_exception_t, dg::network_concurrency::THREAD_COUNT>; 
-    using exception_container_object    = dg::network_genult::singleton<signature_dg_network_cuda_kernel_par_launcher_global_exception, exception_container_t>; //important - to avoid overflow and friends - yet I think this is compiler responsibility
-
-    void set_exception(launch_exception_t err) noexcept{
-
-        size_t thr_idx = dg::network_concurrency::this_thread_idx();
-        exception_container_object::get()[thr_idx] = err;
-    }
-
-    auto last_exception() noexcept -> launch_exception_t{
-
-        size_t thr_idx = dg::network_concurrency::this_thread_idx();
-        return exception_container_object::get()[thr_idx];
     }
 }
 
@@ -281,15 +250,15 @@ namespace dg::network_cuda_kernel_par_launcher{
     using wo_ticketid_t         = uint64_t; 
     using launch_exception_t    = exception::launch_exception_t; 
 
-    struct ExecutableInterface{
-        virtual ~ExecutableInterface() noexcept = default; 
-        virtual void run() noexcept = 0;
+    struct VirtualExecutableInterface{
+        virtual ~VirtualExecutableInterface() noexcept = default; 
+        virtual auto run() noexcept -> exception_t = 0;
     };
 
     struct WorkOrder{
         wo_ticketid_t ticket_id;
         dg::network_std_container::vector<int> env; //this is very futuristic - because usually operations can only be operated in the same environment
-        std::unique_ptr<ExecutableInterface> executable;
+        std::unique_ptr<VirtualExecutableInterface> executable;
         size_t runtime_complexity;
     };
 
@@ -309,13 +278,13 @@ namespace dg::network_cuda_kernel_par_launcher{
 
     struct KernelLaunchControllerInterface{
         virtual ~KernelLaunchControllerInterface() noexcept = default;
-        virtual auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t> = 0;
+        virtual auto launch(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t> = 0;
         virtual auto status(wo_ticketid_t) noexcept -> launch_exception_t = 0;
         virtual void close(wo_ticketid_t) noexcept = 0;
     };
 
     template <class Executable>
-    class DynamicExecutable: public virtual ExecutableInterface{
+    class CudaKernelVirtualExecutable: public virtual VirtualExecutableInterface{
 
         private:
 
@@ -324,13 +293,16 @@ namespace dg::network_cuda_kernel_par_launcher{
         public:
 
             static_assert(std::is_nothrow_destructible_v<Executable>);
-            static_assert(std::is_nothrow_invokable_v<Executable>);
+            static_assert(noexcept(std::declval<Executable>()()));
+            static_assert(std::is_same_v<void, decltype(std::declval<Executable>()())>);
 
-            DynamicExecutable(Executable executable) noexcept(std::is_nothrow_move_constructible_v<Executable>): executable(std::move(executable)){}
+            CudaKernelVirtualExecutable(Executable executable) noexcept(std::is_nothrow_move_constructible_v<Executable>): executable(std::move(executable)){}
 
-            void run() noexcept{
+            auto run() noexcept -> exception_t{
 
+                cudaGetLastError(); //flush error here
                 this->executable();
+                return dg::network_exception::wrap_cuda_exception(cudaGetLastError());
             }
     };
      
@@ -513,7 +485,7 @@ namespace dg::network_cuda_kernel_par_launcher{
                                    std::shared_ptr<WorkTicketControllerInterface> ticket_controller) noexcept: wo_container(std::move(wo_container)),
                                                                                                                ticket_controller(std::move(ticket_controller)){}
             
-            auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
+            auto launch(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
                 std::expected<bool, exception_t> env_status = dg::network_cuda_controller::cuda_is_valid_device(env, env_sz);
 
@@ -564,7 +536,7 @@ namespace dg::network_cuda_kernel_par_launcher{
                                              std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: controller_vec(std::move(controller_vec)){}
 
 
-            auto launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
+            auto launch(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
                 size_t thr_idx = dg::network_concurrency::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
                 std::expected<wo_ticketid_t, exception_t> rs = this->controller_vec[thr_idx]->launch(std::move(executable), env, env_sz, runtime_complexity);
@@ -630,16 +602,15 @@ namespace dg::network_cuda_kernel_par_launcher{
                     return false;
                 }
 
-                dg::network_std_container::vector<int> env = this->extract_environment(wo_vec);
-                auto grd = dg::network_cuda_controller::cuda_env_lock_guard(env.data(), env.size());
-                dg::network_cuda_controller::cuda_synchronize(); //flush cuda synchronization err
+                auto env = this->extract_environment(wo_vec);
+                auto grd = dg::network_cuda_controller::lock_env_guard(env.data(), env.size());
+                dg::network_cuda_controller::cuda_synchronize();
 
-                for (const auto& wo: wo_vec){
-                    wo.executable->run();
-                    launch_exception_t err = global_exception::last_exception(); //this has to be a synchronous error, referring to the last kernel launch
+                for (auto& wo: wo_vec){
+                    exception_t err = wo.executable->run();
 
-                    if (exception::is_failed(err)){
-                        this->ticket_controller->set_status(wo.ticket_id, exception::mark_completed(err));
+                    if (dg::network_exception::is_failed(err)){
+                        this->ticket_controller->set_status(wo.ticket_id, exception::mark_completed(exception::make_from_syserr(err)));
                     }
                 }
 
@@ -661,7 +632,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
             auto extract_environment(const dg::network_std_container::vector<WorkOrder>& wo_vec) noexcept -> dg::network_std_container::vector<int>{
 
-                auto env_set = dg::network_std_container::unordered_set<int>{}; 
+                auto env_set = dg::network_std_container::unordered_set<int>{};
 
                 for (const auto& wo: wo_vec){
                     env_set.insert(wo.env.begin(), wo.env.end());
@@ -673,28 +644,14 @@ namespace dg::network_cuda_kernel_par_launcher{
 
     inline std::unique_ptr<KernelLaunchControllerInterface> kernel_launcher{}; 
 
-    //this has to be a thin lambda wrapper, solely, directly invoking __device__ __host__ <function_name> <<<cuda_config>>> - undefined otherwise - 
-    //cudaLaunchKernel is the new API - this is compiler's work - risk version control problem
-    //should do legacy invoke <function_name> <<<launch-config>>>()
-
     template <class Executable>
-    auto make_kernel_launch_task(Executable executable) noexcept -> std::unique_ptr<ExecutableInterface>{
+    auto make_kernel_launch_task(Executable executable) noexcept -> std::unique_ptr<VirtualExecutableInterface>{
 
-        static_assert(std::is_nothrow_move_constructible<Executable>); //
-        static_assert(std::is_same_v<void, decltype(executable())>); //precond enforcer - void
-
-        auto lambda = [exec = std::move(executable)]() noexcept{
-            static_assert(noexcept(exec()));
-            cudaGetLastError(); //flush error here
-            exec();
-            exception_t err = dg::network_exception::wrap_cuda_exception(cudaGetLastError());
-            global_exception::set_exception(exception::make_from_syserr(err)); //guarantee that global_excetpion::last_exception() is a synchronous exception referring to the last kernel launch - whether succeeded or not
-        };
-
-        return std::make_unique<DynamicExecutable<decltype(lambda)>>(std::move(lambda));
+        static_assert(std::is_nothrow_move_constructible<Executable>);
+        return std::make_unique<CudaKernelVirtualExecutable<Executable>>(std::move(executable));
     }
 
-    auto cuda_launch(std::unique_ptr<ExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> exception_t{
+    auto cuda_launch(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> exception_t{
 
         std::expected<wo_ticketid_t, exception_t> launch_id = kernel_launcher->launch(std::move(executable), env, env_sz, runtime_complexity);
         

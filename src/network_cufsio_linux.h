@@ -56,25 +56,29 @@ namespace dg::network_cufsio_linux::driver_x{
 
     inline CUFSDriverResource cufs_driver_resource{}; 
 
+    void dg_cufs_legacy_driver_close() noexcept{
+
+        exception_t err = dg::network_exception::wrap_cuda_exception(cuFileDriverClose());
+        
+        if (dg::network_exception::is_failed(err)){
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
+            std::abort();
+        }
+    }
+
     auto dg_cufs_legacy_driver_open() noexcept -> exception_t{
 
         using namespace dg::network_cufsio_linux::constants; 
         
+        //TODOs: internalize cuda component exception -> cuda global exception 
+
         exception_t err = dg::network_exception::wrap_cuda_exception(cuFileDriverOpen());
 
         if (dg::network_exception::is_failed(err)){
             return err;
         }
         
-        auto destructor = [](int *) noexcept{
-            exception_t err = dg::network_exception::wrap_cuda_exception(cuFileDriverClose());
-
-            if (dg::network_exception::is_failed(err)){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
-                std::abort();
-            }
-        };
-        auto driver_grd = dg::network_genult::resource_guard(destructor);
+        auto driver_grd = dg::network_genult::resource_guard(dg_cufs_legacy_driver_close);
 
         if (static_cast<bool>(DG_CUFS_POLL_THRESHOLD_SIZE)){
             err = dg::network_exception::wrap_cuda_exception(cuFileDriverSetPollMode(true, DG_CUFS_POLL_THRESHOLD_SIZE.value()));
@@ -110,16 +114,6 @@ namespace dg::network_cufsio_linux::driver_x{
 
         driver_grd.release();
         return dg::network_exception::SUCCESS;
-    }
-
-    void dg_cufs_legacy_driver_close() noexcept{
-
-        exception_t err = dg::network_exception::wrap_cuda_exception(cuFileDriverClose());
-        
-        if (dg::network_exception::is_failed(err)){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
-            std::abort();
-        }
     }
 
     auto dg_cufs_driver_open() noexcept -> std::expected<int, exception_t>{
@@ -182,7 +176,7 @@ namespace dg::network_cufsio_linux::driver_x{
         static_assert(std::is_nothrow_move_constructible_v<T>);
 
         auto lck_grd    = dg::network_genult::lock_guard(cufs_driver_resource.mtx); 
-        auto raii_obj   = std::make_unique<Object<T>>(Object<T>{std::move(resource)});
+        auto raii_obj   = std::make_unique<Object<T>>(Object<T>{std::move(resource)}); //TODOs: either compromise log at make_unique or macro resolution
         auto dict_ptr   = cufs_driver_resource.rtti_resource.find(fd);
 
         if constexpr(DEBUG_MODE_FLAG){
@@ -203,7 +197,7 @@ namespace dg::network_cufsio_linux::driver_x{
             return std::unexpected(efd.error());
         }
 
-        return new int(efd.value());
+        return new int(efd.value());  //TODOs: either compromise log at new or macro resolution
     }
 
     void dg_cufs_driver_dynamic_close(int * fd) noexcept{
@@ -410,6 +404,9 @@ namespace dg::network_cufsio_linux::cufs_io{
 
 namespace dg::network_cufsio_linux::implementation{
     
+    //functionality-wise - fine 
+    //naming-wise - not fine
+
     class CuFSIOInterface{
 
         public:
@@ -445,7 +442,7 @@ namespace dg::network_cufsio_linux::implementation{
             
             auto read_binary(const char * fp, cufs_sptr_t dst) noexcept -> exception_t{
 
-                if (!is_registered(dst)){
+                if (!this->is_registered(dst)){
                     return dg::network_exception::UNREGISTERED_CUFILE_PTR;
                 }
 
@@ -480,7 +477,7 @@ namespace dg::network_cufsio_linux::implementation{
         
             auto write_binary(const char * fp, cufs_sptr_t src) noexcept -> exception_t{
 
-                if (!is_registered(src)){
+                if (!this->is_registered(src)){
                     return dg::network_exception::UNREGISTERED_CUFILE_PTR;
                 }
 
@@ -640,14 +637,14 @@ namespace dg::network_cufsio_linux::implementation{
                     return err;
                 }
 
-                err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(dst, buf.data(), dst_cap, cudaMemcpyHostToDevice)); //change dst_cap -> file_sz
+                err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(dst, buf.data(), dst_cap, cudaMemcpyHostToDevice)); //TODO: change -> cuda_controller 
                 dg::network_exception_handler::nothrow_log(err);
             }
 
             auto cuda_write_binary(const char * fp, cuda_ptr_t src, size_t src_sz) noexcept -> exception_t{
  
                 auto buf        = dg::network_std_container::string(src_sz);
-                exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(buf.data(), src, src_sz, cudaMemcpyDeviceToHost));
+                exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(buf.data(), src, src_sz, cudaMemcpyDeviceToHost)); //TODO: change -> cuda_controller
                 dg::network_exception_handler::nothrow_log(err);
 
                 return dg::network_fileio_linux::dg_write_binary(fp, buf.data(), src_sz);
@@ -714,7 +711,7 @@ namespace dg::network_cufsio_linux::implementation{
 
     struct FsysIOFactory{
 
-        static auto spawn_preallocated_direct_stable_fsysio(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz, void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) noexcept -> std::expected<std::unique_ptr<FsysIOInterface>, exception_t>{
+        static auto spawn_preallocated_direct_stable_fsysio(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz, void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) -> std::unique_ptr<FsysIOInterface>{
             
             auto cudriver_ins       = driver_x::dg_cufs_driver_safe_open();
             auto cuda_to_cufs_dict  = std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t>{};
@@ -722,7 +719,7 @@ namespace dg::network_cufsio_linux::implementation{
             auto cufs_sptr_hashset  = std::unordered_set<cufs_sptr_t>{};
 
             if (!cudriver_ins.has_value()){
-                return std::unexpected(cudriver_ins.error());
+                dg::network_exception::throw_exception(cudriver_ins.error());
             }
 
             int cudriver_fd = *(cudriver_ins.value());
@@ -730,7 +727,7 @@ namespace dg::network_cufsio_linux::implementation{
             for (size_t i = 0u; i < cuda_sz; ++i){
                 auto cufs_raii_sptr = cufs_sptr_controller::safe_register_cudasptr(cuda_ptr[i], cuda_ptr_sz[i]);
                 if (!cufs_raii_sptr.has_value()){
-                    return std::unexpected(cufs_raii_sptr.error());
+                    dg::network_exception::throw_exception(cufs_raii_sptr.error());
                 }
                 
                 cufs_sptr_t cufs_sptr = *(cufs_raii_sptr.value()); 
@@ -742,7 +739,7 @@ namespace dg::network_cufsio_linux::implementation{
             for (size_t i = 0u; i < host_sz; ++i){
                 auto cufs_raii_sptr = cufs_sptr_controller::safe_register_hostsptr(host_ptr[i], host_ptr_sz[i]);
                 if (!cufs_raii_sptr.has_value()){
-                    return std::unexpected(cufs_raii_sptr.error());
+                    dg::network_exception::throw_exception(cufs_raii_sptr.error());
                 }
 
                 cufs_sptr_t cufs_sptr = *(cufs_raii_sptr.value()); 
@@ -757,18 +754,18 @@ namespace dg::network_cufsio_linux::implementation{
             return rs;
         }
 
-        static auto spawn_indirect_fsysio() noexcept -> std::unique_ptr<FsysIOInterface>{
+        static auto spawn_indirect_fsysio() -> std::unique_ptr<FsysIOInterface>{
 
             return std::make_unique<InDirectFsysIO>();
         }
 
-        static auto spawn_std_fsysio(std::unique_ptr<FsysIOInterface> fast, std::unique_ptr<FsysIOInterface> slow) noexcept -> std::unique_ptr<FsysIOInterface>{
+        static auto spawn_std_fsysio(std::unique_ptr<FsysIOInterface> fast, std::unique_ptr<FsysIOInterface> slow) -> std::unique_ptr<FsysIOInterface>{
 
             return std::make_unique<StdFsysIO>(std::move(fast), std::move(slow));
         }
 
         static auto spawn_prereg_direct_or_default_fsysio(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz,
-                                                          void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) noexcept -> std::unique_ptr<FsysIOInterface>{ //relax noexcept next iteration - yet memory exhaustion is usually non-recoverable 
+                                                          void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) -> std::unique_ptr<FsysIOInterface>{
             
             auto zipped_cuda = dg::network_utility::ptrtup_zip(cuda_ptr, cuda_ptr_sz, cuda_sz); 
             auto zipped_host = dg::network_utility::ptrtup_zip(host_ptr, host_ptr_sz, host_sz);
@@ -784,15 +781,14 @@ namespace dg::network_cufsio_linux::implementation{
             auto cuda_last  = std::copy_if(zipped_cuda.begin(), zipped_cuda.end(), zipped_cuda.begin(), cuda_filter);
             auto host_last  = std::copy_if(zipped_host.begin(), zipped_host.end(), zipped_host.begin(), host_filter);
 
-            auto direct_fsysio = spawn_preallocated_direct_stable_fsysio(cuda_ptr, cuda_ptr_sz, std::distance(zipped_cuda.begin(), cuda_last), 
-                                                                         host_ptr, host_ptr_sz, std::distance(zipped_host.begin(), host_last)); 
+            try{
+                auto direct_fsysio = spawn_preallocated_direct_stable_fsysio(cuda_ptr, cuda_ptr_sz, std::distance(zipped_cuda.begin(), cuda_last), 
+                                                                             host_ptr, host_ptr_sz, std::distance(zipped_host.begin(), host_last)); 
 
-            if (!direct_fsysio.has_value()){
-                dg::network_log_stackdump::error(dg::network_exception::verbose(direct_fsysio.error()));
-                return spawn_indirect_fsysio(); 
+                return spawn_std_fsysio(std::move(direct_fsysio), spawn_indirect_fsysio());
+            } catch (...){
+                return spawn_indirect_fsysio();
             }
-
-            return spawn_std_fsysio(std::move(direct_fsysio.value()), spawn_indirect_fsysio());
         }
     };
 } 
@@ -801,9 +797,14 @@ namespace dg::network_cufsio_linux{
 
     inline std::unique_ptr<FsysIOInterface> cufsio_instance{};
 
-    void init(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz, void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) noexcept{
+    void init(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz, void ** host_ptr, size_t * host_ptr_sz, size_t host_sz){
         
         cufsio_instance = implementation::Factory::spawn_prereg_direct_or_default_fsysio(cuda_ptr, cuda_ptr_sz, cuda_sz, host_ptr, host_ptr_sz, host_sz);
+    }
+
+    void deinit() noexcept{
+
+        cufsio_instance = {};
     }
 
     auto dg_cuda_read_binary(const char * fp, cuda_ptr_t dst, size_t dst_cap) noexcept -> exception_t{
@@ -846,7 +847,7 @@ namespace dg::network_cufsio_linux{
         dg::network_exception_handler::nothrow_log(dg_host_write_binary(fp, src, src_sz));
     }
 
-    //extend this component to do replicas - 
+    //extend this component to do replicas + chksum - tmr - this should be macro polymorphism - for network_fileio_linux - such that either an application uses this component xor another component for base file writing - chksum extends the base - replica extends chksum
 }
 
 #endif

@@ -158,7 +158,7 @@ namespace dg::network_allocation_cuda_x{
             dg::network_exception::throw_exception(dg::network_exception::BAD_CUDA_DEVICE_ACCESS);
         }
 
-        auto cuda_device_grd = dg::network_cuda_controller::cuda_env_lock_guard(&device_id, 1u);  
+        auto cuda_device_grd = dg::network_cuda_controller::lock_env_guard(&device_id, 1u);  
         void * mem = dg::network_allocation_clib::cuda_malloc(blk_sz); 
 
         return CudaGlobalPtr{device_id, mem};
@@ -172,7 +172,7 @@ namespace dg::network_allocation_cuda_x{
             dg::network_exception::throw_exception(dg::network_exception::BAD_CUDA_DEVICE_ACCESS);
         }
 
-        auto cuda_device_grd = dg::network_cuda_controller::cuda_env_lock_guard(&device_id, 1u);
+        auto cuda_device_grd = dg::network_cuda_controller::lock_env_guard(&device_id, 1u);
         void * mem = dg::network_allocation_clib::cuda_aligned_malloc(alignment_sz, blk_sz);
 
         return CudaGlobalPtr{device_id, mem};
@@ -180,13 +180,13 @@ namespace dg::network_allocation_cuda_x{
 
     auto cuda_free(CudaGlobalPtr ptr) noexcept{
 
-        auto cuda_device_grd = dg::network_cuda_controller::cuda_env_lock_guard(&ptr.device_id, 1u);
+        auto cuda_device_grd = dg::network_cuda_controller::lock_env_guard(&ptr.device_id, 1u);
         dg::network_allocation_clib::cuda_free(ptr.dev_ptr);
     }
 
     void cuda_memset(CudaGlobalPtr ptr, int c, size_t sz){
 
-        auto cuda_device_grd = dg::network_cuda_controller::cuda_env_lock_guard(&ptr.device_id, 1u);
+        auto cuda_device_grd = dg::network_cuda_controller::lock_env_guard(&ptr.device_id, 1u);
         dg::network_exception_handler::throw_nolog(dg::network_cuda_controller::cuda_memset(ptr.dev_ptr, c, sz)); //
     }
 
