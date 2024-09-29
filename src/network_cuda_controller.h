@@ -68,7 +68,7 @@ namespace dg::network_cuda_controller{
 
     struct ControllerResource{
         dg::network_std_container::vector<int> device;
-        size_t total_device_count;
+        const size_t total_device_count;
         std::unique_ptr<std::recursive_mutex> mtx;
     };
 

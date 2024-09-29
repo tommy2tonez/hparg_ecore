@@ -5,11 +5,11 @@
 #include <stdlib.h>
 #include <tuple>
 
-namespace dg::network_intmemcommit_taxonomy{
+namespace dg::network_memcommit_taxonomy{
 
-    using memory_event_t            = uint8_t;
+    using memory_event_taxonomy_t = uint8_t;
 
-    enum memory_event_option: memory_event_t{
+    enum memory_event_option: memory_event_taxonomy_t{
         forward_ping_signal                 = 0u,  //signal initialization
         forward_pong_request                = 1u,  //request pong post-initialization
         forward_pingpong_request            = 2u,  //signal initialization + request pong post-initialization
@@ -27,11 +27,11 @@ namespace dg::network_intmemcommit_taxonomy{
     };
 }
 
-namespace dg::network_intmemcommit_factory{
+namespace dg::network_memcommit_factory{
 
     //1hr
     
-    using namespace dg::network_intmemcommit_taxonomy;
+    using namespace dg::network_memcommit_taxonomy;
     using vma_ptr_t                 = uint64_t;
     using virtual_memory_event_t    = uint64_t;
 
@@ -139,7 +139,7 @@ namespace dg::network_intmemcommit_factory{
 
     }
 
-    auto read_event_taxonomy(virtual_memory_event_t) noexcept -> memory_event_t{
+    auto read_event_taxonomy(virtual_memory_event_t) noexcept -> memory_event_taxonomy_t{
 
     }
 }
