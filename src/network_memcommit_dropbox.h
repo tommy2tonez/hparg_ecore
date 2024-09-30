@@ -201,41 +201,11 @@ namespace dg::network_memcommit_dropbox{
                         case forward_pong_request:
                             dg::network_producer_consumer::delvrsrv_deliver(fwd_pong_request_delivery_handle.get(), read_event_forward_pong_request(event));
                             break;
-                        case forward_pingpong_request:
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_pingpong_request_delivery_handle.get(), read_event_forward_pingpong_request(event));
-                            break;
                         case forward_pong_signal:
                             dg::network_producer_consumer::delvrsrv_deliver(fwd_pong_signal_delivery_handle.get(), read_event_forward_pong_signal(event));
                             break;
-                        case forward_ready_signal:
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_ready_signal_delivery_handle.get(), read_event_forward_ready_signal(event))
-                            break;
-                        case forward_init_signal:
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_init_signal_delivery_handle.get(), read_event_forward_init_signal(event));
-                            break;
-                        case forward_load_request:
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_load_request_delivery_handle.get(), read_event_forward_load_request(event));
-                            break;
-                        case forward_load_response:
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_load_response_delivery_handle.get(), read_event_forward_load_response(event));
-                            break;
-                        case forward_load_redirect_request:
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_load_redirect_delivery_handle.get(), read_event_forward_load_redirect_request(event));
-                            break;
-                        case backward_ready_signal:
-                            dg::network_producer_consumer::delvrsrv_deliver(bwd_ready_signal_delivery_handle.get(), read_event_backward_ready_signal(event));
-                            break;
                         case backward_do_signal:
                             dg::network_producer_consumer::delvrsrv_deliver(bwd_do_signal_delivery_handle.get(), read_event_backward_do_signal(event));
-                            break;
-                        case backward_load_request:
-                            dg::network_producer_consumer::delvrsrv_deliver(bwd_load_request_delivery_handle.get(), read_event_backward_load_request(event));
-                            break;
-                        case backward_load_response:
-                            dg::network_producer_consumer::delvrsrv_deliver(bwd_load_response_delivery_handle.get(), read_event_backward_load_response(event));
-                            break;
-                        case backward_load_redirect_request:
-                            dg::network_producer_consumer::delvrsrv_deliver(bwd_load_redirect_delivery_handle.get(), read_event_backward_load_redirect_request(event));
                             break;
                         default:
                             if constexpr(DEBUG_MODE_FLAG){

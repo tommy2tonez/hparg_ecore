@@ -74,6 +74,9 @@ namespace dg::network_kernel_mailbox{
             }
     };
 
+    //--important to static this - to do socket recovery + friends by respawning component
+    //this is probably the most troubling component
+
     void init(){
 
     }
@@ -88,7 +91,7 @@ namespace dg::network_kernel_mailbox{
         mailbox->send(std::move(addr), std::move(msg));
     }
 
-    auto recv() noexcept -> std::optional<dg::network_std_container::string>{
+    auto recv() noexcept -> std::optional<dg::network_std_container::string>{ //optional string because string.empty() does not mean that it is not a packet
         
         return mailbox->recv();
     }   
