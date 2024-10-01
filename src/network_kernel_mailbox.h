@@ -13,6 +13,16 @@
 #include "network_kernel_mailbox_impl1.h"
 #include "network_kernel_mailbox_impl1_x.h" 
 
+namespace dg::network_kernel_mailbox_channel{
+
+    using radix_t = dg::network_kernel_mailbox_impl1_radixx::radix_t; 
+
+    enum mailbox_channel: radix_t{
+        CHANNEL_HEARTBEAT       = 0u,
+        CHANNEL_EXTMEMCOMMIT    = 1u
+    };
+} 
+
 namespace dg::network_kernel_mailbox{
 
     struct Config{
@@ -74,14 +84,11 @@ namespace dg::network_kernel_mailbox{
             }
     };
 
-    //--important to static this - to do socket recovery + friends by respawning component
-    //this is probably the most troubling component
-
     void init(){
 
     }
 
-    void send(Address addr, dg::network_std_container::string msg) noexcept{
+    void send(Address addr, dg::network_std_container::string msg, radix_t radix) noexcept{
 
         if (msg.size() > dg::network_kernel_mailbox_impl1::constants::MAXIMUM_MSG_SIZE){
             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -91,7 +98,7 @@ namespace dg::network_kernel_mailbox{
         mailbox->send(std::move(addr), std::move(msg));
     }
 
-    auto recv() noexcept -> std::optional<dg::network_std_container::string>{ //optional string because string.empty() does not mean that it is not a packet
+    auto recv(radix_t radix) noexcept -> std::optional<dg::network_std_container::string>{ //optional string because string.empty() does not mean that it is not a packet
         
         return mailbox->recv();
     }   

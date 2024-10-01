@@ -6,7 +6,7 @@
 #include "network_concurrency.h"
 
 namespace dg::network_external_memcommit_dropbox{
-
+    //brb - 2000 lines today
     using event_t = dg::network_external_memcommit_model::poly_event_t; 
 
     struct Request{
@@ -34,14 +34,12 @@ namespace dg::network_external_memcommit_dropbox{
                        std::unique_ptr<std::mutex> mtx) noexcept: container(std::move(container)),
                                                                   mtx(std::move(mtx)){}
             
-            
+
     };
 
     class ConcurrentDropBox: public virtual DropBoxDispatcher{
 
     };
-
-    //inbound dropbox + outbound dropbox
 
     class MailBoxDispatcher: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -86,7 +84,7 @@ namespace dg::network_external_memcommit_dropbox{
                     }
 
                     recv_request.resize(recv_sz);
-                    auto delivery_map = dg::network_std_container::unordered_map<Address, decltype(dg::network_producer_consumer::xdelvsrv_open_raiihandle_nothrow(&vetorizer, DELIVERY_THRHOLD, MAX_DISPATCH_BYTE_SZ))>{};
+                    auto delivery_map = dg::network_std_container::unordered_map<Address, decltype(dg::network_producer_consumer::xdelvsrv_open_raiihandle_nothrow(&dispatcher, DELIVERY_THRHOLD, MAX_DISPATCH_BYTE_SZ))>{};
 
                     for (request_t& req: recv_request){
                         Address dst_ip = req.requestor;
