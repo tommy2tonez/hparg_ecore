@@ -6,11 +6,10 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <utility>
+#include <expected>
 
 namespace dg::network_type_traits_x{
     
-    //good - std-compliant
-
     template <class ...Args>
     struct tags{};
 
@@ -68,6 +67,17 @@ namespace dg::network_type_traits_x{
     struct mono_reduction_type_helper<tags<First, Second, Args...>>: std::conditional_t<std::is_same_v<First, Second>, 
                                                                                         mono_reduction_type_helper<tags<Second, Args...>>,
                                                                                         empty>{}; //this is not sfinae - consider std::void_t<> - this is a bad hack
+
+    template <class T>
+    struct remove_expected{};
+
+    template <class T, class err>
+    struct remove_expected<std::expected<T, err>>{
+        using type = T;
+    };
+
+    template <class T>
+    using remove_expected_t = typename remove_expected<T>::type; 
 
     template <class T>
     struct mono_reduction_type_helper<tags<T>>: std::enable_if<true, T>{};

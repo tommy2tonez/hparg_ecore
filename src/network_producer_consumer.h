@@ -63,13 +63,7 @@ namespace dg::network_producer_consumer{
                 size_t rem_sz   = event_sz; 
 
                 while (rem_sz != 0u){
-                    size_t submitting_sz = std::min(rem_sz, this->base->capacity());
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (submitting_sz == 0u){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
-                    }
+                    size_t submitting_sz = dg::network_genult::safe_posint_access(std::min(rem_sz, this->base->capacity()));
                     this->base->push(cur, submitting_sz);
                     std::advance(cur, submitting_sz);
                     rem_sz -= submitting_sz;
@@ -77,9 +71,13 @@ namespace dg::network_producer_consumer{
             }
     };
 
+    //don't think that this is some kind of invention - it's hard (if not impossibile) to do std-container-compatibility + c-style error throw for instantiation
+    //I rather let compiler does all the magics for constructor, destructor, move, copy, who-knows-what-in-the-future (which is a mess), and use std_compatible way - unique_ptr<> to stay in the "holy grail" of std_container_compatibility
+
     template <class event_t>
     struct DeliveryHandle{
         static_assert(std::is_trivial_v<event_t>);
+
         std::unique_ptr<event_t[]> deliverable_arr;
         size_t deliverable_sz;
         size_t deliverable_cap;
@@ -170,7 +168,7 @@ namespace dg::network_producer_consumer{
         handle = dg::network_genult::safe_ptr_access(handle); 
 
         if (meter_sz > handle->unit_meter_cap){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+            return dg::network_exception::INVALID_ARGUMENT;
         }
 
         bool flush_cond1    = handle->deliverable_cap == handle->deliverable_vec.size();
@@ -221,7 +219,7 @@ namespace dg::network_raii_producer_consumer{
         static_assert(std::is_nothrow_move_assignable_v<event_t>);
 
         virtual ~ProducerInterface() noexcept = default;
-        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<event_t>> = 0;
+        virtual auto get(size_t) noexcept -> dg::network_std_container::vector<event_t> = 0; //yeah - optional is werid -
     };
 
     template <class EventType>
@@ -347,6 +345,84 @@ namespace dg::network_raii_producer_consumer{
         }
 
         return {std::in_place_t{}, handle.value(), delvsrv_close_handle<event_t>};
+    }
+
+    template <class event_t>
+    struct XDeliveryHandle{
+        static_assert(std::is_nothrow_destructible_v<event_t>);
+        static_assert(std::is_nothrow_move_constructible_v<event_t>);
+        static_assert(std::is_nothrow_move_assignable_v<event_t>);
+
+        dg::network_std_container::vector<event_t> deliverable_vec;
+        size_t deliverable_cap; //don't know if this is necessary - vector provides strong guarantee for this
+        size_t meter_sz;
+        size_t meter_cap;
+        size_t meter_unit_cap;
+        ConsumerInterface<event_t> * consumer;
+    };
+
+    template <class event_t>
+    auto xdelvsrv_open_handle(ConsumerInterface<event_t> * consumer, size_t deliverable_cap, size_t meter_cap, size_t meter_unit_cap) noexcept -> std::expected<XDeliveryHandle<event_t> *, exception_t>{
+        
+        if (!consumer){
+            return std::unexpected(dg::network_exception::INVALID_AGRUMENT);
+        }
+
+        if (deliverable_cap == 0u){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        if (meter_unit_cap > meter_cap){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        dg::network_std_container::vector<event_t> deliverable_vec{};
+        deliverable_vec.reserve(deliverable_cap);
+
+        return new XDeliveryHandle<event_t>{std::move(deliverable_vec), deliverable_cap, 0u, meter_cap, meter_unit_cap, consumer};
+    }
+
+    template <class event_t>
+    auto xdelvsrv_deliver(XDeliveryHandle<event_t> * handle, event_t event, size_t meter_sz) noexcept -> exception_t{
+
+        handle = dg::network_genult::safe_ptr_access(handle);
+
+        if (meter_sz > handle->meter_unit_cap){
+            return dg::network_exception::INVALID_ARGUMENT;    
+        }
+
+        bool flush_cond_1   = handle->deliverable_vec.size() == handle->deliverable_cap;
+        bool flush_cond_2   = handle->meter_sz + meter_sz > handle->meter_cap;
+
+        if (flush_cond_1 || flush_cond_2){
+            handle->consumer->push(std::move(handle->deliverable_vec));
+            handle->meter_sz = 0u;
+        }
+
+        handle->deliverable_vec.push_back(std::move(event));
+        handle->meter_sz += meter_sz;
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    template <class event_t>
+    void xdelvsrv_close_handle(XDeliveryHandle<event_t> * handle) noexcept{
+
+        handle = dg::network_genult::safe_ptr_access(handle);
+        handle->consumer->push(std::move(handle->deliverable_vec));
+        delete handle;
+    }
+
+    template <class evnet_t>
+    auto xdelvsrv_open_raiihandle(ConsumerInterface<event_t> * consuemr, size_t deliverable_cap, size_t meter_cap, size_t meter_unit_cap) noexcept -> std::expected<std::unique_ptr<XDeliveryHandle<event_t>, decltype(&xdelvsrv_close_handle<event_t>)>, exception_t>{
+
+        std::expected<XDeliveryHandle<event_t> *, exception_t> handle = xdelvsrv_open_handle(consumer, deliverable_cap, meter_cap, meter_unit_cap);
+
+        if (!handle.has_value()){
+            return std::unexpected(handle.error());
+        }
+
+        return {std::in_place_t{}, handle.value(0, xdelvsrv_clost_handle<event_t>)};
     }
 }
 

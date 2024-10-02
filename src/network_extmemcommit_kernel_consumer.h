@@ -3,69 +3,31 @@
 
 #include "network_log.h"
 #include "network_concurrency.h"
-#include "network_tile_queue.h" 
 #include "network_tile_initialization.h"
 #include "network_std_container.h"
 #include "network_tile_injection.h"
 #include "network_tile_signal.h"
-#include "network_kernel_mailbox.h"
+#include "network_extmemcommit_model.h"
+#include "network_producer_consumer.h"
 
 namespace dg::network_extmemcommit_kernel_handler{
 
-    using event_taxo_t = uint8_t;
+    using poly_event_t  = dg::network_extmemcommit_model::poly_event_t;
+    using request_t     = dg::network_extmemcommit_dropbox::request_t;
+    using event_kind_t  = dg::network_extmemcommit_model::event_kind_t; 
 
-    enum event_option: event_taxo_t{
-        signal_event    = 0u,
-        inject_event    = 1u,
-        init_event      = 2u
-    };
-
-    struct SignalEvent{
-        dg::network_tile_signal_poly::virtual_payload_t payload;
-    };
-
-    struct InjectEvent{
-        dg::network_tile_injection_poly::virtual_payload_t payload;
-    };
-
-    struct InitEvent{
-        dg::network_tile_initialization_poly::virtual_payload_t payload;
-    };
-
-    struct poly_event_t = std::variant<SignalEvent, InjectEvent, InitEvent>; 
-    
     struct EventBalancerInterface{
         virtual ~EventBalancerInterface() noexcept = default;
         virtual void push(dg::network_std_container::vector<poly_event_t>) noexcept = 0;
-        virtual auto pop(event_taxo_t) noexcept -> std::optional<dg::network_std_container::vector<poly_event_t>> = 0;
-    };
-
-    struct KernelProducerInterface{
-        virtual ~KernelProducerInterface() noexcept = default;
-        virtual auto get() noexcept -> std::optional<dg::network_std_container::string> = 0;    
-    };
-
-    struct InitEventProducerInterface{
-        virtual ~InitEventProducerInterface() noexcept = default;
-        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<InitEvent>> = 0; 
-    };
-
-    struct InjectEventProducerInterface{
-        virtual ~InjectEventProducerInterface() noexcept = default;
-        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<InjectEvent>> = 0;
-    };
-
-    struct SignalEventProducerInterface{
-        virtual ~SignalEventProducerInterface() noexcept = default;
-        virtual auto get() noexcept -> std::optional<dg::network_std_container::vector<SignalEvent>> = 0;
+        virtual auto pop(event_kind_t) noexcept -> dg::network_std_container::vector<poly_event_t> = 0;
     };
 
     class SynchronousEventBalancer: public virtual EventBalancerInterface{
 
         private:
 
-            dg::network_std_container::unordered_map<event_taxo_t, dg::network_std_container::vector<poly_event_t>> event_dict;
-            dg::network_std_container::unordered_map<event_taxo_t, size_t> pop_cap_dict;
+            dg::network_std_container::unordered_map<event_kind_t, dg::network_std_container::vector<poly_event_t>> event_dict;
+            dg::network_std_container::unordered_map<event_kind_t, size_t> pop_cap_dict;
             std::unique_ptr<std::mutex> mtx;
 
         public:
@@ -81,18 +43,23 @@ namespace dg::network_extmemcommit_kernel_handler{
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
 
                 for (auto& event: events){
-                    if (std::holds_alternative<SignalEvent>(event)){
-                        event_dict[signal_event].push_back(std::move(event));
+                    if (dg::network_extmemcommit_model::is_signal_event(event)){
+                        event_dict[signal_event_kind].push_back(std::move(event));
                         continue;
                     }
 
-                    if (std::holds_alternative<InjectEvent>(event)){
-                        event_dict[inject_event].push_back(std::move(event));
+                    if (dg::network_extmemcommit_model::is_inject_event(event)){
+                        event_dict[inject_event_kind].push_back(std::move(event));
                         continue;
                     }
 
-                    if (std::holds_alternative<InitEvent>(event)){
-                        event_dict[init_event].push_back(std::move(event));
+                    if (dg::network_extmemcommit_model::is_init_event(event)){
+                        event_dict[init_event_kind].push_back(std::move(event));
+                        continue;
+                    }
+
+                    if (dg::network_extmemcommit_model::is_conditional_inject_event(event)){
+                        event_dict[conditional_inject_event_kind].push_back(std::move(event));
                         continue;
                     }
 
@@ -103,10 +70,10 @@ namespace dg::network_extmemcommit_kernel_handler{
                 }
             }
 
-            auto pop(event_taxo_t event_taxo) noexcept -> std::optional<dg::network_std_container::vector<poly_event_t>>{
+            auto pop(event_kind_t kind) noexcept -> std::optional<dg::network_std_container::vector<poly_event_t>>{
 
                 auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
-                auto dict_ptr   = this->event_dict.find(event_taxo);
+                auto dict_ptr   = this->event_dict.find(kind);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (dict_ptr == this->event_dict.end()){
@@ -119,11 +86,12 @@ namespace dg::network_extmemcommit_kernel_handler{
                     return std::nullopt;
                 }
 
-                size_t pop_sz = std::min(this->pop_cap_dict[event_taxo], dict_ptr->second.size());
-                auto rs = dg::network_std_container::vector<poly_event_t>(pop_sz);
+                size_t pop_sz   = std::min(this->pop_cap_dict[kind], dict_ptr->second.size());
+                auto rs         = dg::network_std_container::vector<poly_event_t>{};
+                rs.reserve(pop_sz);
 
                 for (size_t i = 0u; i < pop_sz; ++i){
-                    rs[i] = std::move(dict_ptr->second.back());
+                    rs.push_back(std::move(dict_ptr->second.back()));
                     dict_ptr->second.pop_back();
                 }
 
@@ -131,16 +99,6 @@ namespace dg::network_extmemcommit_kernel_handler{
             }
     };
     
-    class KernelProducer: public virtual KernelProducerInterface{
-
-        public:
-
-            auto get() noexcept -> std::optional<dg::network_std_container::string>{
-
-                return dg::network_kernel_mailbox::recv();
-            }
-    };
-
     template <size_t BALANCER_SZ>
     class ConcurrentEventBalancer: public virtual EventBalancerInterface{
 
@@ -166,201 +124,241 @@ namespace dg::network_extmemcommit_kernel_handler{
             }
     };
 
-    class BalancerWrappedInitEventProducer: public virtual InitEventProducerInterface{
+    // class BalancerWrappedInitEventProducer: public virtual InitEventProducerInterface{
 
-        private:
+    //     private:
 
-            std::shared_ptr<EventBalancerInterface> event_balancer;
+    //         std::shared_ptr<EventBalancerInterface> event_balancer;
         
-        public:
+    //     public:
 
-            BalancerWrappedInitEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
+    //         BalancerWrappedInitEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
 
-            auto get() noexcept -> std::optional<dg::network_std_container::vector<InitEvent>>{
+    //         auto get() noexcept -> std::optional<dg::network_std_container::vector<InitEvent>>{
 
-                std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(init_event);
+    //             std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(init_event);
 
-                if (!static_cast<bool>(poly_event_arr)){
-                    return std::nullopt;
-                }
+    //             if (!static_cast<bool>(poly_event_arr)){
+    //                 return std::nullopt;
+    //             }
 
-                dg::network_std_container::vector<InitEvent> rs(poly_event_arr->size());
+    //             dg::network_std_container::vector<InitEvent> rs(poly_event_arr->size());
 
-                for (size_t i = 0u; i < rs.size(); ++i){
-                    rs[i] = std::move(std::get<InitEvent>(poly_event_arr->operator[](i)));
-                }
+    //             for (size_t i = 0u; i < rs.size(); ++i){
+    //                 rs[i] = std::move(std::get<InitEvent>(poly_event_arr->operator[](i)));
+    //             }
 
-                return rs;
-            }
-    };
+    //             return rs;
+    //         }
+    // };
 
-    class BalancerWrappedSignalEventProducer: public virtual SignalEventProducerInterface{
+    // class BalancerWrappedSignalEventProducer: public virtual SignalEventProducerInterface{
 
-        private:
+    //     private:
 
-            std::shared_ptr<EventBalancerInterface> event_balancer;
+    //         std::shared_ptr<EventBalancerInterface> event_balancer;
         
-        public:
+    //     public:
 
-            BalancerWrappedSignalEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
+    //         BalancerWrappedSignalEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
 
-            auto get() noexcept -> std::optional<dg::network_std_container::vector<SignalEvent>>{
+    //         auto get() noexcept -> std::optional<dg::network_std_container::vector<SignalEvent>>{
 
-                std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(signal_event);
+    //             std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(signal_event);
 
-                if (!static_cast<bool>(poly_event_arr)){
-                    return std::nullopt;
-                }
+    //             if (!static_cast<bool>(poly_event_arr)){
+    //                 return std::nullopt;
+    //             }
 
-                dg::network_std_container::vector<SignalEvent> rs(poly_event_arr->size());
+    //             dg::network_std_container::vector<SignalEvent> rs(poly_event_arr->size());
 
-                for (size_t i = 0u; i < rs.size(); ++i){
-                    rs[i] = std::move(std::get<SignalEvent>(poly_event_arr->operator[](i)));
-                }
+    //             for (size_t i = 0u; i < rs.size(); ++i){
+    //                 rs[i] = std::move(std::get<SignalEvent>(poly_event_arr->operator[](i)));
+    //             }
 
-                return rs;
-            }
-    };
+    //             return rs;
+    //         }
+    // };
 
-    class BalancerWrappedInjectEventProducer: public virtual InjectEventProducerInterface{
+    // class BalancerWrappedInjectEventProducer: public virtual InjectEventProducerInterface{
+
+    //     private:
+
+    //         std::shared_ptr<EventBalancerInterface> event_balancer;
+
+    //     public:
+
+    //         BalancerWrappedInjectEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
+
+    //         auto get() noexcept -> std::optional<dg::network_std_container::vector<InjectEvent>>{
+
+    //             std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(signal_event);
+
+    //             if (!static_cast<bool>(poly_event_arr)){
+    //                 return std::nullopt;
+    //             }
+
+    //             dg::network_std_container::vector<InjectEvent> rs(poly_event_arr->size());
+
+    //             for (size_t i = 0u; i < rs.size(); ++i){
+    //                 rs[i] = std::move(std::get<InjectEvent>(poly_event_arr->operator[](i)));
+    //             }
+
+    //             return rs;
+    //         } 
+    // };
+
+    class RequestConsumer: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
             std::shared_ptr<EventBalancerInterface> event_balancer;
+            std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<request_t>> request_producer;
+            const size_t request_digest_sz;
 
-        public:
-
-            BalancerWrappedInjectEventProducer(std::shared_ptr<EventBalancerInterface> event_balancer) noexcept: event_balancer(std::move(event_balancer)){}
-
-            auto get() noexcept -> std::optional<dg::network_std_container::vector<InjectEvent>>{
-
-                std::optional<dg::network_std_container::vector<poly_event_t>> poly_event_arr = this->event_balancer->pop(signal_event);
-
-                if (!static_cast<bool>(poly_event_arr)){
-                    return std::nullopt;
-                }
-
-                dg::network_std_container::vector<InjectEvent> rs(poly_event_arr->size());
-
-                for (size_t i = 0u; i < rs.size(); ++i){
-                    rs[i] = std::move(std::get<InjectEvent>(poly_event_arr->operator[](i)));
-                }
-
-                return rs;
-            } 
-    };
-
-    class KernelConsumer: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::shared_ptr<EventBalancerInterface> event_balancer;
-            std::unique_ptr<KernelProducerInterface> kernel_producer;
-        
         public:
 
             KernelConsumer(std::shared_ptr<EventBalancerInterface> event_balancer,
-                                  std::unique_ptr<KernelProducerInterface> kernel_producer) noexcept: event_balancer(std::move(event_balancer)),
-                                                                                                      kernel_producer(std::move(kernel_producer)){}
+                           std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<request_t>> request_producer,
+                           size_t request_digest_sz) noexcept: event_balancer(std::move(event_balancer)),
+                                                               request_producer(std::move(request_producer)),
+                                                               request_digest_sz(request_digest_sz){}
             
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::network_std_container::string> kernel_data = this->kernel_producer->get(); 
+                dg::network_std_container::vector<request_t> request_vec = this->request_producer->get(this->request_digest_sz);
 
-                if (!static_cast<bool>(kernel_data)){
+                if (request_vec.empty()){
                     return false;
                 }
 
-                dg::network_std_container::vector<poly_event_t> event_payload{};
-                std::expected<const char *, exception_t> rs = dg::network_compact_serializer::integrity_deserialize_into(event_payload, kernel_data->data(), kernel_data->size()); //consider convert -> unstable_addr str container that raii stable_addr - somewhat like realloc - to avoid computation
+                dg::network_std_container::vector<poly_event_t> poly_event_vec{};
+                poly_event_vec.reserve(request_vec.size());
 
-                if (!rs.has_value()){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(rs.error()));
-                    std::abort();
+                for (size_t i = 0u; i < request_vec.size(); ++i){
+                    poly_event_vec.push_back(std::move(request_vec[i].event));
                 }
 
-                this->event_balancer->push(std::move(event_payload));
+                this->event_balancer->push(std::move(poly_event_vec));
                 return true;
             }
     };
 
-    class InitEventConsumer: public virtual dg::network_concurrency::WorkerInterface{
+    class InitializableConsumer: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::shared_ptr<InitEventProducerInterface> producer;
+            std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_initialization_poly::virtual_payload_t>> producer;
+            const size_t digest_sz; 
 
         public:
 
-            InitEventConsumer(std::shared_ptr<InitEventProducerInterface> producer) noexcept: producer(std::move(producer)){}
+            InitializableConsumer(std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_initialization_poly::virtual_payload_t>> producer,
+                                  size_t digest_sz) noexcept: producer(std::move(producer)),
+                                                              digest_sz(digest_sz){}
 
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::network_std_container::vector<InitEvent>> init_events = this->producer->get();
+                dg::network_std_container::vector<dg::network_tile_initialization_poly::virtual_payload_t> initializable_vec = this->producer->get(this->digest_sz);
 
-                if (!static_cast<bool>(init_events)){
+                if (initializable_vec.empty()){
                     return false;
                 }
 
-                for (auto& init_event: init_events.value()){
-                    dg::network_tile_init_poly::load_nothrow(std::move(init_event.payload));
+                for (auto& initializable: initializable_vec){
+                    dg::network_tile_init_poly::load_nothrow(std::move(initializable));
                 }
 
                 return true;
             }
     };
 
-    class SignalEventConsumer: public virtual dg::network_concurrency::WorkerInterface{
+    class SignalableConsumer: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::shared_ptr<SignalEventProducerInterface> producer;
+            std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_signal_poly::virtual_payload_t>> producer;
+            const size_t digest_sz;
+
+        public:
+
+            SignalableConsumer(std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_signal_poly::virtual_payload_t>> producer,
+                               size_t digest_sz) noexcept: producer(std::move(producer)),
+                                                           digest_sz(digest_sz){}
+
+            bool run_one_epoch() noexcept{
+
+                dg::network_std_container::vector<dg::network_tile_signal_poly::virtual_payload_t> signalable_vec = this->producer->get(this->digest_sz);
+
+                if (signalable_vec.empty()){
+                    return false;
+                }
+
+                for (auto& signalable: signalable_vec){
+                    dg::network_tile_signal_poly::load_nothrow(std::move(signalable));
+                }
+
+                return true;
+            }
+    };
+
+    class InjectibleConsumer: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_injection_poly::virtual_payload_t>> producer;
+            const size_t digest_sz;
+
+        public:
+
+            InjectibleConsumer(std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_injection_poly::virtual_payload_t>> producer,
+                               size_t digest_sz) noexcept: producer(std::move(producer)),
+                                                           digest_sz(digest_sz){}
+
+            bool run_one_epoch() noexcept{
+
+                dg::network_std_container::vector<dg::network_tile_injection_poly::virtual_payload_t> injectible_vec = this->producer->get(this->digest_sz);
+
+                if (injectible_vec.empty()){
+                    return false;
+                }
+
+                for (auto& injectible: injectible_vec){
+                    dg::network_tile_inject_poly::load_nothrow(std::move(injectible));
+                }
+
+                return true;
+            }
+    };
+
+    class ConditionalInjectibleConsumer: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_condinjection_poly::virtual_payload_t>> producer;
+            const size_t digest_sz;
         
         public:
 
-            SignalEventConsumer(std::shared_ptr<SignalEventProducerInterface> producer) noexcept: producer(std::move(producer)){}
-
+            ConditionalInjectibleConsumer(std::shared_ptr<dg::network_raii_producer_consumer::ProducerInterface<dg::network_tile_condinjection_poly::virtual_payload_t>> producer,
+                                          size_t digest_sz) noexcept: producer(std::move(producer)),
+                                                                      digest_sz(digest_sz){}
+            
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::network_std_container::vector<SignalEvent>> signal_events = this->producer->get();
+                dg::network_std_container::vector<dg::network_tile_condinjection_poly::virtual_payload_t> injectible_vec = this->producer->get(this->digest_sz);
 
-                if (!static_cast<bool>(signal_events)){
+                if (injectible_vec.empty()){
                     return false;
                 }
 
-                for (auto& signal_event: signal_events.value()){
-                    dg::network_tile_signal_poly::load_nothrow(std::move(signal_event.payload));
+                for (auto& injectible: injectible_vec){
+                    dg::network_tile_condinjection_poly::load_nothrow(std::move(injectible));
                 }
 
                 return true;
             }
     };
-
-    class InjectEventConsumer: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::shared_ptr<InjectEventProducerInterface> producer;
-        
-        public:
-
-            InjectEventConsumer(std::shared_ptr<InjectEventProducerInterface> producer) noexcept: producer(std::move(producer)){}
-
-            bool run_one_epoch() noexcept{
-
-                std::optional<dg::network_std_container::vector<InjectEvent>> inject_events = this->producer->get();
-
-                if (!static_cast<bool>(inject_events)){
-                    return false;
-                }
-
-                for (auto& inject_event: inject_events.value()){
-                    dg::network_tile_inject_poly::load_nothrow(std::move(inject_event.payload));
-                }
-
-                return true;
-            }
-    };
-} 
+}
 
 #endif

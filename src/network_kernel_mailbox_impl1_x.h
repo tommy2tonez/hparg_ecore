@@ -152,10 +152,28 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
     using radix_t = uint8_t; 
 
-    struct RadixMsg{
-        radix_t radix;
-        dg::network_std_container::string content;
-    };
+    static auto serialize_msg(radix_t radix, dg::network_std_container::string content) noexcept -> dg::network_std_container::string{
+
+        constexpr size_t HEADER_SZ      = dg::network_trivial_serializer::size(radix_t{});
+        size_t content_sz               = content.size();
+        size_t total_sz                 = content_sz + HEADER_SZ;
+        content.resize(total_sz);
+        char * header_ptr               = content.data() + content_sz;
+        dg::network_trivial_serializer::serialize_into(header_ptr, radix);
+
+        return content;
+    }
+
+    static auto deserialize_msg(dg::network_std_container::string serialized) noexcept -> std::pair<radix_t, dg::network_std_container::string>{
+
+        constexpr size_t HEADER_SZ      = dg::network_trivial_serializer::size(radix_t{});
+        auto [left, right]              = dg::network_genult::backsplit_str(std::move(serialized), HEADER_SZ);
+        radix_t radix                   = {};
+
+        dg::network_trivial_serializer::deserialize_into(radix, right.data());
+
+        return std::make_pair(radix, std::move(left));
+    }
 
     struct OutBoundRequest{
         Address dst;
@@ -452,11 +470,10 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
                 if (!static_cast<bool>(recv_data)){
                     return false;
                 }
-
-                RadixMsg msg{};
-                dg::network_compact_serializer::deserialize_into(msg, recv_data->data());
-                this->inbound_container->push(msg.radix, std::move(msg.content));
                 
+                auto [radix, msg] = deserialize_msg(std::move(recv_data.value()));
+                this->inbound_container->push(radix, std::move(msg));
+
                 return true;
             }
     };
@@ -478,16 +495,12 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
                 std::optional<OutBoundRequest> outbound_data = this->container->pop();
 
-                if (!static_cast<bool>(send_data)){
+                if (!static_cast<bool>(outbound_data)){
                     return false;
                 }
 
-                RadixMsg msg{outbound_data->radix, std::move(outbound_data->content)};
-                size_t msg_sz = dg::network_compact_serializer::size(msg); 
-                dg::network_std_container::string serialized_msg(msg_sz);
-                dg::network_compact_serializer::serialize_into(serialized_msg.data(), msg);
-                this->mailbox->send(outbound_data->dst, std::move(serialized_msg));
-
+                dg::network_std_container::string bstream = serialize_msg(outbound_data->radix, std::move(outbound_data->content));
+                this->mailbox->send(outbound_data->dst, std::move(bstream));
                 return true;
             }
     };
@@ -510,8 +523,8 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             void send(Address addr, dg::network_std_container::string buf, radix_t radix) noexcept{
                 
-                OutBoundRequest rq{std::move(addr), std::move(radix), std::move(buf)};
-                this->outbound_container->push(std::move(rq));
+                OutBoundRequest request{std::move(addr), std::move(radix), std::move(buf)};
+                this->outbound_container->push(std::move(request));
             }
 
             auto recv(radix_t radix) noexcept -> std::optional<dg::network_std_container::string>{

@@ -4,127 +4,266 @@
 #include "network_extmemcommit_model.h"
 #include "network_producer_consumer.h"
 #include "network_concurrency.h"
+#include "network_std_container.h"
+#include "network_type_trait_x.h"
 
-namespace dg::network_external_memcommit_dropbox{
-    //brb - 2000 lines today
+namespace dg::network_extmemcommit_dropbox{
+
     using event_t = dg::network_external_memcommit_model::poly_event_t; 
 
     struct Request{
         Address requestor;
         Address requestee;
         event_t event;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(requestor, requestee, event);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(requestor, requestee, event);
+        }
     };
 
     using request_t = Request;
+    
+    struct RequestContainerInterface{
+        virtual ~RequestContainerInterface() noexcept = default;
+        virtual void push(Request) noexcept = 0;
+        virtual auto pop() noexcept -> std::optional<Request> = 0;
+    };
 
-    struct DropBoxInterface: public virtual dg::network_producer_consumer::ProducerInterface<request_t>,
-                             public virtual dg::network_producer_consumer::ConsumerInterface<request_t>{};
+    struct RequestCenterInterface: public virtual RequestContainerInterface{
+        virtual ~RequestCenterInterface() noexcept = default;
+        virtual void send(Request) noexcept = 0;
+        virtual auto recv() noexcept -> std::optional<Request> = 0;
+    };
 
-
-    class LckDropBox: public virtual DropBoxInterface{
-
+    class LckContainer: public virtual RequestContainerInterface{
+        
         private:
-            
-            dg::network_std_container::vector<request_t> container;
-            std::unique_ptr<std::mutex> mtx;
 
+            dg::network_std_container::vector<Request> request_vec;
+            std::unique_ptr<std::mutex> lck;
+        
         public:
 
-            LckDropBox(dg::network_std_container::vector<request_t> container,
-                       std::unique_ptr<std::mutex> mtx) noexcept: container(std::move(container)),
-                                                                  mtx(std::move(mtx)){}
-            
+            LckContainer(dg::network_std_container::vector<Request> request_vec,
+                         std::unique_ptr<std::mutex> lck) noexcept: request_vec(std::move(request_vec)),
+                                                                    lck(std::move(lck)){}
 
-    };
+            void push(Request request) noexcept{
 
-    class ConcurrentDropBox: public virtual DropBoxDispatcher{
+                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                this->request_vec.push_back(std::move(request));
+            }
 
-    };
+            auto pop() noexcept -> std::optional<Request>{
 
-    class MailBoxDispatcher: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::unique_ptr<dg::network_producer_consumer::ProducerInterface<request_t> producer;
-
-            struct HelperClass: public virtual dg::network_producer_consumer::ConsumerInterface<request_t>{
-            
-                void push(request_t * request, size_t sz) noexcept{ //this does not specify ownership - this is bad practice - can do something like std::add_rvalue_reference<request_t> * - yet it looks incredibly dumb
-                    
-                    if (sz == 0u){
-                        return;
-                    }
-
-                    Address dst_addr    = request[0].requestor;
-                    auto vec_view       = std::span<request_t>{request, sz};
-                    size_t bsz          = dg::network_compact_serializer::size(vec_view);
-                    auto bstream        = dg::network_std_container::string(bsz);
-                    dg::network_compact_serializer::serialize_into(bstream.data(), vec_view);
-                    dg::network_kernel_mailbox::send(dst_addr, std::move(bstream), EXTERNAL_MEMCOMMIT_DROPBOX_IDENTIFIER);
+                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                
+                if (this->request_vec.empty()){
+                    return std::nullopt;
                 }
-            };
+
+                auto rs = std::move(this->request_vec.back());
+                this->request_vec.pop_back();
+
+                return {std::in_place_t{}, std::move(rs)};
+            }
+    };
+
+    class OutBoundDispatcher: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<RequestContainerInterface> outbound_container;
+            const size_t vectorization_sz; 
+            const size_t addr_vectorization_sz; 
 
         public:
 
-            MailBoxDispatcher(std::unique_ptr<dg::network_producer_consumer::ProducerInterface<request_t> producer) noexcept: producer(std::move(producer)){}
+            OutBoundDispatcher(std::shared_ptr<RequestContainerInterface> outbound_container, 
+                               size_t vectorization_sz,
+                               size_t addr_vectorization_sz) noexcept: outbound_container(std::move(outbound_container)),
+                                                                       vectorization_sz(vectorization_sz),
+                                                                       addr_vectorization_sz(addr_vectorization_sz){}
 
             bool run_one_epoch() noexcept{
                 
-                const size_t MAX_DISPATCH_BYTE_SZ = dg::kernel_mailbox::UDP_PACKET_SIZE >> 2;
+                const size_t SERIALIZATION_OVERHEAD = dg::network_compact_serializer::size(dg::network_std_container::vector<request_t>{});
+                const size_t MAX_DISPATCH_BYTE_SZ   = dg::network_kernel_mailbox::MAX_SUBMIT_SIZE - SERIALIZATION_OVERHEAD;
                 HelperClass dispatcher{}; 
 
                 {
-                    dg::network_std_container::vector<request_t> recv_request{};
-                    recv_request.reserve(this->capacity); // 
-                    size_t recv_sz{}; 
-                    this->producer->get(recv_request.data(), recv_sz, this->capacity);
+                    dg::network_std_container::vector<request_t> recv_request = this->recv();
 
-                    if (recv_sz == 0u){
+                    if (recv_request.empty()){
                         return false;
                     }
 
-                    recv_request.resize(recv_sz);
-                    auto delivery_map = dg::network_std_container::unordered_map<Address, decltype(dg::network_producer_consumer::xdelvsrv_open_raiihandle_nothrow(&dispatcher, DELIVERY_THRHOLD, MAX_DISPATCH_BYTE_SZ))>{};
+                    using handle_t      = dg::network_type_traits_x::remove_expected_t<decltype(dg::network_raii_producer_consumer::xdelvsrv_open_raiihandle(&dispatcher, this->addr_vectorization_sz, MAX_DISPATCH_BYTE_SZ, MAX_DISPATCH_BYTE_SZ))>; //interface coersion might not work
+                    auto delivery_map   = dg::network_std_container::unordered_map<Address, handle_t>{};
 
-                    for (request_t& req: recv_request){
-                        Address dst_ip = req.requestor;
+                    for (request_t& request: recv_request){
+                        Address dst_ip  = request.requestor;
+                        auto map_ptr    = delivery_map.find(dst_ip); 
 
-                        if (delivery_map.find(dst_ip) == delivery_map.end()){
-                            delivery_map.emplace(std::make_pair(dst_ip, dg::network_producer_consumer::xdelvsrv_open_raiihandle_nothrow(&dispatcher, DELIVERY_THRHOLD, MAX_DISPATCH_BYTE_SZ)));
+                        if (map_ptr == delivery_map.end()){
+                            auto handle = dg::network_exception_handler::nothrow_log(dg::network_raii_producer_consumer::xdelvsrv_open_raiihandle(&dispatcher, this->addr_vectorization_sz, MAX_DISPATCH_BYTE_SZ, MAX_DISPATCH_BYTE_SZ));
+                            auto [emplace_ptr, status] = delivery_map.emplace(std::make_pair(dst_ip, std::move(handle)));
+                            map_ptr = emplace_ptr;
+                            dg::network_genult::assert(status);
                         }
 
-                        dg::network_producer_consumer::xdelvsrv_deliver(delivery_map.find(dst_ip)->second.get(), std::move(req));
+                        exception_t err = dg::network_producer_consumer::xdelvsrv_deliver(map_ptr->second.get(), std::move(request), dg::network_compact_serializer::size(request)); //dangy
+                        dg::network_exception_handler::nothrow_log(err);
                     }
+                }
+
+                return true;
+            }
+        
+        private:
+
+            auto recv() noexcept -> dg::network_std_container::vector<Request>{
+
+                dg::network_std_container::vector<Request> rs{};
+                rs.reserve(this->vectorization_sz);
+
+                for (size_t i = 0u; i < this->vectorization_sz; ++i){
+                    std::optional<Request> request = this->outbound_container->pop();
+                    
+                    if (!static_cast<bool>(request)){
+                        return rs;
+                    }
+
+                    rs.push_back(std::move(request.value()));
+                }
+
+                return rs;
+            }
+
+            struct HelperClass: public virtual dg::network_raii_producer_consumer::ConsumerInterface<request_t>{
+            
+                void push(dg::network_std_container::vector<request_t> data) noexcept{
+                    
+                    if (data.size() == 0u){
+                        return;
+                    }
+
+                    Address dst     = data.front().requestor;
+                    size_t bsz      = dg::network_compact_serializer::size(data);
+                    auto bstream    = dg::network_std_container::string(bsz);
+                    dg::network_compact_serializer::serialize_into(bstream.data(), data);
+                    dg::network_kernel_mailbox::send(dst, std::move(bstream), dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
+                }
+            };
+    };
+
+    class InBoundDispatcher: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<RequestContainerInterface> inbound_container;
+        
+        public:
+
+            DropBoxDispatcher(std::shared_ptr<RequestContainerInterface> inbound_container) noexcept: inbound_container(std::move(inbound_container)){}
+
+            bool run_one_epoch() noexcept{
+
+                std::optional<dg::network_std_container::string> bstream = dg::network_kernel_mailbox::recv(dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
+                
+                if (!static_cast<bool>(bstream)){
+                    return false;
+                }
+
+                dg::network_std_container::vector<Request> recv_data{};
+                dg::network_compact_serializer::deserialize_into(recv_data, bstream->data());
+
+                for (Request& request: recv_data){
+                    this->inbound_container->push(std::move(request));
                 }
 
                 return true;
             }
     };
 
-    class DropBoxDispatcher: public virtual dg::network_concurrency::WorkerInterface{
+    class RequestCenter: public virtual RequestCenterInterface{
 
         private:
 
-            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<request_t>> consumer;
+            dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> workers;
+            std::shared_ptr<RequestContainerInterface> outbound_container;
+            std::shared_ptr<RequestContainerInterface> inbound_container;
         
         public:
 
-            DropBoxDispatcher(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<request_t>> consumer) noexcept: consumer(std::move(consumer)){}
+            RequestCenter(dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> workers,
+                          std::shared_ptr<RequestContainerInterface> outbound_container,
+                          std::shared_ptr<RequestContainerInterface> inbound_container) noexcept: workers(std::move(workers)),
+                                                                                                  outbound_container(std::move(outbound_container)),
+                                                                                                  inbound_container(std::move(inbound_container)){}
+            
+            void send(Request request) noexcept{
 
-            bool run_one_epoch() noexcept{
+                this->outbound_container->push(std::move(request));
+            }
 
-                std::optional<dg::network_std_container::string> bstream = dg::network_kernel_mailbox::recv(EXTERNAL_MEMCOMMIT_DROPBOX_IDENTIFIER);
-                
-                if (!static_cast<bool>(bstream)){
-                    return false;
-                }
+            auto recv() noexcept -> std::optional<Request>{
 
-                dg::network_std_container::vector<request_t> recv_data{};
-                dg::network_compact_serializer::deserialize_into(recv_data, bstream->data()); 
-                this->consumer->push(recv_data.data(), recv_data.size()); //raii transfering should happen here - this is not correct //this does not specify ownership - this is bad practice
+                return this->inbound_container->pop();
             }
     };
 
+    class RequestDropBox: public virtual dg::network_raii_producer_consumer::ConsumerInterface<Request>{
+
+        private:
+
+            std::shared_ptr<RequestCenterInterface> request_center;
+        
+        public:
+
+            RequestDropBox(std::shared_ptr<RequestCenterInterface> request_center) noexcept: request_center(std::move(request_center)){}
+
+            void push(dg::network_std_container::vector<Request> request_vec) noexcept{
+
+                for (auto& request: request_vec){
+                    this->request_center->send(std::move(request));
+                }
+            }
+    };
+
+    class RequestProducer: public virtual dg::network_raii_producer_consumer::ProducerInterface<Request>{
+
+        private:
+
+            std::shared_ptr<RequestCenterInterface> request_center;
+        
+        public:
+
+            RequestProducer(std::shared_ptr<RequestCenterInterface> request_center) noexcept: request_center(std::move(request_center)){}
+
+            auto get(size_t capacity) noexcept -> dg::network_std_container::vector<Request>{
+
+                dg::network_std_container::vector<Request> vec{};
+
+                for (size_t i = 0u; i < capacity; ++i){
+                    std::optional<Request> request = this->request_center->pop();
+
+                    if (!static_cast<bool>(request)){
+                        return vec;
+                    }
+
+                    vec.push_back(std::move(request.value()));
+                }
+
+                return vec;
+            }
+    };
 }
 
 #endif

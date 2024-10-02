@@ -119,24 +119,37 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     using global_packet_id_t = GlobalPacketIdentifier;
 
-    struct Packet{
+    struct PacketHeader{
         Address fr_addr;
         Address to_addr; 
         global_packet_id_t id;
         uint8_t retransmission_count;
         uint8_t priority;
         uint8_t taxonomy; 
-        dg::network_std_container::string content;
-        dg::network_std_container::vector<timepoint_t> port_stamps;
+        dg::network_std_container::fixed_cap_vector<timepoint_t, MAX_STAMP_SZ> port_stamps;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(fr_addr, to_addr, id, retransmission_count, priority, taxonomy, content, port_stamps);
+            reflector(fr_addr, to_addr, id, retransmission_count, priority, taxonomy, port_stamps);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(fr_addr, to_addr, id, retransmission_count, priority, taxonomy, content, port_stamps);
+            reflector(fr_addr, to_addr, id, retransmission_count, priority, taxonomy, port_stamps);
+        }
+    };
+
+    struct Packet: PacketHeader{
+        dg::network_std_container::string content;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(static_cast<const PacketHeader&>(*this), content);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(static_cast<PacketHeader&>(*this), content);
         }
     };
 
@@ -284,6 +297,34 @@ namespace dg::network_kernel_mailbox_impl1::utility{
     static auto to_timelapsed(std::chrono::duration<Args...> dur) noexcept -> timelapsed_t{
 
         return std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count();
+    }
+
+    static auto serialize_packet(Packet packet) noexcept -> dg::network_std_container::string{
+
+        size_t header_sz    = dg::network_compact_serializer::integrity_size(static_cast<const PacketHeader&>(packet));  //assure that PacketHeader is constexpr sz
+        size_t content_sz   = packet.content.size();
+        size_t total_sz     = content_sz + header_sz;
+        dg::network_std_container::string bstream = std::move(packet.content);
+        bstream.resize(total_sz);
+        char * header_ptr   = bstream.data() + content_sz;
+        dg::network_compact_serializer::integrity_serialize_into(header_ptr, static_cast<const PacketHeader&>(packet));
+
+        return bstream;
+    }
+
+    static auto deserialize_packet(dg::network_std_container::string bstream) noexcept -> std::expected<Packet, exception_t>{
+
+        Packet rs           = {};
+        auto header_sz      = dg::network_compact_serializer::intergrity_size(static_cast<const PacketHeader&>(packet)); //assure that PacketHeader is constexpr sz
+        auto [left, right]  = dg::network_genult::backsplit_str(std::move(bstream), header_sz);
+        rs->content         = std::move(left);
+        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<PacketHeader>)(static_cast<PacketHeader&>(rs), right.data(), right.size());
+
+        if (dg::network_exception::is_failed(err)){
+            return std::unexpected(err);
+        }
+
+        return {std::in_place_t{}, std::move(rs)};
     }
 }
 
@@ -884,7 +925,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto rs = std::move(this->packet_vec.back());
                 this->packet_vec.pop_back();
 
-                return rs;
+                return {std::in_place_t{}, std::move(rs)};
             }   
     };
 
@@ -930,7 +971,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto rs = std::move(this->packet_vec.back().pkt);
                 this->packet_vec.pop_back();
 
-                return rs;
+                return {std::in_place_t{}, std::move(rs)};
             }
     };
 
@@ -1064,7 +1105,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 this->cur_byte_count -= constants::MSG_MAX_SZ;
-
                 return rs;
             }
     };
@@ -1268,13 +1308,12 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 } 
 
                 cur->port_stamps.push_back(utility::unix_timestamp());
-                size_t sz = dg::network_compact_serializer::integrity_size(cur.value());
-                auto buf = dg::network_std_container::string(sz); 
-                dg::network_compact_serializer::integrity_serialize_into(buf.data(), cur.value()); //consider convert -> unstable_addr str container that raii stable_addr - somewhat like realloc - to avoid computation
-                exception_t err = socket_service::nonblocking_send(*this->socket, cur->to_addr, buf.data(), sz);
+                dg::network_std_container::string bstream = utility::serialize_packet(std::move(cur.value()));
+                exception_t err = socket_service::nonblocking_send(*this->socket, cur->to_addr, bstream.data(), bstream.size());
                 
                 if (dg::network_exception::is_failed(err)){
                     dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(err));
+                    return false;
                 }
 
                 return true;
@@ -1337,21 +1376,23 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 
                 model::Packet pkt   = {};
                 size_t sz           = {};
-                auto buf            = dg::network_std_container::string(constants::MAXIMUM_MSG_SIZE);
-                exception_t err     = socket_service::blocking_recv(*this->socket, buf.data(), sz, constants::MAXIMUM_MSG_SIZE);
+                auto bstream        = dg::network_std_container::string(constants::MAXIMUM_MSG_SIZE);
+                exception_t err     = socket_service::blocking_recv(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE);
 
                 if (dg::network_exception::is_failed(err)){
                     dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(err));
                     return false;
                 }
 
-                auto expected_nxt_ptr = dg::network_compact_serializer::integrity_deserialize_into(pkt, buf.data(), sz); //consider convert -> unstable_addr str container that raii stable_addr - somewhat like realloc - to avoid computation - such that solely the kernel is responsible for populating the data
+                bstream.resize(sz);
+                std::expected<Packet, exception_t> epkt = utility::deserialize_packet(std::move(bstream)); 
                 
-                if (!expected_nxt_ptr.has_value()){
-                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(expected_nxt_ptr.error()));
+                if (!epkt.has_value()){
+                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(epkt.error()));
                     return true;
                 }
-
+                
+                Packet pkt = std::move(epkt.value());
                 pkt.port_stamps.push_back(utility::unix_timestamp());
 
                 if (pkt.taxonomy == constants::rts_ack){
@@ -1442,7 +1483,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                     return std::nullopt;
                 }
 
-                return std::move(pkt->content);
+                return {std::in_place_t{}, std::move(pkt->content)};
             }
     };
 

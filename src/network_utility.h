@@ -47,6 +47,20 @@ namespace dg::network_genult{
             }
     };
 
+    template <class ...Args>
+    auto backsplit_str(std::basic_string<Args...> s, size_t sz) -> std::pair<std::basic_string<Args...>, std::basic_string<Args...>>{
+
+        size_t rhs_sz = std::min(s.size(), sz); 
+        std::basic_string<Args...> rhs(rhs_sz);
+
+        for (size_t i = rhs_sz; i != 0; --i){
+            rhs[i - 1] = s.back();
+            s.pop_back();
+        }
+
+        return std::make_pair(std::move(s), std::move(rhs));
+    }
+
     auto unix_timestamp() noexcept -> unix_timepoint{
 
         return unix_timepoint(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()));
