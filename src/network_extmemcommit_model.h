@@ -53,6 +53,30 @@ namespace dg::network_extmemcommit_model{
 
         return std::holds_alternative<InitEvent>(event);
     }
+
+    auto get_signal_event(poly_event_t event) noexcept -> dg::network_tile_signal_poly::virtual_payload_t{
+
+        auto rs = std::move(std::get<SignalEvent>(event).payload);
+        return rs;
+    }
+
+    auto get_inject_event(poly_event_t event) noexcept -> dg::network_tile_injection_poly::virtual_payload_t{
+
+        auto rs = std::move(std::get<InjectEvent>(event).payload);
+        return rs;
+    }
+
+    auto get_condinject_event(poly_event_t event) noexcept -> dg::network_tile_condinjection_poly::virtual_payload_t{
+
+        auto rs = std::move(std::get<ConditionalInjectEvent>(event).payload);
+        return rs;
+    }
+
+    auto get_init_event(poly_event_t event) noexcept -> dg::network_tile_initialization_poly::virtual_payload_t{
+
+        auto rs = std::move(std::get<InitEvent>(event).payload);
+        return rs;
+    }
 }
 
 #endif

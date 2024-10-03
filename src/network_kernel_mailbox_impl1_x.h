@@ -8,6 +8,7 @@
 #include <chrono>
 #include "network_log.h"
 #include "network_concurrency.h"
+#include "network_concurrency_x.h"
 
 namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
@@ -297,14 +298,17 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             std::unique_ptr<InBoundContainerInterface> base;
             dg::network_std_container::unordered_map<radix_t, std::unique_ptr<ExhaustionControllerInterface>> exhaustion_controller_map;
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            ExhaustionControlledInboundContainer(std::unique_ptr<InBoundContainerInterface> base, 
+            ExhaustionControlledInBoundContainer(std::unique_ptr<InBoundContainerInterface> base, 
                                                  dg::network_std_container::unordered_map<radix_t, std::unique_ptr<ExhaustionControllerInterface>> exhaustion_controller_map,
+                                                 std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
                                                  std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
                                                                                             exhaustion_controller_map(std::move(exhaustion_controller_map)),
+                                                                                            executor(std;:move(executor)),
                                                                                             mtx(std::move(mtx)){}
             
             auto get(radix_t radix) noexcept -> std::optional<dg::network_std_container::string>{
@@ -314,7 +318,11 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             void push(radix_t radix, dg::network_std_container::string content) noexcept{
 
-                while (!this->internal_push(radix, content)){}
+                // while (!this->internal_push(radix, content)){} //move from wrong -> not yet wrong
+
+                auto lambda = [&]() noexcept{return this->internal_push(radix, content);};
+                auto exe    = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(lambda)>(std::move(lambda));
+                this->executor->exec(exe);
             }
         
         private:
@@ -402,19 +410,26 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             std::unique_ptr<OutBoundContainerInterface> base;
             std::unique_ptr<ExhaustionControllerInterface> exhaustion_controller;
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
             ExhaustionControlledOutBoundContainer(std::unique_ptr<OutBoundContainerInterface> base,
                                                   std::unique_ptr<ExhaustionControllerInterface> exhaustion_controller,
+                                                  std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
                                                   std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
                                                                                              exhaustion_controller(std::move(exhaustion_controller)),
+                                                                                             executor(std::move(executor)),
                                                                                              mtx(std::move(mtx)){}
 
             void push(OutBoundRequest request) noexcept{
 
-                while (!this->internal_push(request)){}
+                // while (!this->internal_push(request)){} //move from wrong -> not yet wrong
+
+                auto lambda = [&]{return this->internal_push(request);};
+                auto exe    = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(lambda)>(std::move(lambda));
+                this->executor->exec(exe);
             }
 
             auto pop() noexcept -> std::optional<OutBoundRequest>{

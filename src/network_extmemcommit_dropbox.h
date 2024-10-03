@@ -192,6 +192,13 @@ namespace dg::network_extmemcommit_dropbox{
             }
     };
 
+    //this is probably questionable - yet I think there's more to RequestCenter than just a warehouse
+    //split the responsibility here for future extension - the implementation is placeholder only - not necessarily the final implementation
+    //the responsibility that could only be extended here is kind request - let's say that signals are compact - injections are expensive - then vectorization sz for each kind should be different 
+    //or anonymous request - think onion - request has random routing and a countdown - mask requestor and requestee
+    //the implementation should be simple - for countdown != 0, randomize peer, change requestor - current, send request -> the randomized peer, track the request in memory for backprop 
+    //not necessary in the next few years - but in the future - where massive P2P network is required - not for computation - but trust issues
+
     class RequestCenter: public virtual RequestCenterInterface{
 
         private:

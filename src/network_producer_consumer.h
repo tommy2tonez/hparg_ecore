@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <array>
 #include <memory>
+#include <atomic> 
+#include "network_concurrency_x.h"
 
 namespace dg::network_producer_consumer{
 
@@ -15,16 +17,6 @@ namespace dg::network_producer_consumer{
 
         virtual ~ProducerInterface() noexcept = default;
         virtual void get(event_t * events, size_t& event_sz, size_t event_cap) noexcept = 0;
-    };
-
-    template <class EventType>
-    struct DistributedProducerInterface{
-        using event_t = EventType;
-        static_assert(std::is_trivial_v<event_t>);
-        
-        virtual ~DistributedProducerInterface() noexcept = default; 
-        virtual auto range() const noexcept -> size_t = 0;
-        virtual void get(size_t i, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;  
     };
 
     template <class EventType>
@@ -42,7 +34,7 @@ namespace dg::network_producer_consumer{
         static_assert(std::is_trivial_v<event_t>);
         
         virtual ~LimitConsumerInterface() noexcept = default;
-        virtual void push(event_t * src, size_t src_sz) noexcept = 0;  
+        virtual auto push(event_t * src, size_t src_sz) noexcept -> bool = 0;  
         virtual auto capacity() const noexcept -> size_t = 0;
     };
 
@@ -52,10 +44,13 @@ namespace dg::network_producer_consumer{
         private:
 
             std::shared_ptr<LimitConsumerInterface<EventType>> base;
-        
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
+
         public:
 
-            LimitConsumerToConsumerWrapper(std::shared_ptr<LimitConsumerInterface<EventType>> base) noexcept: base(std::move(base)){}
+            LimitConsumerToConsumerWrapper(std::shared_ptr<LimitConsumerInterface<EventType>> base,
+                                           std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
+                                                                                                                                      executor(std::move(executor)){}
 
             void push(event_t * events, size_t event_sz) noexcept{
                 
@@ -64,15 +59,13 @@ namespace dg::network_producer_consumer{
 
                 while (rem_sz != 0u){
                     size_t submitting_sz = dg::network_genult::safe_posint_access(std::min(rem_sz, this->base->capacity()));
-                    this->base->push(cur, submitting_sz);
+                    dg::network_concurrency_infretry_x::ExecutableWrapper exe([&]() noexcept{return this->base->push(cur, submitting_sz)});
+                    this->executor->exec(virtexe);
                     std::advance(cur, submitting_sz);
                     rem_sz -= submitting_sz;
                 }
             }
     };
-
-    //don't think that this is some kind of invention - it's hard (if not impossibile) to do std-container-compatibility + c-style error throw for instantiation
-    //I rather let compiler does all the magics for constructor, destructor, move, copy, who-knows-what-in-the-future (which is a mess), and use std_compatible way - unique_ptr<> to stay in the "holy grail" of std_container_compatibility
 
     template <class event_t>
     struct DeliveryHandle{
@@ -205,12 +198,65 @@ namespace dg::network_producer_consumer{
 
         return {std::in_place_t{}, handle.value(), xdelvsrv_close_handle<event_t>};
     }
+
+    template <class EventType>
+    struct WareHouseInterface: virtual ProducerInterface<EventType>,
+                               virtual ConsumerInterface<EventType>{};
+
+    template <class EventType>
+    class LckWareHouse: public virtual WareHouseInterface<EventType>{
+
+        private:
+
+            dg::network_std_container::vector<EventType> vec;
+            const size_t digest_cap;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            LckWareHouse(dg::network_std_container::vector<EventType> vec,
+                         size_t digest_cap,
+                         std::unique_ptr<std::mutex> mtx) noexcept: vec(std::move(vec)),
+                                                                    digest_cap(digest_cap),
+                                                                    mtx(std::move(mtx)){}
+         
+            auto push(EventType * ingestible_arr, size_t sz) noexcept -> bool{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->digest_cap){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+
+                if (this->vec.size() + sz > this->vec.capacity()){
+                    return false;
+                }
+
+                this->vec.insert(this->vec.end(), ingestible_arr, ingestible_arr + sz);
+                return true;
+            }
+
+            void get(EventType * dst, size_t& dst_sz, size_t dst_cap) noexcept{
+
+                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                dst_sz          = std::min(dst_cap, this->vec.size());
+                size_t new_sz   = this->vec.size() - dst_sz;
+                std::copy(this->vec.begin() + new_sz, this->vec.end(), dst);
+                this->vec.resize(new_sz);
+            }
+
+            auto capacity() const noexcept -> size_t{
+
+                return this->digest_cap;
+            }
+    };
 }
 
 namespace dg::network_raii_producer_consumer{
-
-    //it's hard to code this correctly so its better to be correct for a very minute subset of usecases than not being correct at all 
-
+    
     template <class EventType>
     struct ProducerInterface{
         using event_t = EventType;
@@ -219,7 +265,7 @@ namespace dg::network_raii_producer_consumer{
         static_assert(std::is_nothrow_move_assignable_v<event_t>);
 
         virtual ~ProducerInterface() noexcept = default;
-        virtual auto get(size_t) noexcept -> dg::network_std_container::vector<event_t> = 0; //yeah - optional is werid -
+        virtual auto get(size_t) noexcept -> dg::network_std_container::vector<event_t> = 0;
     };
 
     template <class EventType>
@@ -241,7 +287,7 @@ namespace dg::network_raii_producer_consumer{
         static_assert(std::is_nothrow_move_assignable_v<event_t>);
 
         virtual ~LimitConsumerInterface() noexcept = default;
-        virtual void push(dg::network_std_container::vector<event_t>) noexcept = 0;
+        virtual auto push(dg::network_std_container::vector<event_t>) noexcept -> dg::network_std_container::vector<event_t> = 0; //this is b way to do this - better off with internalized meter
         virtual auto capcity() const noexcept -> size_t = 0; 
     };
 
@@ -251,16 +297,25 @@ namespace dg::network_raii_producer_consumer{
         private:
 
             std::shared_ptr<LimitConsumerInterface<EventType>> base;
-        
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
+
         public:
 
-            LimitConsumerToConsumerWrapper(std::shared_ptr<LimitConsumerInterface<EventType>> base) noexcept: base(std::move(base)){}
+            LimitConsumerToConsumerWrapper(std::shared_ptr<LimitConsumerInterface<EventType>> base,
+                                           std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
+                                                                                                                                      executor(std::move(executor)){}
 
             void push(dg::network_std_container::vector<EventType> vec) noexcept{
 
                 while (!vec.empty()){ 
                     size_t extracting_sz = dg::network_genult::safe_posint_access(std::min(vec.size(), this->base->capacity()));
-                    this->base->push(this->extract_back(vec, extracting_sz));
+                    dg::network_std_container::vector<EventType> ingestible_vec = this->extract_back(vec, extracting_sz);
+                    auto lambda = [&]() noexcept{
+                        ingestible_vec = this->base->push(std::move(ingestible_vec));
+                        return ingestible_vec.empty();
+                    };
+                    dg::network_concurrency_infretry_x::ExecutableWrapper exe(lambda); 
+                    this->executor->exec(exe);
                 }
             }
         
@@ -424,6 +479,106 @@ namespace dg::network_raii_producer_consumer{
 
         return {std::in_place_t{}, handle.value(0, xdelvsrv_clost_handle<event_t>)};
     }
+
+    template <class EventType>
+    struct WareHouseInterface: virtual ProducerInterface<EventType>,
+                               virtual LimitConsumerInterface<EventType>{};
+
+    template <class EventType>
+    class LckWareHouse: public virtual WareHouseInterface<EventType>{
+
+        private:
+
+            dg::network_std_container::vector<EventType> vec;
+            const size_t ingest_cap;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            LckWareHouse(dg::network_std_container::vector<EventType> vec, 
+                         size_t ingest_cap,
+                         std::unique_ptr<std::mutex> mtx) noexcept: vec(std::move(vec)),
+                                                                    ingest_cap(ingest_cap),
+                                                                    mtx(std::move(mtx)){}
+            
+            auto push(dg::network_std_container::vector<EventType> ingesting_vec) noexcept -> dg::network_std_container::vector<EventType>{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (ingesting_vec.size() > this->ingest_cap){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+
+                if (this->vec.size() + ingesting_vec.size() > this->vec.capacity()){
+                    return ingesting_vec;
+                }
+
+                for (auto& ingestible: ingesting_vec){
+                    this->vec.push_back(std::move(ingestible));
+                }
+
+                return {};
+            }
+
+            auto get(size_t cap) noexcept -> dg::network_std_container::vector<event_t>{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                dg::network_std_container::vector<EventType> rs{};
+
+                for (size_t i = 0u; i < cap; ++i){
+                    if (this->vec.empty()){
+                        return rs;
+                    } 
+
+                    rs.push_back(std::move(this->vec.back()));
+                    this->vec.pop_back();
+                }
+
+                return rs;            
+            } 
+
+            auto capacity() const noexcept -> size_t{
+
+                return this->ingest_cap;
+            }
+    };
+
+    template <size_t CONCURRENCY_SZ, class EventType> //deprecate next iteration
+    class ConcurrentWarehouse: public virtual DropBoxInterface{
+
+        private:
+
+            dg::network_std_container::vector<std::unique_ptr<WareHouseInterface<EventType>>> warehouse_vec;
+            const size_t warehouse_cap;
+
+        public:
+
+            ConcurrentWarehouse(dg::network_std_container::vector<std::unique_ptr<WareHouseInterface<EventType>>> warehouse_vec,
+                                size_t warehouse_cap, 
+                                std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: warehouse_vec(std::move(warehouse_vec)),
+                                                                                          warehouse_cap(warehouse_cap){}
+
+            auto push(dg::network_std_container::vector<EventType> vec) noexcept -> std::optional<dg::network_std_container::vector<EventType>>{
+
+                size_t thr_idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{});
+                return this->warehouse_vec[thr_id]->push(std::move(vec));
+            }
+
+            auto capacity() const noexcept -> size_t{
+
+                return this->warehouse_cap;
+            }
+
+            auto get(size_t cap) noexcept -> dg::network_std_container::vector<EventType>{
+
+                auto thr_idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{});
+                return this->warehouse_vec[thr_idx]->get(cap);
+            }
+    };
+
 }
 
 #endif

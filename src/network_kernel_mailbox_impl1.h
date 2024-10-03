@@ -32,6 +32,7 @@
 #include <array>
 #include "network_log.h"
 #include "network_exception.h"
+#include "network_concurrency_x.h"
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -1057,6 +1058,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t cur_byte_count;
             size_t cap_byte_count;
             std::unique_ptr<PacketContainerInterface> base_packet_container;
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
             std::unique_ptr<std::mutex> mtx;
 
         public:
@@ -1064,14 +1066,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             ExhaustionControlledPacketContainer(size_t cur_byte_count,
                                                 size_t cap_byte_count,
                                                 std::unique_ptr<PacketContainerInterface> base_packet_container,
+                                                std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
                                                 std::unique_ptr<std::mutex> mtx) noexcept: cur_byte_count(cur_byte_count),
                                                                                            cap_byte_count(cap_byte_count),
                                                                                            base_packet_container(std::move(base_packet_container)),
+                                                                                           executor(std::move(executor)),
                                                                                            mtx(std::move(mtx)){}
 
             void push(Packet pkt) noexcept{
 
-                while (!internal_push(pkt)){}
+                // while (!internal_push(pkt)){} //move from wrong -> not yet wrong - avoid deadlock which hinders recovery - this is precisely the reason that dependency injection via constructor is useful
+                auto lambda = [&]() noexcept{
+                    return this->internal_push(pkt);
+                };
+                auto exe = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(lambda)>(std::move(lambda));
+                this->executor->exec(exe);
             } 
 
             auto pop() noexcept -> std::optional<Packet>{
