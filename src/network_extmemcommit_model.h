@@ -7,15 +7,6 @@
 
 namespace dg::network_extmemcommit_model{
 
-    using event_kind_t = uint8_t;
-
-    enum event_option: event_kind_t{
-        signal_event_kind               = 0u,
-        inject_event_kind               = 1u,
-        conditional_inject_event_kind   = 2u,
-        init_event_kind                 = 3u
-    };
-
     struct SignalEvent{
         dg::network_tile_signal_poly::virtual_payload_t payload;
     };

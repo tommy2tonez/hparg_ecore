@@ -19,7 +19,8 @@ namespace dg::network_kernel_mailbox_channel{
 
     enum mailbox_channel: radix_t{
         CHANNEL_HEARTBEAT       = 0u,
-        CHANNEL_EXTMEMCOMMIT    = 1u
+        CHANNEL_EXTMEMCOMMIT    = 1u,
+        CHANNEL_REST            = 2u
     };
 } 
 

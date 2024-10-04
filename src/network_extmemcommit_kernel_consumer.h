@@ -15,7 +15,7 @@ namespace dg::network_extmemcommit_kernel_handler{
     using poly_event_t  = dg::network_extmemcommit_model::poly_event_t;
     
     template <class T>
-    using Request = dg::network_model::Request<T>; // 
+    using Request = dg::network_model::Request<T>;
 
     class RequestConsumer: public virtual dg::network_concurrency::WorkerInterface{
 
