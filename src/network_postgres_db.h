@@ -369,8 +369,8 @@ namespace dg::network_postgres_db{
             dg::network_std_container::string encoded_payload   = utility::quote(utility::encode_sql(heartbeat_payload));
             dg::network_std_container::string inject_query      = utility::query_format("INSERT INTO HeartBeat(payload) VALUES({})", encoded_payload);
 
-            inject_transaction->exec(inject_query.c_str()).no_rows();
-            inject_transaction->commit();
+            transaction_handle.exec(inject_query.c_str()).no_rows();
+            transaction_handle.commit();
             
             dg::network_std_container::string get_query = utility::query_format("SELECT * FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
             auto rs = transaction_handle.exec(get_query.c_str());
