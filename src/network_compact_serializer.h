@@ -14,9 +14,10 @@
 #include <optional>
 #include <numeric>
 #include "network_type_traits_x.h"
-#include "network_exception.h"
+// #include "network_exception.h"
 #include "network_hash.h"
 #include <type_traits>
+#include <array>
 
 namespace dg::network_compact_serializer::constants{
 
@@ -288,7 +289,6 @@ namespace dg::network_compact_serializer::archive{
             
             size_t rs = this->count(types::size_type{});
 
-            //optimizable - worth or not worth it - 
             for (const auto& e: data){
                 rs += this->count(e);
             }
@@ -515,8 +515,8 @@ namespace dg::network_compact_serializer{
             dg::network_exception::throw_exception(dg::network_exception::INVALID_SERIALIZATION_FORMAT);
         }
 
-        char * first                = buf;
-        char * last                 = first + (sz - size(types::hash_type{})); 
+        const char * first          = buf;
+        const char * last           = first + (sz - size(types::hash_type{})); 
         types::hash_type expected   = {};
         types::hash_type reality    = utility::hash(first, std::distance(first, last));
         deserialize_into(expected, last);

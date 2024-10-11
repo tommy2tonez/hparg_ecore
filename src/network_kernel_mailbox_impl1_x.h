@@ -149,9 +149,398 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
     };
 }
 
+namespace dg::network_kernel_mailbox_impl1_streamx{
+    
+    struct GlobalIdentifier{
+        Address addr;
+        uint64_t local_id;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(addr, local_id);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(addr, local_id);
+        }
+    };
+
+    struct SegmentPacket{
+        dg::network_std_container::string buf;
+        dg::network_std_container::string id;
+
+        uint64_t segment_off;
+        uint64_t segment_sz;
+        uint64_t total_byte_sz;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(buf, id, segment_off, segment_sz, total_byte_sz);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(buf, id, segment_off, segment_sz, total_byte_sz);
+        }
+    };
+
+    struct PacketizerInterface{
+        virtual ~PacketizerInterface() noexcept = default;
+        virtual auto packetize(const dg::network_std_container::string&) noexcept -> dg::network_std_container::vector<SegmentPacket> = 0; 
+    };
+
+    struct EntranceControllerInterface{
+        virtual ~EntranceControllerInterface() noexcept = default;
+        virtual void tick(const dg::network_std_container::string&) noexcept = 0; 
+        virtual auto get_expired() noexcept -> dg::network_std_container::vector<dg::network_std_container::string> = 0;
+    };
+
+    struct PacketAssemblerInterface{
+        virtual ~PacketAssemblerInterface() noexcept = default;  
+        virtual auto assemble(SegmentPacket) noexcept -> std::optional<dg::network_std_container::string> = 0; 
+        virtual void destroy(const dg::network_std_container::string& id) noexcept = 0;
+    };
+
+    struct InBoundContainerInterface{
+        virtual ~InBoundContainerInterface() noexcept = default;
+        virtual void push(dg::network_std_container::string) noexcept = 0;
+        virtual auto pop() noexcept -> std::optional<dg::network_std_container::string> = 0;
+    };
+
+    class Packetizer: public virtual PacketizerInterface{
+
+        private:
+
+            size_t segment_byte_sz;
+            Address factory_addr;
+            size_t packetized_sz; 
+
+        public:
+            
+            Packetizer(size_t segment_byte_sz,
+                       Address factory_addr,
+                       size_t packetized_sz) noexcept: segment_byte_sz(segment_byte_sz),
+                                                       factory_addr(std::move(factory_addr)),
+                                                       packetized_sz(packetized_sz){}
+
+            auto packetize(const dg::network_std_container::string& buf) noexcept -> dg::network_std_container::vector<SegmentPacket>{
+                
+                size_t segment_sz = buf.size() / this->segment_byte_size + size_t{buf.size() % this->segment_byte_size != 0u};
+                dg::network_std_container::vector<SegmentPacket> rs{};
+
+                for (size_t i = 0u; i < segment_sz; ++i){
+                    size_t first            = this->segment_byte_sz * i;
+                    size_t last             = std::min(buf.size(), this->segment_byte_sz * (i + 1));
+                    SegmentPacket packet{};
+                    std::copy(buf.data() + first, buf.data() + last, std::back_inserter(packet.buf));
+                    packet.id               = this->make_global_packet_id();
+                    packet.segment_off      = i;
+                    packet.segment_sz       = segment_sz;
+                    packet.total_byte_sz    = buf.size();
+                    rs.push_back(std::move(packet));
+                }
+
+                return rs;
+            }
+        
+        private:
+
+            auto make_global_packet_id() noexcept -> dg::network_std_container::string{
+
+                GlobalIdentifier id{};
+                id.addr     = this->factory_addr;
+                id.local_id = this->packetized_sz;
+                this->packetized_sz += 1;
+
+                dg::network_std_container::string rs(dg::network_compact_serializer::size(id), ' ');
+                dg::network_compact_serializer::serialize_into(rs.data(), id);
+
+                return rs;
+            }
+        
+    };
+
+    class EntranceController: public virtual EntranceControllerInterface{
+
+        private:
+
+            struct EntranceEntry{
+                std::chrono::nanoseconds timestamp;
+                dg::network_std_container::string key;
+                size_t entry_id;
+            };
+
+            dg::network_std_container::vector<EntranceEntry> timesheet;
+            dg::network_std_container::unordered_map<dg::network_std_container::string, size_t> key_id_map;
+            size_t id_size;
+            std::chrono::nanoseconds expiry_period;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            EntranceController(dg::network_std_container::vector<EntranceEntry> timesheet,
+                                dg::network_std_container::unordered_map<dg::network_std_container::string, size_t> key_id_map,
+                                size_t id_size,
+                                std::chrono::nanoseconds expiry_period,
+                                std::unique_ptr<std::mutex> mtx) noexcept: timesheet(std::move(timesheet)),
+                                                                           key_id_map(std::move(key_id_map)),
+                                                                           id_size(std::move(id_size)),
+                                                                           expiry_period(std::move(expiry_period)),
+                                                                           mtx(std::move(mtx)){}
+            
+            void tick(const dg::network_std_container::string& key) noexcept{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                size_t entry_id = this->id_size;
+                std::chrono::nanoseconds now = dg::network_genult::unix_timestamp();
+                EntranceEntry entry{now, key, entry_id};
+                this->timesheet.push_back(std::move(entry));
+                std::push_heap(this->timesheet.begin(), this->timesheet.end(), [](const EntranceEntry& lhs, const EntranceEntry& rhs){return lhs.timestamp > rhs.timestamp;}); 
+                this->key_id_map[key] = entry_id;
+                this->id_size += 1;
+            }
+
+            auto get_expired() noexcept -> dg::network_std_container::vector<dg::network_std_container::string>{
+
+                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto expired    = static_cast<std::chrono::nanoseconds>(dg::network_genult::unix_timestamp()) - this->expiry_period;
+                auto rs         = dg::network_std_container::vector<dg::network_std_container::string>{};
+
+                while (true){
+                    if (this->timesheet.empty()){
+                        break;
+                    }
+
+                    if (this->timesheet.front().timestamp > expired){
+                        break;
+                    }
+
+                    std::pop_heap(this->timesheet.begin(), this->timesheet.end(), [](const EntranceEntry& lhs, const EntranceEntry& rhs){return lhs.timestamp > rhs.timestamp;});
+                    EntranceEntry entry = std::move(this->timesheet.back());
+                    this->timesheet.pop_back();
+                    auto map_ptr = this->key_id_map.find(entry.entry_id); 
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (map_ptr == this->key_id_map.end()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    if (map_ptr->second == entry.entry_id){
+                        rs.push_back(std::move(entry.key));
+                        this->key_id_map.erase(map_ptr);
+                    }
+                }
+
+                return rs;
+            }
+    };
+
+    class PacketAssembler: public virtual PacketAssemblerInterface{
+
+        private:
+
+            struct AssembledPacket{
+                dg::network_std_container::string data;
+                size_t rem_sz;
+            };
+
+            dg::network_std_container::unordered_map<dg::network_std_container::string, AssembledPacket> packet_map;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            PacketAssembler(dg::network_std_container::unordered_map<dg::network_std_container::string, AssembledPacket> packet_map, 
+                            std::unique_ptr<std::mutex> mtx) noexcept: packet_map(std::move(packet_map)),
+                                                                       mtx(std::move(mtx)){}
+            
+            auto assemble(SegmentPacket segment) noexcept -> std::optional<dg::network_std_container::string>{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto ptr = this->packet_map.find(segment.id);
+
+                if (ptr == this->packet_map.end()){
+                    AssembledPacket pkt{dg::network_std_container::string(segment.total_byte_sz, ' '), segment.segment_sz};     
+                    auto [emplace_ptr, status] = this->packet_map.emplace(std::make_pair(segment.id, std::move(pkt)));
+                    dg::network_genult::assert(status);
+                    ptr = emplace_ptr;
+                }
+
+                size_t region_sz    = segment.total_byte_sz / segment.segment_sz;
+                void * dst          = ptr->second.data + (segment.segment_off * region_sz);
+                const void * src    = segment.buf.data();
+                size_t cpy_sz       = segment.buf.size();
+
+                std::memcpy(dst, src, cpy_sz);
+                dg::network_genult::assert(ptr->second.rem_sz != 0u);
+                ptr->second.rem_sz -= 1;
+
+                if (ptr->second.rem_sz != 0u){
+                    return std::nullopt;
+                }
+
+                return ptr->second.data; //optimizable
+            }
+
+            void destroy(const dg::network_std_container::string& id) noexcept{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                this->packet_map.erase(id);
+            }
+    };
+
+    class InBoundContainer: public virtual InBoundContainerInterface{
+
+        private:
+
+            dg::network_std_container::vector<dg::network_std_container::string> vec;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            InBoundContainer(dg::network_std_container::vector<dg::network_std_container::string> vec,
+                             std::unique_ptr<std::mutex> mtx) noexcept: vec(std::move(vec)),
+                                                                        mtx(std::move(mtx)){}
+            
+            void push(dg::network_std_container::string buf) noexcept{
+
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                this->vec.push_back(std::move(buf));
+            }
+
+            auto pop() noexcept -> std::optional<dg::network_std_container::string>{
+                
+                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                
+                if (this->vec.empty()){
+                    return std::nullopt;
+                }
+
+                auto rs = std::move(this->vec.back());
+                this->vec.pop_back();
+
+                return rs;
+            }
+    };
+
+    class ExpiryWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<PacketAssemblerInterface> packet_assembler;
+            std::shared_ptr<EntranceControllerInterface> timesheet_controller;
+        
+        public:
+
+            ExpiryWorker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
+                         std::shared_ptr<EntranceControllerInterface> timesheet_controller) noexcept: packet_assembler(std::move(packet_assembler)),
+                                                                                                       timesheet_controller(std::move(timesheet_controller)){}
+            
+            bool run_one_epoch() noexcept{
+
+                dg::network_std_container::vector<dg::network_std_container::string> expired_id_vec = this->timesheet_controller->get_expired();
+
+                if (expired_id_vec.empty()){
+                    return false;
+                }
+
+                for (const dg::network_std_container::string& expired_id: expired_id_vec){
+                    this->packet_assembler->destroy(expired_id);
+                }
+
+                return true;
+            }
+    };
+
+    class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<PacketAssemblerInterface> packet_assembler;
+            std::shared_ptr<InBoundContainerInterface> inbound_container;
+            std::shared_ptr<EntranceControllerInterface> timesheet_controller;
+            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> base;
+
+        public:
+
+            InBoundWorker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
+                          std::shared_ptr<InBoundContainerInterface> inbound_container,
+                          std::shared_ptr<EntranceControllerInterface> timesheet_controller,
+                          std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> base) noexcept: packet_assembler(std::move(packet_assembler)),
+                                                                                                                    inbound_container(std::move(inbound_container)),
+                                                                                                                    timesheet_controller(std::move(timesheet_controller)),
+                                                                                                                    base(std::move(base)){}
+
+            bool run_one_epoch() noexcept{
+
+                std::optional<dg::network_std_container::string> data = this->base->recv();
+
+                if (!static_cast<bool>(data)){
+                    return false;
+                }
+
+                SegmentPacket pkt{};
+                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<SegmentPacket>)(pkt, data->data(), data->size());
+
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                    return false;
+                }
+
+                dg::network_std_container::string id = pkt.id;
+                std::optional<dg::network_std_container::string> assembled_packet = this->packet_assembler->assemble(std::move(pkt)); //exhaustion control is hard here - VERY
+                this->timesheet_controller->tick(id);
+
+                if (assembled_packet.has_value()){
+                    this->inbound_container->push(std::move(assembled_packet.value()));
+                }
+
+                return true;
+            }
+    };
+
+    class MailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailBoxInterface{
+
+        private:
+
+            dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
+            std::unique_ptr<PacketizerInterface> packetizer;
+            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> base;
+            std::shared_ptr<InBoundContainerInterface> inbound_container;
+
+        public:
+
+            MailBox(dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemons,
+                    std::unique_ptr<PacketizerInterface> packetizer,
+                    std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> base,
+                    std::shared_ptr<InBoundContainerInterface> inbound_container): daemons(std::move(daemons)),
+                                                                                   packetizer(std::move(packetizer)),
+                                                                                   base(std::move(base)),
+                                                                                   inbound_container(std::move(inbound_container)){}
+
+            void send(Address addr, dg::network_std_container::string arg) noexcept{
+
+                dg::network_std_container::vector<SegmentPacket> segment_vec = this->packetizer->packetize(std::move(arg));
+
+                for (SegmentPacket& segment: segment_vec){
+                    auto bstream = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(segment), ' ');
+                    dg::network_compact_serializer::integrity_serialize_into(bstream.data(), segment);
+                    this->base->send(addr, std::move(bstream));
+                }
+            }
+
+            auto recv() noexcept -> std::optional<dg::network_std_container::string>{
+
+                return this->inbound_container->pop();
+            }
+    };
+}
+
 namespace dg::network_kernel_mailbox_impl1_radixx{
 
-    using radix_t = uint8_t; 
+    using radix_t = uint32_t; 
 
     static auto serialize_msg(radix_t radix, dg::network_std_container::string content) noexcept -> dg::network_std_container::string{
 
@@ -282,7 +671,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
                 dg::network_std_container::string rs = std::move(ptr->second.back());
                 ptr->second.pop_back();
 
-                return {std::in_place_t{}, std::move(rs)};
+                return std::move(rs);
             }
 
             void push(radix_t radix, dg::network_std_container::string content) noexcept{
@@ -400,7 +789,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
                 OutBoundRequest rs = std::move(this->vec.back());
                 this->vec.pop_back();
 
-                return {std::in_place_t{}, std::move(rs)};
+                return std::move(rs);
             }
     };
 

@@ -79,11 +79,11 @@ namespace dg::network_postgres_db::model{
     struct UserLogEntry: UserLog{
         dg::network_std_container::string entry_id;
     };
+}
 
-    struct CommitableInterface{
-        virtual ~CommitableInterface() noexcept = default;
-        virtual auto commit(pqxx::work&) noexcept -> exception_t = 0;
-    };
+namespace dg::network_postgres_db::model_factory{
+
+    using namespace dg::network_postgres_db::model;
 
     auto make_legacy_auth(const dg::network_std_container::string& salt, const dg::network_std_container& verifiable, const dg::network_std_container::string& user_id) noexcept -> std::expected<LegacyAuth, exception_t>{
 
@@ -153,7 +153,7 @@ namespace dg::network_postgres_db::model{
 
         return UserLog{content, kind, user_id, timestamp};
     }
-}
+} 
 
 namespace dg::network_postgres_db::constants{
 
@@ -314,11 +314,16 @@ namespace dg::network_postgres_db::utility{
 
 namespace dg::network_postgres_db{
 
+    struct CommitableInterface{
+        virtual ~CommitableInterface() noexcept = default;
+        virtual auto commit(pqxx::work&) noexcept -> exception_t = 0;
+    };
+
     inline std::unique_ptr<pqxx::connection> pq_conn; //-if performance problem arises - change -> atomic_shared_ptr or multiple instance approach 
     inline std::mutex mtx;
 
     template <class Lambda>
-    class CommitableWrapper: public virtual model::CommitableInterface{
+    class CommitableWrapper: public virtual CommitableInterface{
 
         private:
 
@@ -539,7 +544,7 @@ namespace dg::network_postgres_db{
         return dg::network_exception::to_cstyle_function(lambda)();
     }
 
-    auto make_commitable_create_systemlog(const model::SystemLog& log) noexcept -> std::expected<std::unique_ptr<model::CommitableInterface>, exception_t>{
+    auto make_commitable_create_systemlog(const model::SystemLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::network_std_container::string query = utility::query_format("INSERT INTO SystemLog(content, kind, timestamp) VALUES({}, {}, {})", utility::quote(utility::encode_sql(log.content)), 
@@ -552,7 +557,7 @@ namespace dg::network_postgres_db{
         return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
     };
 
-    auto make_commitable_create_userlog(const model::UserLog& log) noexcept -> std::expected<std::unique_ptr<model::CommitableInterface>, exception_t>{
+    auto make_commitable_create_userlog(const model::UserLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::network_std_container::string query = utility::query_format("INSERT INTO UserLog(content, kind, user_id, timestamp) VALUES({}, {}, {}, {})", utility::quote(utility::encode_sql(log.content)),
@@ -566,7 +571,7 @@ namespace dg::network_postgres_db{
         return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
     }
 
-    auto make_commitable_create_user(const model::User& user) noexcept -> std::expected<std::unique_ptr<model::CommitableInterface>, exception_t>{
+    auto make_commitable_create_user(const model::User& user) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::network_std_container::string query = utility::query_format("INSERT INTO User(id, clearance) VALUES({}, {})", utility::quote(utility::encode_sql(user.id)), 
@@ -578,7 +583,7 @@ namespace dg::network_postgres_db{
         return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
     }
 
-    auto make_commitable_create_legacy_auth(const model::LegacyAuth& legacy_auth) noexcept -> std::expected<std::unique_ptr<model::CommitableInterface>, exception_t>{
+    auto make_commitable_create_legacy_auth(const model::LegacyAuth& legacy_auth) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::network_std_container::string query = utility::query_format("INSERT INTO LegacyAuth(salt, verifiable, user_id) VALUES({}, {}, {})", utility::quote(utility::encode_sql(legacy_auth.salt)), 
@@ -591,7 +596,7 @@ namespace dg::network_postgres_db{
         return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
     }
 
-    auto make_commitable_delete_user_by_id(const dg::network_std_container::string& id) noexcept -> std::expected<std::unique_ptr<model::CommitableInterface>, exception_t>{
+    auto make_commitable_delete_user_by_id(const dg::network_std_container::string& id) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         if (std::clamp(id.size(), model::USER_ID_MIN_LENGTH, model::USER_ID_MAX_LENGTH) != id.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -606,7 +611,7 @@ namespace dg::network_postgres_db{
         return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
     }
 
-    void commit(dg::network_std_container::vector<std::unique_ptr<model::CommitableInterface>> commitables) noexcept -> exception_t{
+    void commit(dg::network_std_container::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 
