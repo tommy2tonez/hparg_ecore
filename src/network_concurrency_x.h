@@ -7,6 +7,7 @@
 #include <utility>
 #include <type_traits>
 #include "network_type_traits_x.h"
+#include <chrono>
 
 namespace dg::network_concurrency_infretry_x{
 
@@ -30,10 +31,13 @@ namespace dg::network_concurrency_infretry_x{
         private:
 
             std::shared_ptr<std::atomic<bool>> poison_pill;
-        
+            std::chrono::nanoseconds wait_dur; 
+
         public:
 
-            StdExecutor(std::shared_ptr<std::atomic<bool>> poison_pill): poison_pill(std::move(poison_pill)){}
+            StdExecutor(std::shared_ptr<std::atomic<bool>> poison_pill,
+                        std::chrono::nanoseconds wait_dur): poison_pill(std::move(poison_pill)),
+                                                            wait_dur(std::move(wait_dur)){}
 
             void exec(Executable& executor) noexcept{
 
@@ -41,9 +45,12 @@ namespace dg::network_concurrency_infretry_x{
                     if (this->load_poison_pill()){
                         return;
                     }
+
                     if (executor.run()){
                         return;
                     }
+
+                    std::this_thread::sleep_for(this->wait_dur);
                 }
             }
         
@@ -104,7 +111,7 @@ namespace dg::network_concurrency_infretry_x{
 
         constexpr size_t DICE_SZ = 128;
         std::shared_ptr<std::atomic<bool>> interceptor          = std::make_shared<std::atomic<bool>>(bool{false});
-        std::unique_ptr<ExecutorInterface> executor             = std::make_unique<StdExecutor<DICE_SZ>>(interceptor);
+        std::unique_ptr<ExecutorInterface> executor             = std::make_unique<StdExecutor<DICE_SZ>>(interceptor, std::chrono::microseconds(5));
         std::unique_ptr<ExecutorDestructorInterface> destructor = std::make_unique<StdExecutorDestructor>(interceptor);
 
         return std::make_pair(std::move(executor), std::move(destructor));   
