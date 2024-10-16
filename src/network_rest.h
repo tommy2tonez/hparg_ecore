@@ -1245,6 +1245,25 @@ namespace dg::network_post_rest_app{
     //         }
     // };
 
+    //consumer-producer
+    //2 approaches
+    
+    //1 - chan. luong` hien tai. | doi. toi' khi nao co' du~ lieu, mo? luong - anh khong dong y (kernel linux - windows - friends)
+    //2 - inf loop - chay. toi' khi nao co du lieu. | xu ly du lieu
+    
+    //2 duoc. chon. khi latency (lag) khong quan trong
+    //lag = thoi gian du~ lieu. duoc. nhan tu kernel -> thoi` gian du~ lieu. duoc xu ly boi? ung dung.
+    //20GB/s du~ lieu. -> ung dung
+    //cach 1: 20GB/s - spike (mat data)
+    //cach 2: 20GB/s - spike management (load balance of spike)
+    //cach 2: khong block luong`, xoa' socket, mo? socket (socket la phan` de~ bi sai nhat cua kernel)
+    //socket corrupted - (kernel panic, OOM, ...)
+    //peer corrupted - peer not responding (khong tra loi) - doi khi la do socket corrupted
+    //-> reset socket - unblock thread - (1) khong hoat dong - compromise program - (bad design)
+
+    //REST request - kernel spawns 1 thread - thread kernel - RB tree, 1 << 20, 1 << 25 - saturated threads - lost compute - DDOS attack
+    //nginx (different implementation) - same approach - 10-15 workers (recv REST requests in batch)
+
     auto request_token_get(dg::network_post_rest::client::RestControllerInterface& controller, TokenGenerateRequest request) noexcept -> std::expected<TokenGenerateResponse, exception_t>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;

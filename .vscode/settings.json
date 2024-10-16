@@ -78,6 +78,7 @@
         "charconv": "cpp",
         "format": "cpp",
         "span": "cpp",
-        "expected": "cpp"
+        "expected": "cpp",
+        "stdfloat": "cpp"
     }
 }
