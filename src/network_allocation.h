@@ -277,6 +277,7 @@ namespace dg::network_allocation{
     //the balance between cache-efficiency and fragmentation is tough to find - up to the implementation (number of circular heap_blks) and developer to decide
     //allocator might be global - or local
     //don't optimize this yet before actual profiling
+    //requires GC support - a daemon to intervally spawn allocator 
 
     auto cmalloc(size_t blk_sz) noexcept -> void *{
 

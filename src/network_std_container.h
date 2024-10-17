@@ -121,7 +121,7 @@ namespace dg::network_std_container{
     template <class T>
     using deque         = std::deque<T, dg::network_allocation::NoExceptAllocator<T>>;
 
-    using string = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
+    using string        = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
 }
 
 #endif

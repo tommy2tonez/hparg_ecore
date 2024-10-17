@@ -350,8 +350,6 @@ namespace dg::network_auth_utility{
 
 namespace dg::network_user{
 
-    //hmm - I think this oversteps into the model responsibility - then is the model unique reference by this component - that's a design question 
-
     struct UserBaseResource{
         std::unique_ptr<network_auth_utility::TokenControllerInterface> token_controller;
         std::unique_ptr<network_auth_utility::EncoderInterface> pw_encoder;

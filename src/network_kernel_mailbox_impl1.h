@@ -504,6 +504,10 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
     static auto send_noblock(SocketHandle sock, model::Address to_addr, const void * buf, size_t sz) noexcept -> exception_t{
 
+        //TODOS:
+        //another kernel protocol is required to saturate network bandwidth - either reimplementation or SO_REUSEPORT + SO_ATTACH + disable gro + unload ip tables + disable validation + disable audit + skip id calculation
+        //on top of all those configurations, use multiple ports to spam TCP packets - make sure that there's no lock congestion
+
         if (to_addr.ip.sin_fam() == AF_INET6){
             return send_noblock_ipv6(sock, to_addr, buf, sz);
         }
@@ -521,6 +525,10 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
     }
 
     static auto recv_block(SocketHandle sock, void * dst, size_t& dst_sz, size_t dst_cap) noexcept -> exception_t{
+
+        //TODOS:
+        //another kernel protocol is required to saturate network bandwidth - either reimplementation or SO_REUSEPORT + SO_ATTACH + disable gro + unload ip tables + disable validation + disable audit + skip id calculation
+        //on top of all those configurations, use multiple ports to spam TCP packets - make sure that there's no lock congestion
 
         if constexpr(DEBUG_MODE_FLAG){
             if (sock.protocol != SOCK_DGRAM){
@@ -1495,15 +1503,15 @@ namespace dg::network_kernel_mailbox_impl1::core{
     struct ComponentFactory{
 
         static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::InBoundControllerInterface> ib_controller,
-                                                             std::shared_ptr<packet_controller::SchedulerInterface> scheduler, //fine - scheduler is external injection - tons of optimization could be done with scheduler - this needs a right model to approx congestion - not the current one - of course
-                                                             std::unique_ptr<model::SocketHandle> socket,
-                                                             std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
-                                                             std::unique_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager,
-                                                             std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
-                                                             std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
-                                                             size_t num_inbound_worker,
-                                                             size_t num_outbound_worker,
-                                                             size_t num_retry_worker) -> std::unique_ptr<MailBoxInterface>{
+                                                           std::shared_ptr<packet_controller::SchedulerInterface> scheduler, //fine - scheduler is external injection - tons of optimization could be done with scheduler - this needs a right model to approx congestion - not the current one - of course
+                                                           std::unique_ptr<model::SocketHandle> socket,
+                                                           std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
+                                                           std::unique_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager,
+                                                           std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
+                                                           std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
+                                                           size_t num_inbound_worker,
+                                                           size_t num_outbound_worker,
+                                                           size_t num_retry_worker) -> std::unique_ptr<MailBoxInterface>{
             
             const size_t MIN_WORKER_SIZE    = size_t{1u};
             const size_t MAX_WORKER_SIZE    = size_t{1024u}; 

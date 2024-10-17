@@ -80,6 +80,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t CUDA_LAUNCH_COMPLETED               = 0u; 
     static inline constexpr exception_t CUDA_EXECUTABLE_WAITING_DISPATCH    = 0u; 
     static inline constexpr exception_t CUDA_NOT_SUPPORTED                  = 0u;
+    static inline constexpr exception_t UNMET_CLEARANCE                     = 0u;
     
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
