@@ -277,7 +277,7 @@ namespace dg::network_postgres_db::utility{
             num_rep = std::byteswap(num_rep);
         }
 
-        dg::network_std_container::string rs(8u);
+        dg::network_std_container::string rs(8u, ' ');
         std::memcpy(rs.data(), &num_rep, sizeof(uint64_t));
 
         return hex_encoder::encode(rs);
@@ -380,12 +380,11 @@ namespace dg::network_postgres_db{
             dg::network_std_container::string get_query = utility::query_format("SELECT * FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
             auto rs = transaction_handle.exec(get_query.c_str());
             rs.one_row();
-            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& encoded_payload){
+            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& encoded_payload){ //this is fine - consider string_view
                 if (heartbeat_payload != utility::decode_sql(encoded_payload)){
-                    dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+                    dg::network_exception::throw_exception(dg::network_exception::POSTGRES_CORRUPTION);
                 }
             });
-
             dg::network_std_container::string del_query = utility::query_format("DELETE FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
             transaction_handle.exec(del_query.c_str()).no_rows();
             transaction_handle.commit();
@@ -393,7 +392,7 @@ namespace dg::network_postgres_db{
         };
 
         exception_t err = dg::network_exception::to_cstyle_function(lambda)();
-        return dg::network_exception::is_success(err); //need to be more descriptive + handle internal corruption - internal corruption could leak -
+        return dg::network_exception::is_success(err); //need to be more descriptive + handle internal corruption - internal corruption could bleed
     }
 
     auto get_user_by_id(const dg::network_std_container::string& id) noexcept -> std::expected<model::UserEntry, exception_t>{
@@ -554,7 +553,7 @@ namespace dg::network_postgres_db{
         };
 
         auto func = dg::network_exception::to_cstyle_function(std::move(lambda));
-        return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
+        return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     };
 
     auto make_commitable_create_userlog(const model::UserLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
@@ -568,7 +567,7 @@ namespace dg::network_postgres_db{
         };
 
         auto func = dg::network_exception::to_cstyle_function(std::move(lambda));
-        return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
+        return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
     auto make_commitable_create_user(const model::User& user) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
@@ -580,7 +579,7 @@ namespace dg::network_postgres_db{
         };
 
         auto func = dg::network_exception::to_cstyle_function(std::move(lambda));
-        return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
+        return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
     auto make_commitable_create_legacy_auth(const model::LegacyAuth& legacy_auth) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
@@ -593,7 +592,7 @@ namespace dg::network_postgres_db{
         };
 
         auto func = dg::network_exception::to_cstyle_function(std::move(lambda));
-        return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
+        return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
     auto make_commitable_delete_user_by_id(const dg::network_std_container::string& id) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
@@ -608,7 +607,7 @@ namespace dg::network_postgres_db{
         };
 
         auto func = dg::network_exception::to_cstyle_function(std::move(lambda));
-        return {std::in_place_t{}, std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func))};
+        return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
     void commit(dg::network_std_container::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
