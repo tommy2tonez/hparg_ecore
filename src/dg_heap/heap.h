@@ -5527,7 +5527,7 @@ namespace dg::heap::user_interface{
 
     //error - external linking
     template <class ID = std::integral_constant<size_t, 0>>
-    extern auto get_allocator(char * data, const ID& id = std::integral_constant<size_t, 0>{}) -> std::unique_ptr<core::Allocatable>{
+    extern auto get_allocator(char * data, const ID& id = std::integral_constant<size_t, 0>{}) -> std::unique_ptr<core::Allocatable>{ //yeah - the thing I don't like is ID here - fine - I'll fix this next iteration
 
         return _Controller::get_allocatable(data, id);
     }
