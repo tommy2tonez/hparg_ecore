@@ -48,7 +48,7 @@ namespace dg::network_fileio_linux{
             }
         };
 
-        return {std::in_place_t{}, fd, destructor}; 
+        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>{fd, destructor}; 
     }
     
     auto dg_file_size(int fd) noexcept -> std::expected<size_t, exception_t>{
@@ -166,7 +166,11 @@ namespace dg::network_fileio_linux{
         size_t fsz  = dg_file_size_nothrow(fd); //this is an error that user should not know of - internal corruption if failed (think of a successful file open guarantees a successful read of metadata)
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache(fd); //this is an error that user should not know of - internal corruption if failed
+            exception_t err = dg_fadvise_nocache(fd); //this is an error that user should not know of - internal corruption if failed
+
+            if (dg::network_exception::is_failed(err)){
+                return err;
+            }
         }
 
         if (!is_met_direct_dgio_blksz_requirement(fsz)){
@@ -181,7 +185,13 @@ namespace dg::network_fileio_linux{
             return dg::network_exception::BUFFER_OVERFLOW;
         }
 
-        if (read(fd, dst, fsz) != fsz){
+        auto read_err = read(fd, dst, fsz);
+
+        if (read_err < 0){
+            return dg::network_exception::wrap_kernel_exception(errno);
+        } 
+
+        if (fsz != read_err){
             return dg::network_exception::RUNTIME_FILEIO_ERROR; //this is where the exception + abort line is blurred - yet i think this should be abort (open_file guarantees successful immutable operations - if not then its the open_file problem) - global-mtx-lockguard is required internally - external modification is UB 
         }
 
@@ -209,10 +219,20 @@ namespace dg::network_fileio_linux{
         }
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache(fd);
+            exception_t err = dg_fadvise_nocache(fd);
+
+            if (dg::network_exception::is_failed(err)){
+                return err;
+            }
         }
 
-        if (read(fd, dst, fsz) != fsz){
+        auto read_err = read(fd, dst, fsz);
+
+        if (read_err < 0){
+            return dg::network_exception::wrap_kernel_exception(errno);
+        } 
+
+        if (fsz != read_err){
             return dg::network_exception::RUNTIME_FILEIO_ERROR; //this is a very blurred line between exception + abort | yet I choose to not trust sys for now - propagate error to make some root function noexceptable
         }
 
@@ -249,7 +269,11 @@ namespace dg::network_fileio_linux{
         }
         
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache(raii_fd.value()); //this is an error that user should not know of - internal corruption if failed
+            exception_t err = dg_fadvise_nocache(raii_fd.value());
+
+            if (dg::network_exception::is_failed(err)){
+                return err;
+            }
         }
 
         if (!is_met_direct_dgio_blksz_requirement(src_sz)){
@@ -260,7 +284,13 @@ namespace dg::network_fileio_linux{
             return dg::network_exception::BAD_ALIGNMENT;
         }
 
-        if (write(raii_fd.value(), src, src_sz) != src_sz){
+        auto write_err = write(raii_fd.value(), src, src_sz);
+
+        if (write_err < 0){
+            return dg::network_exception::wrap_kernel_exception(errno);
+        } 
+
+        if (write_err != src_sz){
             return dg::network_exception::RUNTIME_FILEIO_ERROR; //need to be more descriptive
         }
 
@@ -281,10 +311,20 @@ namespace dg::network_fileio_linux{
         }
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            dg_fadvise_nocache(raii_fd.value());
+            exception_t err = dg_fadvise_nocache(raii_fd.value());
+
+            if (dg::network_exception::is_failed(err)){
+                return err;
+            }
         }
 
-        if (write(raii_fd.value(), src, src_sz) != src_sz){
+        auto write_err = write(raii_fd.value(), src, src_sz);
+
+        if (write_err < 0){
+            return dg::network_exception::wrap_kernel_exception(errno);
+        } 
+
+        if (write_err != src_sz){
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 

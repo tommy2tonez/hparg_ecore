@@ -27,6 +27,24 @@ namespace dg::memult{
         return size_t{1} << bit_offset;
     }
 
+    constexpr auto region(const void * ptr, size_t memregion_sz) noexcept -> const void *{
+
+        assert(is_pow2(memregion_sz));
+        [[assume(memregion_sz != 0 && (memregion_sz & (memregion_sz - 1)) == 0)]];
+        uintptr_t uptr = reinterpret_cast<uintptr_t>(ptr); 
+
+        return reinterpret_cast<const void *>((uptr / memregion_sz) * memregion_sz);
+    }
+
+    constexpr auto region(void * ptr, size_t memregion_sz) noexcept -> void *{
+
+        assert(is_pow2(memregion_sz));
+        [[assume(memregion_sz != 0 && (memregion_sz & (memregion_sz - 1)) == 0)]];
+        uintptr_t uptr = reinterpret_cast<uintptr_t>(ptr);
+
+        return reinterpret_cast<void *>((uptr / memregion_sz) * memregion_sz);
+    }
+
     constexpr auto least_pow2_greater_eq_than(size_t sz) noexcept -> size_t{ //type coercion - static_assert subset - 
 
         for (size_t i = 0u; i < sizeof(size_t) * CHAR_BIT; ++i){

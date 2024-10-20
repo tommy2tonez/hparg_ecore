@@ -71,7 +71,7 @@ namespace dg::network_cudamap_x_impl1::model{
 }
 
 namespace dg::network_cudamap_x_impl1::interface{
-
+    
     using namespace network_cudamap_x_impl1::model; 
 
     struct CuFSLoaderInterface{
@@ -89,7 +89,7 @@ namespace dg::network_cudamap_x_impl1::interface{
     struct ConcurrentMapInterface{
         virtual ~ConcurrentMapInterface() = default;
         virtual auto map(cufs_ptr_t) noexcept -> std::expected<ConcurrentMapResource, exception_t> = 0;
-        virtual void unmap(ConcurrentMap) noexcept = 0;
+        virtual void unmap(ConcurrentMapResource) noexcept = 0;
     };
 
     struct MapDistributorInterface{
@@ -99,8 +99,21 @@ namespace dg::network_cudamap_x_impl1::interface{
 }
 
 namespace dg::network_cudamap_x_impl1::implementation{
-    
+
     using namespace network_cudamap_x_impl1::interface;
+
+    template <class T, std::enable_if_t<dg::network_trivial_serializer::is_serializable_v<T>, bool> = true>
+    struct trivial_reflectable_hasher{
+
+        constexpr auto operator()(const T& value) const noexcept -> size_t{
+
+            constexpr size_t SZ         = dg::network_trivial_serializer::size(T{});  
+            std::array<char, SZ> buf    = {};
+            dg::network_trivial_serializer::serialize_into(buf.data(), value);
+
+            return dg::network_hash::hash_bytes(buf.data(), std::integral_constant<size_t, SZ>{});
+        }
+    };
 
     struct HeapNodeCmp{
 
@@ -224,12 +237,14 @@ namespace dg::network_cudamap_x_impl1::implementation{
             }
     };
 
+    //the complexity might not worth changing - I rather do impl2 - after profiling - this is hardly an issue - if the concurrency_sz is high - and there is no lock congestion
+    //I will actually reconsider this
     class Map: public virtual MapInterface{
 
         private:
 
             std::vector<std::unique_ptr<HeapNode>> priority_queue;
-            std::unordered_map<cufs_ptr_t, HeapNode *> allocation_dict;
+            jg::dense_hash_map<cufs_ptr_t, HeapNode *, trivial_reflectable_hasher<cufs_ptr_t>> allocation_dict; 
             std::unique_ptr<CuFSLoaderInterface> fsys_loader;
             MemoryNode tmp_space;
             std::unique_ptr<Lock> lck;
@@ -237,17 +252,17 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
         public:
 
-            explicit Map(std::vector<std::unique_ptr<HeapNode>> priority_queue, 
-                         std::unordered_map<cufs_ptr_t, HeapNode *> allocation_dict,
-                         std::unique_ptr<CuFSLoaderInterface> fsys_loader,
-                         MemoryNode tmp_space,
-                         std::unique_ptr<Lock> lck,
-                         size_t memregion_sz) noexcept: priority_queue(std::move(priority_queue)),
-                                                        allocation_dict(std::move(allocation_dict)),
-                                                        fsys_loader(std::move(fsys_loader)),
-                                                        tmp_space(std::move(tmp_space)),
-                                                        lck(std::move(lck)),
-                                                        memregion_sz(memregion_sz){}
+            Map(std::vector<std::unique_ptr<HeapNode>> priority_queue, 
+                jg::dense_hash_map<cufs_ptr_t, HeapNode *, trivial_reflectable_hasher<cufs_ptr_t>> allocation_dict,
+                std::unique_ptr<CuFSLoaderInterface> fsys_loader,
+                MemoryNode tmp_space,
+                std::unique_ptr<Lock> lck,
+                size_t memregion_sz) noexcept: priority_queue(std::move(priority_queue)),
+                                               allocation_dict(std::move(allocation_dict)),
+                                               fsys_loader(std::move(fsys_loader)),
+                                               tmp_space(std::move(tmp_space)),
+                                               lck(std::move(lck)),
+                                               memregion_sz(memregion_sz){}
 
             auto map(cufs_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
@@ -370,7 +385,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
                 if (static_cast<bool>(this->priority_queue[0u]->fsys_ptr_info)){
                     if (this->priority_queue[0u]->fsys_ptr_info->reference == 0u){
-                        exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region);
+                        exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region); //
 
                         if (dg::network_exception::is_failed(err)){
                             return std::unexpected(err);
@@ -380,7 +395,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
                         this->fsys_loader->unload(*priority_queue[0u]);
                         this->allocation_dict_remove_entry(removing_region);
                         this->allocation_dict_add_entry(ptr_region, priority_queue[0u].get());
-                        std::swap(static_cast<MemoryNode&>(*this->priority_queue[0u]), this->tmp_space); //fine - does not affect ptr() and const_ptr() - assume that those methods are invoked when user is in charge of the map_resource
+                        std::swap(static_cast<MemoryNode&>(*this->priority_queue[0u]), this->tmp_space);
                         this->heap_push_down_at(0u);
 
                         return this->internal_map(ptr);
@@ -406,18 +421,18 @@ namespace dg::network_cudamap_x_impl1::implementation{
             } 
     };
     
-    class StdMapDistribution: public virtual MapDistributorInterface{
+    class StdMapDistributor: public virtual MapDistributorInterface{
 
         private:
 
-            std::unordered_map<cufs_ptr_t, size_t> region_id_dict;
+            jg::dense_hash_map<cufs_ptr_t, size_t, trivial_reflectable_hasher<cufs_ptr_t>> region_id_dict;
             size_t memregion_sz;
 
         public:
 
-            explicit StdMapDistribution(std::unordered_map<cufs_ptr_t, size_t> region_id_dict,
-                                        size_t memregion_sz) noexcept: region_id_dict(std::move(region_id_dict)),
-                                                                       memregion_sz(memregion_sz){}
+            StdMapDistributor(jg::dense_hash_map<cufs_ptr_t, size_t, trivial_reflectable_hasher<cufs_ptr_t>> region_id_dict,
+                              size_t memregion_sz) noexcept: region_id_dict(std::move(region_id_dict)),
+                                                             memregion_sz(memregion_sz){}
 
             auto id(cufs_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
@@ -436,14 +451,14 @@ namespace dg::network_cudamap_x_impl1::implementation{
 
         private:
 
-            std::vector<std::unique_ptr<MapInterface>> map_table;
-            std::unique_ptr<MapDistributorInterface> map_distributor;
+            std::vector<std::unique_ptr<Map>> map_table;
+            std::unique_ptr<StdMapDistributor> map_distributor;
         
         public:
 
-            explicit ConcurrentMap(std::vector<std::unique_ptr<MapInterface>> map_table,
-                                   std::unique_ptr<MapDistributorInterface> map_distributor) noexcept: map_table(std::move(map_table)),
-                                                                                                       map_distributor(std::move(map_distributor)){}
+            explicit ConcurrentMap(std::vector<std::unique_ptr<Map>> map_table,
+                                   std::unique_ptr<StdMapDistributor> map_distributor) noexcept: map_table(std::move(map_table)),
+                                                                                                 map_distributor(std::move(map_distributor)){}
 
             auto map(cufs_ptr_t ptr) noexcept -> std::expected<ConcurrentMapResource, exception_t>{
 
@@ -466,7 +481,7 @@ namespace dg::network_cudamap_x_impl1::implementation{
 namespace dg::network_cudamap_x_impl1{
 
     template <size_t MEMREGION_SZ>
-    auto make(cufs_ptr_t * region, std::filesystem::path * path, fsys_device_id_t * device_id, size_t n, std::integral_constant<size_t, MEMREGION_SZ>) -> std::unique_ptr<interface::MapInterface>{
+    auto make(cufs_ptr_t * region, std::filesystem::path * path, fsys_device_id_t * device_id, size_t n, std::integral_constant<size_t, MEMREGION_SZ>) -> std::unique_ptr<interface::ConcurrentMapInterface>{
 
     }
 }

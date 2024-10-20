@@ -22,14 +22,15 @@ namespace dg::network_allocation{
     //this is often called "pages" by other allocators
     //yet the policy of reusing pages (FIFO) by other allocators often lead to serious fragmentation in a long run 
 
-    using ptr_type                                          = uint64_t;
-    using alignment_type                                    = uint16_t;
-    static inline constexpr size_t PTROFFS_BSPACE           = sizeof(uint32_t) * CHAR_BIT;
-    static inline constexpr size_t PTRSZ_BSPACE             = sizeof(uint16_t) * CHAR_BIT;
-    static inline constexpr size_t ALLOCATOR_ID_BSPACE      = sizeof(uint8_t) * CHAR_BIT;
-    static inline constexpr size_t ALIGNMENT_BSPACE         = sizeof(uint8_t) * CHAR_BIT;
-    static inline constexpr ptr_type NETALLOC_NULLPTR       = ptr_type{0u}; 
-    static inline constexpr size_t DEFLT_ALIGNMENT          = alignof(std::max_align_t);
+    using ptr_type                                              = uint64_t;
+    using alignment_type                                        = uint16_t;
+    static inline constexpr size_t PTROFFS_BSPACE               = sizeof(uint32_t) * CHAR_BIT;
+    static inline constexpr size_t PTRSZ_BSPACE                 = sizeof(uint16_t) * CHAR_BIT;
+    static inline constexpr size_t ALLOCATOR_ID_BSPACE          = sizeof(uint8_t) * CHAR_BIT;
+    static inline constexpr size_t ALIGNMENT_BSPACE             = sizeof(uint8_t) * CHAR_BIT;
+    static inline constexpr ptr_type NETALLOC_NULLPTR           = ptr_type{0u}; 
+    static inline constexpr size_t DEFLT_ALIGNMENT              = alignof(std::max_align_t);
+    static inline constexpr size_t LEAST_GUARANTEED_ALIGNMENT   = 8u;
 
     static_assert(PTROFFS_BSPACE + PTRSZ_BSPACE + ALLOCATOR_ID_BSPACE + ALIGNMENT_BSPACE <= sizeof(ptr_type) * CHAR_BIT);
     static_assert(-1 == ~0);
@@ -45,6 +46,18 @@ namespace dg::network_allocation{
             return ~T{0u};
         } else{
             return (T{1u} << SZ) - 1; 
+        }
+    }
+
+    template <size_t BIT_SIZE>
+    constexpr auto bit_capacity(const std::integral_constant<size_t, BIT_SIZE>) noexcept -> size_t{
+
+        static_assert(BIT_SIZE <= sizeof(size_t) * CHAR_BIT);
+
+        if constexpr(BIT_SIZE == sizeof(size_t) * CHAR_BIT){
+            return std::numeric_limits<size_t>::max();
+        } else{
+            return (size_t{1} << BIT_SIZE) - 1;
         }
     }
 
@@ -143,28 +156,29 @@ namespace dg::network_allocation{
                 auto [resp_offs, resp_sz] = resp.value();
                 static_assert(std::is_unsigned_v<decltype(resp_off)>);
                 static_assert(std::is_unsigned_v<decltype(resp_sz)>);
+
                 return encode_ptr(resp_offs, resp_sz); //use 16 bits encoding - 1 bit to denotes log2 roundup and 15 bits to denote the length
             }
 
-            void free(ptr_type ptr_addr) noexcept{
+            void free(ptr_type ptr) noexcept{
                 
-                if (!ptr_addr){
+                if (!ptr){
                     return;
                 }
 
-                auto [offs, sz] = decode_ptr(ptr_addr);
+                auto [offs, sz] = decode_ptr(ptr);
                 this->base_allocator->free({offs, sz});
             }
 
-            auto c_addr(ptr_type ptr_addr) noexcept -> void *{
+            auto c_addr(ptr_type ptr) noexcept -> void *{
 
-                if (!ptr_addr){
+                if (!ptr){
                     return nullptr;
                 }
 
                 [[assume(this->leaf_sz != 0 && (this->leaf_sz & (this->leaf_sz - 1)) == 0)]];
 
-                auto [offs, _] = decode_ptr(ptr_addr);
+                auto [offs, _] = decode_ptr(ptr);
                 char * rs = this->buf.get();
                 std::advance(rs, offs * this->leaf_sz);
 
@@ -179,7 +193,14 @@ namespace dg::network_allocation{
         private:
 
             auto encode_ptr(uint64_t hi, uint64_t lo) const noexcept -> ptr_type{
-                
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (lo + 1 > bit_capacity(std::integral_constant<size_t, PTRSZ_BSPACE>{})){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+    
                 return (static_cast<ptr_type>(hi) << PTRSZ_BSPACE) | static_cast<ptr_type>(lo + 1);
             }
 
@@ -191,7 +212,7 @@ namespace dg::network_allocation{
                 return {static_cast<uint64_t>(hi), static_cast<uint64_t>(lo) - 1};
             }
     };
-    
+
     class MultiThreadAllocator: public virtual GCAllocatorInterface{
 
         private:
@@ -287,7 +308,7 @@ namespace dg::network_allocation{
 
         auto spawn_heap_allocator(size_t leaf_sz, size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
 
-            const size_t MIN_LEAF_SZ        = 1u;
+            const size_t MIN_LEAF_SZ        = 1;
             const size_t MAX_LEAF_SZ        = size_t{1} << 10;
             const size_t MIN_BASE_SZ        = 1u;
             const size_t MAX_BASE_SZ        = size_t{1} << 40;
@@ -308,19 +329,9 @@ namespace dg::network_allocation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            //fine if unsigned + sign, without loss of generality
-            //C is a language of promoting the usage of signed integers without the usage of signed integers 
-            //signed integer is always a mistake - it denotes error in your code and often does not have any real usage except for returning error - which should be representable by another variable
-            //this practice has been dragging for too long - by kernel and other operating system which heavily influences C++ development
-            //imagine a function taking in a signed integer instead of unsinged integer to be legacy-compatible - then you have to if (is_non_negative(value)) every single time - and it's insane
-
-            //uint32_t + int16_t -> uint32_t + static_cast<uint32_t>(int16_t)
-            //uint16_t + int32_t -> int32_t + int32_t
-            //uint16_t + int16_t -> uint16_t + uint16_t
-
             uint8_t tree_height = static_cast<uint8_t>(std::countr_zero(base_sz)) + 1u;
             size_t buf_sz       = dg::heap::user_interface::get_memory_usage(tree_height);
-            auto buf            = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::malloc(buf_sz)), std::free);  
+            auto buf            = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::malloc(buf_sz)), std::free);
 
             if (!buf){
                 dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
@@ -336,7 +347,7 @@ namespace dg::network_allocation{
 
         auto spawn_allocator(size_t leaf_sz, size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
 
-            const size_t MIN_LEAF_SZ        = 1u;
+            const size_t MIN_LEAF_SZ        = LEAST_GUARANTEED_ALIGNMENT;
             const size_t MAX_LEAF_SZ        = size_t{1} << 10;
             const size_t MIN_LEAST_BUF_SZ   = 1u;
             const size_t MAX_LEAST_BUF_SZ   = size_t{1} << 40;
@@ -355,7 +366,7 @@ namespace dg::network_allocation{
 
             size_t buf_sz   = dg::memult::least_pow2_greater_eq_than(std::max(least_buf_sz, leaf_sz));
             size_t base_sz  = buf_sz / leaf_sz;
-            auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::malloc(buf_sz)), std::free);
+            auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(leaf_sz, buf_sz)), std::free);  
 
             if (!buf){
                 dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
@@ -368,7 +379,7 @@ namespace dg::network_allocation{
         auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
 
             const size_t MIN_ALLOCATOR_SZ   = 1u;
-            const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 10;
+            const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 8;
 
             if (std::clamp(static_cast<size_t>(allocator.size()), MIN_ALLOCATOR_SZ, MAX_ALLOCATOR_SZ) != allocator.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -434,8 +445,9 @@ namespace dg::network_allocation{
         if (blk_sz == 0u){
             return NETALLOC_NULLPTR;
         }
-
-        size_t adj_blk_sz   = blk_sz + alignment;
+        
+        size_t fwd_sz       = std::max(alignment, LEAST_GUARANTEED_ALIGNMENT) - LEAST_GUARANTEED_ALIGNMENT;
+        size_t adj_blk_sz   = blk_sz + fwd_sz;
         ptr_type ptr        = allocation_resource.allocator->malloc(adj_blk_sz);
 
         if (!ptr){
@@ -526,7 +538,7 @@ namespace dg::network_allocation{
         
         template <class U>
         struct rebind{
-            typedef NoExceptAllocator<U> other;
+            using other = NoExceptAllocator<U>;
         };
 
         auto address(reference x) const noexcept -> pointer{

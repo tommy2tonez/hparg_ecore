@@ -99,7 +99,7 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class T>
     struct is_dg_arithmetic<T, std::void_t<std::enable_if_t<std::is_floating_point_v<T>>>>: std::bool_constant<std::numeric_limits<T>::is_iec559>{}; 
-
+ 
     template <class T, class = void>
     struct container_value_or_empty{};
 
@@ -125,28 +125,37 @@ namespace dg::network_compact_serializer::types_space{
                                                                                         void>>;
 
     template <class T>
-    using containee_t                           = typename containee_or_empty<T>::type;
+    using containee_t = typename containee_or_empty<T>::type;
 
     template <class T>
-    static constexpr bool is_container_v        = std::disjunction_v<is_vector<T>, is_unordered_map<T>, is_unordered_set<T>, is_map<T>, is_set<T>, is_basic_string<T>>;
+    static constexpr bool has_unique_serializable_representations_v = std::disjunction_v<std::is_same<T, char>, std::is_same<T, unsigned char>>;
+    
+    template <class T>
+    static constexpr bool is_cpyable_linear_container_v             = std::disjunction_v<is_vector<T>, is_basic_string<T>> && has_unique_serializable_representations_v<containee_t<T>>; //is_vector<T> is undefined - according to std - vector is not ptr-arithemtic-qualified or memcpy-qualified - due to the underlying storage being not allocated by new[]
 
     template <class T>
-    static constexpr bool is_tuple_v            = is_tuple<T>::value; 
+    static constexpr bool is_noncpyable_linear_container_v          = std::disjunction_v<is_vector<T>, is_basic_string<T>> && !has_unique_serializable_representations_v<containee_t<T>>;
 
     template <class T>
-    static constexpr bool is_unique_ptr_v       = is_unique_ptr<T>::value;
+    static constexpr bool is_nonlinear_container_v                  = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_set<T>>;
 
     template <class T>
-    static constexpr bool is_optional_v         = is_optional<T>::value;
+    static constexpr bool is_tuple_v                                = is_tuple<T>::value; 
 
     template <class T>
-    static constexpr bool is_reflectible_v      = is_reflectible<T>::value;
+    static constexpr bool is_unique_ptr_v                           = is_unique_ptr<T>::value;
 
     template <class T>
-    using base_type_t                           = dg::network_type_traits_x::base_type_t<T>;
+    static constexpr bool is_optional_v                             = is_optional<T>::value;
 
     template <class T>
-    static constexpr bool is_dg_arithmetic_v    = is_dg_arithmetic<T>::value;
+    static constexpr bool is_reflectible_v                          = is_reflectible<T>::value;
+
+    template <class T>
+    using base_type_t                                               = dg::network_type_traits_x::base_type_t<T>;
+
+    template <class T>
+    static constexpr bool is_dg_arithmetic_v                        = is_dg_arithmetic<T>::value;
 }
 
 namespace dg::network_compact_serializer::utility{
@@ -284,7 +293,7 @@ namespace dg::network_compact_serializer::archive{
             return rs;
         }
 
-        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type_t<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
         auto count(T&& data) const noexcept -> size_t{
             
             size_t rs = this->count(types::size_type{});
@@ -294,6 +303,12 @@ namespace dg::network_compact_serializer::archive{
             }
 
             return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            return this->count(types::size_type{}) + static_cast<size_t>(data.size()) * sizeof(types_space::containee_t<types_space::base_type_t<T>>);
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
@@ -351,15 +366,31 @@ namespace dg::network_compact_serializer::archive{
             }(buf, std::forward<T>(data), idx_seq);
         }
 
-        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type_t<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
-            
+
             this->put(buf, dg::network_genult::safe_integer_cast<types::size_type>(data.size()));
 
             //optimizable - worth or not worth it
             for (const auto& e: data){
                 this->put(buf, e);
             }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            using base_type = types_space::base_type_t<T>;
+            using elem_type = types_space::containee_t<base_type>;
+
+            this->put(buf, dg::network_genult::safe_integer_cast<types::size_type>(data.size()));
+
+            void * dst          = buf;
+            const void * src    = data.data();
+            size_t cpy_sz       = data.size() * sizeof(elem_type);  
+
+            std::memcpy(dst, src, cpy_sz);
+            std::advance(buf, cpy_sz);
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
@@ -428,23 +459,40 @@ namespace dg::network_compact_serializer::archive{
             }(buf, std::forward<T>(data), idx_seq);
         }
 
-        template <class T, std::enable_if_t<types_space::is_container_v<types_space::base_type_t<T>>, bool> = true>
+        template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, T&& data) const{
             
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
+            
             auto sz         = types::size_type{};
             auto isrter     = utility::get_inserter<base_type>();
-
             this->put(buf, sz); 
             data.reserve(sz);
 
-            //optimizable - worth or not worth it
             for (size_t i = 0; i < sz; ++i){
                 elem_type e{};
                 this->put(buf, e);
                 isrter(data, std::move(e));
             }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+            using elem_type = types_space::containee_t<base_type>;
+            
+            auto sz = types::size_type{};
+            this->put(buf, sz);
+            data.resize(sz);
+
+            void * dst          = data.data();
+            const void * src    = buf;
+            size_t cpy_sz       = sz * sizeof(elem_type); 
+
+            std::memcpy(dst, src, cpy_sz);
+            std::advance(buf, cpy_sz);
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
