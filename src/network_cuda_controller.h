@@ -67,7 +67,7 @@ namespace dg::network_cuda_controller{
     //this is fine for the first draft - be back for improvement later
 
     struct ControllerResource{
-        dg::network_std_container::vector<int> device;
+        dg::vector<int> device;
         const size_t total_device_count;
         std::unique_ptr<std::recursive_mutex> mtx;
     };
@@ -109,7 +109,7 @@ namespace dg::network_cuda_controller{
             return true; //is default according to MAN
         }
 
-        dg::network_std_container::unordered_set<int> device_set(device, device + sz, sz);
+        dg::unordered_set<int> device_set(device, device + sz, sz);
         
         if (device_set.size() != sz){ //MAN does not specify whether device *, size_t has to be as valid set or not - stricter req
             return false;
@@ -131,7 +131,7 @@ namespace dg::network_cuda_controller{
             return err;
         }
 
-        controller_resource->device = dg::network_std_container::vector<int>(device, device + sz);
+        controller_resource->device = dg::vector<int>(device, device + sz);
         return dg::network_exception::SUCCESS;
     }
 
@@ -257,7 +257,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
     struct WorkOrder{
         wo_ticketid_t ticket_id;
-        dg::network_std_container::vector<int> env; //this is very futuristic - because usually operations can only be operated in the same environment
+        dg::vector<int> env; //this is very futuristic - because usually operations can only be operated in the same environment
         std::unique_ptr<VirtualExecutableInterface> executable;
         size_t runtime_complexity;
     };
@@ -265,7 +265,7 @@ namespace dg::network_cuda_kernel_par_launcher{
     struct WorkOrderContainerInterface{
         virtual ~WorkOrderContainerInterface() noexcept = default;
         virtual void push(WorkOrder) noexcept = 0; //since this is an application - I don't think propagate error code is necessary here - since memory exhaustion could be solved by abstraction
-        virtual auto pop() noexcept -> dg::network_std_container::vector<WorkOrder> = 0;
+        virtual auto pop() noexcept -> dg::vector<WorkOrder> = 0;
     };
 
     struct WorkTicketControllerInterface{
@@ -310,7 +310,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
         private:
 
-            dg::network_std_container::deque<WorkOrder> work_order_vec;
+            dg::deque<WorkOrder> work_order_vec;
             size_t min_complexity_thrhold;
             size_t suggested_max_complexity_thrhold;
             std::chrono::nanoseconds last_consumed_stamp;
@@ -319,7 +319,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
         public:
 
-            LoadBalancedWorkOrderContainer(dg::network_std_container::deque<WorkOrder> work_order_vec,
+            LoadBalancedWorkOrderContainer(dg::deque<WorkOrder> work_order_vec,
                                            size_t min_complexity_thrhold,
                                            size_t suggested_max_complexity_thrhold,
                                            std::chrono::nanoseconds last_consumed_stamp,
@@ -337,7 +337,7 @@ namespace dg::network_cuda_kernel_par_launcher{
                 this->work_order_vec.push_back(std::move(wo));
             }
 
-            auto pop() noexcept -> dg::network_std_container::vector<WorkOrder>{ //even though I think std::optional<std::vector<WorkOrder>> is way more performant than this - I think that's the vector container's responsibility than an optimization to make
+            auto pop() noexcept -> dg::vector<WorkOrder>{ //even though I think std::optional<std::vector<WorkOrder>> is way more performant than this - I think that's the vector container's responsibility than an optimization to make
 
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
 
@@ -352,10 +352,10 @@ namespace dg::network_cuda_kernel_par_launcher{
         
         private:
 
-            auto internal_pop() noexcept -> dg::network_std_container::vector<WorkOrder>{
+            auto internal_pop() noexcept -> dg::vector<WorkOrder>{
 
                 size_t peek_complexity  = 0u; 
-                auto rs                 = dg::network_std_container::vector<WorkOrder>{};
+                auto rs                 = dg::vector<WorkOrder>{};
 
                 while (!this->work_order_vec.empty()){
                     peek_complexity += this->work_order_vec.front().runtime_complexity;
@@ -503,7 +503,7 @@ namespace dg::network_cuda_kernel_par_launcher{
                     return std::unexpected(ticket_id.error());
                 }
 
-                auto wo = WorkOrder{ticket_id.value(), std::move(executable), dg::network_std_container::vector<int>(env, env + env_sz), runtime_complexity};
+                auto wo = WorkOrder{ticket_id.value(), std::move(executable), dg::vector<int>(env, env + env_sz), runtime_complexity};
                 this->wo_container->push(std::move(wo));
 
                 return ticket_id.value();
@@ -525,14 +525,14 @@ namespace dg::network_cuda_kernel_par_launcher{
 
         private:
 
-            dg::network_std_container::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec;
+            dg::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec;
 
         public:
 
             static_assert(CONCURRENCY_SZ != 0u);
             static_assert(CONCURRENCY_SZ <= std::numeric_limits<uint8_t>::max());
 
-            ConcurrentKernelLaunchController(dg::network_std_container::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec, 
+            ConcurrentKernelLaunchController(dg::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec, 
                                              std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: controller_vec(std::move(controller_vec)){}
 
 
@@ -596,7 +596,7 @@ namespace dg::network_cuda_kernel_par_launcher{
             
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<WorkOrder> wo_vec = this->wo_container->pop();
+                dg::vector<WorkOrder> wo_vec = this->wo_container->pop();
 
                 if (wo_vec.empty()){
                     return false;
@@ -630,15 +630,15 @@ namespace dg::network_cuda_kernel_par_launcher{
         
         private:
 
-            auto extract_environment(const dg::network_std_container::vector<WorkOrder>& wo_vec) noexcept -> dg::network_std_container::vector<int>{
+            auto extract_environment(const dg::vector<WorkOrder>& wo_vec) noexcept -> dg::vector<int>{
 
-                auto env_set = dg::network_std_container::unordered_set<int>{};
+                auto env_set = dg::unordered_set<int>{};
 
                 for (const auto& wo: wo_vec){
                     env_set.insert(wo.env.begin(), wo.env.end());
                 }
 
-                return dg::network_std_container::vector<int>(env_set.begin(), env_set.end());
+                return dg::vector<int>(env_set.begin(), env_set.end());
             }
     };
 

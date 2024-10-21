@@ -44,7 +44,7 @@ namespace dg::network_extmemcommit_kernel_handler{
             
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<Request<poly_event_t>> request_vec = this->request_producer->get(this->digest_sz);
+                dg::vector<Request<poly_event_t>> request_vec = this->request_producer->get(this->digest_sz);
 
                 if (request_vec.empty()){
                     return false;
@@ -101,7 +101,7 @@ namespace dg::network_extmemcommit_kernel_handler{
 
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<dg::network_tile_initialization_poly::virtual_payload_t> initializable_vec = this->producer->get(this->digest_sz);
+                dg::vector<dg::network_tile_initialization_poly::virtual_payload_t> initializable_vec = this->producer->get(this->digest_sz);
 
                 if (initializable_vec.empty()){
                     return false;
@@ -134,7 +134,7 @@ namespace dg::network_extmemcommit_kernel_handler{
 
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<dg::network_tile_signal_poly::virtual_payload_t> signalable_vec = this->producer->get(this->digest_sz);
+                dg::vector<dg::network_tile_signal_poly::virtual_payload_t> signalable_vec = this->producer->get(this->digest_sz);
 
                 if (signalable_vec.empty()){
                     return false;
@@ -167,7 +167,7 @@ namespace dg::network_extmemcommit_kernel_handler{
 
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<dg::network_tile_injection_poly::virtual_payload_t> injectible_vec = this->producer->get(this->digest_sz);
+                dg::vector<dg::network_tile_injection_poly::virtual_payload_t> injectible_vec = this->producer->get(this->digest_sz);
 
                 if (injectible_vec.empty()){
                     return false;
@@ -200,7 +200,7 @@ namespace dg::network_extmemcommit_kernel_handler{
             
             bool run_one_epoch() noexcept{
 
-                dg::network_std_container::vector<dg::network_tile_condinjection_poly::virtual_payload_t> injectible_vec = this->producer->get(this->digest_sz);
+                dg::vector<dg::network_tile_condinjection_poly::virtual_payload_t> injectible_vec = this->producer->get(this->digest_sz);
 
                 if (injectible_vec.empty()){
                     return false;

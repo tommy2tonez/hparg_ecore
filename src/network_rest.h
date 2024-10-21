@@ -12,9 +12,9 @@ namespace dg::network_post_rest::model{
     using ticket_id_t = uint64_t;
 
     struct Request{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
-        dg::network_std_container::string payload;
+        dg::string uri;
+        dg::string requestor;
+        dg::string payload;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -29,7 +29,7 @@ namespace dg::network_post_rest::model{
     };
 
     struct Response{
-        dg::network_std_container::string response;
+        dg::string response;
         exception_t err_code;
 
         template <class Reflector>
@@ -150,10 +150,10 @@ namespace dg::network_post_rest::client{
         return resp;
     }
 
-    auto request_many(RestControllerInterface& controller, dg::network_std_container::vector<model::Request> payload_vec) noexcept -> dg::network_std_container::vector<std::expected<model::Response, exception_t>>{
+    auto request_many(RestControllerInterface& controller, dg::vector<model::Request> payload_vec) noexcept -> dg::vector<std::expected<model::Response, exception_t>>{
         
-        auto ticket_vec = dg::network_std_container::vector<std::expected<model::ticket_id_t, exception_t>>{};
-        auto rs_vec     = dg::network_std_container::vector<std::expected<model::Response, exception_t>>{};
+        auto ticket_vec = dg::vector<std::expected<model::ticket_id_t, exception_t>>{};
+        auto rs_vec     = dg::vector<std::expected<model::Response, exception_t>>{};
 
         for (model::Request& payload: payload_vec){
             ticket_vec.push_back(controller.request(std::move(payload)));
@@ -196,13 +196,13 @@ namespace dg::network_post_rest::server_impl1{
 
         private:
 
-            dg::network_std_container::unordered_map<dg::network_std_container::string, std::unique_ptr<RequestHandlerInterface>> request_handler;
+            dg::unordered_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler;
             const uint32_t resolve_channel;
             const uint32_t response_channel 
 
         public:
 
-            RequestResolverWorker(dg::network_std_container::unordered_map<dg::network_std_container::string, std::unique_ptr<RequestHandlerInterface>> request_handler,
+            RequestResolverWorker(dg::unordered_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler,
                                   uint32_t resolve_channel,
                                   uint32_t response_channel) noexcept: request_handler(std::move(request_handler)),
                                                                        resolve_channel(resolve_channel),
@@ -210,7 +210,7 @@ namespace dg::network_post_rest::server_impl1{
             
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::network_std_container::string> recv = dg::network_kernel_mailbox::recv(this->resolve_channel);
+                std::optional<dg::string> recv = dg::network_kernel_mailbox::recv(this->resolve_channel);
 
                 if (!recv.has_value()){
                     return false;
@@ -232,7 +232,7 @@ namespace dg::network_post_rest::server_impl1{
                 }
 
                 model::InternalResponse response{};
-                std::expected<dg::network_std_container::string, exception_t> resource_path = dg::network_uri_encoder::extract_local_path(request.request.uri);
+                std::expected<dg::string, exception_t> resource_path = dg::network_uri_encoder::extract_local_path(request.request.uri);
 
                 if (!resource_path.has_value()){
                     response = model::InternalResponse{model::Response{{}, resource_path.error()}, request.ticket_id};
@@ -246,7 +246,7 @@ namespace dg::network_post_rest::server_impl1{
                     }
                 }
 
-                auto response_bstream = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(response), ' ');
+                auto response_bstream = dg::string(dg::network_compact_serializer::integrity_size(response), ' ');
                 dg::network_compact_serializer::integrity_serialize_into(response_bstream.data(), response);
                 dg::network_kernel_mailbox::send(requestor_addr.value(), std::move(response_bstream), this->response_channel);
                 
@@ -263,12 +263,12 @@ namespace dg::network_post_rest::client_impl1{
 
         private:
 
-            dg::network_std_container::deque<model::InternalRequest> container;
+            dg::deque<model::InternalRequest> container;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
-            RequestContainer(dg::network_std_container::deque<model::InternalRequest> container,
+            RequestContainer(dg::deque<model::InternalRequest> container,
                              std::unique_ptr<std::mutex> mtx) noexcept: container(std::move(container)),
                                                                         mtx(std::move(mtx)){}
 
@@ -359,7 +359,7 @@ namespace dg::network_post_rest::client_impl1{
 
         private:
 
-            dg::network_std_container::unordered_map<size_t, std::chrono::nanoseconds> expiry_map;
+            dg::unordered_map<size_t, std::chrono::nanoseconds> expiry_map;
             size_t ticket_sz;
             std::chrono::nanoseconds min_dur;
             std::chrono::nanoseconds max_dur;
@@ -367,7 +367,7 @@ namespace dg::network_post_rest::client_impl1{
         
         public:
 
-            ClockController(dg::network_std_container::unordered_map<size_t, std::chrono::nanoseconds> expiry_map,
+            ClockController(dg::unordered_map<size_t, std::chrono::nanoseconds> expiry_map,
                             size_t ticket_sz,
                             std::chrono::nanoseconds min_dur,
                             std::chrono::nanoseconds max_dur,
@@ -433,13 +433,13 @@ namespace dg::network_post_rest::client_impl1{
 
         private:
 
-            dg::network_std_container::unordered_map<model::ticket_id_t, std::optional<model::Response>> response_map;
+            dg::unordered_map<model::ticket_id_t, std::optional<model::Response>> response_map;
             size_t ticket_sz;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
-            TicketController(dg::network_std_container::unordered_map<model::ticket_id_t, std::optional<model::Response>> response_map,
+            TicketController(dg::unordered_map<model::ticket_id_t, std::optional<model::Response>> response_map,
                              size_t ticket_sz,
                              std::unique_ptr<std::mutex> mtx): response_map(std::move(response_map)),
                                                                ticket_sz(ticket_sz),
@@ -534,7 +534,7 @@ namespace dg::network_post_rest::client_impl1{
 
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::network_std_container::string> recv = dg::network_kernel_mailbox::recv(this->channel);
+                std::optional<dg::string> recv = dg::network_kernel_mailbox::recv(this->channel);
 
                 if (!recv.has_value()){
                     return false;
@@ -581,7 +581,7 @@ namespace dg::network_post_rest::client_impl1{
                     return true;
                 }
 
-                auto bstream = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(request.value()), ' ');
+                auto bstream = dg::string(dg::network_compact_serializer::integrity_size(request.value()), ' ');
                 dg::network_compact_serializer::integrity_serialize_into(bstream.data(), request.value());
                 dg::network_kernel_mailbox::send(addr.value(), std::move(bstream), this->channel);
 
@@ -593,20 +593,20 @@ namespace dg::network_post_rest::client_impl1{
 
         private:
 
-            dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
             std::unique_ptr<TicketControllerInterface> ticket_controller;
             std::unique_ptr<ClockControllerInterface> clock_controller;
             std::unique_ptr<RequestContainerInterface> request_container;
-            dg::network_std_container::unordered_map<model::ticket_id_t, size_t> ticket_clockid_map; 
+            dg::unordered_map<model::ticket_id_t, size_t> ticket_clockid_map; 
             std::unique_ptr<std::mutex> map_mtx;
 
         public:
 
-            RestController(dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
+            RestController(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
                            std::unique_ptr<TicketControllerInterface> ticket_controller,
                            std::unique_ptr<ClockControllerInterface> clock_controller,
                            std::unique_ptr<RequestContainerInterface> request_container,
-                           dg::network_std_container::unordered_map<model::ticket_id_t, size_t> ticket_clockid_map,
+                           dg::unordered_map<model::ticket_id_t, size_t> ticket_clockid_map,
                            std::unique_ptr<std::mutex> map_mtx) noexcept: daemon_vec(std::move(daemon_vec)),
                                                                           ticket_controller(std::move(ticket_controller)),
                                                                           clock_controller(std::move(clock_controller)),
@@ -734,7 +734,7 @@ namespace dg::network_post_rest::client_impl1{
 namespace dg::network_post_rest_app{
 
     struct TokenGenerateBaseRequest{
-        dg::network_std_container::string auth_payload;
+        dg::string auth_payload;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
@@ -748,8 +748,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct TokenGenerateRequest: TokenGenerateBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -764,7 +764,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TokenGenerateBaseResponse{
-        dg::network_std_container::string token;
+        dg::string token;
         exception_t token_err_code;
 
         template <class Reflector>
@@ -793,7 +793,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TokenRefreshBaseRequest{
-        dg::network_std_container::string token;
+        dg::string token;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
@@ -807,8 +807,8 @@ namespace dg::network_post_rest_app{
      };
 
     struct TokenRefreshRequest: TokenRefreshBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -823,7 +823,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TokenRefreshBaseResponse{
-        dg::network_std_container::string token;
+        dg::string token;
         exception_t token_err_code;
 
         template <class Reflector>
@@ -852,7 +852,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileInitBaseRequest{
-        dg::network_std_container::string token;
+        dg::string token;
         dg::network_tile_init::virtual_payload_t payload;
 
         template <class Reflector>
@@ -867,8 +867,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileInitRequest: TileInitBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -911,7 +911,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileInjectBaseRequest{
-        dg::network_std_container::string token;
+        dg::string token;
         dg::network_tile_inject::virtual_payload_t payload;
 
         template <class Reflector>
@@ -926,8 +926,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileInjectRequest: TileInjectBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -970,7 +970,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileSignalBaseRequest{
-        dg::network_std_container::string token;
+        dg::string token;
         dg::network_tile_signal::virtual_payload_t payload;
 
         template <class Reflector>
@@ -985,8 +985,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileSignalRequest: TileSignalBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -1029,7 +1029,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileCondInjectBaseRequest{
-        dg::network_std_container::string token;
+        dg::string token;
         dg::network_tile_condinject::virtual_payload_t payload;
 
         template <class Reflector>
@@ -1044,8 +1044,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileCondInjectRequest: TileCondInjectBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -1088,7 +1088,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileMemcommitBaseRequest{
-        dg::network_std_container::string token;
+        dg::string token;
         dg::network_tile_seqmemcommit::virtual_payload_t payload;
 
         template <class Reflector>
@@ -1103,8 +1103,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct TileMemcommitRequest: TileMemcommitBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -1147,8 +1147,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct SysLogRetrieveBaseRequest{
-        dg::network_std_container::string token;
-        dg::network_std_container::string kind;
+        dg::string token;
+        dg::string kind;
         std::chrono::nanoseconds fr;
         std::chrono::nanoseconds to;
         uint32_t limit;
@@ -1165,8 +1165,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct SysLogRetrieveRequest: SysLogRetrieveBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -1181,7 +1181,7 @@ namespace dg::network_post_rest_app{
     };
     
     struct SysLogRetrieveBaseResponse{
-        dg::network_std_container::vector<dg::network_postgres_db::model::SystemLogEntry> log_vec;
+        dg::vector<dg::network_postgres_db::model::SystemLogEntry> log_vec;
         exception_t retrieve_err_code;
 
         template <class Reflector>
@@ -1210,8 +1210,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct UserLogRetrieveBaseRequest{
-        dg::network_std_container::string token;
-        dg::network_std_container::string kind;
+        dg::string token;
+        dg::string kind;
         std::chrono::nanoseconds fr;
         std::chrono::nanoseconds to;
         uint32_t limit;
@@ -1228,8 +1228,8 @@ namespace dg::network_post_rest_app{
     };
 
     struct UserLogRetrieveRequest: UserLogRetrieveBaseRequest{
-        dg::network_std_container::string uri;
-        dg::network_std_container::string requestor;
+        dg::string uri;
+        dg::string requestor;
         std::chrono::nanoseconds timeout;
 
         template <class Reflector>
@@ -1244,7 +1244,7 @@ namespace dg::network_post_rest_app{
     };
 
     struct UserLogRetrieveBaseResponse{
-        dg::network_std_container::vector<dg::network_postgres_db::model::UserLogEntry> log_vec;
+        dg::vector<dg::network_postgres_db::model::UserLogEntry> log_vec;
         exception_t retrieve_err_code;
         
         template <class Reflector>
@@ -1283,18 +1283,18 @@ namespace dg::network_post_rest_app{
                 
                 if (dg::network_exception::is_failed(err)){
                     TokenGenerateBaseResponse tokgen_response{{}, err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tokgen_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokgen_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> token = dg::network_user::token_generate_from_auth_payload(tokgen_request.auth_payload);
+                std::expected<dg::string, exception_t> token = dg::network_user::token_generate_from_auth_payload(tokgen_request.auth_payload);
 
                 if (!token.has_value()){
                     TokenGenerateBaseResponse tokgen_response{{}, token.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tokgen_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokgen_response), dg::network_exception::SUCCESS};
                 }
 
                 TokenGenerateBaseResponse tokgen_response{std::move(token.value()), dg::network_exception::SUCCESS};
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tokgen_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokgen_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1309,18 +1309,18 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     TokenRefreshBaseResponse tokrefr_response{{}, err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tokrefr_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokrefr_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> newtok = dg::network_user::token_refresh(tokrefr_request.token);
+                std::expected<dg::string, exception_t> newtok = dg::network_user::token_refresh(tokrefr_request.token);
 
                 if (!newtok.has_value()){
                     TokenRefreshBaseResponse tokrefr_response{{}, newtok.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tokrefr_response), dg::network_exception::SUCCESS}; //fine - 
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokrefr_response), dg::network_exception::SUCCESS}; //fine - 
                 }
 
                 TokenRefreshBaseResponse tokrefr_response{std::move(newtok.value()), dg::network_exception::SUCCESS};
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tokrefr_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokrefr_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1335,32 +1335,32 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     TileInitBaseResponse tileinit_response{err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinit_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(tileinit_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(tileinit_request.token);
                 
                 if (!user_id.has_value()){
                     TileInitBaseResponse tileinit_response{user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinit_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     TileInitBaseResponse tileinit_response{user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinit_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::to_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_GLOBAL_MODIFY){
                     TileInitBaseResponse tileinit_response{ dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinit_response), dg::network_exception::SUCCESS};
                 }
 
                 exception_t load_err = dg::network_tile_init::load(std::move(request.payload));
                 TileInitBaseResponse tileinit_response{load_err};
                 
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinit_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinit_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1375,32 +1375,32 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     TileInjectBaseResponse tileinject_response{err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinject_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(tileinject_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(tileinject_request.token);
 
                 if (!user_id.has_value()){
                     TileInjectBaseResponse tileinject_response{user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinject_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     TileInjectBaseResponse tileinject_response{user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinject_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::to_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_GLOBAL_MODIFY){
                     TileInjectBaseResponse tileinject_response{dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinject_response), dg::network_exception::SUCCESS};
                 }
 
                 exception_t load_err = dg::network_tile_inject::load(std::move(request.payload));
                 TileInjectBaseResponse tileinject_response{load_err};
                 
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tileinject_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tileinject_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1415,32 +1415,32 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     TileSignalBaseResponse tilesignal_response{err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tilesignal_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tilesignal_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(tilesignal_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(tilesignal_request.token);
 
                 if (!user_id.has_value()){
                     TileSignalBaseResponse tilesignal_response{user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tilesignal_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tilesignal_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     TileSignalBaseResponse tilesignal_response{user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tilesignal_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tilesignal_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::to_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_GLOBAL_MODIFY){
                     TileSignalBaseResponse tilesignal_response{dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tilesignal_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tilesignal_response), dg::network_exception::SUCCESS};
                 }
 
                 exception_t load_err = dg::network_tile_signal::load(std::move(tilesignal_request.payload));//this is not stateless - 
                 TileSignalBaseResponse tilesignal_response{load_err};
 
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(tilesignal_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tilesignal_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1455,32 +1455,32 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     TileCondInjectBaseResponse condinject_response{err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(condinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(condinject_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(condinject_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(condinject_request.token);
 
                 if (!user_id.has_value()){
                     TileCondInjectBaseResponse condinject_response{user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(condinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(condinject_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     TileCondInjectBaseResponse condinject_response{user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(condinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(condinject_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::to_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_GLOBAL_MODIFY){
                     TileCondInjectBaseResponse condinject_response{dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(condinject_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(condinject_response), dg::network_exception::SUCCESS};
                 }
 
                 exception_t load_err = dg::network_tile_condinject::load(std::move(condinject_request.payload));
                 TileCondInjectBaseResponse condinject_response{load_err};
 
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(condinject_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(condinject_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1495,32 +1495,32 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     TileMemcommitBaseResponse memcommit_response{err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(memcommit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(memcommit_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(memcommit_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(memcommit_request.token);
 
                 if (!user_id.has_value()){
                     TileMemcommitBaseResponse memcommit_response{user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(memcommit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(memcommit_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     TileMemcommitBaseResponse memcommit_response{user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(memcommit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(memcommit_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::to_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_GLOBAL_MODIFY){
                     TileMemcommitBaseResponse memcommit_response{dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(memcommit_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(memcommit_response), dg::network_exception::SUCCESS};
                 }
 
                 exception_t load_err = dg::network_tile_memcommit::load(std::move(memcommit_request.payload));
                 TileMemcommitBaseResponse memcommit_response{load_err};
 
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(memcommit_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(memcommit_response), dg::network_exception::SUCCESS};
 
             }
     };
@@ -1536,38 +1536,38 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     SysLogRetrieveBaseResponse syslog_get_response{{}, err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(syslog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(syslog_get_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(syslog_get_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(syslog_get_request.token);
 
                 if (!user_id.has_value()){
                     SysLogRetrieveBaseResponse syslog_get_response{{}, user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(syslog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(syslog_get_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     SysLogRetrieveBaseResponse syslog_get_response{{}, user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(syslog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(syslog_get_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::to_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_SYS_READ){
                     SysLogRetrieveBaseResponse syslog_get_response{{}, dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(syslog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(syslog_get_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::vector<dg::network_postgres_db::model::SystemLogEntry>, exception_t> syslog_vec = dg::network_postgres_db::get_systemlog(syslog_get_request.kind, syslog_get_request.fr, 
+                std::expected<dg::vector<dg::network_postgres_db::model::SystemLogEntry>, exception_t> syslog_vec = dg::network_postgres_db::get_systemlog(syslog_get_request.kind, syslog_get_request.fr, 
                                                                                                                                                                                   syslog_get_request.to, syslog_get_request.limit);
 
                 if (!syslog_vec.has_value()){
                     SysLogRetrieveBaseResponse syslog_get_response{{}, syslog_vec.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(syslog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(syslog_get_response), dg::network_exception::SUCCESS};
                 }
 
                 SysLogRetrieveBaseResponse syslog_get_response{std::move(syslog_vec.value()), dg::network_exception::SUCCESS};
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(syslog_get_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(syslog_get_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1582,39 +1582,39 @@ namespace dg::network_post_rest_app{
 
                 if (dg::network_exception::is_failed(err)){
                     UserLogRetrieveBaseResponse usrlog_get_response{{}, err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(usrlog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(usrlog_get_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_id = dg::network_user::token_extract_userid(usrlog_get_request.token);
+                std::expected<dg::string, exception_t> user_id = dg::network_user::token_extract_userid(usrlog_get_request.token);
 
                 if (!user_id.has_value()){
                     UserLogRetrieveBaseResponse usrlog_get_response{{}, user_id.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(usrlog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(usrlog_get_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
+                std::expected<dg::string, exception_t> user_clearance = dg::network_user::user_get_clearance(user_id.value());
 
                 if (!user_clearance.has_value()){
                     UserLogRetrieveBaseResponse usrlog_get_response{{}, user_clearance.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(usrlog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(usrlog_get_response), dg::network_exception::SUCCESS};
                 }
 
                 if (dg::network_user::get_clearance_level(user_clearance.value()) < dg::network_user::CLEARANCE_LEVEL_SELF_READ){
                     UserLogRetrieveBaseResponse usrlog_get_response{{}, dg::network_exception::UNMET_CLEARANCE};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(usrlog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(usrlog_get_response), dg::network_exception::SUCCESS};
                 }
 
-                std::expected<dg::network_std_container::vector<dg::network_postgres_db::model::UserLogEntry>, exception_t> usrlog_vec = dg::network_postgres_db::get_userlog(user_id.value(), usrlog_get_request.kind, 
+                std::expected<dg::vector<dg::network_postgres_db::model::UserLogEntry>, exception_t> usrlog_vec = dg::network_postgres_db::get_userlog(user_id.value(), usrlog_get_request.kind, 
                                                                                                                                                                               usrlog_get_request.fr, usrlog_get_request.to, 
                                                                                                                                                                               usrlog_get_request.limit);
 
                 if (!usrlog_vec.has_value()){
                     UserLogRetrieveBaseResponse usrlog_get_response{{}, usrlog_vec.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(usrlog_get_response), dg::network_exception::SUCCESS};
+                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(usrlog_get_response), dg::network_exception::SUCCESS};
                 }
 
                 UserLogRetrieveBaseResponse usrlog_get_response{dg::move(usrlog_vec.value()), dg::network_exception::SUCCESS};
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::network_std_container::string>(usrlog_get_response), dg::network_exception::SUCCESS};
+                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(usrlog_get_response), dg::network_exception::SUCCESS};
             }
     };
 
@@ -1623,7 +1623,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response; 
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TokenGenerateBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TokenGenerateBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TokenGenerateBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(controller, std::move(base_request)); 
@@ -1654,7 +1654,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TokenRefreshBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TokenRefreshBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TokenRefreshBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(controller, std::move(base_request));
@@ -1685,7 +1685,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TileInitBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileInitBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileInitBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(controller, std::move(base_request));
@@ -1716,7 +1716,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::newtork_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TileInjectBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileInjectBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileInjectBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(std::move(base_request));
@@ -1747,7 +1747,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TileSignalBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileSignalBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileSignalBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(std::move(base_request));
@@ -1778,7 +1778,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TileCondInjectBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileCondInjectBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileCondInjectBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(std::move(base_request));
@@ -1809,7 +1809,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const TileMemcommitBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileMemcommitBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileMemcommitBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(std::move(base_request));
@@ -1840,7 +1840,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const SysLogRetrieveBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const SysLogRetrieveBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const SysLogRetrieveBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(std::move(base_request));
@@ -1871,7 +1871,7 @@ namespace dg::network_post_rest_app{
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(static_cast<const UserLogRetrieveBaseRequest&>(request)), ' ');
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const UserLogRetrieveBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const UserLogRetrieveBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
         std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest::client::request(std::move(base_request));
@@ -1897,17 +1897,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_token_get(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TokenGenerateRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TokenGenerateResponse, exception_t>>{
+    auto requestmany_token_get(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TokenGenerateRequest>& req_vec) noexcept -> dg::vector<std::expected<TokenGenerateResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TokenGenerateResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TokenGenerateResponse, exception_t>> rs{};
 
         for (const TokenGenerateBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timestamp};
             base_request_vec.push_back(std::move(base_request));
@@ -1940,17 +1940,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_token_refresh(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TokenRefreshRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TokenRefreshResponse, exception_t>>{
+    auto requestmany_token_refresh(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TokenRefreshRequest>& req_vec) noexcept -> dg::vector<std::expected<TokenRefreshResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TokenRefreshResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TokenRefreshResponse, exception_t>> rs{};
 
         for (const TokenRefreshBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timestamp};
             base_request_vec.push_back(std::move(base_request));
@@ -1983,17 +1983,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_tile_init(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TileInitRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TileInitResponse, exception_t>>{
+    auto requestmany_tile_init(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TileInitRequest>& req_vec) noexcept -> dg::vector<std::expected<TileInitResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TileInitResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TileInitResponse, exception_t>> rs{};
 
         for (const TileInitBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' '); //optimizable
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' '); //optimizable
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req); //optimizable
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timestamp};
             base_request_vec.push_back(std::move(base_request));
@@ -2026,17 +2026,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_tile_inject(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TileInjectRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TileInjectResponse, exception_t>>{
+    auto requestmany_tile_inject(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TileInjectRequest>& req_vec) noexcept -> dg::vector<std::expected<TileInjectResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TileInjectResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TileInjectResponse, exception_t>> rs{};
 
         for (const TileInjectBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timeout};
             base_request_vec.push_back(std::move(base_request));
@@ -2069,17 +2069,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_tile_signal(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TileSignalRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TileSignalResponse, exception_t>>{
+    auto requestmany_tile_signal(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TileSignalRequest>& req_vec) noexcept -> dg::vector<std::expected<TileSignalResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TileSignalResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TileSignalResponse, exception_t>> rs{};
 
         for (const TileSignalBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timeout};
             request_vec.push_back(std::move(base_request));
@@ -2112,17 +2112,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_tile_condinject(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TileCondInjectRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TileCondInjectResponse, exception_t>>{
+    auto requestmany_tile_condinject(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TileCondInjectRequest>& req_vec) noexcept -> dg::vector<std::expected<TileCondInjectResponse, exception_t>>{
         
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TileCondInjectResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TileCondInjectResponse, exception_t>> rs{};
 
         for (const TileCondInjectBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timeout};
             base_request_vec.push_back(std::move(base_request));
@@ -2155,17 +2155,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_tile_seqmemcommit(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<TileMemcommitRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<TileMemcommitResponse, exception_t>>{
+    auto requestmany_tile_seqmemcommit(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<TileMemcommitRequest>& req_vec) noexcept -> dg::vector<std::expected<TileMemcommitResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<TileMemcommitResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<TileMemcommitResponse, exception_t>> rs{};
 
         for (const TileMemcommitBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timeout};
             base_request_vec.push_back(std::move(base_request));
@@ -2198,17 +2198,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_syslog_get(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<SysLogRetrieveRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<SysLogRetrieveResponse, exception_t>>{
+    auto requestmany_syslog_get(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<SysLogRetrieveRequest>& req_vec) noexcept -> dg::vector<std::expected<SysLogRetrieveResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<SysLogRetrieveResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<SysLogRetrieveResponse, exception_t>> rs{};
 
         for (const SysLogRetrieveBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
             base_request_vec.push_back(std::move(base_request));
@@ -2241,17 +2241,17 @@ namespace dg::network_post_rest_app{
         return rs;
     }
 
-    auto requestmany_usrlog_get(dg::network_post_rest::client::RestControllerInterface& controller, const dg::network_std_container::vector<UserLogRetrieveRequest>& req_vec) noexcept -> dg::network_std_container::vector<std::expected<UserLogRetrieveResponse, exception_t>>{
+    auto requestmany_usrlog_get(dg::network_post_rest::client::RestControllerInterface& controller, const dg::vector<UserLogRetrieveRequest>& req_vec) noexcept -> dg::vector<std::expected<UserLogRetrieveResponse, exception_t>>{
 
         using BaseRequest   = dg::network_post_rest::model::Request;
         using BaseResponse  = dg::network_post_rest::model::Response;
 
-        dg::network_std_container::vector<BaseRequest> base_request_vec{};
-        dg::network_std_container::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
-        dg::network_std_container::vector<std::expected<UserLogRetrieveResponse, exception_t>> rs{};
+        dg::vector<BaseRequest> base_request_vec{};
+        dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
+        dg::vector<std::expected<UserLogRetrieveResponse, exception_t>> rs{};
 
         for (const UserLogRetrieveBaseRequest& req: req_vec){
-            auto bstream        = dg::network_std_container::string(dg::network_compact_serializer::integrity_size(req), ' ');
+            auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(req), ' ');
             dg::network_compact_serializer::integrity_serialize_into(bstream.data(), req);
             auto base_request   = BaseRequest{req.uri, req.requestor, std::move(bstream), req.timeout};
             base_request_vec.push_back(std::move(base_request));

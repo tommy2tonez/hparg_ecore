@@ -70,12 +70,12 @@ namespace dg::network_recovery_line{
 
         private:
 
-            dg::network_std_container::vector<size_t> tickets;
+            dg::vector<size_t> tickets;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            TicketContainer(dg::network_std_container::vector<size_t> tickets,
+            TicketContainer(dg::vector<size_t> tickets,
                             std::unique_ptr<std::mutex> mtx) noexcept: tickets(std::move(tickets)),
                                                                        mtx(std::move(mtx)){}
 
@@ -104,12 +104,12 @@ namespace dg::network_recovery_line{
 
         private:
 
-            dg::network_std_container::unordered_map<size_t, std::shared_ptr<RecoveryExecutableInterface>> resource_map;
+            dg::unordered_map<size_t, std::shared_ptr<RecoveryExecutableInterface>> resource_map;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
-            RecoveryLineResourceContainer(dg::network_std_container::unordered_map<size_t, std::shared_ptr<RecoveryExecutableInterface>> resource_map,
+            RecoveryLineResourceContainer(dg::unordered_map<size_t, std::shared_ptr<RecoveryExecutableInterface>> resource_map,
                                           std::unique_ptr<std::mutex> mtx) noexcept: resource_map(std::move(resource_map)),
                                                                                      mtx(std::move(mtx)){}
 

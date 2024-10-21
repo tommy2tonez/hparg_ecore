@@ -107,21 +107,44 @@ namespace dg::network_std_container{
     struct optional_type<empty>{};
 
     template <class T>
-    using optional_type_t = typename optional_type<T>::type; 
+    using optional_type_t           = typename optional_type<T>::type; 
 
     template <class T>
-    using unordered_set = std::unordered_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>>;
+    using unordered_set             = std::unordered_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>>;
 
     template <class Key, class Value>
-    using unordered_map = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
+    using unordered_map             = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
+
+    template <class Key, class Value>
+    using unordered_unstable_map    = jg::dense_hash_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class T>
-    using vector        = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
+    using vector                    = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
 
     template <class T>
-    using deque         = std::deque<T, dg::network_allocation::NoExceptAllocator<T>>;
+    using deque                     = std::deque<T, dg::network_allocation::NoExceptAllocator<T>>;
 
-    using string        = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
+    using string                    = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
+}
+
+namespace dg{
+
+    template <class ...Args>
+    using unordered_set             = dg::network_std_container::unordered_set<Args...>;
+
+    template <class ...Args>
+    using unordered_map             = dg::network_std_container::unordered_map<Args...>;
+
+    template <class ...Args>
+    using unordered_unstable_map    = dg::network_std_container::unordered_unstable_map<Args...>;
+
+    template <class ...Args>
+    using vector                    = dg::network_std_container::vector<Args...>;
+
+    template <class ...Args>
+    using deque                     = dg::network_std_container::deque<Args...>;
+
+    using string                    = dg::network_std_container::string;
 }
 
 #endif

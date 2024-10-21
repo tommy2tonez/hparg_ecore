@@ -33,51 +33,51 @@ namespace dg::network_postgres_db::model{
     static inline constexpr size_t USERLOG_USER_ID_MAX_LENGTH           = USER_ID_MAX_LENGTH; 
 
     struct LegacyAuth{
-        dg::network_std_container::string salt;
-        dg::network_std_container::string verifiable;
-        dg::network_std_container::string user_id;
+        dg::string salt;
+        dg::string verifiable;
+        dg::string user_id;
     };
 
     struct LegacyAuthEntry: LegacyAuth{
-        dg::network_std_container::string entry_id;
+        dg::string entry_id;
     };
 
     struct User{
-        dg::network_std_container::string id;
-        dg::network_std_container::string clearance;
+        dg::string id;
+        dg::string clearance;
     };
 
     struct UserEntry: User{
-        dg::network_std_container::string entry_id;
+        dg::string entry_id;
     };
 
     struct HeartBeat{
-        dg::network_std_container::string payload;
+        dg::string payload;
     };
 
     struct HeartBeatEntry: HeartBeat{
-        dg::network_std_container::string entry_id;
+        dg::string entry_id;
     };
 
     struct SystemLog{
-        dg::network_std_container::string content;
-        dg::network_std_container::string kind;
+        dg::string content;
+        dg::string kind;
         std::chrono::nanoseconds timestamp;
     };
 
     struct SystemLogEntry: SystemLog{
-        dg::network_std_container::string entry_id;
+        dg::string entry_id;
     };
 
     struct UserLog{
-        dg::network_std_container::string content;
-        dg::network_std_container::string kind;
-        dg::network_std_container::string user_id;
+        dg::string content;
+        dg::string kind;
+        dg::string user_id;
         std::chrono::nanoseconds timestamp;
     };
 
     struct UserLogEntry: UserLog{
-        dg::network_std_container::string entry_id;
+        dg::string entry_id;
     };
 }
 
@@ -85,7 +85,7 @@ namespace dg::network_postgres_db::model_factory{
 
     using namespace dg::network_postgres_db::model;
 
-    auto make_legacy_auth(const dg::network_std_container::string& salt, const dg::network_std_container& verifiable, const dg::network_std_container::string& user_id) noexcept -> std::expected<LegacyAuth, exception_t>{
+    auto make_legacy_auth(const dg::string& salt, const dg::network_std_container& verifiable, const dg::string& user_id) noexcept -> std::expected<LegacyAuth, exception_t>{
 
         if (std::clamp(salt.size(), LEGACYAUTH_SALT_MIN_LENGTH, LEGACYAUTH_SALT_MAX_LENGTH) != salt.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -102,7 +102,7 @@ namespace dg::network_postgres_db::model_factory{
         return LegacyAuth{salt, verifiable, user_id};
     }
 
-    auto make_user(const dg::network_std_container::string& id, const dg::network_std_container::string& clearance) noexcept -> std::expected<User, exception_t>{
+    auto make_user(const dg::string& id, const dg::string& clearance) noexcept -> std::expected<User, exception_t>{
 
         if (std::clamp(id.size(), USER_ID_MIN_LENGTH, USER_ID_MAX_LENGTH) != id.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -115,7 +115,7 @@ namespace dg::network_postgres_db::model_factory{
         return User{id, clearance};
     }
 
-    auto make_heartbeat(const dg::network_std_container::string& payload) noexcept -> std::expected<HeartBeat, exception_t>{
+    auto make_heartbeat(const dg::string& payload) noexcept -> std::expected<HeartBeat, exception_t>{
 
         if (std::clamp(payload.size(), HEARTBEAT_PAYLOAD_MIN_LENGTH, HEARTBEAT_PAYLOAD_MAX_LENGTH) != payload.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -124,7 +124,7 @@ namespace dg::network_postgres_db::model_factory{
         return HeartBeat{payload};
     }
 
-    auto make_systemlog(const dg::network_std_container::string& content, const dg::network_std_container::string& kind, std::chrono::nanoseconds timestamp) noexcept -> std::expected<SystemLog, exception_t>{
+    auto make_systemlog(const dg::string& content, const dg::string& kind, std::chrono::nanoseconds timestamp) noexcept -> std::expected<SystemLog, exception_t>{
 
         if (std::clamp(content.size(), SYSTEMLOG_CONTENT_MIN_LENGTH, SYSTEMLOG_CONTENT_MAX_LENGTH) != content.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -137,7 +137,7 @@ namespace dg::network_postgres_db::model_factory{
         return SystemLog{content, kind, timestamp};        
     }
 
-    auto make_userlog(const dg::network_std_container::string& content, const dg::network_std_container::string& kind, const dg::network_std_container::string& user_id, std::chrono::nanoseconds timestamp) noexcept -> std::expected<UserLog, exception_t>{
+    auto make_userlog(const dg::string& content, const dg::string& kind, const dg::string& user_id, std::chrono::nanoseconds timestamp) noexcept -> std::expected<UserLog, exception_t>{
 
         if (std::clamp(content.size(), USERLOG_CONTENT_MIN_LENGTH, USERLOG_CONTENT_MAX_LENGTH) != content.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -203,9 +203,9 @@ namespace dg::network_postgres_db::hex_encoder{
         return std::bit_cast<char>(uc);
     }
 
-    static auto encode(const dg::network_std_container::string& s) -> dg::network_std_container::string{
+    static auto encode(const dg::string& s) -> dg::string{
 
-        dg::network_std_container::string rs{}; 
+        dg::string rs{}; 
         rs.reserve(s.size() * 2);
 
         for (char c: s){
@@ -217,14 +217,14 @@ namespace dg::network_postgres_db::hex_encoder{
         return rs;
     }
 
-    static auto decode(const dg::network_std_container::string& s) -> dg::network_std_container::string{
+    static auto decode(const dg::string& s) -> dg::string{
 
         if (s.size() % 2 != 0u){
             dg::network_exception::throw_exception(dg::network_exception::BAD_ENCODING_FORMAT);
         }
 
         size_t rs_sz = s.size() / 2;
-        dg::network_std_container::string rs(rs_sz);
+        dg::string rs(rs_sz);
 
         for (size_t i = 0u; i < rs_sz; ++i){
             size_t hidx = i * 2;
@@ -239,9 +239,9 @@ namespace dg::network_postgres_db::hex_encoder{
 namespace dg::network_postgres_db::utility{
 
     template <class ...Args>
-    static auto query_format(const char * fmt, Args&& ...args) -> dg::network_std_container::string{
+    static auto query_format(const char * fmt, Args&& ...args) -> dg::string{
 
-        dg::network_std_container::string rs{};
+        dg::string rs{};
         std::format_to(std::back_inserter(rs), fmt, std::forward<Args>(args)...);
         
         if (rs.size() > constants::MAXIMUM_QUERY_LENGTH){
@@ -251,24 +251,24 @@ namespace dg::network_postgres_db::utility{
         return rs;
     } 
 
-    static auto encode_sql(const dg::network_std_contaier::string& arg) -> dg::network_std_container::string{
+    static auto encode_sql(const dg::network_std_contaier::string& arg) -> dg::string{
 
-        dg::network_std_container::string integrity_payload(dg::network_compact_serializer::integrity_size(arg));
+        dg::string integrity_payload(dg::network_compact_serializer::integrity_size(arg));
         dg::network_compact_serializer::integrity_serialize_into(integrity_payload.data(), arg);
         
         return hex_encoder::encode(integrity_payload);
     }
 
-    static auto decode_sql(const dg::network_std_container::string& arg) -> dg::network_std_container::string{
+    static auto decode_sql(const dg::string& arg) -> dg::string{
 
-        dg::network_std_container::string integrity_payload = hex_encoder::decode(arg); 
-        dg::network_std_container::string org_payload{};
+        dg::string integrity_payload = hex_encoder::decode(arg); 
+        dg::string org_payload{};
         dg::network_compact_serializer::integrity_deserialize_into(org_payload, integrity_payload.data(), integrity_payload.size());
 
         return org_payload;
     }
 
-    static auto encode_timestamp(std::chrono::nanoseconds timestamp) -> dg::network_std_container::string{
+    static auto encode_timestamp(std::chrono::nanoseconds timestamp) -> dg::string{
 
         static_assert((std::endian::native == std::endian::little || std::endian::native == std::endian::big));
         uint64_t num_rep = timestamp.count();
@@ -277,16 +277,16 @@ namespace dg::network_postgres_db::utility{
             num_rep = std::byteswap(num_rep);
         }
 
-        dg::network_std_container::string rs(8u, ' ');
+        dg::string rs(8u, ' ');
         std::memcpy(rs.data(), &num_rep, sizeof(uint64_t));
 
         return hex_encoder::encode(rs);
     } 
 
-    static auto decode_timestamp(const dg::network_std_container::string& arg) -> std::chrono::nanoseconds{
+    static auto decode_timestamp(const dg::string& arg) -> std::chrono::nanoseconds{
 
         static_assert((std::endian::native == std::endian::little || std::endian::native == std::endian::big));
-        dg::network_std_container::string encoded = hex_encoder::decode(arg);
+        dg::string encoded = hex_encoder::decode(arg);
 
         if (encoded.size() != 8u){
             dg::network_exception::throw_exception(dg::network_exception::BAD_ENCODING_FORMAT);
@@ -302,10 +302,10 @@ namespace dg::network_postgres_db::utility{
         return std::chrono::nanoseconds(num_rep); 
     }
 
-    static auto quote(const dg::network_std_container::string& arg) -> dg::network_std_container::string{
+    static auto quote(const dg::string& arg) -> dg::string{
 
         const char * fmt = "\"{}\"";
-        dg::network_std_container::string rs{};
+        dg::string rs{};
         std::format_to(std::back_inserter(rs), fmt, arg);
 
         return rs;
@@ -344,7 +344,7 @@ namespace dg::network_postgres_db{
             }
     };
 
-    void init(const dg::network_std_container::string& pq_conn_arg) noexcept -> exception_t{
+    void init(const dg::string& pq_conn_arg) noexcept -> exception_t{
         
         auto lck_grd = dg::network_genult::lock_guard(mtx);
         auto lambda = [&]{
@@ -370,22 +370,22 @@ namespace dg::network_postgres_db{
 
         auto lambda = [&]{
             pqxx::work transaction_handle{*pq_conn};
-            dg::network_std_container::string heartbeat_payload = dg::network_randomizer::randomize_string(model::HEARTBEAT_PAYLOAD_MAX_LENGTH);
-            dg::network_std_container::string encoded_payload   = utility::quote(utility::encode_sql(heartbeat_payload));
-            dg::network_std_container::string inject_query      = utility::query_format("INSERT INTO HeartBeat(payload) VALUES({})", encoded_payload);
+            dg::string heartbeat_payload = dg::network_randomizer::randomize_string(model::HEARTBEAT_PAYLOAD_MAX_LENGTH);
+            dg::string encoded_payload   = utility::quote(utility::encode_sql(heartbeat_payload));
+            dg::string inject_query      = utility::query_format("INSERT INTO HeartBeat(payload) VALUES({})", encoded_payload);
 
             transaction_handle.exec(inject_query.c_str()).no_rows();
             transaction_handle.commit();
             
-            dg::network_std_container::string get_query = utility::query_format("SELECT * FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
+            dg::string get_query = utility::query_format("SELECT * FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
             auto rs = transaction_handle.exec(get_query.c_str());
             rs.one_row();
-            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& encoded_payload){ //this is fine - consider string_view
+            rs.for_each([&](const dg::string& entry_id, const dg::string& encoded_payload){ //this is fine - consider string_view
                 if (heartbeat_payload != utility::decode_sql(encoded_payload)){
                     dg::network_exception::throw_exception(dg::network_exception::POSTGRES_CORRUPTION);
                 }
             });
-            dg::network_std_container::string del_query = utility::query_format("DELETE FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
+            dg::string del_query = utility::query_format("DELETE FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
             transaction_handle.exec(del_query.c_str()).no_rows();
             transaction_handle.commit();
             transaction_handle.exec(get_query.c_str()).no_rows();
@@ -395,7 +395,7 @@ namespace dg::network_postgres_db{
         return dg::network_exception::is_success(err); //need to be more descriptive + handle internal corruption - internal corruption could bleed
     }
 
-    auto get_user_by_id(const dg::network_std_container::string& id) noexcept -> std::expected<model::UserEntry, exception_t>{
+    auto get_user_by_id(const dg::string& id) noexcept -> std::expected<model::UserEntry, exception_t>{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 
@@ -409,11 +409,11 @@ namespace dg::network_postgres_db{
 
         auto lambda = [&]{
             pqxx::nontransaction transaction_handle{*pq_conn};
-            dg::network_std_container::string query = utility::query_format("SELECT * FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
+            dg::string query = utility::query_format("SELECT * FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
             model::UserEntry user{};
             auto rs = transaction_handle.exec(query.c_str());
             rs.one_row();
-            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& id, const dg::network_std_container::string& clearance){
+            rs.for_each([&](const dg::string& entry_id, const dg::string& id, const dg::string& clearance){
                 user.entry_id    = entry_id;
                 user.id          = utility::decode_sql(id);
                 user.clearance   = utility::decode_sql(clearance);
@@ -425,7 +425,7 @@ namespace dg::network_postgres_db{
         return dg::network_exception::to_cstyle_function(lambda)();
     }
 
-    auto get_legacyauth_by_userid(const dg::network_std_container::string& user_id) noexcept -> std::expected<model::LegacyAuthEntry, exception_t>{
+    auto get_legacyauth_by_userid(const dg::string& user_id) noexcept -> std::expected<model::LegacyAuthEntry, exception_t>{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 
@@ -439,11 +439,11 @@ namespace dg::network_postgres_db{
 
         auto lambda = [&]{
             pqxx::nontransaction transaction_handle{*pq_conn};
-            dg::network_std_container::string query = utility::query_format("SELECT * FROM LegacyAuth WHERE LegacyAuth.user_id = {}", utility::quote(utility::encode_sql(user_id)));
+            dg::string query = utility::query_format("SELECT * FROM LegacyAuth WHERE LegacyAuth.user_id = {}", utility::quote(utility::encode_sql(user_id)));
             model::LegacyAuthEntry auth{};
             auto rs = transaction_handle.exec(query.c_str());
             rs.one_row();
-            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& salt, const dg::network_std::container::string& verifiable, const dg::network_std_container::string& user_id){
+            rs.for_each([&](const dg::string& entry_id, const dg::string& salt, const dg::network_std::container::string& verifiable, const dg::string& user_id){
                 auth.entry_id   = entry_id;
                 auth.salt       = utility::decode_sql(salt);
                 auth.verifiable = utility::decode_sql(verifiable);
@@ -456,7 +456,7 @@ namespace dg::network_postgres_db{
         return dg::network_exception::to_cstyle_function(lambda)();
     }
     
-    auto get_systemlog(const dg::network_std_container::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::network_std_container::vector<model::SystemLogEntry>, exception_t>{
+    auto get_systemlog(const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::SystemLogEntry>, exception_t>{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 
@@ -479,9 +479,9 @@ namespace dg::network_postgres_db{
                                                            AND SystemLog.timestamp > {} AND SystemLog.timestamp < {}
                                                      LIMIT {}", utility::quote(utility::encode_sql(kind)), utility::quote(utility::encode_timestamp(fr)), utility::quote(utility::encode_timestamp(to)), limit);
 
-            auto log_vec    = dg::network_std_container::vector<model::SystemLogEntry>{};
+            auto log_vec    = dg::vector<model::SystemLogEntry>{};
             auto rs         = transaction_handle.exec(query.c_str());
-            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& content, const dg::network_std_container::string& kind, const dg::network_std_container::string& timestamp){
+            rs.for_each([&](const dg::string& entry_id, const dg::string& content, const dg::string& kind, const dg::string& timestamp){
                 model::SystemLogEntry entry{};
                 entry.entry_id  = entry_id;
                 entry.content   = utility::decode_sql(content);
@@ -496,7 +496,7 @@ namespace dg::network_postgres_db{
         return dg::network_exception::to_cstyle_function(lambda)();
     }
 
-    auto get_userlog(const dg::network_std_container::string& user_id, const dg::network_std_container::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::network_std_container::vector<model::UserLogEntry>, exception_t>{
+    auto get_userlog(const dg::string& user_id, const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::UserLogEntry>, exception_t>{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 
@@ -525,9 +525,9 @@ namespace dg::network_postgres_db{
                                                      LIMIT {}", utility::quote(utility::encode_sql(user_id)), utility::quote(utility::encode_sql(kind)), 
                                                                 utility::quote(utility::encode_timestamp(fr)), utility::quote(utility::encode_timestamp(to)),
                                                                 limit);
-            auto log_vec    = dg::network_std_container::vector<model::UserLogEntry>{};
+            auto log_vec    = dg::vector<model::UserLogEntry>{};
             auto rs         = transaction_handle.exec(query.c_str());
-            rs.for_each([&](const dg::network_std_container::string& entry_id, const dg::network_std_container::string& content, const dg::network_std_container::string& kind, const dg::network_std_container::string& user_id, const dg::network_std_container::string& timestamp){
+            rs.for_each([&](const dg::string& entry_id, const dg::string& content, const dg::string& kind, const dg::string& user_id, const dg::string& timestamp){
                 model::UserLogEntry entry{};
                 entry.entry_id  = entry_id;
                 entry.content   = utility::decode_sql(content);
@@ -546,7 +546,7 @@ namespace dg::network_postgres_db{
     auto make_commitable_create_systemlog(const model::SystemLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
-            dg::network_std_container::string query = utility::query_format("INSERT INTO SystemLog(content, kind, timestamp) VALUES({}, {}, {})", utility::quote(utility::encode_sql(log.content)), 
+            dg::string query = utility::query_format("INSERT INTO SystemLog(content, kind, timestamp) VALUES({}, {}, {})", utility::quote(utility::encode_sql(log.content)), 
                                                                                                                                                   utility::quote(utility::encode_sql(log.kind)), 
                                                                                                                                                   utility::quote(utility::encode_timestamp(log.timestamp)));
             transaction_handle.exec(query.c_str()).no_rows();
@@ -559,7 +559,7 @@ namespace dg::network_postgres_db{
     auto make_commitable_create_userlog(const model::UserLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
-            dg::network_std_container::string query = utility::query_format("INSERT INTO UserLog(content, kind, user_id, timestamp) VALUES({}, {}, {}, {})", utility::quote(utility::encode_sql(log.content)),
+            dg::string query = utility::query_format("INSERT INTO UserLog(content, kind, user_id, timestamp) VALUES({}, {}, {}, {})", utility::quote(utility::encode_sql(log.content)),
                                                                                                                                                              utility::quote(utility::encode_sql(log.kind)),
                                                                                                                                                              utility::quote(utility::encode_sql(log.user_id)),
                                                                                                                                                              utility::quote(utility::encode_timestamp(log.timestamp)));
@@ -573,7 +573,7 @@ namespace dg::network_postgres_db{
     auto make_commitable_create_user(const model::User& user) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
-            dg::network_std_container::string query = utility::query_format("INSERT INTO User(id, clearance) VALUES({}, {})", utility::quote(utility::encode_sql(user.id)), 
+            dg::string query = utility::query_format("INSERT INTO User(id, clearance) VALUES({}, {})", utility::quote(utility::encode_sql(user.id)), 
                                                                                                                               utility::quote(utility::encode_sql(user.clearance)));
             transaction_handle.exec(query.c_str()).no_rows();
         };
@@ -585,7 +585,7 @@ namespace dg::network_postgres_db{
     auto make_commitable_create_legacy_auth(const model::LegacyAuth& legacy_auth) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         auto lambda = [=](pqxx::work& transaction_handle){
-            dg::network_std_container::string query = utility::query_format("INSERT INTO LegacyAuth(salt, verifiable, user_id) VALUES({}, {}, {})", utility::quote(utility::encode_sql(legacy_auth.salt)), 
+            dg::string query = utility::query_format("INSERT INTO LegacyAuth(salt, verifiable, user_id) VALUES({}, {}, {})", utility::quote(utility::encode_sql(legacy_auth.salt)), 
                                                                                                                                                     utility::quote(utility::encode_sql(legacy_auth.verifiable)), 
                                                                                                                                                     utility::quote(utility::encode_sql(legacy_auth.user_id)));
             transaction_handle.exec(query.c_str()).no_rows();
@@ -595,14 +595,14 @@ namespace dg::network_postgres_db{
         return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
-    auto make_commitable_delete_user_by_id(const dg::network_std_container::string& id) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
+    auto make_commitable_delete_user_by_id(const dg::string& id) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
         if (std::clamp(id.size(), model::USER_ID_MIN_LENGTH, model::USER_ID_MAX_LENGTH) != id.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
         }
 
         auto lambda = [=](pqxx::work& transaction_handle){
-            dg::network_std_container::string query = utility::query_format("DELETE FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
+            dg::string query = utility::query_format("DELETE FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
             transaction_handle.exec(query.c_str()).no_rows();
         };
 
@@ -610,7 +610,7 @@ namespace dg::network_postgres_db{
         return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
-    void commit(dg::network_std_container::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
+    void commit(dg::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 

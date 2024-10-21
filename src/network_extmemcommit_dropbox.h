@@ -45,12 +45,12 @@ namespace dg::network_extmemcommit_dropbox{
         
         private:
 
-            dg::network_std_container::vector<Request> request_vec;
+            dg::vector<Request> request_vec;
             std::unique_ptr<std::mutex> lck;
         
         public:
 
-            LckContainer(dg::network_std_container::vector<Request> request_vec,
+            LckContainer(dg::vector<Request> request_vec,
                          std::unique_ptr<std::mutex> lck) noexcept: request_vec(std::move(request_vec)),
                                                                     lck(std::move(lck)){}
 
@@ -93,19 +93,19 @@ namespace dg::network_extmemcommit_dropbox{
 
             bool run_one_epoch() noexcept{
                 
-                const size_t SERIALIZATION_OVERHEAD = dg::network_compact_serializer::size(dg::network_std_container::vector<request_t>{});
+                const size_t SERIALIZATION_OVERHEAD = dg::network_compact_serializer::size(dg::vector<request_t>{});
                 const size_t MAX_DISPATCH_BYTE_SZ   = dg::network_kernel_mailbox::MAX_SUBMIT_SIZE - SERIALIZATION_OVERHEAD;
                 HelperClass dispatcher{}; 
 
                 {
-                    dg::network_std_container::vector<request_t> recv_request = this->recv();
+                    dg::vector<request_t> recv_request = this->recv();
 
                     if (recv_request.empty()){
                         return false;
                     }
 
                     using handle_t      = dg::network_type_traits_x::remove_expected_t<decltype(dg::network_raii_producer_consumer::xdelvsrv_open_raiihandle(&dispatcher, this->addr_vectorization_sz, MAX_DISPATCH_BYTE_SZ, MAX_DISPATCH_BYTE_SZ))>; //interface coersion might not work
-                    auto delivery_map   = dg::network_std_container::unordered_map<Address, handle_t>{};
+                    auto delivery_map   = dg::unordered_map<Address, handle_t>{};
 
                     for (request_t& request: recv_request){
                         Address dst_ip  = request.requestor;
@@ -128,9 +128,9 @@ namespace dg::network_extmemcommit_dropbox{
         
         private:
 
-            auto recv() noexcept -> dg::network_std_container::vector<Request>{
+            auto recv() noexcept -> dg::vector<Request>{
 
-                dg::network_std_container::vector<Request> rs{};
+                dg::vector<Request> rs{};
                 rs.reserve(this->vectorization_sz);
 
                 for (size_t i = 0u; i < this->vectorization_sz; ++i){
@@ -148,7 +148,7 @@ namespace dg::network_extmemcommit_dropbox{
 
             struct HelperClass: public virtual dg::network_raii_producer_consumer::ConsumerInterface<request_t>{
             
-                void push(dg::network_std_container::vector<request_t> data) noexcept{
+                void push(dg::vector<request_t> data) noexcept{
                     
                     if (data.size() == 0u){
                         return;
@@ -156,7 +156,7 @@ namespace dg::network_extmemcommit_dropbox{
 
                     Address dst     = data.front().requestor;
                     size_t bsz      = dg::network_compact_serializer::size(data);
-                    auto bstream    = dg::network_std_container::string(bsz);
+                    auto bstream    = dg::string(bsz);
                     dg::network_compact_serializer::serialize_into(bstream.data(), data);
                     dg::network_kernel_mailbox::send(dst, std::move(bstream), dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
                 }
@@ -175,13 +175,13 @@ namespace dg::network_extmemcommit_dropbox{
 
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::network_std_container::string> bstream = dg::network_kernel_mailbox::recv(dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
+                std::optional<dg::string> bstream = dg::network_kernel_mailbox::recv(dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
                 
                 if (!static_cast<bool>(bstream)){
                     return false;
                 }
 
-                dg::network_std_container::vector<Request> recv_data{};
+                dg::vector<Request> recv_data{};
                 dg::network_compact_serializer::deserialize_into(recv_data, bstream->data());
 
                 for (Request& request: recv_data){
@@ -203,13 +203,13 @@ namespace dg::network_extmemcommit_dropbox{
 
         private:
 
-            dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> workers;
+            dg::vector<dg::network_concurrency::daemon_raii_handle_t> workers;
             std::shared_ptr<RequestContainerInterface> outbound_container;
             std::shared_ptr<RequestContainerInterface> inbound_container;
         
         public:
 
-            RequestCenter(dg::network_std_container::vector<dg::network_concurrency::daemon_raii_handle_t> workers,
+            RequestCenter(dg::vector<dg::network_concurrency::daemon_raii_handle_t> workers,
                           std::shared_ptr<RequestContainerInterface> outbound_container,
                           std::shared_ptr<RequestContainerInterface> inbound_container) noexcept: workers(std::move(workers)),
                                                                                                   outbound_container(std::move(outbound_container)),
@@ -236,7 +236,7 @@ namespace dg::network_extmemcommit_dropbox{
 
             RequestDropBox(std::shared_ptr<RequestCenterInterface> request_center) noexcept: request_center(std::move(request_center)){}
 
-            void push(dg::network_std_container::vector<Request> request_vec) noexcept{
+            void push(dg::vector<Request> request_vec) noexcept{
 
                 for (auto& request: request_vec){
                     this->request_center->send(std::move(request));
@@ -254,9 +254,9 @@ namespace dg::network_extmemcommit_dropbox{
 
             RequestProducer(std::shared_ptr<RequestCenterInterface> request_center) noexcept: request_center(std::move(request_center)){}
 
-            auto get(size_t capacity) noexcept -> dg::network_std_container::vector<Request>{
+            auto get(size_t capacity) noexcept -> dg::vector<Request>{
 
-                dg::network_std_container::vector<Request> vec{};
+                dg::vector<Request> vec{};
 
                 for (size_t i = 0u; i < capacity; ++i){
                     std::optional<Request> request = this->request_center->pop();

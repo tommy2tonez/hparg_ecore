@@ -630,7 +630,7 @@ namespace dg::network_cufsio_linux::implementation{
 
             auto cuda_read_binary(const char * fp, cuda_ptr_t dst, size_t dst_cap) noexcept -> exception_t{
 
-                auto buf        = dg::network_std_container::string(dst_cap);
+                auto buf        = dg::string(dst_cap);
                 exception_t err = dg::network_fileio_linux::dg_read_binary(fp, buf.data(), dst_cap); 
 
                 if (dg::network_exception::is_failed(err)){
@@ -643,7 +643,7 @@ namespace dg::network_cufsio_linux::implementation{
 
             auto cuda_write_binary(const char * fp, cuda_ptr_t src, size_t src_sz) noexcept -> exception_t{
  
-                auto buf        = dg::network_std_container::string(src_sz);
+                auto buf        = dg::string(src_sz);
                 exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(buf.data(), src, src_sz, cudaMemcpyDeviceToHost)); //TODO: change -> cuda_controller
                 dg::network_exception_handler::nothrow_log(err);
 

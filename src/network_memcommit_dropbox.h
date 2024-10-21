@@ -77,7 +77,7 @@ namespace dg::network_memcommit_dropbox{
                 auto bwd_load_request_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->bwd_load_request_resolutor.get(), this->bwd_load_request_resolution_sz));
                 auto bwd_load_response_delivery_handle      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->bwd_load_response_resolutor.get(), this->bwd_load_response_resolution_sz));
                 auto bwd_load_redirect_delivery_handle      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->bwd_load_redirect_resolutor.get(), this->bwd_load_redirect_resolution_sz));
-                auto retrieving_data                        = dg::network_std_container::vector<virtual_memory_event_t>(this->consuming_sz);
+                auto retrieving_data                        = dg::vector<virtual_memory_event_t>(this->consuming_sz);
                 size_t retrieving_sz                        = {}; 
                 this->producer->get(retrieving_data.data(), retrieving_sz, this->consuming_sz);
 

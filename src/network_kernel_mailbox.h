@@ -30,8 +30,8 @@ namespace dg::network_kernel_mailbox{
         size_t outbound_worker_count;
         size_t inbound_worker_count;
         size_t retransmission_worker_count;
-        dg::network_std_container::vector<ip_t> host_ips;
-        dg::network_std_container::vector<uint16_t> host_ports;
+        dg::vector<ip_t> host_ips;
+        dg::vector<uint16_t> host_ports;
         std::chrono::nanoseconds retransmission_delay;
         size_t retranmission_count;
         std::optional<size_t> inbound_exhaustion_control_sz;
@@ -89,7 +89,7 @@ namespace dg::network_kernel_mailbox{
 
     }
 
-    void send(Address addr, dg::network_std_container::string msg, radix_t radix) noexcept{
+    void send(Address addr, dg::string msg, radix_t radix) noexcept{
 
         if (msg.size() > dg::network_kernel_mailbox_impl1::constants::MAXIMUM_MSG_SIZE){
             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -99,7 +99,7 @@ namespace dg::network_kernel_mailbox{
         mailbox->send(std::move(addr), std::move(msg));
     }
 
-    auto recv(radix_t radix) noexcept -> std::optional<dg::network_std_container::string>{ //optional string because string.empty() does not mean that it is not a packet
+    auto recv(radix_t radix) noexcept -> std::optional<dg::string>{ //optional string because string.empty() does not mean that it is not a packet
         
         return mailbox->recv();
     }   

@@ -193,13 +193,6 @@ namespace dg::network_allocation{
         private:
 
             auto encode_ptr(uint64_t hi, uint64_t lo) const noexcept -> ptr_type{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (lo + 1 > bit_capacity(std::integral_constant<size_t, PTRSZ_BSPACE>{})){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
     
                 return (static_cast<ptr_type>(hi) << PTRSZ_BSPACE) | static_cast<ptr_type>(lo + 1);
             }
@@ -306,7 +299,7 @@ namespace dg::network_allocation{
 
     struct Factory{
 
-        auto spawn_heap_allocator(size_t leaf_sz, size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
+        static auto spawn_heap_allocator(size_t leaf_sz, size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
 
             const size_t MIN_LEAF_SZ        = 1;
             const size_t MAX_LEAF_SZ        = size_t{1} << 10;
@@ -345,7 +338,7 @@ namespace dg::network_allocation{
             return rs;
         }
 
-        auto spawn_allocator(size_t leaf_sz, size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
+        static auto spawn_allocator(size_t leaf_sz, size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
 
             const size_t MIN_LEAF_SZ        = LEAST_GUARANTEED_ALIGNMENT;
             const size_t MAX_LEAF_SZ        = size_t{1} << 10;
@@ -376,7 +369,7 @@ namespace dg::network_allocation{
             return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator), leaf_sz);
         }
 
-        auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
+        static auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
 
             const size_t MIN_ALLOCATOR_SZ   = 1u;
             const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 8;
@@ -396,7 +389,7 @@ namespace dg::network_allocation{
             return std::make_unique<MultiThreadAllocator>(std::move(allocator));
         }
 
-        auto spawn_gc_worker(std::chrono::nanoseconds gc_interval, std::shared_ptr<GCInterface> gc_able) -> dg::network_concurrency::daemon_raii_handle_t{ //this is strange - this overstep into the responsibility - decouple the component
+        static auto spawn_gc_worker(std::chrono::nanoseconds gc_interval, std::shared_ptr<GCInterface> gc_able) -> dg::network_concurrency::daemon_raii_handle_t{ //this is strange - this overstep into the responsibility - decouple the component
 
             std::chrono::nanoseconds MIN_GC_INTERVAL    = std::chrono::milliseconds(1);
             std::chrono::nanoseconds MAX_GC_INTERVAL    = std::chrono::seconds(1);

@@ -481,7 +481,7 @@ namespace dg::network_memcommit_resolutor{
                 operatable_id_t ops_id      = dg::network_tile_member_getsetter::get_extclone_operatable_id_nothrow(ptr);
                 Address requesting_ip       = this->uma_ip_retriever->ip(ptr);
 
-                dg::network_std_container::string tmp_buf(dg::network_tile_member_getsetter::grad_buf_sz);
+                dg::string tmp_buf(dg::network_tile_member_getsetter::grad_buf_sz);
                 dg::network_memops_uma::memcpy_uma_to_host(grad_add, tmp_buf.data(), grad_buf_sz);
                 Request<external_virtual_memory_commit_t> request{requesting_ip, dg::network_external_memcommit_factory::make_event_external_backward_do_signal(requesting_addr, ops_id, std::move(tmp_buf))};
                 dg::network_producer_consumer::delvsrv_deliver(handle, std::move(request));
