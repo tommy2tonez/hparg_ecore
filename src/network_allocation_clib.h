@@ -89,10 +89,9 @@ namespace dg::network_allocation_clib{
         void * aligned_ptr  = dg::memult::align(dg::memult::badvance(rs, sizeof(cuda_ptr_header_t)), alignment_sz);
         void * header_ptr   = dg::memult::badvance(aligned_ptr, -static_cast<intmax_t>(sizeof(cuda_ptr_header_t)));
         auto header         = static_cast<cuda_ptr_header_t>(dg::memult::distance(rs, aligned_ptr));
+        exception_t cpy_err = dg::network_cuda_controller::cuda_memcpy(header_ptr, &header, sizeof(cuda_ptr_header_t), cudaMemcpyHostToDevice);
 
-        err = dg::network_cuda_controller::cuda_memcpy(header_ptr, &header, sizeof(cuda_ptr_header_t), cudaMemcpyHostToDevice);
-
-        if (dg::network_exception::is_failed(err)){
+        if (dg::network_exception::is_failed(cpy_err)){
             throw std::bad_alloc();
         }
 

@@ -7,28 +7,107 @@
 #include <memory>
 #include <string>
 #include <chrono>
+#include "network_compact_serializer.h"
+#include <vector>
+#include <string>
 
 namespace dg::cublas_x::syntax_tree{
 
-    using transform_ins_t = std::string;  
+    using transform_kind_t = uint8_t; 
 
-    struct Space{
+    enum transform_option: transform_kind_t{
+        transform_kind_saturate_01          = 0u,
+        transform_kind_rounddown_optional   = 1u,
+        transform_kind_rounddown            = 2u,
+        transform_kind_roundup_optional     = 3u,
+        transform_kind_roundup              = 4u,
+        transform_kind_fastmath             = 5u,
+        transform_kind_roundeven_optional   = 6u,
+        transform_kind_roundeven            = 7u,
+        transform_kind_roundzero_optional   = 8u,
+        transform_kind_roundzero            = 9u,
+        transform_kind_clone                = 10u,
+        transform_kind_relu                 = 11u,
+        transform_kind_cast_u8              = 12u,
+        transform_kind_cast_u16             = 13u,
+        transform_kind_cast_u32             = 14u,
+        transform_kind_cast_f8_native       = 15u,
+        transform_kind_cast_f16_brain       = 16u,
+        transform_kind_cast_f16_iec559      = 17u,
+        transform_kind_cast_f32_iec559      = 18u,
+        transform_kind_sign                 = 19u,
+        transform_kind_exp                  = 20u,
+        transform_kind_exp2                 = 21u,
+        transform_kind_exp10                = 22u,
+        transform_kind_log                  = 23u,
+        transform_kind_log2                 = 24u,
+        transform_kind_log10                = 25u,
+        transform_kind_abs                  = 26u,
+        transform_kind_cos                  = 27u,
+        transform_kind_acos                 = 28u,
+        transform_kind_sin                  = 29u,
+        transform_kind_asin                 = 30u,
+        transform_kind_tan                  = 31u,
+        transform_kind_atan                 = 32u,
+        transform_kind_sqrt                 = 33u,
+        transform_kind_invsqrt              = 34u,
+        transform_kind_negative             = 35u,
+        transform_kind_negate               = 36u,
+        transform_kind_transpose            = 37u,
+        transform_kind_linear               = 38u,
+        transform_kind_dot                  = 39u,
+        transform_kind_add                  = 40u,
+        transform_kind_sub                  = 41u,
+        transform_kind_mul                  = 42u,
+        transform_kind_div                  = 43u,
+        transform_kind_pow                  = 44u,
+        transform_kind_min                  = 45u,
+        transform_kind_max                  = 46u,
+        transform_kind_none                 = 47u
+    };
+
+    using logit_kind_t  = uint8_t; 
+    
+    enum logit_option: logit_kind_t{
+        u8          = 0u,
+        u16         = 1u,
+        u32         = 2u,
+        f8          = 3u,
+        f16brain    = 4u,
+        f16iec559   = 5u,
+        f32iec559   = 6u
+    };
+
+    struct MatrixDimension{
         size_t row_sz;
         size_t column_sz;
-        size_t replication_factor;
     };
 
     struct AbstractNode{
         std::vector<std::unique_ptr<AbstractNode>> descendants;
-        std::string transform_type;
-        Space space;
+        transform_kind_t transform_kind;
+        MatrixDimension dim;
+        std::string value_identifier;
+        logit_kind_t logit_kind;
     };
 
     struct Node{
         std::vector<std::unique_ptr<Node>> descendants;
-        transform_ins_t transform_type;
+        transform_kind_t transform_kind;
+        MatrixDimension dim;
+        std::string value_identifier;
+        logit_kind_t logit_kind;
         std::shared_ptr<cuda_ptr_t> data;
     };
+
+    auto transform_kind_cstr(transform_kind_t transform_kind) -> const char *{
+
+    }
+}
+
+namespace dg::cublas_x::exception{
+
+    struct invalid_argument: std::exception{};
 }
 
 namespace dg::cublas_x::exec_engine{
@@ -38,9 +117,9 @@ namespace dg::cublas_x::exec_engine{
         public:
 
             virtual ~ExecutorInterface() noexcept = default;
-            virtual void exec(cublas_handle_t, cuda_ptr_t *) = 0;
+            virtual void exec(int device_id, const std::multimap<std::string, void *>& arguments, void * dst, size_t dst_cap) = 0;
     };
-} 
+}
 
 namespace dg::cublas_x::opti_engine{
  
@@ -104,14 +183,6 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
         
         public:
-
-            //this is a hard-problem
-            //WLOG, assume binary tree 
-            //split the tree into two after segmentation blocks (reachable by root, not-reachable by root)
-            //reachable_by_root -> = ordered_hash of the graph -> direct look of dictionary
-            //not_reachable_by_root -> child of reachable_by_root  
-            //segmentation blocks permutation == |combinatorial_space(1, N)| + |combinatorial_space(2, N)| + ... + |combinatorial_space(N, N)| 
-            //do tmr
 
             auto search(const syntax_tree::AbstractNode& node) -> std::vector<syntax_tree::AbstractNode>{
 
@@ -248,7 +319,46 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
 } 
 
+namespace dg::cublas_x::utility{
+
+    auto deepcopy(const std::unique_ptr<syntax_tree::AbstractNode>& node) -> std::unique_ptr<syntax_tree::AbstractNode>{
+
+        if (!node){
+            return nullptr;
+        }
+
+        auto rs                 = std::make_unique<syntax_tree::AbstractNode>();
+        rs->transform_kind      = node->transform_kind;
+        rs->dim                 = node->dim;
+        rs->value_identifier    = node->value_identifier;
+
+        for (const auto& child: node->descendants){
+            rs->descendants.push_back(deepcopy(child));
+        }
+
+        return rs;
+    } 
+
+    auto make_identifier(const std::string& identifier) -> std::string{
+
+        auto new_identifier = std::vector<std::string> {identifier};
+        auto rs             = std::string(dg::network_compact_serializer::size(new_identifier), ' ');
+        dg::network_compact_serializer::serialize_into(rs.data(), new_identifier);
+
+        return rs;
+    } 
+
+    auto combine_identifier(const std::string& lhs, const std::string& rhs) -> std::string{
+        
+        return lhs + rhs;
+    }
+}
+
 namespace dg::cublas_x{
+
+    using AbstractNode  = syntax_tree::AbstractNode;
+    using cublas_plan_t = std::unique_ptr<AbstractNode>;
+    using logit_kind_t  = syntax_tree::logit_kind_t;
 
     template <class arithemtic_ops_t>
     struct coerced_x_math{
@@ -347,200 +457,886 @@ namespace dg::cublas_x{
         }
     };
 
-    using matrix_option_t  = uint8_t;
-    using logit_option_t   = uint8_t; 
-    
-    enum logit_option: logit_option_t{
-        u8          = 0u,
-        u16         = 1u,
-        u32         = 2u,
-        f8          = 3u, //specifier
-        f16brain    = 4u,
-        f16iec559   = 5u,
-        f32iec559   = 6u
-    };
+    auto cublas_make_matrix(size_t m, size_t n, std::string value_identifier, logit_kind_t logit_kind) -> std::unique_ptr<AbstractNode>{
+        
+        using namespace syntax_tree; 
 
-    auto cublas_make_matrix(size_t m, size_t n, size_t ld, logit_option_t logit_option) -> cublas_plan_t{
+        if (m == 0u){
+            throw exception::invalid_argument();
+        }
 
-    } 
+        if (n == 0u){
+            throw exception::invalid_argument{};
+        }
 
-    auto cublas_make_matrix(size_t m, size_t n, logit_option_t logit_option) -> cublas_plan_t{
-
+        return std::make_unique<AbstractNode>(AbstractNode{{}, transform_kind_none, MatrixDimension{m, n}, utility::make_identifier(value_identifier), logit_kind});
     }
     
-    auto cublas_mono_saturate_01(cublas_plan_t) -> cublas_plan_t{
+    auto cublas_split(const std::unique_ptr<AbstractNode>& plan, size_t split_factor) -> std::vector<std::unique_ptr<AbstractNode>>{
 
+    }
+
+    auto cublas_join(const std::vector<std::unique_ptr<AbstractNode>>& plan) -> std::unique_ptr<AbstractNode>{
+        
+    }
+
+    auto cublas_mono_saturate_01(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_saturate_01;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_saturate_01));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_rounddown_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_rounddown_optional;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_rounddown_optional));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
     } 
 
-    auto cublas_mono_rounddown_optional(cublas_plan_t) -> cublas_plan_t{
+    auto cublas_mono_rounddown(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
 
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_rounddown;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_rounddown)); 
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_roundup_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_roundup_optional;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundup_optional));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_roundup(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_roundup;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundup));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_fastmath(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+        
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_fastmath;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_fastmath));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_roundeven_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_roundeven_optional;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundeven_optional));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_roundeven(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_roundeven;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundeven));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_roundzero_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_roundzero_optional;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundzero_optional));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_roundzero(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_roundzero;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundzero));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_clone(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_clone;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_clone));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_relu(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_relu;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_relu));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_cast(const std::unique_ptr<AbstractNode>& plan, logit_kind_t logit_kind) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind{};
+
+        switch (logit_kind){
+            case u8:
+                transform_kind = transform_kind_cast_u8;
+                break;
+            case u16:
+                transform_kind = transform_kind_cast_u16;
+                break;
+            case u32:
+                transform_kind = transform_kind_cast_u32;
+                break;
+            case f8:
+                transform_kind = transform_kind_cast_f8_native;
+                break;
+            case f16brain:
+                transform_kind = transform_kind_cast_f16_brain;
+                break;
+            case f16iec559:
+                transform_kind = transform_kind_cast_f16_iec559;
+                break;
+            case f32iec559:
+                transform_kind = transform_kind_cast_f32_iec559;
+                break;
+            default:
+                throw exception::invalid_argument();
+                break;
+        }
+
+        MatrixDimension dim     = plan->dim;
+        std::string identifier  = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind));
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_sign(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_sign;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_sign));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_exp(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_exp;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_exp));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_exp2(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_exp2;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_exp2));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_exp10(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_exp10;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_exp10));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_log(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_log;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_log));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_log2(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_log2;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_log2));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_log10(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_log10;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_log10));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
     } 
 
-    auto cublas_mono_rounddown(cublas_plan_t) -> cublas_plan_t{
+    auto cublas_mono_abs(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_abs;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_abs));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_cos(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_cos;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_cos));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_acos(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument{};
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_acos;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_acos));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_sin(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_sin;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_sin));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_asin(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_asin;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_asin));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+ 
+    auto cublas_mono_tan(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_tan;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_tan));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_atan(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_atan;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_atan));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_sqrt(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_sqrt;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_sqrt));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_invsqrt(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_invsqrt;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_invsqrt));
+        logit_kind_t logit_kind         = plan->logit_kind; 
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_negative(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_negative;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_negative));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_negate(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_negate;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_negate));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_mono_transpose(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (plan == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        transform_kind_t transform_kind = transform_kind_transpose;
+        MatrixDimension dim             = plan->dim;
+        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_transpose));
+        logit_kind_t logit_kind         = plan->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_linear(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->logit_kind != rhs->logit_kind){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_linear;
+        MatrixDimension dim             = MatrixDimension{lhs->dim.row_sz, rhs->dim.column_sz};
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_linear));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_dot(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        } 
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_dot;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_linear));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_add(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->logit_kind != rhs->logit_kind){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_add;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_add));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_sub(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->logit_kind != rhs->logit_kind){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_sub;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_sub));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_mul(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->logit_kind != rhs->logit_kind){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_mul;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_mul));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_div(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->logit_kind != rhs->logit_kind){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_div;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_div));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_pow(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_pow;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_div));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_min(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_min;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_min));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+        
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_pair_max(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
+
+        using namespace syntax_tree;
+
+        if (lhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (rhs == nullptr){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.column_sz != rhs->dim.column_sz){
+            throw exception::invalid_argument();
+        }
+
+        if (lhs->dim.row_sz != rhs->dim.row_sz){
+            throw exception::invalid_argument();
+        }
+
+        auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        transform_kind_t transform_kind = transform_kind_max;
+        MatrixDimension dim             = lhs->dim;
+        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_max));
+        logit_kind_t logit_kind         = lhs->logit_kind;
+
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+    }
+
+    auto cublas_optimize_fast(int device_id, const std::unique_ptr<AbstractNode>& plan, size_t buf_cap) -> std::unique_ptr<AbstractNode>{
 
     }
 
-    auto cublas_mono_roundup_optional(cublas_plan_t) -> cublas_plan_t{
+    auto cublas_optimize_slow(int device_id, const std::unique_ptr<AbstractNode>& plan, size_t buf_cap) -> std::unique_ptr<AbstractNode>{
 
     }
 
-    auto cublas_mono_roundup(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_fastmath(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_roundeven_optional(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_roundeven(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_roundzero_optional(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_roundzero(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_clone(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_relu(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_cast(cublas_plan_t, logit_option_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_sign(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_exp(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_exp2(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_exp10(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_log(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_log2(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_log10(cublas_plan_t) -> cublas_plan_t{
-
-    } 
-
-    auto cublas_mono_abs(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_cos(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_acos(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_sin(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_asin(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_tan(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_atan(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_sqrt(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_invsqrt(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_negative(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_mono_negate(cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_linear(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_tlinear(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_dot(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_add(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_sub(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_mul(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_div(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_pow(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_min(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_pair_max(cublas_plan_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_optimize_fast(cublas_handle_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_optimize_slow(cublas_handle_t, cublas_plan_t) -> cublas_plan_t{
-
-    }
-
-    auto cublas_make_executable(cublas_plan_t) -> std::unique_ptr<ExecutorInterface>{
+    auto cublas_make_executable(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<exec_engine::ExecutorInterface>{
 
     }
 } 

@@ -547,8 +547,8 @@ namespace dg::network_postgres_db{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::string query = utility::query_format("INSERT INTO SystemLog(content, kind, timestamp) VALUES({}, {}, {})", utility::quote(utility::encode_sql(log.content)), 
-                                                                                                                                                  utility::quote(utility::encode_sql(log.kind)), 
-                                                                                                                                                  utility::quote(utility::encode_timestamp(log.timestamp)));
+                                                                                                                           utility::quote(utility::encode_sql(log.kind)), 
+                                                                                                                           utility::quote(utility::encode_timestamp(log.timestamp)));
             transaction_handle.exec(query.c_str()).no_rows();
         };
 
@@ -560,9 +560,9 @@ namespace dg::network_postgres_db{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::string query = utility::query_format("INSERT INTO UserLog(content, kind, user_id, timestamp) VALUES({}, {}, {}, {})", utility::quote(utility::encode_sql(log.content)),
-                                                                                                                                                             utility::quote(utility::encode_sql(log.kind)),
-                                                                                                                                                             utility::quote(utility::encode_sql(log.user_id)),
-                                                                                                                                                             utility::quote(utility::encode_timestamp(log.timestamp)));
+                                                                                                                                      utility::quote(utility::encode_sql(log.kind)),
+                                                                                                                                      utility::quote(utility::encode_sql(log.user_id)),
+                                                                                                                                      utility::quote(utility::encode_timestamp(log.timestamp)));
             transaction_handle.exec(query.c_str()).no_rows();
         };
 
@@ -574,7 +574,7 @@ namespace dg::network_postgres_db{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::string query = utility::query_format("INSERT INTO User(id, clearance) VALUES({}, {})", utility::quote(utility::encode_sql(user.id)), 
-                                                                                                                              utility::quote(utility::encode_sql(user.clearance)));
+                                                                                                       utility::quote(utility::encode_sql(user.clearance)));
             transaction_handle.exec(query.c_str()).no_rows();
         };
 
@@ -586,8 +586,8 @@ namespace dg::network_postgres_db{
 
         auto lambda = [=](pqxx::work& transaction_handle){
             dg::string query = utility::query_format("INSERT INTO LegacyAuth(salt, verifiable, user_id) VALUES({}, {}, {})", utility::quote(utility::encode_sql(legacy_auth.salt)), 
-                                                                                                                                                    utility::quote(utility::encode_sql(legacy_auth.verifiable)), 
-                                                                                                                                                    utility::quote(utility::encode_sql(legacy_auth.user_id)));
+                                                                                                                             utility::quote(utility::encode_sql(legacy_auth.verifiable)), 
+                                                                                                                             utility::quote(utility::encode_sql(legacy_auth.user_id)));
             transaction_handle.exec(query.c_str()).no_rows();
         };
 
