@@ -52,7 +52,7 @@ namespace dg::network_cuda_stream{
             return std::unexpected(handle.error());
         }
 
-        return {std::in_place_t{}, std::move(handle.value()), cuda_stream_close};
+        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaStreamHandle, decltype(&cuda_stream_close)>(std::move(handle.value()), cuda_stream_close);
     }
 
     auto cuda_stream_get_legacy(CudaStreamHandle handle) noexcept -> cudaStream_t{

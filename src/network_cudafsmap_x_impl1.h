@@ -93,6 +93,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
     using namespace network_cudafsmap_x_impl1::interface;
 
+    //optimizables
     struct HeapNodeCmp{
 
         constexpr auto operator()(const HeapNode& lhs, const HeapNode& rhs) const noexcept -> int{
@@ -132,14 +133,16 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
         private:
 
-            //this is actually an easy fix - just have virtual filepath and rid of the pollution problem
-            dg::unordered_map<cufs_ptr_t, std::filesystem::path> stable_storage_dict;
+            std::unique_ptr<dg::network_cufsio::FsysIOInterface> fsys_io;
+            dg::unordered_map<cufs_ptr_t, std::filesystem::path> alias_dict; //this is actually an easy fix - just have virtual filepath and rid of the pollution problem
             size_t memregion_sz;
 
         public:
 
-            FsysLoader(dg::unordered_map<cufs_ptr_t, std::filesystem::path> stable_storage_dict,
-                       size_t memregion_sz) noexcept: stable_storage_dict(std::move(stable_storage_dict)),
+            FsysLoader(std::unique_ptr<dg::network_cufsio::FsysIOInterface> fsys_io,
+                       dg::unordered_map<cufs_ptr_t, std::filesystem::path> alias_dict,
+                       size_t memregion_sz) noexcept: fsys_io(std::move(fsys_io)),
+                                                      alias_dict(std::move(alias_dict)),
                                                       memregion_sz(memregion_sz){}
 
             auto load(MemoryNode& root, cufs_ptr_t region) noexcept -> exception_t{
@@ -150,16 +153,16 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                     return dg::network_exception::INVALID_ARGUMENT; //fine - this is a subset of MemoryNode valid_states that does not meet the requirement of load - precond qualified
                 }
 
-                auto dict_ptr = this->stable_storage_dict.find(region);
+                auto dict_ptr = this->alias_dict.find(region);
 
-                if (dict_ptr == this->stable_storage_dict.end()){
+                if (dict_ptr == this->alias_dict.end()){
                     return network_exception::INVALID_DICTIONARY_KEY;
                 }
 
                 const std::filesystem::path& inpath = dict_ptr->second;
                 const char * cstr_path              = inpath.c_str();
                 cuda_ptr_t dst                      = *root.cuptr;
-                exception_t read_err                = dg::network_cufsio::dg_read_binary(cstr_path, dst, this->memregion_sz); 
+                exception_t read_err                = this->fsys_io->cuda_read_binary(cstr_path, dst, this->memregion_sz); 
                 
                 if (dg::network_exception::is_failed(read_err)){
                     return read_err;
@@ -182,10 +185,10 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                 }
 
                 cufs_ptr_t host_region  = root.fsys_ptr_info->ptr;
-                auto dict_ptr           = this->stable_storage_dict.find(host_region);
+                auto dict_ptr           = this->alias_dict.find(host_region);
 
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (dict_ptr == this->stable_storage_dict.end()){
+                    if (dict_ptr == this->alias_dict.end()){
                         dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
@@ -194,8 +197,12 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                 const std::filesystem::path& opath  = dict_ptr->second;
                 const char * cstr_path              = opath.c_str();
                 cuda_ptr_t src                      = *root.cuptr;
-                
-                dg::network_cufsio::dg_write_binary_nothrow(cstr_path, src, this->memregion_sz); //this has to be a nothrow-ops - I don't like inverse operation to be throw-able - recoverability is unified-fsys's responsibility
+                exception_t err                     = this->fsys_io->cuda_write_binary(cstr_path, src, this->memregion_sz); //this has to be a nothrow-ops - I don't like inverse operation to be throw-able - recoverability is unified-fsys's responsibility
+
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_log_stackdump::critical(dg::network_exception::UNRECOVERABLE);
+                    std::abort();
+                }
 
                 root.fsys_ptr_info  = std::nullopt;
                 root.last_modified  = dg::network_genult::unix_timestamp();
@@ -422,23 +429,25 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
             return std::unique_ptr<cuda_ptr_t, decltype(destructor)>(new cuda_ptr_t(new_ptr), destructor);
         }
 
-        static auto spawn_fsys_loader(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& memmap, size_t memregion_sz) -> std::unique_ptr<CuFSLoaderInterface>{
+        static auto spawn_fsys_loader(std::unique_ptr<dg::network_cufsio::FsysIOInterface> fsysio,
+                                      const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& alias_map, 
+                                      size_t memregion_sz) -> std::unique_ptr<CuFSLoaderInterface>{
+            
+            if (fsysio == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             if (!dg::memult::is_pow2(memregion_sz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<FsysLoader>(memmap, memregion_sz);
+            return std::make_unique<FsysLoader>(std::move(fsysio), alias_map, memregion_sz);
         }
 
-        static auto spawn_map(std::unique_ptr<CuFSLoaderInterface> fsys_loader, size_t memregion_sz, int gpu_device, size_t memory_node_count) -> std::unique_ptr<MapInterface>{
+        static auto spawn_map(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& alias_map, size_t memregion_sz, int gpu_device, size_t memory_node_count) -> std::unique_ptr<MapInterface>{
 
             const size_t MIN_MEMORY_NODE_COUNT  = 1u;
             const size_t MAX_MEMORY_NODE_COUNT  = size_t{1} << 30;
-
-            if (fsys_loader == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
 
             if (!dg::memult::is_pow2(memregion_sz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -447,8 +456,10 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
             if (std::clamp(memory_node_count, MIN_MEMORY_NODE_COUNT, MAX_MEMORY_NODE_COUNT) != memory_node_count){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
-            dg::vector<std::unique_ptr<HeapNode>> priority_queue{};
-            std::shared_ptr<cuda_ptr_t> memblk = dg::network_allocation_cuda_x::cuda_aligned_malloc(gpu_device, memregion_sz, memregion_sz * (memory_node_count + 1));
+    
+            auto priority_queue                 = dg::vector<std::unique_ptr<HeapNode>>{};
+            std::shared_ptr<cuda_ptr_t> memblk  = dg::network_allocation_cuda_x::cuda_aligned_malloc(gpu_device, memregion_sz, memregion_sz * (memory_node_count + 1));
+            auto registered_stable_ptr          = std::vector<std::pair<cuda_ptr_t, size_t>>{};
 
             for (size_t i = 0u; i < memory_node_count; ++i){
                 HeapNode node{};
@@ -456,6 +467,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                 node.cuptr          = off_cuptr(memblk, i * memregion_sz);
                 node.fsys_ptr_info  = std::nullopt;
                 node.last_modified  = dg::network_genult::unix_timestamp();
+                registered_stable_ptr.push_back(std::make_pair(*node.cuptr, memregion_sz));
                 priority_queue.push_back(std::make_unique<HeapNode>(std::move(node)));
             }
 
@@ -465,8 +477,12 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
             tmp.fsys_ptr_info   = std::nullopt;
             tmp.last_modifed    = dg::network_genult::unix_timestamp(); 
             auto lck            = std::make_unique<Lock>();
+            registered_stable_ptr.push_back(std::make_pair(*tmp.cuptr, memregion_sz));
 
-            return std::make_unique<Map>(std::move(priority_queue), std::move(allocation_dict), std::move(fsys_loader), std::move(tmp), std::move(lck), memregion_sz);
+            std::unique_ptr<dg::network_cufsio::FsysIOInterface> raw_fsys_loader = dg::network_cufsio::make_cuda_fsys_loader(registered_stable_ptr);
+            std::unique_ptr<CuFSLoaderInterface> alias_fsys_loader = spawn_fsys_loader(std::move(raw_fsys_loader), alias_map, memregion_sz);
+
+            return std::make_unique<Map>(std::move(priority_queue), std::move(allocation_dict), std::move(alias_fsys_loader), std::move(tmp), std::move(lck), memregion_sz);
         }
 
         static auto spawn_map_distributor(const dg::unordered_map<cufs_ptr_t, size_t>& region_id_dict, size_t memregion_sz) -> std::unique_ptr<MapDistributorInterface>{
@@ -495,18 +511,25 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
     struct ConcurrentMapMake{
 
-        static auto to_device_memmap(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& map) -> dg::unordered_map<int, dg::unordered_map<cufs_ptr_t, std::filesystem::path>>{
+        static auto to_device_memmap(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& alias_map,
+                                     const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map) -> dg::unordered_map<int, dg::unordered_map<cufs_ptr_t, std::filesystem::path>>{
 
             auto rs = dg::unordered_map<int, dg::unordered_map<cufs_ptr_t, std::filesystem::path>>{};
 
-            for (const auto& map_pair: map){
+            for (const auto& map_pair: alias_map){
                 auto [ptr, fsys_path]   = map_pair;
-                int gpu_device_id       = dg::network_pointer::cufs_ptr_device_id(ptr);
+                auto gpu_ptr            = gpu_platform_map.find(fsys_path);
+
+                if (gpu_ptr == gpu_platform_map.end()){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                int gpu_device_id       = gpu_ptr->second;
                 rs[gpu_device_id][ptr]  = fsys_path;
             }
 
             return rs;
-        } 
+        }
 
         static auto unifdist_map(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& map, size_t distribution_factor) -> dg::vector<dg::unordered_map<cufs_ptr_t, std::filesystem::path>>{
 
@@ -543,7 +566,11 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
             return rs;
         }
 
-        static auto make(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
+        static auto make(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_alias_map, 
+                         const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map, 
+                         size_t memregion_sz, 
+                         double ram_to_disk_ratio, 
+                         size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
             
             const double MIN_RAM_TO_DISK_RATIO  = double{0.001};
             const double MAX_RAM_TO_DISK_RATIO  = double{0.999};
@@ -552,7 +579,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             } 
 
-            dg::unordered_map<int, dg::unordered_map<cufs_ptr_t, std::filesystem::path>> device_memmap = to_device_memmap(bijective_map);
+            dg::unordered_map<int, dg::unordered_map<cufs_ptr_t, std::filesystem::path>> device_memmap = to_device_memmap(bijective_alias_map, gpu_platform_map);
             dg::vector<std::unique_ptr<MapInterface>> map_table{};
             dg::unordered_map<cufs_ptr_t, size_t> region_table_idx_map{};
 
@@ -561,8 +588,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
                 for (const auto& raw_map: distributed_map){
                     size_t memory_node_count = raw_map.size() * ram_to_disk_ratio; //this is prolly the most problematic line
-                    std::unique_ptr<CuFSLoaderInterface> cufs_loader = Factory::spawn_fsys_loader(raw_map, memregion_sz);
-                    std::unique_ptr<MapInterface> map = Factory::spawn_map(std::move(cufs_loader), memregion_sz, std::get<0>(devicemap_pair), memory_node_count);
+                    std::unique_ptr<MapInterface> map = Factory::spawn_map(raw_map, memregion_sz, std::get<0>(devicemap_pair), memory_node_count);
                     map_table.push_back(std::move(map));
 
                     for (const auto& map_pair: raw_map){
@@ -579,9 +605,13 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
 namespace dg::network_cudafsmap_x_impl1{
 
-    extern auto make(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
+    extern auto make(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_alias_map, 
+                     const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map, 
+                     size_t memregion_sz, 
+                     double ram_to_disk_ratio, 
+                     size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
 
-        return implementation::ConcurrentMapMake::make(bijective_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        return implementation::ConcurrentMapMake::make(bijective_alias_map, gpu_platform_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
     }
 }
 

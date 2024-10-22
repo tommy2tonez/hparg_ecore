@@ -11,9 +11,13 @@ namespace dg::network_cudafsmap_x{
 
     inline std::unique_ptr<dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface> map_instance{};  
 
-    void init(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
+    void init(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_alias_map, 
+              const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map, //work on virtual path - virtual path is basically reinventing the wheel - actually not a path, part of a physical file, has aligned offset, etc.
+              size_t memregion_sz, 
+              double ram_to_disk_ratio, 
+              size_t distribution_factor){
 
-        map_instance = dg::network_cudafsmap_x_impl1::make(bijective_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        map_instance = dg::network_cudafsmap_x_impl1::make(bijective_alias_map, gpu_platform_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
     }
 
     void deinit() noexcept{

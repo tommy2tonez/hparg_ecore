@@ -10,6 +10,7 @@
 #include <mutex>
 #include <thread>
 #include "network_std_container.h"
+#include "network_cuda_controller.h"
 
 namespace dg::network_cufsio_linux::constants{
 
@@ -216,7 +217,7 @@ namespace dg::network_cufsio_linux::driver_x{
             return std::unexpected(edfd.error());
         } 
 
-        return {std::in_place_t{}, edfd.value(), dg_cufs_driver_dynamic_close};
+        return std::unique_ptr<int, dg_cufs_driver_dynamic_close_t>(edfd.value(), dg_cufs_driver_dynamic_close);
     }
 } 
 
@@ -314,7 +315,7 @@ namespace dg::network_cufsio_linux::cufs_sptr_controller{
             return std::unexpected(edcufs_ptr.error());
         }
 
-        return {std::in_place_t{}, edcufs_ptr.value(), dynamic_deregister};
+        return std::unique_ptr<cufs_sptr_t, dynamic_deregister_t>(edcufs_ptr.value(), dynamic_deregister);
     }
 
     auto safe_register_hostsptr(cuda_ptr_t ptr, size_t sz) noexcept -> std::expected<std::unique_ptr<cufs_sptr_t, dynamic_deregister_t>, exception_t>{
@@ -325,7 +326,7 @@ namespace dg::network_cufsio_linux::cufs_sptr_controller{
             return std::unexpected(edcufs_ptr.error());
         }
 
-        return {std::in_place_t{}, edcufs_ptr.value(), dynamic_deregister};
+        return std::unique_ptr<cufs_sptr_t, dynamic_deregister_t>(edcufs_ptr.value(), dynamic_deregister);
     }
 }
 
@@ -362,7 +363,7 @@ namespace dg::network_cufsio_linux::cufs_io{
             return std::unexpected(err);
         }
 
-        return {std::in_place_t{}, new CudaFileDescriptor{std::move(kfd.value()), cf_handle}, destructor};
+        return std::unique_ptr<CudaFileDescriptor, cuda_fclose_t>(new CudaFileDescriptor{std::move(kfd.value()), cf_handle}, destructor);
     }
 
     auto dg_curead_file(CudaFileDescriptor& fd, cuda_legacy_ptr_t dst, size_t sz, size_t file_off, size_t dst_off) noexcept -> exception_t{
@@ -453,7 +454,7 @@ namespace dg::network_cufsio_linux::implementation{
                 } 
 
                 int kernel_fd                   = raii_fd.value()->kernel_raii_fd;
-                size_t fsz                      = dg::network_fileio_linux::dg_file_size_nothrow(kernel_fd);
+                size_t fsz                      = dg::network_fileio_linux::dg_file_size_nothrow(kernel_fd); //exception here - 
                 size_t dst_cap                  = cufs_sptr_controller::get_size(dst);
                 cufs_legacy_ptr_t legacy_dst    = cufs_sptr_controller::get_cufs_legacy_ptr(dst);
 
@@ -630,22 +631,24 @@ namespace dg::network_cufsio_linux::implementation{
 
             auto cuda_read_binary(const char * fp, cuda_ptr_t dst, size_t dst_cap) noexcept -> exception_t{
 
-                auto buf        = dg::string(dst_cap);
+                auto buf        = dg::string(dst_cap, ' ');
                 exception_t err = dg::network_fileio_linux::dg_read_binary(fp, buf.data(), dst_cap); 
 
                 if (dg::network_exception::is_failed(err)){
                     return err;
                 }
 
-                err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(dst, buf.data(), dst_cap, cudaMemcpyHostToDevice)); //TODO: change -> cuda_controller 
-                dg::network_exception_handler::nothrow_log(err);
+                return dg::network_cuda_controller::cuda_memcpy(dst, buf.data(), dst_cap, cudaMemcpyHostToDevice);
             }
 
             auto cuda_write_binary(const char * fp, cuda_ptr_t src, size_t src_sz) noexcept -> exception_t{
  
-                auto buf        = dg::string(src_sz);
-                exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(buf.data(), src, src_sz, cudaMemcpyDeviceToHost)); //TODO: change -> cuda_controller
-                dg::network_exception_handler::nothrow_log(err);
+                auto buf        = dg::string(src_sz, ' ');
+                exception_t err = dg::network_cuda_controller::cuda_memcpy(buf.data(), src, src_sz, cudaMemcpyDeviceToHost);
+                
+                if (dg::network_exception::is_failed(err)){
+                    return err;
+                }
 
                 return dg::network_fileio_linux::dg_write_binary(fp, buf.data(), src_sz);
             }
@@ -795,59 +798,9 @@ namespace dg::network_cufsio_linux::implementation{
 
 namespace dg::network_cufsio_linux{
 
-    inline std::unique_ptr<FsysIOInterface> cufsio_instance{};
+    auto make_cuda_fsys_loader(const std::vector<std::pair<cuda_ptr_t, size_t>>& stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
 
-    void init(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz, void ** host_ptr, size_t * host_ptr_sz, size_t host_sz){
-        
-        cufsio_instance = implementation::Factory::spawn_prereg_direct_or_default_fsysio(cuda_ptr, cuda_ptr_sz, cuda_sz, host_ptr, host_ptr_sz, host_sz);
     }
-
-    void deinit() noexcept{
-
-        cufsio_instance = {};
-    }
-
-    auto dg_cuda_read_binary(const char * fp, cuda_ptr_t dst, size_t dst_cap) noexcept -> exception_t{
-
-        return cufsio_instance->cuda_read_binary(fp, dst, dst_cap);
-    }
-
-    void dg_cuda_read_binary_nothrow(const char * fp, cuda_ptr_t dst, size_t dst_cap) noexcept{
-
-        dg::network_exception_handler::nothrow_log(dg_cuda_read_binary(fp, dst, dst_cap));
-    }
-
-    auto dg_cuda_write_binary(const char * fp, cuda_ptr_t src, size_t src_sz) noexcept -> exception_t{
-
-        return cufsio_instance->cuda_write_binary(fp, src, src_sz);
-    } 
-
-    void dg_cuda_write_binary_nothrow(const char * fp, cuda_ptr_t src, size_t src_sz) noexcept{
-
-        dg::network_exception_handler::nothrow_log(dg_cuda_write_binary(fp, src, src_sz));
-    }
-
-    auto dg_host_read_binary(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
-
-        return cufsio_instance->host_read_binary(fp, dst, dst_cap);
-    } 
-
-    void dg_host_read_binary_nothrow(const char * fp, void * dst, size_t dst_cap) noexcept{
-
-        dg::network_exception_handler::nothrow_log(dg_host_read_binary(fp, dst, dst_cap));
-    } 
-
-    auto dg_host_write_binary(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
-
-        return cufsio_instance->host_write_binary(fp, src, src_sz);
-    }
-
-    void dg_host_write_binary_nothrow(const char * fp, const void * src, size_t src_sz){
-
-        dg::network_exception_handler::nothrow_log(dg_host_write_binary(fp, src, src_sz));
-    }
-
-    //extend this component to do replicas + chksum - tmr - this should be macro polymorphism - for network_fileio_linux - such that either an application uses this component xor another component for base file writing - chksum extends the base - replica extends chksum
 }
 
 #endif

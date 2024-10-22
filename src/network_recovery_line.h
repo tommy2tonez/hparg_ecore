@@ -223,7 +223,7 @@ namespace dg::network_recovery_line{
             return std::unexpected(line.error());
         }
 
-        return {std::in_place_t{}, new size_t{line.value()}, destructor};
+        return std::unique_ptr<size_t, recovery_line_dclose_t>(new size_t{line.value()}, destructor);
     } 
 }
 

@@ -356,6 +356,8 @@ namespace dg::cublas_x::utility{
 
 namespace dg::cublas_x{
 
+    //alright - let's get this correct today and tomorrow - this is not as complicated as many people think - given a list of base-optimizables - build a tree of operations - this is 101 
+
     using AbstractNode  = syntax_tree::AbstractNode;
     using cublas_plan_t = std::unique_ptr<AbstractNode>;
     using logit_kind_t  = syntax_tree::logit_kind_t;

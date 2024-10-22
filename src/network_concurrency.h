@@ -99,7 +99,7 @@ namespace dg::network_concurrency{
             return std::unexpected(handle.error());
         }
 
-        return {std::in_place_t{}, handle.value(), daemon_deregister};
+        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
     }
 
     using daemon_raii_handle_t = dg::network_genult::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>;

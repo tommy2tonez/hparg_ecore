@@ -6,27 +6,7 @@
 
 namespace dg::network_pointer{
 
-    struct CufsPtr{
-        uint64_t device_numerical_addr;
-        int gpu_device;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(device_numerical_addr, gpu_device);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(device_numerical_addr, gpu_device);
-        }
-    };
-
-    using cufs_ptr_t = CufsPtr;
-
-    auto cufs_ptr_device_id(CufsPtr ptr) noexcept -> int{
-        
-        return ptr.gpu_device;
-    }
+    using cufs_ptr_t = uint64_t;
 } 
 
 #endif
