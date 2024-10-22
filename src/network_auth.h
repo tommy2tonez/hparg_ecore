@@ -374,7 +374,7 @@ namespace dg::network_user{
     auto user_register(const dg::string& user_id, const dg::string& pwd, const dg::string& clearance) noexcept -> exception_t{
 
         if (std::clamp(static_cast<size_t>(pwd.size()), MINIMUM_RAW_PWD_SIZE, MAXIMUM_RAW_PWD_SIZE) != pwd.size()){
-            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            return network_exception::INVALID_ARGUMENT;
         }
 
         constexpr size_t SALT_FLEX_SZ                   = dg::network_postgres_db::model::LEGACYAUTH_SALT_MAX_LENGTH - dg::network_postgres_db_model::LEGACYAUTH_SALT_MIN_LENGTH;
@@ -515,10 +515,7 @@ namespace dg::network_user{
             return std::unexpected(dg::network_exception::BAD_AUTHENTICATION);
         }
 
-        auto bstream = dg::string(dg::network_compact_serializer::size(id.value()), ' ');
-        dg::network_compact_serializer::serialize_into(bstream.data(), id.value());
-
-        return resource.token_controller->tokenize(bstream);
+        return resource.token_controller->tokenize(id);
     }
 
     auto token_refresh(const dg::string& token) noexcept -> std::expected<dg::string, exception_t>{
