@@ -63,10 +63,10 @@ namespace dg::network_auth_utility{
 
                 uint64_t key    = dg::network_hash::murmur_hash(arg.data(), arg.size(), this->secret);
                 auto msg        = MurMurMessage{key, arg};
-                auto bstream    = dg::string(dg::network_compact_serializer::integrity_size(msg));
+                auto bstream    = dg::string(dg::network_compact_serializer::integrity_size(msg), ' ');
                 dg::network_compact_serializer::integrity_serialize_into(bstream.data(), msg);
 
-                return bstream; //std::move
+                return bstream;
             }
 
             auto decode(const dg::string& arg) noexcept -> std::expected<dg::string, exception_t>{
@@ -81,10 +81,10 @@ namespace dg::network_auth_utility{
                 uint64_t expected_key = dg::network_hash::murmur_hash(msg.encoded.data(), msg.encoded.size(), this->secret);
                 
                 if (expected_key != msg.validation_key){
-                    return std::unexpected(dg::network_exception::BAD_DECODE);
+                    return std::unexpected(dg::network_exception::BAD_ENCODING_FORMAT);
                 }
 
-                return msg.encoded; //std::move
+                return msg.encoded;
             }
     };
     
@@ -119,12 +119,20 @@ namespace dg::network_auth_utility{
             
         public:
 
+            static inline constexpr size_t MIN_ENCODING_LENGTH  = size_t{0u};
+            static inline constexpr size_t MAX_ENCODING_LENGTH  = size_t{1u} << 15; 
+            static inline constexpr size_t MIN_DECODING_LENGTH  = size_t{0u};
+            static inline constexpr size_t MAX_DECODING_LENGTH  = size_t{1u} << 16;
 
             Mt19937Encoder(dg::string secret,
                            mt19937 salt_randgen) noexcept: secret(std::move(secret)),
                                                            salt_randgen(std::move(salt_randgen)){}
 
             auto encode(const dg::string& arg) noexcept -> std::expected<dg::string, exception_t>{
+                
+                if (std::clamp(static_cast<size_t>(arg.size()), MIN_ENCODING_LENGTH, MAX_ENCODING_LENGTH) != arg.size()){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
 
                 uint64_t salt       = this->salt_randgen();
                 uint64_t seed       = dg::network_hash::murmur_hash(this->secret.data(), this->secret.size(), salt);
@@ -139,6 +147,10 @@ namespace dg::network_auth_utility{
             }
 
             auto decode(const dg::string& arg) noexcept -> std::expected<dg::string, exception_t>{
+                
+                if (std::clamp(static_cast<size_t>(arg.size()), MIN_DECODING_LENGTH, MAX_DECODING_LENGTH) != arg.size()){
+                    return std::unexpected(dg::network_exception::BAD_ENCODING_FORMAT);
+                }
 
                 std::expected<Mt19937Message, exception_t> msg = this->deserialize(arg);
 
@@ -350,9 +362,6 @@ namespace dg::network_auth_utility{
 
 namespace dg::network_user{
 
-    static inline constexpr size_t MINIMUM_RAW_PWD_SIZE = 6u;
-    static inline constexpr size_t MAXIMUM_RAW_PWD_SIZE = 128u;
-
     //I dont see anything wrong with this - except for init, deinit should be disk-persistent -  
 
     struct UserBaseResource{
@@ -372,10 +381,6 @@ namespace dg::network_user{
     }
 
     auto user_register(const dg::string& user_id, const dg::string& pwd, const dg::string& clearance) noexcept -> exception_t{
-
-        if (std::clamp(static_cast<size_t>(pwd.size()), MINIMUM_RAW_PWD_SIZE, MAXIMUM_RAW_PWD_SIZE) != pwd.size()){
-            return network_exception::INVALID_ARGUMENT;
-        }
 
         constexpr size_t SALT_FLEX_SZ                   = dg::network_postgres_db::model::LEGACYAUTH_SALT_MAX_LENGTH - dg::network_postgres_db_model::LEGACYAUTH_SALT_MIN_LENGTH;
         size_t salt_length                              = dg::network_postgres_db::model::LEGACYAUTH_SALT_MIN_LENGTH + dg::network_randomizer::randomize_range(SALT_FLEX_SZ);

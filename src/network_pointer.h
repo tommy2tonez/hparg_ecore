@@ -6,7 +6,8 @@
 
 namespace dg::network_pointer{
 
-    using cufs_ptr_t = uint64_t;
+    using cufs_ptr_t    = uint64_t;
+    using fsys_ptr_t    = uint64_t;
 } 
 
 #endif

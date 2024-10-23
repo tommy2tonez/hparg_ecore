@@ -66,8 +66,8 @@ namespace dg::cublas_x::syntax_tree{
         transform_kind_none                 = 47u
     };
 
-    using logit_kind_t  = uint8_t; 
-    
+    using logit_kind_t = uint8_t; 
+
     enum logit_option: logit_kind_t{
         u8          = 0u,
         u16         = 1u,
@@ -89,6 +89,11 @@ namespace dg::cublas_x::syntax_tree{
         MatrixDimension dim;
         std::string value_identifier;
         logit_kind_t logit_kind;
+    };
+
+    struct CollapsedAbstractNode{
+        std::unique_ptr<AbstractNode> upper; //this is weird
+        std::vector<std::unique_ptr<AbstractNode>> leaf_descendants; //this is weird
     };
 
     struct Node{
@@ -134,20 +139,12 @@ namespace dg::cublas_x::opti_engine{
 
 namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
-    // class EngineLookupInterface{
-
-    //     public:
-
-    //         virtual ~EngineLookupInterface() noexcept = default;
-    //         virtual auto lookup(syntax_tree::transform_ins_t) -> std::shared_ptr<exec_engine::ExecutorInterface> = 0;
-    // };
- 
     class SpaceRandomizerInterface{
 
         public:
 
             virtual ~SpaceRandomizerInterface() noexcept = default;
-            virtual auto randomize(const syntax_tree::Space&) -> std::shared_ptr<cuda_ptr_t> = 0;
+            virtual auto randomize(const syntax_tree::MatrixDimension&) -> std::shared_ptr<cuda_ptr_t> = 0;
     };
 
     class AbstractNodeRandomizerInterface{
@@ -155,7 +152,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
         public:
 
             virtual ~AbstractNodeRandomizerInterface() noexcept = default;
-            virtual auto randomize(const syntax_tree::AbstractNode&) -> syntax_tree::Node = 0;
+            virtual auto randomize(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::unique_ptr<syntax_tree::Node> = 0;
     };
 
     class StateSearchEngineInterface{
@@ -163,7 +160,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
         public:
 
             virtual ~StateSearchEngineInterface() noexcept = default;
-            virtual auto search(const syntax_tree::AbstractNode&) -> std::vector<syntax_tree::AbstractNode> = 0;
+            virtual auto search(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::vector<std::unique_ptr<syntax_tree::AbstractNode>> = 0;
     };
 
     class BenchmarkEngineInterface{
@@ -171,153 +168,34 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
         public:
 
             virtual ~BenchmarkEngineInterface() noexcept = default;
-            virtual auto benchmark(cublas_handle_t, const syntax_tree::Node&) -> std::chrono::nanoseconds = 0;
+            virtual auto benchmark(int device_id, const std::unique_ptr<syntax_tree::Node>&) -> std::chrono::nanoseconds = 0;
+    };
+
+    class IdentifierGeneratorInterface{
+
+        public:
+
+            virtual ~IdentifierGeneratorInterface() noexcept = default;
+            virtual auto id(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::string = 0;
+    };
+
+    class AbstractNodeCollapserInterface{
+
+        public:
+
+            virtual ~AbstractNodeCollapserInterface() noexcept = default;
+            virtual auto collapse(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::vector<std::unique_ptr<CollapsedAbstractNode>> = 0; 
+    };
+
+    class AbstractNodeUniqueRepresentationGeneratorInterface{
+
+        public:
+
+            virtual ~AbstractNodeUniqueRepresentationGeneratorInterface() noexcept = default;
+            virtual auto to_unique_representation(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::unique_ptr<syntax_tree::AbstractNode> = 0;
     };
 } 
 
-namespace dg::cublas_x::exhaustive_ss_opti_engine{
-
-    class BaseStateSearchEngine: public virtual StateSearchEngineInterface{
-
-        private:
-
-        
-        public:
-
-            auto search(const syntax_tree::AbstractNode& node) -> std::vector<syntax_tree::AbstractNode>{
-
-            }
-    };
-
-    class PermuteStateSearchEngine: public virtual StateSearchEngineInterface{
-
-        private:
-
-            std::unique_ptr<StateSearchEngineInterface> base_search;
-
-        public:
-
-            explicit PermuteStateSearchEngine(std::unique_ptr<StateSearchEngineInterface> base_search) noexcept: base_search(std::move(base_search)){}
-
-            auto search(const syntax_tree::AbstractNode& node) -> std::vector<syntax_tree::AbstractNode>{
-
-                return this->internal_search(node);
-            }
-        
-        private:
-
-            auto get_space(const std::vector<std::vector<syntax_tree::AbstractNode>>& inp) -> std::vector<size_t>{ //should be vector_utility
-
-                auto rs = std::vector<size_t>();
-
-                for (const auto& e: inp){
-                    rs.push_back(e.size());
-                }
-
-                return rs;
-            } 
-
-            void iter_increment(std::vector<size_t>& ptr, const std::vector<size_t>& space){
-
-                for (size_t i = 0; i < space.size(); ++i){
-                    ptr[i] += 1;
-
-                    if (ptr[i] != space[i]){
-                        return;
-                    }
-
-                    ptr[i] = 0u;
-                }
-            }
-
-            auto extract_abstract_node(const std::vector<std::vector<syntax_tree::AbstractNode>>& inp, const std::vector<size_t>& ptr) -> std::vector<syntax_tree::AbstractNode>{
-
-                std::vector<syntax_tree::AbstractNode> rs{};
-
-                for (size_t i = 0; i < ptr.size(); ++i){
-                    size_t idx = ptr[i]; 
-                    rs.push_back(syntax_tree::deepcopy(inp[i][idx]));
-                }
-
-                return rs;
-            }
-
-            auto make_root_possibilities(const syntax_tree::AbstractNode& node, const std::vector<std::vector<syntax_tree::AbstractNode>>& descendants) -> std::vector<syntax_tree::AbstractNode>{
-                
-                std::vector<syntax_tree::AbstractNode> rs{};
-                std::vector<size_t> space   = this->get_space(descendants); 
-                std::vector<size_t> ptr     = std::vector<size_t>(space.size(), 0u);
-
-                while (ptr != space){
-                    std::vector<syntax_tree::AbstractNode> cur_descendants = this->extract_abstract_node(descendants, ptr);
-                    rs.push_back(syntax_tree::make_abstract_node(cur_descendants, node.transform_type, node.space));
-                    this->iter_increment(ptr, space);
-                }
-
-                return rs;
-            } 
-
-            auto internal_search(const syntax_tree::AbstractNode& node) -> std::vector<syntax_tree::AbstractNode>{
-
-                std::vector<std::vector<syntax_tree::AbstractNode>> descendant_permute_set{};
-
-                for (size_t i = 0; i < node.descendants.size(); ++i){
-                    descendant_permute_set.push_back(internal_search(*node.descendants[i]));
-                }
-
-                if (descendant_permute_set.size() == 0u){
-                    return {node};
-                }
-
-                std::vector<syntax_tree::AbstractNode> root_possibilities   = this->make_root_possibilities(node, descendant_permute_set);
-                std::vector<syntax_tree::AbstractNode> root_valids          = {};
-                
-                for (const syntax_tree::AbstractNode& cur: root_possibilities){
-                    auto cur_valid = this->base_search->search(cur); 
-                    std::copy(std::make_move_iterator(cur_valid.begin()), std::make_move_iterator(cur_valid.end()), std::back_inserter(root_valids));
-                }
-
-                return root_valids;
-            }
-    };
-
-    class OptimizerEngine: public virtual opti_engine::OptimizerInterface{
-
-        private:
-
-            std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer;
-            std::unique_ptr<StateSearchEngineInterface> state_search_engine;
-            std::unique_ptr<BenchmarkEngineInterface> benchmark_engine;
-        
-        public:
-
-            explicit OptimizerEngine(std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer,
-                                     std::unique_ptr<StateSearchEngineInterface> state_search_engine,
-                                     std::unique_ptr<BenchmarkEngineInterface> benchmark_engine) noexcept: abstract_node_randomizer(std::move(abstract_node_randomizer)),
-                                                                                                           state_search_engine(std::move(state_search_engine)),
-                                                                                                           benchmark_engine(std::move(benchmark_engine)){}
-            
-            auto optimize(cublas_handle_t cublas_handle_object, const syntax_tree::AbstractNode& node) -> syntax_tree::AbstractNode{
-
-                std::vector<syntax_tree::AbstractNode> abstract_states = this->state_search_engine->search(node);
-                std::chrono::nanoseconds max_ts = std::chrono::duration_values<std::chrono::nanoseconds>::max();
-                syntax_tree::AbstractNode rs    = syntax_tree::deepcopy(node);
-
-                for (const syntax_tree::AbstractNode& abstract_state: abstract_states){
-                    syntax_tree::Node state         = this->abstract_node_randomizer->randomize(abstract_state);
-                    std::chrono::nanoseconds cur_ts = this->benchmark_engine->benchmark(cublas_handle_object, state);
-
-                    if (cur_ts < max_ts){
-                        max_ts = cur_ts;
-                        rs = syntax_tree::deepcopy(abstract_state);
-                    }
-                }
-
-                return rs;
-            } 
-    };
-
-} 
 
 namespace dg::cublas_x::utility{
 
@@ -350,17 +228,14 @@ namespace dg::cublas_x::utility{
 
     auto combine_identifier(const std::string& lhs, const std::string& rhs) -> std::string{
         
-        return lhs + rhs;
+        // return lhs + rhs;
+
     }
 }
 
-namespace dg::cublas_x{
+namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
-    //alright - let's get this correct today and tomorrow - this is not as complicated as many people think - given a list of base-optimizables - build a tree of operations - this is 101 
-
-    using AbstractNode  = syntax_tree::AbstractNode;
-    using cublas_plan_t = std::unique_ptr<AbstractNode>;
-    using logit_kind_t  = syntax_tree::logit_kind_t;
+    using namespace syntax_tree; 
 
     template <class arithemtic_ops_t>
     struct coerced_x_math{
@@ -458,6 +333,376 @@ namespace dg::cublas_x{
 
         }
     };
+
+    //this is the very basic of optimization - heuristics could be applied to do pruning - eliminating state search
+    //this component alone could be 20k-30k LOC
+    //there are many objectives:
+    //(1): heuristics pruning 
+    //(2): base case greedy optimizations
+    //(3): fast greedy optimization
+    //(4): fast grouping - rotate + permute
+    //(5): trade off between tree-height + tree nodes and runtime  
+
+    class AbstractNodeCollapser: public virtual AbstractNodeCollapserInterface{
+
+        private:
+
+            static inline constexpr uint8_t PATHNODE_BITCONTROL_END_OF_PATH     = 0b11;
+            static inline constexpr uint8_t PATHNODE_BITCONTROL_END_AT_ROOT     = 0b01;
+            static inline constexpr uint8_t PATHNODE_BITCONTROL_CONTINUE        = 0b00;
+
+            struct PathNode{
+                uint8_t bit_control;
+                size_t descendant_idx;
+            };
+
+            using path_t = std::vector<PathNode>; 
+
+        public:
+
+            auto collapse(const std::unique_ptr<syntax_tree::AbstractNode>& root) -> std::vector<std::unique_ptr<CollapsedAbstractNode>>{
+
+                std::vector<std::vector<path_t>> block_instruction_set = this->get_block_possibilities(root);
+                return this->make_collapsed_node_from_block_instruction_set(root, block_instruction_set);
+            }
+        
+        private:
+
+            auto get_space(const std::vector<std::vector<std::vector<path_t>>>& inp) -> std::vector<size_t>{
+
+                auto rs = std::vector<size_t>();
+
+                for (const auto& e: inp){
+                    rs.push_back(e.size());
+                }
+
+                return rs;
+            } 
+
+            auto get_space_size(const std::vector<size_t>& space) -> size_t{
+
+                if (space.empty()){
+                    return 0u;
+                }
+
+                size_t space_sz = 1u;
+
+                for (size_t i = 0; i < space.size(); ++i){
+                    space_sz *= space[i];
+                }
+                
+                return space_sz;
+            }
+
+            void iter_increment(std::vector<size_t>& ptr, const std::vector<size_t>& space){
+
+                for (size_t i = 0; i < space.size(); ++i){
+                    ptr[i] += 1;
+
+                    if (ptr[i] != space[i]){
+                        return;
+                    }
+
+                    ptr[i] = 0u;
+                }
+            }
+
+            auto permute_join(const std::vector<std::vector<std::vector<path_t>>>& block_instruction) -> std::vector<std::vector<path_t>>{
+                
+                std::vector<std::vector<path_t>> rs{};
+                std::vector<size_t> space = get_space(block_instruction);
+                std::vector<size_t> ptr(0u, space.size());
+                size_t idx = 0u;
+                size_t space_size = this->get_space_size(space);
+
+                while (idx != space_size){
+                    std::vector<path_t> cur_block_instruction{};
+
+                    for (size_t i = 0u; i < ptr.size(); ++i){
+                        std::vector<path_t> descendant_block_instruction = block_instruction[i][ptr[i]];
+
+                        for (auto& descendant_path: descendant_block_instruction){
+                            descendant_path.insert(descendant_path.begin(), PathNode{PATHNODE_BITCONTROL_CONTINUE, i});
+                        }
+
+                        cur_block_instruction.insert(cur_block_instruction.end(), descendant_block_instruction.begin(), descendant_block_instruction.end());
+                    }
+
+                    rs.push_back(std::move(cur_block_instruction));
+                    ++idx;
+                    iter_increment(ptr, space);
+                }
+
+                return rs;
+            }
+
+            auto get_block_possibilities(const std::unique_ptr<syntax_tree::AbstractNode>& root) -> std::vector<std::vector<path_t>>{
+
+                if (root == nullptr){
+                    return {};
+                }
+
+                if (root->descendants.empty()){
+                    return {{{PathNode{PATHNODE_BITCONTROL_END_OF_PATH, {}}}}, {{PathNode{PATHNODE_BITCONTROL_END_AT_ROOT, {}}}}};
+                }
+
+                std::vector<std::vector<std::vector<path_t>>> descendants_possibilities = {};
+
+                for (const auto& descendant: root->descendants){
+                    descendants_possibilities.push_back(this->get_block_possibilities(descendant));
+                }
+
+                std::vector<std::vector<path_t>> rs = this->permute_join(descendants_possibilities);
+                rs.push_back(std::vector<path_t>{path_t{PathNode{PATHNODE_BITCONTROL_END_OF_PATH, {}}}});
+
+                return rs;
+            }
+
+            auto traverse_and_prune(const std::unique_ptr<syntax_tree::AbstractNode>& root, std::vector<intmax_t>& backtrack, const std::unordered_set<std::string>& leaf_hashset) -> std::pair<std::unique_ptr<AbstractNode>, std::vector<std::unique_ptr<AbstractNode>>>{
+
+                // if (root == nullptr){
+                //     return {};
+                // }
+
+                // std::string backtrack_str_rep(dg::network_compact_serializer::size(backtrack), ' ');
+                // dg::network_compact_serializer::serialize_into(backtrack_str_rep.data(), backtrack);
+                
+                // if (leaf_hashset.contains(backtrack_str_rep)){
+                //     return {nullptr, {}};
+                // }
+
+
+
+            } 
+
+            auto make_collapsed_node_from_block_instruction_set(const std::unique_ptr<syntax_tree::AbstractNode>& root, const std::vector<std::vector<path_t>>& instruction_set) -> std::vector<std::unique_ptr<CollapsedAbstractNode>>{
+                    
+                std::vector<std::unique_ptr<CollapsedAbstractNode>> rs{};
+
+                for (const auto& instruction: instruction_set){
+                    std::unordered_set<std::string> end_of_path_hashset = this->to_eop_hashset(instruction);
+                    std::vector<intmax_t> backtrack = {-1};  
+                    auto [abstract_root, descendants] = traverse_and_prune(root, end_of_path_hashset);
+                    auto rs = std::make_unique<CollapsedAbstractNode>(CollapsedAbstractNode{std::move(abstract_root), std::move(descendants)});
+                    rs.push_back(std::move(rs));
+                }
+            }
+    };
+
+    class BaseStateSearchEngine: public virtual StateSearchEngineInterface{
+
+        private:
+
+            std::unordered_map<std::string, transform_kind_t> transform_map;
+            std::unique_ptr<IdentifierGeneratorInterface> id_gen;
+            std::unique_ptr<AbstractNodeCollapserInterface> abstract_node_collapser;
+            std::unique_ptr<AbstractNodeUniqueRepresentationGeneratorInterface> abstract_node_unique_rep_generator;
+
+        public:
+
+            BaseStateSearchEngine(std::unordered_map<std::string, transform_kind_t> transform_map,
+                                  std::unique_ptr<IdentifierGeneratorInterface> id_gen,
+                                  std::unique_ptr<AbstractNodeCollapserInterface> abstract_node_collapser,
+                                  std::unique_ptr<AbstractNodeUniqueRepresentationGeneratorInterface> abstract_node_unique_rep_generator) noexcept: transform_map(std::move(transform_map)),
+                                                                                                                                                    id_gen(std::move(id_gen)),
+                                                                                                                                                    abstract_node_collapser(std::move(abstract_node_collapser)),
+                                                                                                                                                    abstract_node_unique_rep_generator(std::move(abstract_node_unique_rep_generator)){}
+
+            auto search(const std::unique_ptr<AbstractNode>& root) -> std::vector<std::unique_ptr<AbstractNode>>{
+
+                if (!this->is_precond_met(root)){
+                    return {utility::deepcopy(root)};
+                }
+
+                std::vector<std::unique_ptr<CollapsedAbstractNode>> collapsed_node_vec = this->abstract_node_collapser->collapse(root);
+                std::vector<std::unique_ptr<AbstractNode>> rs{};
+
+                for (auto& collapsed_node: collapsed_node_vec){
+                    std::unique_ptr<AbstractNode> uniq_rep  = this->abstract_node_unique_rep_generator->to_unique_representation(collapsed_node->upper);
+                    std::string id                          = this->id_gen->id(uniq_rep);
+                    auto map_ptr                            = this->transform_map.find(id);
+
+                    if (map_ptr == this->transform_map.end()){
+                        continue;
+                    }
+
+                    auto appendee               = std::make_unique<AbstractNode>();
+                    appendee->dim               = collapsed_node->upper->dim;
+                    appendee->logit_kind        = collapsed_node->upper->logit_kind;
+                    appendee->value_identifier  = collapsed_node->upper->value_identifier;
+                    appendee->transform_kind    = map_ptr->second;
+                    appendee->descendants       = this->map_descendants(collapsed_node->upper, uniq_rep, collapsed_node->leaf_descendants);
+
+                    rs.push_back(std::move(appendee));
+                }
+
+                return rs;
+            }
+    };
+
+    class PermuteStateSearchEngine: public virtual StateSearchEngineInterface{
+
+        private:
+
+            std::unique_ptr<StateSearchEngineInterface> base_search;
+
+        public:
+
+            PermuteStateSearchEngine(std::unique_ptr<StateSearchEngineInterface> base_search) noexcept: base_search(std::move(base_search)){}
+
+            auto search(const std::unique_ptr<AbstractNode>& root) -> std::vector<std::unique_ptr<AbstractNode>>{
+
+                return this->internal_search(root);
+            }
+        
+        private:
+
+            auto get_space(const std::vector<std::vector<std::unique_ptr<AbstractNode>>>& inp) -> std::vector<size_t>{
+
+                auto rs = std::vector<size_t>();
+
+                for (const auto& e: inp){
+                    rs.push_back(e.size());
+                }
+
+                return rs;
+            } 
+
+            auto get_space_size(const std::vector<size_t>& space) -> size_t{
+
+                if (space.empty()){
+                    return 0u;
+                }
+
+                size_t space_sz = space[0u];
+
+                for (size_t i = 1u; i < space.size(); ++i){
+                    space_sz *= space[i];
+                }
+                
+                return space_sz;
+            }
+
+            void iter_increment(std::vector<size_t>& ptr, const std::vector<size_t>& space){
+
+                for (size_t i = 0; i < space.size(); ++i){
+                    ptr[i] += 1;
+
+                    if (ptr[i] != space[i]){
+                        return;
+                    }
+
+                    ptr[i] = 0u;
+                }
+            }
+
+            auto extract_abstract_node(const std::vector<std::vector<std::unique_ptr<AbstractNode>>>& inp, const std::vector<size_t>& ptr) -> std::vector<std::unique_ptr<AbstractNode>>{
+
+                std::vector<std::unique_ptr<AbstractNode>> rs{};
+
+                for (size_t i = 0; i < ptr.size(); ++i){
+                    size_t idx = ptr[i]; 
+                    rs.push_back(utility::deepcopy(inp[i][idx]));
+                }
+
+                return rs;
+            }
+
+            auto make_root_possibilities(const std::unique_ptr<AbstractNode>& root, 
+                                         const std::vector<std::vector<std::unique_ptr<AbstractNode>>>& descendants) -> std::vector<std::unique_ptr<AbstractNode>>{
+                
+                auto rs                     = std::vector<std::unique_ptr<AbstractNode>>{};
+                std::vector<size_t> space   = this->get_space(descendants); 
+                std::vector<size_t> ptr     = std::vector<size_t>(space.size(), 0u);
+                size_t space_size           = this->get_space_size(space);
+                size_t idx                  = 0u; 
+
+                while (idx != space_size){
+                    auto appendee               = std::make_unique<AbstractNode>();
+                    appendee->descendants       = this->extract_abstract_node(descendants, ptr);
+                    appendee->dim               = root->dim;
+                    appendee->logit_kind        = root->logit_kind;
+                    appendee->transform_kind    = root->transform_kind;
+                    appendee->value_identifier  = root->value_identifier;
+                    rs.push_back(std::move(appendee));
+                    this->iter_increment(ptr, space);
+                    ++idx;
+                }
+
+                return rs;
+            } 
+
+            auto internal_search(const std::unique_ptr<AbstractNode>& root) -> std::vector<std::unique_ptr<AbstractNode>>{
+
+                if (root == nullptr){
+                    return {};
+                }
+
+                if (root->descendants.size() == 0u){
+                    return {utility::deepcopy(root)};
+                }
+
+                std::vector<std::vector<std::unique_ptr<AbstractNode>>> descendant_permute_set{};
+
+                for (size_t i = 0; i < root->descendants.size(); ++i){
+                    descendant_permute_set.push_back(internal_search(root->descendants[i]));
+                }
+
+                std::vector<std::unique_ptr<AbstractNode>> root_possibilities = this->make_root_possibilities(root, descendant_permute_set);
+                std::vector<std::unique_ptr<AbstractNode>> rs{};
+
+                for (const std::unique_ptr<AbstractNode>& cur: root_possibilities){
+                    auto cur_valid = this->base_search->search(cur);
+                    std::copy(std::make_move_iterator(cur_valid.begin()), std::make_move_iterator(cur_valid.end()), std::back_inserter(rs));
+                }
+
+                return rs;
+            }
+    };
+
+    class OptimizerEngine: public virtual opti_engine::OptimizerInterface{
+
+        private:
+
+            std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer;
+            std::unique_ptr<StateSearchEngineInterface> state_search_engine;
+            std::unique_ptr<BenchmarkEngineInterface> benchmark_engine;
+        
+        public:
+
+            explicit OptimizerEngine(std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer,
+                                     std::unique_ptr<StateSearchEngineInterface> state_search_engine,
+                                     std::unique_ptr<BenchmarkEngineInterface> benchmark_engine) noexcept: abstract_node_randomizer(std::move(abstract_node_randomizer)),
+                                                                                                           state_search_engine(std::move(state_search_engine)),
+                                                                                                           benchmark_engine(std::move(benchmark_engine)){}
+            
+            auto optimize(cublas_handle_t cublas_handle_object, const syntax_tree::AbstractNode& node) -> syntax_tree::AbstractNode{
+
+                std::vector<syntax_tree::AbstractNode> abstract_states = this->state_search_engine->search(node);
+                std::chrono::nanoseconds max_ts = std::chrono::duration_values<std::chrono::nanoseconds>::max();
+                syntax_tree::AbstractNode rs    = syntax_tree::deepcopy(node);
+
+                for (const syntax_tree::AbstractNode& abstract_state: abstract_states){
+                    syntax_tree::Node state         = this->abstract_node_randomizer->randomize(abstract_state);
+                    std::chrono::nanoseconds cur_ts = this->benchmark_engine->benchmark(cublas_handle_object, state);
+
+                    if (cur_ts < max_ts){
+                        max_ts = cur_ts;
+                        rs = syntax_tree::deepcopy(abstract_state);
+                    }
+                }
+
+                return rs;
+            } 
+    };
+
+} 
+
+namespace dg::cublas_x{
+
+    using AbstractNode  = syntax_tree::AbstractNode;
+    using cublas_plan_t = std::unique_ptr<AbstractNode>;
+    using logit_kind_t  = syntax_tree::logit_kind_t;
 
     auto cublas_make_matrix(size_t m, size_t n, std::string value_identifier, logit_kind_t logit_kind) -> std::unique_ptr<AbstractNode>{
         

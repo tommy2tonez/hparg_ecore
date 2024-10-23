@@ -11,16 +11,19 @@
 
 namespace dg::network_kernelmap_x{
     
-    using fsys_ptr_t                = uint32_t; 
-    using exception_t               = dg::network_exception::exception_t;  
-    using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::MapResource;
+    using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
+    using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 
-    inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::MapInterface> map_instance{}; 
+    inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface> map_instance{}; 
 
-    template <size_t MEMREGION_SZ>
-    void init(fsys_ptr_t * region, std::filesystem::path * path, fsys_device_id_t * device_id, size_t n, std::integral_constant<size_t, MEMREGION_SZ>){
+    void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
 
-        map_instance = dg::network_kernelmap_x_impl1::make(region, path, device_id, n, std::integral_constant<size_t, MEMREGION_SZ>{});
+        map_instance = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ran_to_disk_ratio, distribution_factor);
+    }
+
+    void deinit() noexcept{
+        
+        map_instance = nullptr;
     }
 
     auto map(fsys_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
@@ -41,16 +44,6 @@ namespace dg::network_kernelmap_x{
     static inline auto map_release_lambda = [](map_resource_handle_t map_resource) noexcept{
         map_release(map_resource);
     };
-
-    auto map_relguard(map_resource_handle_t map_resource) noexcept{
-    
-        static int i    = 0;
-        auto destructor = [=](int *) noexcept{
-            map_release(map_resource);
-        }
-
-        return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor));
-    }
 
     auto map_safe(fsys_ptr_t ptr) noexcept -> std::expected<dg::genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 

@@ -38,6 +38,9 @@ namespace dg::network_cufsio_linux::utility{
 
 namespace dg::network_cufsio_linux::driver_x{
 
+    //its fine to treat global memory exhaustion as a non-error for these tasks - not necessarily a good practice
+    //because these are small allocations - exception also requires dynamic allocation - which will eventually terminate the program
+
     struct ObjectInterface{
         virtual ~ObjectInterface() noexcept = default;
     };
@@ -363,7 +366,7 @@ namespace dg::network_cufsio_linux::cufs_io{
             return std::unexpected(err);
         }
 
-        return std::unique_ptr<CudaFileDescriptor, cuda_fclose_t>(new CudaFileDescriptor{std::move(kfd.value()), cf_handle}, destructor);
+        return std::unique_ptr<CudaFileDescriptor, cuda_fclose_t>(new CudaFileDescriptor{std::move(kfd.value()), cf_handle}, destructor); //compromise new - 
     }
 
     auto dg_curead_file(CudaFileDescriptor& fd, cuda_legacy_ptr_t dst, size_t sz, size_t file_off, size_t dst_off) noexcept -> exception_t{
@@ -714,7 +717,8 @@ namespace dg::network_cufsio_linux::implementation{
 
     struct FsysIOFactory{
 
-        static auto spawn_preallocated_direct_stable_fsysio(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz, void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) -> std::unique_ptr<FsysIOInterface>{
+        static auto spawn_preallocated_direct_stable_fsysio(const std::vector<std::pair<cuda_ptr_t, size_t>>& cuda_stable_ptr_vec,
+                                                            const std::vector<std::pair<void *, size_t>>& host_stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
             
             auto cudriver_ins       = driver_x::dg_cufs_driver_safe_open();
             auto cuda_to_cufs_dict  = std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t>{};
@@ -727,27 +731,29 @@ namespace dg::network_cufsio_linux::implementation{
 
             int cudriver_fd = *(cudriver_ins.value());
 
-            for (size_t i = 0u; i < cuda_sz; ++i){
-                auto cufs_raii_sptr = cufs_sptr_controller::safe_register_cudasptr(cuda_ptr[i], cuda_ptr_sz[i]);
+            for (size_t i = 0u; i < cuda_stable_ptr_vec.size(); ++i){
+                auto [cuda_ptr, cuda_ptr_sz]    = cuda_stable_ptr_vec[i]; 
+                auto cufs_raii_sptr             = cufs_sptr_controller::safe_register_cudasptr(cuda_ptr, cuda_ptr_sz);
                 if (!cufs_raii_sptr.has_value()){
                     dg::network_exception::throw_exception(cufs_raii_sptr.error());
                 }
                 
                 cufs_sptr_t cufs_sptr = *(cufs_raii_sptr.value()); 
                 cufs_sptr_hashset.insert(cufs_sptr);
-                cuda_to_cufs_dict.insert(std::make_pair(std::make_pair(pointer_cast<uintptr_t>(cuda_ptr[i]), cuda_ptr_sz[i]), cufs_sptr));
+                cuda_to_cufs_dict.insert(std::make_pair(std::make_pair(pointer_cast<uintptr_t>(cuda_ptr), cuda_ptr_sz), cufs_sptr));
                 driver_x::dg_cufs_register_resource(cudriver_fd, std::move(cufs_raii_sptr.value()));
             }
 
-            for (size_t i = 0u; i < host_sz; ++i){
-                auto cufs_raii_sptr = cufs_sptr_controller::safe_register_hostsptr(host_ptr[i], host_ptr_sz[i]);
+            for (size_t i = 0u; i < host_stable_ptr_vec.size(); ++i){
+                auto [host_ptr, host_ptr_sz]    = host_stable_ptr_vec[i];
+                auto cufs_raii_sptr             = cufs_sptr_controller::safe_register_hostsptr(host_ptr, host_ptr_sz);
                 if (!cufs_raii_sptr.has_value()){
                     dg::network_exception::throw_exception(cufs_raii_sptr.error());
                 }
 
                 cufs_sptr_t cufs_sptr = *(cufs_raii_sptr.value()); 
                 cufs_sptr_hashset.insert(cufs_sptr);
-                host_to_cufs_dict.insert(std::make_pair(std::make_pair(pointer_cast<uintptr_t>(host_ptr[i]), host_ptr_sz[i]), cufs_sptr));
+                host_to_cufs_dict.insert(std::make_pair(std::make_pair(pointer_cast<uintptr_t>(host_ptr), host_ptr_sz), cufs_sptr));
                 driver_x::dg_cufs_register_resource(cudriver_fd, std::move(cufs_raii_sptr.value()));
             }
 
@@ -767,27 +773,25 @@ namespace dg::network_cufsio_linux::implementation{
             return std::make_unique<StdFsysIO>(std::move(fast), std::move(slow));
         }
 
-        static auto spawn_prereg_direct_or_default_fsysio(cuda_ptr_t * cuda_ptr, size_t * cuda_ptr_sz, size_t cuda_sz,
-                                                          void ** host_ptr, size_t * host_ptr_sz, size_t host_sz) -> std::unique_ptr<FsysIOInterface>{
+        static auto spawn_prereg_direct_or_default_fsysio(const std::vector<std::pair<cuda_ptr_t, size_t>>& cuda_stable_ptr_vec,
+                                                          const std::vector<std::pair<void *, size_t>>& host_stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
             
-            auto zipped_cuda = dg::network_utility::ptrtup_zip(cuda_ptr, cuda_ptr_sz, cuda_sz); 
-            auto zipped_host = dg::network_utility::ptrtup_zip(host_ptr, host_ptr_sz, host_sz);
-            
-            auto cuda_filter = [](std::tuple<cuda_ptr_t, size_t> e){
+            auto aligned_cuda_stable_ptr_vec    = std::vector<std::pair<cuda_ptr_t, size_t>>{};
+            auto aligned_host_stable_ptr_vec    = std::vector<std::pair<void *, size_t>>{};
+
+            auto cuda_filter = [](const std::pair<cuda_ptr_t, size_t>& e){
                 return utility::is_met_cudadirect_dgio_ptralignment_requirement(pointer_cast<uintptr_t>(std::get<0>(e))) && utility::is_met_cudadirect_dgio_blksz_requirement(std::get<1>(e));
             };
 
-            auto host_filter = [](std::tuple<void *, size_t> e){
+            auto host_filter = [](const std::pair<void *, size_t>& e){
                 return utility::is_met_cudadirect_dgio_ptralignment_requirement(pointer_cast<uintptr_t>(std::get<0>(e))) && utility::is_met_cudadirect_dgio_blksz_requirement(std::get<1>(e));
             };
 
-            auto cuda_last  = std::copy_if(zipped_cuda.begin(), zipped_cuda.end(), zipped_cuda.begin(), cuda_filter);
-            auto host_last  = std::copy_if(zipped_host.begin(), zipped_host.end(), zipped_host.begin(), host_filter);
+            std::copy_if(cuda_stable_ptr_vec.begin(), cuda_stable_ptr_vec.end(), std::back_inserter(aligned_cuda_stable_ptr_vec), cuda_filter);
+            std::copy_if(host_stable_ptr_vec.begin(), host_stable_ptr_vec.end(), std::back_inserter(aligned_host_stable_ptr_vec), host_filter);
 
             try{
-                auto direct_fsysio = spawn_preallocated_direct_stable_fsysio(cuda_ptr, cuda_ptr_sz, std::distance(zipped_cuda.begin(), cuda_last), 
-                                                                             host_ptr, host_ptr_sz, std::distance(zipped_host.begin(), host_last)); 
-
+                auto direct_fsysio = spawn_preallocated_direct_stable_fsysio(aligned_cuda_stable_ptr_vec, aligned_host_stable_ptr_vec); 
                 return spawn_std_fsysio(std::move(direct_fsysio), spawn_indirect_fsysio());
             } catch (...){
                 return spawn_indirect_fsysio();
@@ -800,6 +804,7 @@ namespace dg::network_cufsio_linux{
 
     auto make_cuda_fsys_loader(const std::vector<std::pair<cuda_ptr_t, size_t>>& stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
 
+        return implementation::Factory::spawn_prereg_direct_or_default_fsysio(stable_ptr_vec, {});
     }
 }
 
