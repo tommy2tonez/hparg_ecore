@@ -11,378 +11,366 @@
 #include <memory>
 #include <array>
 #include <string_view>
+#include <mutex>
 
-namespace dg::network_log_implementation{
+// #include "network_postgres_db.h"
 
-    using logger_option_t = uint8_t; 
+namespace dg::network_log::implementation{
 
-    enum logger_option_t: logger_option_t{
-        HAS_WRITE               = 0b0001,
-        HAS_FAST_WRITE          = 0b0010,
-        HAS_OPTIONAL            = 0b0100,
-        HAS_CONCURRENT_LOGGER   = 0b1000
-    };
-
-    template <class T>
     struct LoggerInterface{
-
-        static void log(const char * buf, size_t sz){
-
-            T::log(buf, sz);
-        }
-
-        static void flush(){
-
-            T::flush();
-        }
+        virtual ~LoggerInterface() noexcept = default;
+        virtual void log(std::string_view content, std::string_view kind) = 0;
+        virtual void flush() = 0;
     };
 
-    template <class ID>
-    struct MtxLogger: LoggerInterface<MtxLogger<ID>>{
+    struct KindLoggerInterface{
+        virtual ~KindLoggerInterface() noexcept = default;
+        virtual void critical(const char *) noexcept = 0;
+        virtual void error(const char *) noexcept = 0;
+        virtual void error_optional(const char *) noexcept = 0;
+        virtual void error_fast(const char *) noexcept = 0;
+        virtual void error_fast_optional(const char *) noexcept = 0;
+        virtual void journal(const char *) noexcept = 0;
+        virtual void journal_optional(const char *) noexcept = 0;
+        virtual void journal_fast(const char *) noexcept = 0;
+        virtual void journal_fast_optional(const char *) noexcept = 0;
+        virtual void flush() noexcept = 0;
+        virtual void flush_optional() noexcept = 0;
+    };
 
-        private:
-
-            static inline std::filesystem::path logger_path{};
-            static inline std::mutex mtx{};
+    class InstantLogger: public virtual LoggerInterface{
 
         public:
 
-            static void init(std::filesystem::path arg_path) noexcept{
+            void log(std::string_view content, std::string_view kind){
+                
+                std::expected<dg::network_postgres_db::model::SystemLog, exception_t> syslog = dg::network_postgres_db::model_factory(content, kind, get_utc_timestamp());
 
-                logger_path = std::move(arg_path);
+                if (!syslog.has_value()){
+                    dg::network_exception::throw_exception(syslog.error());
+                }
+
+                auto commitable = dg::network_postgres_db::make_commitable_create_systemlog(syslog.value());
+
+                if (!commitable.has_value()){
+                    dg::network_exception::throw_exception(commitable.error());
+                }
+
+                exception_t err = dg::network_postgres_db::commit({std::move(commitable.value())});
+
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_exception::throw_exception(err);
+                }
             }
 
-            static void log(const char * buf, size_t buf_sz){
-
-                auto lck_grd    = std::lock_guard<std::mutex>(mtx);
-                auto writer     = std::ofstream(logger_path, std::ios::app);
-                writer.write(buf, buf_sz);
-            }
-
-            static void flush(){
+            void flush(){
 
                 (void) flush;
             }
     };
 
-    template <class ID>
-    struct ConcurrentLogger: LoggerInterface<ConcurrentLogger<ID>>{
-
-        private:
-
-            static inline std::vector<std::filesystem::path> path_table{};
-
-        public:
-
-            static void init(std::vector<std::filesystem::path> arg_path_table) noexcept{
-                
-                path_table = std::move(arg_path_table);
-            } 
-
-            static void log(const char * buf, size_t buf_sz){
-
-                const auto& cur_path    = path_table[dg::network_concurrency::this_thread_idx()];
-                auto writer             = std::ofstream(cur_path, std::ios::app);
-                writer.write(buf, buf_sz);
-            }
-
-            static void flush(){
-                
-                (void) flush;
-            }
-    };
-
-    template <class ID, class Logger>
-    struct AggregatedLogger{};
-
-    template <class ID, class T>
-    struct AggregatedLogger<ID, LoggerInterface<T>>: LoggerInterface<AggregatedLogger<ID, LoggerInterface<T>>>{
-
-        private:
-
-            using base = LoggerInterface<T>;
-            static inline std::vector<std::string> log_table{};
-
-        public:
- 
-            static void init(std::vector<std::string> arg_log_table) noexcept{
-                
-                log_table = std::move(arg_log_table);
-            }
-
-            static void log(const char * buf, size_t buf_sz){
-
-                size_t idx          = dg::network_concurrency::this_thread_idx();
-                std::string& cur    = log_table[idx]; 
-
-                if (buf_sz > cur.capacity()){
-                    base::log(buf, buf_sz);
-                    return;
-                }
-
-                if (cur.size() + buf_sz > cur.capacity()){
-                    base::log(cur.data(), cur.size());
-                    cur.clear();
-                }
-                
-                std::copy(buf, buf + buf_sz, std::back_inserter(cur));
-            }
-
-            static void flush(){
-
-                size_t idx = dg::network_concurrency::this_thread_idx();
-                base::log(log_table[idx].data(), log_table[idx].size());
-                log_table[idx].clear();
-                base::flush();
-            }
-    };
-
-    template <class ID>
-    struct VoidLogger: LoggerInterface<VoidLogger<ID>>{
+    class BatchLogger: public virtual LoggerInterface{
         
-        static void log(const char * buf, size_t sz){
+        private:
 
-            (void) buf;
-        }
+            std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec;
 
-        static void flush(){
+        public:
 
-            (void) flush;
-        }
-    } 
+            BatchLogger(std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec) noexcept: syslog_vec(std::move(syslog_vec)){} 
 
-    template <class ID, class SlowLogger, class FastLogger, class HasOptional>
-    struct TaxoLogger{}; 
+            ~BatchLogger() noexcept{
 
-    template <class ID, class T, class T1, bool HAS_OPTIONAL>
-    struct TaxoLogger<ID, LoggerInterface<T>, LoggerInterface<T1>, std::integral_constant<bool, HAS_OPTIONAL>>{
-
-        using slow_logger = LoggerInterface<T>;
-        using fast_logger = LoggerInterface<T1>; 
-
-        static auto make_log(const char * err, const char * what) -> std::string{
-
-            std::string fmt                     = "[{}]\n{}\n{} unix_ns\n------------\n";
-            std::string err_str                 = std::string(err); 
-            std::string what_str                = std::string(what);
-            std::chrono::nanoseconds unix_ts    = dg::utility::unix_timestamp(); 
-            std::string unix_ts_str             = std::to_string(static_cast<size_t>(unix_ts.count()))
-
-            return std::format(fmt, err_str, what_str, unix_ts_str);
-        }
-
-        static void critical(const char * what) noexcept{
-
-            std::string msg = make_log("critical", what);
-            slow_logger::log(msg.data(), msg.size());
-        }
-
-        static void error(const char * what) noexcept{
-
-            std::string msg = make_log("error", what);
-            slow_logger::log(msg.data(), msg.size());
-        }
-
-        static void error_fast(const char * what) noexcept{
-
-            std::string msg = make_log("error", what);
-            fast_logger::log(msg.data(), msg.size());
-        }
-
-        static void error_optional(const char * what) noexcept{
-
-            if constexpr(HAS_OPTIONAL){
                 try{
-                    std::string msg = make_log("error", what);
-                    slow_logger::log(msg.data(), msg.size());
+                    this->flush();
+                } catch (...){
+                    //attempt to write external log then - if thru - fine - if not thru - no-action
+                    std::abort();
+                }
+            }
+
+            void log(std::string_view content, std::string_view kind){
+
+                if (this->syslog_vec.size() == this->syslog_vec.capacity()){
+                    this->flush();
+                }
+
+                std::expected<dg::network_postgres_db::model::SystemLog, exception_t> model = dg::network_postgres_db::model_factory::make_systemlog(content, kind, get_utc_timestamp());
+                
+                if (!model.has_value()){
+                    dg::network_exception::throw_exception(model.error());
+                }
+
+                this->syslog_vec.push_back(std::move(model.value()));
+            }
+
+            void flush(){
+                
+                std::vector<std::unique_ptr<dg::network_postgres_db::CommitableInterface>> commitable_vec{};
+
+                for (auto& syslog: this->syslog_vec){
+                    auto commitable = dg::network_postgres_db::make_commitable_create_systemlog(syslog);
+                    if (!commitable.has_value()){
+                        throw dg::network_exception::throw_exception(commitable.error());
+                    }
+                    commitable_vec.push_back(std::move(commitable.value()));
+                }
+
+                exception_t err = dg::network_postgres_db::commit(std::move(commitable_vec));
+
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_exception::throw_exception(err);
+                }
+
+                this->syslog_vec.clear();            
+            }
+    };
+
+    class ConcurrentLogger: public virtual LoggerInterface{
+
+        private:
+
+            std::vector<std::unique_ptr<LoggerInterface>> logger_vec;
+        
+        public:
+
+            ConcurrentLogger(std::vector<std::unique_ptr<LoggerInterface>> logger_vec) noexcept: logger_vec(std::move(logger_vec)){}
+
+            void log(std::string_view content, std::string_view kind){
+                
+                size_t logger_sz = this->logger_vec.size();
+                [[assume(loggser_sz != 0 && (logger_sz & (logger_sz -1)) == 0)]];
+                size_t idx = std::bit_cast<size_t>(std::this_thread::get_id()) % logger_sz;
+                this->logger_vec[idx]->log(content, kind);
+            }
+
+            void flush(){
+
+                size_t logger_sz = this->logger_vec.size();
+                [[assume(loggser_sz != 0 && (logger_sz & (logger_sz -1)) == 0)]];
+                size_t idx = std::bit_cast<size_t>(std::this_thread::get_id()) % logger_sz;
+                this->logger_vec[idx]->flush();
+            }
+    };
+
+    struct KindLogger: public virtual KindLoggerInterface{
+
+        private:
+
+            std::unique_ptr<LoggerInterface> instant_logger;
+            std::unique_ptr<LoggerInterface> batch_logger;
+
+        public:
+
+            KindLogger(std::unique_ptr<LoggerInterface> instant_logger,
+                       std::unique_ptr<LoggerInterface> batch_logger) noexcept: instant_logger(std::move(instant_logger)),
+                                                                                batch_logger(std::move(batch_logger)){} 
+
+
+            void critical(const char * what) noexcept{
+
+                this->instant_logger->log(what, "critical");
+            }
+
+            void error(const char * what) noexcept{
+
+                this->instant_logger->log(what, "error");
+            }
+
+            void error_fast(const char * what) noexcept{
+
+                this->batch_logger->log(what, "error");
+            }
+
+            void error_optional(const char * what) noexcept{
+
+                try{
+                    this->instant_logger->log(what, "error");
                 } catch (...){
                     (void) what;
                 }
-            } else{
-                error(what);
             }
-        }
 
-        static void error_optional_fast(const char * what) noexcept{
+            void error_fast_optional(const char * what) noexcept{
 
-            if constexpr(HAS_OPTIONAL){
                 try{
-                    std::string msg = make_log("error", what);
-                    fast_logger::log(msg.data(), msg.size());
+                    this->batch_logger->log(what, "error");
                 } catch (...){
                     (void) what;
                 }
-            } else{
-                error_fast(what);
             }
-        }
 
-        static void journal(const char * what) noexcept{
+            void journal(const char * what) noexcept{
 
-            std::string msg = make_log("journal", what);
-            slow_logger::log(msg.data(), msg.size());
-        }
+                this->instant_logger->log(what, "journal");
+            }
 
-        static void journal_fast(const char * what) noexcept{
+            void journal_fast(const char * what) noexcept{
 
-            std::string msg = make_log("journal", what);
-            fast_logger::log(msg.data(), msg.size());
-        }
+                this->batch_logger->log(what, "journal");
+            }
 
-        static void journal_optional(const char * what) noexcept{
+            void journal_optional(const char * what) noexcept{
 
-            if constexpr(HAS_OPTIONAL){
                 try{
-                    std::string msg = make_log("journal", what);
-                    slow_logger::log(msg.data(), msg.size());
+                    this->instant_logger->log(what, "journal");
                 } catch (...){
                     (void) what;
                 }
-            } else{
-                journal(what);
             }
-        }
 
-        static void journal_optional_fast(const char * what) noexcept{
+            void journal_fast_optional(const char * what) noexcept{
 
-            if constexpr(HAS_OPTIONAL){
                 try{
-                    std::string msg = make_log("journal", what);
-                    fast_logger::log(msg.data(), msg.size());
+                    this->batch_logger->log(what, "journal");
                 } catch (...){
                     (void) what;
                 }
-            } else{
-                journal_fast(what);
             }
-        }
 
-        static void flush() noexcept{
+            void flush() noexcept{
+                
+                this->instant_logger->flush();
+                this->batch_logger->flush();
+            }
 
-            slow_logger::flush();
-            fast_logger::flush();
-        }
+            void flush_optional() noexcept{
 
-        static void flush_optional() noexcept{
-
-            if constexpr(HAS_OPTIONAL){
                 try{
-                    slow_logger::flush();
-                    fast_logger::flush();
+                    this->instant_logger->flush();
+                    this->batch_logger->flush();
                 } catch (...){
                     (void) flush;
                 }
-            } else{
-                flush();
             }
-        }
     };
 
-    template <class ID, logger_option_t LOGGER_OPTION_VALUE>
-    auto make_taxo_logger(std::vector<std::filesystem::path> logger_dir, 
-                          const ID,
-                          const std::integral_constant<logger_option_t, LOGGER_OPTION_VALUE>, 
-                          const char * EXTENSION = "log",
-                          const size_t FASTBUF_CAPACITY = 1024){
+    struct Factory{
 
-        constexpr bool HAS_OPTIONAL_VALUE           = (LOGGER_OPTION_VALUE & HAS_OPTIONAL) != 0u;
-        constexpr bool HAS_WRITE_VALUE              = (LOGGER_OPTION_VALUE & HAS_WRITE) != 0u;
-        constexpr bool HAS_CONCURRENT_LOGGER_VALUE  = (LOGGER_OPTION_VALUE & HAS_CONCURRENT_LOGGER) != 0u;
-        constexpr bool HAS_FAST_WRITE_VALUE         = (LOGGER_OPTION_VALUE & HAS_FAST_WRITE) != 0u;
+        static auto spawn_instant_logger() -> std::unique_ptr<LoggerInterface>{
 
-        auto slow_logger_initializer = [&]{
-            if constexpr(HAS_WRITE_VALUE){
-                if constexpr(HAS_CONCURRENT_LOGGER_VALUE){
-                    ConcurrentLogger<ID>::init(logger_dir, EXTENSION);
-                    return typename ConcurrentLogger<ID>::interface_t{};
-                } else{
-                    MtxLogger<ID>::init(logger_dir / EXTENSION); //
-                    return typename MtxLogger<ID>::interface_t{};
-                }
-            } else{
-                return typename VoidLogger<ID>::interface_t{};
+            return std::make_unique<InstantLogger>();
+        } 
+
+        static auto spawn_batch_logger(size_t capacity) -> std::unique_ptr<LoggerInterface>{
+
+            const size_t MIN_CAPACITY   = 1u;
+            const size_t MAX_CAPACITY   = size_t{1} << 20;
+
+            if (std::clamp(capacity, MIN_CAPACITY, MAX_CAPACITY) != capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
-        }; 
 
-        auto fast_logger_initializer = [&]{
-            if constexpr(HAS_FAST_WRITE_VALUE){
-                AggregatedLogger<ID, slow_logger>::init(FASTBUF_CAPACITY);
-                return typename AggregatedLogger<ID, slow_logger>::interface_t{};
-            } else{
-                return slow_logger{};
+            std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec{};
+            syslog_vec.reserve(capacity);
+
+            return std::make_unique<BatchLogger>(std::move(syslog_vec));
+        }
+
+        static auto spawn_concurrent_logger(std::vector<std::unique_ptr<LoggerInterface>> logger_vec) -> std::unique_ptr<LoggerInterface>{
+
+            const size_t MIN_LOGGER_VEC_SZ  = 1u;
+            const size_t MAX_LOGGER_VEC_SZ  = size_t{1} << 10;
+
+            if (std::clamp(static_cast<size_t>(logger_vec.size()), MIN_LOGGER_VEC_SZ, MAX_LOGGER_VEC_SZ) != logger_vec.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
-        };
-        
-        auto slow_logger    = slow_logger_initializer();
-        auto fast_logger    = fast_logger_initializer();
 
-        return TaxoLogger<ID, decltype(slow_logger), decltype(fast_logger), std::integral_constant<bool, HAS_OPTIONAL_VALUE>>{};
-    } 
+            if (!dg::memult::is_pow2(logger_vec.size())){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ConcurrentLogger>(std::move(logger_vec));
+        } 
+
+        static auto spawn_kind_logger(size_t fastlog_capacity, size_t concurrency_sz) -> std::unique_ptr<KindLoggerInterface>{
+
+            std::vector<std::unique_ptr<LoggerInterface>> instant_logger_vec    = {};
+            std::vector<std::unique_ptr<LoggerInterface>> batch_logger_vec      = {};
+
+            for (size_t i = 0u; i < concurrency_sz; ++i){
+                instant_logger_vec.push_back(spawn_instant_logger());
+                batch_logger_vec.push_back(spawn_batch_logger(fastlog_capacity));
+            }
+
+            std::unique_ptr<LoggerInterface> concurrent_instant_logger  = spawn_concurrent_logger(std::move(instant_logger_vec));
+            std::unique_ptr<LoggerInterface> concurrent_batch_logger    = spawn_concurrent_logger(std::move(batch_logger_vec));
+
+            return std::make_unique<KindLoggerInterface>(std::move(concurrent_instant_logger), std::move(concurrent_batch_logger));
+        }
+    };
 }
 
 namespace dg::network_log{
 
-    static inline constexpr network_log_implementation::logger_option_t LOGGER_OPTION_VALUE = 0u; 
-    using logger = decltype(network_log_implementation::make_taxo_logger({}, std::integral_constant<network_log_implementation::logger_option_t, LOGGER_OPTION_VALUE>{})); 
+    constexpr size_t FAST_LOG_CAPACITY  = size_t{1} << 8;
+    constexpr size_t CONCURRENCY_SZ     = size_t{1} << 8;
 
-    void init(std::vector<std::filesystem::path> logger_path){
+    inline std::unique_ptr<implementation::KindLoggerInterface> logger{};
 
-        network_log_implementation::make_taxo_logger(logger_path, std::integral_constant<network_log_implementation::logger_option_t, LOGGER_OPTION_VALUE>{});
+    void init(){
+
+        logger = implementation::Factory::spawn_kind_logger(FAST_LOG_CAPACITY, CONCURRENCY_SZ);
     } 
+
+    void deinit() noexcept{
+        
+        logger = nullptr;
+    }
 
     void critical(const char * what) noexcept{
 
-        logger::critical(what);
+        logger->critical(what);
     }
 
     void error(const char * what) noexcept{
 
-        logger::error(what);
+        logger->error(what);
     }
 
     void error_fast(const char * what) noexcept{
 
-        logger::error_fast(what);
+        logger->error_fast(what);
     }
     
     void error_optional(const char * what) noexcept{
 
-        logger::error_optional(what);
+        logger->error_optional(what);
     }
 
-    void error_optional_fast(const char * what) noexcept{
+    void error_fast_optional(const char * what) noexcept{
 
-        logger::error_optional_fast(what);
+        logger->error_fast_optional(what);
     }
 
     void journal(const char * what) noexcept{
 
-        logger::journal(what);
+        logger->journal(what);
     }
 
     void journal_fast(const char * what) noexcept{
 
-        logger::journal_fast(what);
+        logger->journal_fast(what);
     }
 
     void journal_optional(const char * what) noexcept{
 
-        logger::journal_optional(what);
+        logger->journal_optional(what);
     }
 
-    void journal_optional_fast(const char * what) noexcept{
+    void journal_fast_optional(const char * what) noexcept{
 
-        logger::journal_optional_fast(what);
+        logger->journal_fast_optional(what);
     }
 
     void flush() noexcept{
 
-        logger::flush();
+        logger->flush();
     }
 
     void flush_optional() noexcept{
 
-        logger::flush_optional();
+        logger->flush_optional();
     }
 }
 
@@ -441,15 +429,15 @@ namespace dg::network_log_stackdump{
         error_optional("");
     }
 
-    void error_optional_fast(const char * what) noexcept{
+    void error_fast_optional(const char * what) noexcept{
 
         auto new_what = dg::functional::invoke_nothrow_or_empty(add_stack_trace, what);
-        network_log::error_optional_fast(new_what);
+        network_log::error_fast_optional(new_what);
     }
 
-    void error_optional_fast() noexcept{
+    void error_fast_optional() noexcept{
 
-        error_optional_fast("");
+        error_fast_optional("");
     }
 
     void journal(const char * what) noexcept{
@@ -485,15 +473,15 @@ namespace dg::network_log_stackdump{
         journal_optional("");
     }
 
-    void journal_optional_fast(const char * what) noexcept{
+    void journal_fast_optional(const char * what) noexcept{
 
         auto new_what = dg::functional::invoke_nothrow_or_empty(add_stack_trace, what);
-        network_log::journal_optional_fast(new_what.c_str());
+        network_log::journal_fast_optional(new_what.c_str());
     }
 
-    void journal_optional_fast() noexcept{
+    void journal_fast_optional() noexcept{
 
-        network_log::journal_optional_fast("");
+        network_log::journal_fast_optional("");
     }
 
     void flush() noexcept{
@@ -518,9 +506,9 @@ namespace dg::network_log_scope{
             
             try{
                 std::rethrow_exception(std::current_exception());
-                network_log_stackdump::critical_error();
+                network_log_stackdump::critical();
             } catch (std::exception& e){
-                network_log_stackdump::critical_error(e.what()); //
+                network_log_stackdump::critical(e.what()); //
                 std::terminate();
             }
         };

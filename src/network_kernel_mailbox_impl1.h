@@ -844,7 +844,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
 
                 if (pkt.retransmission_count == this->max_retransmission){
-                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(dg::network_exception::LOST_RETRANSMISSION));
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::LOST_RETRANSMISSION));
                     return;
                 }
 
@@ -1275,7 +1275,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 exception_t err = socket_service::send_noblock(*this->socket, cur->to_addr, bstream.data(), bstream.size());
                 
                 if (dg::network_exception::is_failed(err)){
-                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(err));
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     return false;
                 }
 
@@ -1346,7 +1346,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 exception_t err     = socket_service::recv_block(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE);
 
                 if (dg::network_exception::is_failed(err)){
-                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(err));
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     return false;
                 }
 
@@ -1354,13 +1354,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 std::expected<Packet, exception_t> epkt = utility::deserialize_packet(std::move(bstream)); 
                 
                 if (!epkt.has_value()){
-                    dg::network_log_stackdump::error_optional_fast(dg::network_exception::verbose(epkt.error()));
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(epkt.error()));
                     return true;
                 }
                 
                 Packet pkt = std::move(epkt.value());
                 
                 if (!this->ib_controller->thru(pkt.id)){
+                    if (pkt.kind == constants::request){
+                        auto ack_pkt = packet_service::request_to_ack(pkt);
+                        this->ob_packet_container->push(std::move(ack_pkt));
+                    }
                     return true;
                 }
 

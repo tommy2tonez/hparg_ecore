@@ -10,6 +10,8 @@
 #include "network_compact_serializer.h"
 #include <vector>
 #include <string>
+#include <utility>
+#include <algorithm>
 
 namespace dg::cublas_x::syntax_tree{
 
@@ -81,19 +83,49 @@ namespace dg::cublas_x::syntax_tree{
     struct MatrixDimension{
         size_t row_sz;
         size_t column_sz;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(row_sz, column_sz);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(row_sz, column_sz);
+        }
     };
 
     struct AbstractNode{
         std::vector<std::unique_ptr<AbstractNode>> descendants;
-        transform_kind_t transform_kind;
+        transform_kind_t transform_kind; //
         MatrixDimension dim;
         std::string value_identifier;
         logit_kind_t logit_kind;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(descendants, transform_kind, dim, value_identifier, logit_kind);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(descendants, transform_kind, dim, value_identifier, logit_kind);
+        }
     };
 
     struct CollapsedAbstractNode{
-        std::unique_ptr<AbstractNode> upper; //this is weird
-        std::vector<std::unique_ptr<AbstractNode>> leaf_descendants; //this is weird
+        std::unique_ptr<AbstractNode> upper;
+        std::vector<std::unique_ptr<AbstractNode>> leaf_descendants;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(upper, leaf_descendants);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(upper, leaf_descendants);
+        }
     };
 
     struct Node{
@@ -107,6 +139,107 @@ namespace dg::cublas_x::syntax_tree{
 
     auto transform_kind_cstr(transform_kind_t transform_kind) -> const char *{
 
+        switch (transform_kind){
+            case transform_kind_saturate_01:
+                return "transform_kind_saturate_01";
+            case transform_kind_rounddown_optional:
+                return "transform_kind_rounddown_optional";
+            case transform_kind_rounddown:
+                return "transform_kind_rounddown";
+            case transform_kind_roundup_optional:
+                return "transform_kind_roundup_optional";
+            case transform_kind_roundup:
+                return "transform_kind_roundup";
+            case transform_kind_fastmath:
+                return "transform_kind_fastmath";
+            case transform_kind_roundeven_optional:
+                return "transform_kind_roundeven_optional";
+            case transform_kind_roundeven:
+                return "transform_kind_roundeven";
+            case transform_kind_roundzero_optional:
+                return "transform_kind_roundzero_optional";
+            case transform_kind_roundzero:
+                return "transform_kind_roundzero";
+            case transform_kind_clone:
+                return "transform_kind_clone";
+            case transform_kind_relu:
+                return "transform_kind_relu";
+            case transform_kind_cast_u8:
+                return "transform_kind_cast_u8";
+            case transform_kind_cast_u16:
+                return "transform_kind_cast_u16";
+            case transform_kind_cast_u32:
+                return "transform_kind_cast_u32";
+            case transform_kind_cast_f8_native:
+                return "transform_kind_cast_f8_native";
+            case transform_kind_cast_f16_brain:
+                return "transform_kind_cast_f16_brain";
+            case transform_kind_cast_f16_iec559:
+                return "transform_kind_cast_f16_iec559";
+            case transform_kind_cast_f32_iec559:
+                return "transform_kind_cast_f32_iec559";
+            case transform_kind_sign:
+                return "transform_kind_sign";
+            case transform_kind_exp:
+                return "transform_kind_exp";
+            case transform_kind_exp2:
+                return "transform_kind_exp2";
+            case transform_kind_exp10:
+                return "transform_kind_exp10";
+            case transform_kind_log:
+                return "transform_kind_log";
+            case transform_kind_log2:
+                return "transform_kind_log2";
+            case transform_kind_log10:
+                return "transform_kind_log10";
+            case transform_kind_abs:
+                return "transform_kind_abs";
+            case transform_kind_cos:
+                return "transform_kind_cos";
+            case transform_kind_acos:
+                return "transform_kind_acos";
+            case transform_kind_sin:
+                return "transform_kind_sin";
+            case transform_kind_asin:
+                return "transform_kind_asin";
+            case transform_kind_tan:
+                return "transform_kind_tan";
+            case transform_kind_atan:
+                return "transform_kind_atan";
+            case transform_kind_sqrt:
+                return "transform_kind_sqrt";
+            case transform_kind_invsqrt:
+                return "transform_kind_invsqrt";
+            case transform_kind_negative:
+                return "transform_kind_negative";
+            case transform_kind_negate:
+                return "tranform_kind_negate";
+            case transform_kind_transpose:
+                return "transform_kind_transpose";
+            case transform_kind_linear:
+                return "transform_kind_linear";
+            case transform_kind_dot:
+                return "transform_kind_dot";
+            case transform_kind_add:
+                return "transform_kind_add";
+            case transform_kind_sub:
+                return "transform_kind_sub";
+            case transform_kind_mul:
+                return "transform_kind_mul";
+            case transform_kind_div:
+                return "transform_kind_div";
+            case transform_kind_pow:
+                return "transform_kind_pow";
+            case transform_kind_min:
+                return "transform_kind_min";
+            case transform_kind_max:
+                return "transform_kind_max";
+            case transform_kind_none:
+                return "transform_kind_none";
+            default:
+                std::abort();
+                return ""; 
+            }
     }
 }
 
@@ -133,7 +266,9 @@ namespace dg::cublas_x::opti_engine{
         public:
 
             virtual ~OptimizerInterface() noexcept = default;
-            virtual auto optimize(cublas_handle_t, const syntax_tree::AbstractNode&) -> syntax_tree::AbstractNode = 0;
+            virtual auto set_cuda_device(int) -> OptimizerInterface& = 0;
+            virtual auto set_memory_cap(size_t) -> OptimizerInterface& = 0;
+            virtual auto optimize(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::unique_ptr<syntax_tree::AbstractNode> = 0;
     };
 }
 
@@ -171,11 +306,11 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
             virtual auto benchmark(int device_id, const std::unique_ptr<syntax_tree::Node>&) -> std::chrono::nanoseconds = 0;
     };
 
-    class IdentifierGeneratorInterface{
+    class AbstractNodeIdentifierGeneratorInterface{
 
         public:
 
-            virtual ~IdentifierGeneratorInterface() noexcept = default;
+            virtual ~AbstractNodeIdentifierGeneratorInterface() noexcept = default;
             virtual auto id(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::string = 0;
     };
 
@@ -185,6 +320,14 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
             virtual ~AbstractNodeCollapserInterface() noexcept = default;
             virtual auto collapse(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::vector<std::unique_ptr<CollapsedAbstractNode>> = 0; 
+    };
+    
+    class AbstractNodeOverheadCalculatorInterface{
+
+        public:
+
+            virtual ~AbstractNodeOverheadCalculatorInterface() noexcept = default;
+            virtual auto get_memory_overhead(const std::unique_ptr<syntax_tree::AbstractNode>&) -> size_t = 0;
     };
 
     class AbstractNodeUniqueRepresentationGeneratorInterface{
@@ -199,20 +342,13 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
 namespace dg::cublas_x::utility{
 
-    auto deepcopy(const std::unique_ptr<syntax_tree::AbstractNode>& node) -> std::unique_ptr<syntax_tree::AbstractNode>{
+    template <class T>
+    auto deepcopy(const T& inp) -> T{
 
-        if (!node){
-            return nullptr;
-        }
-
-        auto rs                 = std::make_unique<syntax_tree::AbstractNode>();
-        rs->transform_kind      = node->transform_kind;
-        rs->dim                 = node->dim;
-        rs->value_identifier    = node->value_identifier;
-
-        for (const auto& child: node->descendants){
-            rs->descendants.push_back(deepcopy(child));
-        }
+        std::string bstream(dg::network_compact_serializer::size(inp), ' ');
+        dg::network_compact_serializer::serialize_into(bstream.data(), inp);
+        T rs{};
+        dg::network_compact_serializer::deserialize_into(rs, bstream.data());
 
         return rs;
     } 
@@ -342,33 +478,19 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
     //(3): fast greedy optimization
     //(4): fast grouping - rotate + permute
     //(5): trade off between tree-height + tree nodes and runtime  
-
+    
     class AbstractNodeCollapser: public virtual AbstractNodeCollapserInterface{
-
-        private:
-
-            static inline constexpr uint8_t PATHNODE_BITCONTROL_END_OF_PATH     = 0b11;
-            static inline constexpr uint8_t PATHNODE_BITCONTROL_END_AT_ROOT     = 0b01;
-            static inline constexpr uint8_t PATHNODE_BITCONTROL_CONTINUE        = 0b00;
-
-            struct PathNode{
-                uint8_t bit_control;
-                size_t descendant_idx;
-            };
-
-            using path_t = std::vector<PathNode>; 
 
         public:
 
             auto collapse(const std::unique_ptr<syntax_tree::AbstractNode>& root) -> std::vector<std::unique_ptr<CollapsedAbstractNode>>{
 
-                std::vector<std::vector<path_t>> block_instruction_set = this->get_block_possibilities(root);
-                return this->make_collapsed_node_from_block_instruction_set(root, block_instruction_set);
+                return this->internal_collapse(root);
             }
         
         private:
 
-            auto get_space(const std::vector<std::vector<std::vector<path_t>>>& inp) -> std::vector<size_t>{
+            auto get_space(const std::vector<std::vector<std::unique_ptr<CollapsedAbstractNode>>>& inp) -> std::vector<size_t>{
 
                 auto rs = std::vector<size_t>();
 
@@ -377,7 +499,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 }
 
                 return rs;
-            } 
+            }
 
             auto get_space_size(const std::vector<size_t>& space) -> size_t{
 
@@ -385,13 +507,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                     return 0u;
                 }
 
-                size_t space_sz = 1u;
-
-                for (size_t i = 0; i < space.size(); ++i){
-                    space_sz *= space[i];
-                }
-                
-                return space_sz;
+                return std::accumulate(space.begin(), space.end(), size_t{1u}, std::multiplies<>{});
             }
 
             void iter_increment(std::vector<size_t>& ptr, const std::vector<size_t>& space){
@@ -407,28 +523,45 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 }
             }
 
-            auto permute_join(const std::vector<std::vector<std::vector<path_t>>>& block_instruction) -> std::vector<std::vector<path_t>>{
+            auto make_collapsed_node(const std::unique_ptr<syntax_tree::AbstractNode>& root, const std::vector<std::unique_ptr<CollapsedAbstractNode>>& descendants) -> std::unique_ptr<CollapsedAbstractNode>{
+
+                if (root == nullptr){
+                    std::abort();
+                }
+
+                auto rs     = std::make_unique<CollapsedAbstractNode>();
+                rs->upper   = utility::deepcopy(root);
                 
-                std::vector<std::vector<path_t>> rs{};
-                std::vector<size_t> space = get_space(block_instruction);
-                std::vector<size_t> ptr(0u, space.size());
-                size_t idx = 0u;
-                size_t space_size = this->get_space_size(space);
+                for (size_t i = 0u; i < descendants.size(); ++i){
+                    rs->upper->descendants[i] = utility::deepcopy(descendants[i]->upper);
+                    std::vector<std::unique_ptr<AbstractNode>> cur_leaf_descendants = utility::deepcopy(descendants[i]->leaf_descendants);
+                    std::copy(std::make_move_iterator(cur_leaf_descendants.begin()), std::make_move_iterator(cur_leaf_descendants.end()), std::back_inserter(rs->leaf_descendants));
+                }
+
+                return rs;
+            } 
+
+            auto permute_join(const std::unique_ptr<syntax_tree::AbstractNode>& root, const std::vector<std::vector<std::unique_ptr<CollapsedAbstractNode>>>& descendants) -> std::vector<std::unique_ptr<CollapsedAbstractNode>>{
+                
+                if (root == nullptr){
+                    std::abort();
+                }
+
+                std::vector<size_t> space   = get_space(descendants);
+                auto rs                     = std::vector<std::unique_ptr<CollapsedAbstractNode>>{};
+                auto ptr                    = std::vector<size_t>(0u, space.size());
+                size_t idx                  = 0u;
+                size_t space_size           = this->get_space_size(space);
 
                 while (idx != space_size){
-                    std::vector<path_t> cur_block_instruction{};
+                    std::vector<std::unique_ptr<CollapsedAbstractNode>> cand = {};
 
                     for (size_t i = 0u; i < ptr.size(); ++i){
-                        std::vector<path_t> descendant_block_instruction = block_instruction[i][ptr[i]];
-
-                        for (auto& descendant_path: descendant_block_instruction){
-                            descendant_path.insert(descendant_path.begin(), PathNode{PATHNODE_BITCONTROL_CONTINUE, i});
-                        }
-
-                        cur_block_instruction.insert(cur_block_instruction.end(), descendant_block_instruction.begin(), descendant_block_instruction.end());
+                        cand.push_back(utility::deepcopy(descendants[i][ptr[i]]));
                     }
 
-                    rs.push_back(std::move(cur_block_instruction));
+                    std::unique_ptr<CollapsedAbstractNode> collapsed_node = this->make_collapsed_node(root, cand); 
+                    rs.push_back(std::move(collapsed_node));
                     ++idx;
                     iter_increment(ptr, space);
                 }
@@ -436,56 +569,124 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 return rs;
             }
 
-            auto get_block_possibilities(const std::unique_ptr<syntax_tree::AbstractNode>& root) -> std::vector<std::vector<path_t>>{
-
+            auto internal_collapse(const std::unique_ptr<syntax_tree::AbstractNode>& root) -> std::vector<std::unique_ptr<CollapsedAbstractNode>>{
+                
                 if (root == nullptr){
                     return {};
                 }
 
-                if (root->descendants.empty()){
-                    return {{{PathNode{PATHNODE_BITCONTROL_END_OF_PATH, {}}}}, {{PathNode{PATHNODE_BITCONTROL_END_AT_ROOT, {}}}}};
-                }
-
-                std::vector<std::vector<std::vector<path_t>>> descendants_possibilities = {};
+                auto descendants_collapsed_vec = std::vector<std::vector<std::unique_ptr<CollapsedAbstractNode>>>{};
 
                 for (const auto& descendant: root->descendants){
-                    descendants_possibilities.push_back(this->get_block_possibilities(descendant));
+                    descendants_collapsed_vec.push_back(this->internal_collapse(descendant));
                 }
 
-                std::vector<std::vector<path_t>> rs = this->permute_join(descendants_possibilities);
-                rs.push_back(std::vector<path_t>{path_t{PathNode{PATHNODE_BITCONTROL_END_OF_PATH, {}}}});
+                std::vector<std::unique_ptr<CollapsedAbstractNode>> rs      = this->permute_join(root, descendants_collapsed_vec);
+                std::unique_ptr<CollapsedAbstractNode> self_abstract_node   = std::make_unique<CollapsedAbstractNode>();
+                self_abstract_node->upper                                   = utility::deepcopy(root);
+                self_abstract_node->upper->transform_kind                   = syntax_tree::transform_kind_none;
+                self_abstract_node->upper->descendants                      = {};
+                self_abstract_node->leaf_descendants.push_back(utility::deepcopy(root));
+                rs.push_back(std::move(self_abstract_node));
 
                 return rs;
             }
+    };
 
-            auto traverse_and_prune(const std::unique_ptr<syntax_tree::AbstractNode>& root, std::vector<intmax_t>& backtrack, const std::unordered_set<std::string>& leaf_hashset) -> std::pair<std::unique_ptr<AbstractNode>, std::vector<std::unique_ptr<AbstractNode>>>{
+    class AbstractNodeTransformIdentifierGenerator: public virtual AbstractNodeIdentifierGeneratorInterface{
 
-                // if (root == nullptr){
-                //     return {};
-                // }
+        public:
 
-                // std::string backtrack_str_rep(dg::network_compact_serializer::size(backtrack), ' ');
-                // dg::network_compact_serializer::serialize_into(backtrack_str_rep.data(), backtrack);
-                
-                // if (leaf_hashset.contains(backtrack_str_rep)){
-                //     return {nullptr, {}};
-                // }
+            auto id(const std::unique_ptr<AbstractNode>& root) -> std::string{
 
+                std::vector<transform_kind_t> transform_kind_vec{};
+                this->postorder_traversal(root, transform_kind_vec);
+                std::string bstream(dg::network_compact_serializer::size(transform_kind_vec), ' ');
+                dg::network_compact_serializer::serialize_into(bstream.data(), transform_kind_vec);
 
+                return bstream;
+            }
+        
+        private:
 
-            } 
+            void postorder_traversal(const std::unique_ptr<AbstractNode>& root, std::vector<transform_kind_t>& rs){
 
-            auto make_collapsed_node_from_block_instruction_set(const std::unique_ptr<syntax_tree::AbstractNode>& root, const std::vector<std::vector<path_t>>& instruction_set) -> std::vector<std::unique_ptr<CollapsedAbstractNode>>{
-                    
-                std::vector<std::unique_ptr<CollapsedAbstractNode>> rs{};
-
-                for (const auto& instruction: instruction_set){
-                    std::unordered_set<std::string> end_of_path_hashset = this->to_eop_hashset(instruction);
-                    std::vector<intmax_t> backtrack = {-1};  
-                    auto [abstract_root, descendants] = traverse_and_prune(root, end_of_path_hashset);
-                    auto rs = std::make_unique<CollapsedAbstractNode>(CollapsedAbstractNode{std::move(abstract_root), std::move(descendants)});
-                    rs.push_back(std::move(rs));
+                if (root == nullptr){
+                    return;
                 }
+
+                for (const auto& descendant: root->descendants){
+                    postorder_traversal(descendant, rs);
+                }
+                
+                rs.push_back(root->transform_kind);
+            }
+    };
+
+    class AbstractNodeUniqueRepresentationGenerator: public virtual AbstractNodeUniqueRepresentationGeneratorInterface{
+
+        private:
+
+            std::unique_ptr<AbstractNodeIdentifierGeneratorInterface> id_gen;
+
+        public:
+
+            AbstractNodeUniqueRepresentationGenerator(std::unique_ptr<AbstractNodeIdentifierGeneratorInterface> id_gen) noexcept: id_gen(std::move(id_gen)){}
+
+            auto to_unique_representation(const std::unique_ptr<AbstractNode>& root) -> std::unique_ptr<AbstractNode>{
+
+                return this->internal_to_unique_representation(root);
+            }
+        
+        private:
+
+            auto internal_to_unique_representation(const std::unique_ptr<AbstractNode>& root) -> std::unique_ptr<AbstractNode>{
+
+                if (root == nullptr){
+                    return nullptr;
+                }
+
+                std::vector<std::unique_ptr<AbstractNode>> descendant_vec{};
+                std::unique_ptr<AbstractNode> rs = utility::deepcopy(root);
+                rs->descendants = {};
+
+                for (const auto& descendant: root->descendants){
+                    descendant_vec.push_back(this->internal_to_unique_representation(descendant));
+                }
+
+                std::vector<std::pair<std::string, size_t>> cmpable_representation_vec{};
+
+                for (const auto& descendant: descendant_vec){
+                    cmpable_representation_vec.push_back(std::make_pair(this->id_gen->id(descendant), cmpable_representation_vec.size()));
+                }
+
+                std::sort(cmpable_representation_vec.begin(), cmpable_representation_vec.end());
+
+                for (const auto& pair: cmpable_representation_vec){
+                    rs->descendants.push_back(std::move(descendant_vec[std::get<1>(pair)]));
+                }
+
+                return rs;
+            }
+    };
+
+    class AbstractNodeOverheadCalculator: public virtual AbstractNodeOverheadCalculatorInterface{
+
+        public:
+
+            auto get_memory_overhead(const std::unique_ptr<AbstractNode>& root) -> size_t{
+                
+                if (root == nullptr){
+                    return 0u;
+                }
+
+                size_t rs = root->dim.column_sz * root->dim.row_sz;
+
+                for (const auto& descendant: root->descendants){
+                    rs += this->get_memory_overhead(descendant);
+                }
+
+                return rs;
             }
     };
 
@@ -494,14 +695,14 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
         private:
 
             std::unordered_map<std::string, transform_kind_t> transform_map;
-            std::unique_ptr<IdentifierGeneratorInterface> id_gen;
+            std::unique_ptr<AbstractNodeIdentifierGeneratorInterface> id_gen;
             std::unique_ptr<AbstractNodeCollapserInterface> abstract_node_collapser;
             std::unique_ptr<AbstractNodeUniqueRepresentationGeneratorInterface> abstract_node_unique_rep_generator;
 
         public:
 
             BaseStateSearchEngine(std::unordered_map<std::string, transform_kind_t> transform_map,
-                                  std::unique_ptr<IdentifierGeneratorInterface> id_gen,
+                                  std::unique_ptr<AbstractNodeIdentifierGeneratorInterface> id_gen,
                                   std::unique_ptr<AbstractNodeCollapserInterface> abstract_node_collapser,
                                   std::unique_ptr<AbstractNodeUniqueRepresentationGeneratorInterface> abstract_node_unique_rep_generator) noexcept: transform_map(std::move(transform_map)),
                                                                                                                                                     id_gen(std::move(id_gen)),
@@ -510,14 +711,10 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
             auto search(const std::unique_ptr<AbstractNode>& root) -> std::vector<std::unique_ptr<AbstractNode>>{
 
-                if (!this->is_precond_met(root)){
-                    return {utility::deepcopy(root)};
-                }
-
                 std::vector<std::unique_ptr<CollapsedAbstractNode>> collapsed_node_vec = this->abstract_node_collapser->collapse(root);
                 std::vector<std::unique_ptr<AbstractNode>> rs{};
 
-                for (auto& collapsed_node: collapsed_node_vec){
+                for (const auto& collapsed_node: collapsed_node_vec){
                     std::unique_ptr<AbstractNode> uniq_rep  = this->abstract_node_unique_rep_generator->to_unique_representation(collapsed_node->upper);
                     std::string id                          = this->id_gen->id(uniq_rep);
                     auto map_ptr                            = this->transform_map.find(id);
@@ -526,16 +723,52 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                         continue;
                     }
 
-                    auto appendee               = std::make_unique<AbstractNode>();
-                    appendee->dim               = collapsed_node->upper->dim;
-                    appendee->logit_kind        = collapsed_node->upper->logit_kind;
-                    appendee->value_identifier  = collapsed_node->upper->value_identifier;
-                    appendee->transform_kind    = map_ptr->second;
-                    appendee->descendants       = this->map_descendants(collapsed_node->upper, uniq_rep, collapsed_node->leaf_descendants);
-
+                    auto appendee = this->map_descendants(collapsed_node->upper, uniq_rep, collapsed_node->leaf_descendants);
                     rs.push_back(std::move(appendee));
                 }
 
+                return rs;
+            }
+
+        private:
+
+            void postorder_traversal_leaf_identifier(const std::unique_ptr<AbstractNode>& root, std::vector<std::string>& identifier_vec){
+
+                if (root == nullptr){
+                    return;
+                }
+
+                for (auto& descendant: root->descendants){
+                    this->postorder_traversal_leaf_identifier(descendant, identifier_vec);
+                }
+
+                if (root->descendants.empty()){
+                    identifier_vec.push_back(root->value_identifier);
+                }
+            }
+
+            auto map_descendants(const std::unique_ptr<AbstractNode>& old_node, const std::unique_ptr<AbstractNode>& new_node, const std::vector<std::unique_ptr<AbstractNode>>& descendants) -> std::unique_ptr<AbstractNode>{
+
+                if (new_node == nullptr){
+                    return nullptr;
+                }
+
+                auto old_node_leaf_identifier_vec   = std::vector<std::string>{};
+                auto new_node_leaf_identifier_vec   = std::vector<std::string>{};
+                auto new_descendants                = std::vector<std::unique_ptr<AbstractNode>>{};
+                auto rs                             = utility::deepcopy(new_node); 
+
+                this->postorder_traversal_leaf_identifier(old_node, old_node_leaf_identifier_vec);
+                this->postorder_traversal_leaf_identifier(new_node, new_node_leaf_identifier_vec);
+
+                for (size_t i = 0u ; i < descendants.size(); ++i){
+                    auto ptr    = std::find(old_node_leaf_identifier_vec.begin(), old_node_leaf_identifier_vec.end(), new_node_leaf_identifier_vec[i]);
+                    size_t idx  = std::distance(old_node_leaf_identifier_vec.begin(), ptr);
+                    new_descendants.push_back(utility::deepcopy(descendants[idx]));
+                    old_node_leaf_identifier_vec.erase(ptr);
+                }
+
+                rs->descendants = std::move(new_descendants);
                 return rs;
             }
     };
@@ -574,13 +807,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                     return 0u;
                 }
 
-                size_t space_sz = space[0u];
-
-                for (size_t i = 1u; i < space.size(); ++i){
-                    space_sz *= space[i];
-                }
-                
-                return space_sz;
+                return std::accumulate(space.begin(), space.end(), size_t{1u}, std::multiplies<>{});
             }
 
             void iter_increment(std::vector<size_t>& ptr, const std::vector<size_t>& space){
@@ -596,18 +823,6 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 }
             }
 
-            auto extract_abstract_node(const std::vector<std::vector<std::unique_ptr<AbstractNode>>>& inp, const std::vector<size_t>& ptr) -> std::vector<std::unique_ptr<AbstractNode>>{
-
-                std::vector<std::unique_ptr<AbstractNode>> rs{};
-
-                for (size_t i = 0; i < ptr.size(); ++i){
-                    size_t idx = ptr[i]; 
-                    rs.push_back(utility::deepcopy(inp[i][idx]));
-                }
-
-                return rs;
-            }
-
             auto make_root_possibilities(const std::unique_ptr<AbstractNode>& root, 
                                          const std::vector<std::vector<std::unique_ptr<AbstractNode>>>& descendants) -> std::vector<std::unique_ptr<AbstractNode>>{
                 
@@ -619,7 +834,9 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
                 while (idx != space_size){
                     auto appendee               = std::make_unique<AbstractNode>();
-                    appendee->descendants       = this->extract_abstract_node(descendants, ptr);
+                    for (size_t i = 0u; i < ptr.size(); ++i){
+                        appendee->descendants.push_back(utility::deepcopy(descendants[i][ptr[i]]));
+                    }
                     appendee->dim               = root->dim;
                     appendee->logit_kind        = root->logit_kind;
                     appendee->transform_kind    = root->transform_kind;
@@ -664,38 +881,64 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
         private:
 
+            struct OptimizationConfig{
+                int cuda_device_id;
+                size_t optimization_memory_cap;
+            };
+
             std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer;
             std::unique_ptr<StateSearchEngineInterface> state_search_engine;
             std::unique_ptr<BenchmarkEngineInterface> benchmark_engine;
-        
+            std::unique_ptr<AbstractNodeOverheadCalculatorInterface> overhead_calculator;
+            OptimizationConfig config;
+
         public:
 
-            explicit OptimizerEngine(std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer,
-                                     std::unique_ptr<StateSearchEngineInterface> state_search_engine,
-                                     std::unique_ptr<BenchmarkEngineInterface> benchmark_engine) noexcept: abstract_node_randomizer(std::move(abstract_node_randomizer)),
-                                                                                                           state_search_engine(std::move(state_search_engine)),
-                                                                                                           benchmark_engine(std::move(benchmark_engine)){}
+            OptimizerEngine(std::unique_ptr<AbstractNodeRandomizerInterface> abstract_node_randomizer,
+                            std::unique_ptr<StateSearchEngineInterface> state_search_engine,
+                            std::unique_ptr<BenchmarkEngineInterface> benchmark_engine,
+                            std::unique_ptr<AbstractNodeOverheadCalculatorInterface> overhead_calculator) noexcept: abstract_node_randomizer(std::move(abstract_node_randomizer)),
+                                                                                                                    state_search_engine(std::move(state_search_engine)),
+                                                                                                                    benchmark_engine(std::move(benchmark_engine)),
+                                                                                                                    overhead_calculator(std::move(overhead_calculator)),
+                                                                                                                    config(OptimizationConfig{-1, std::numeric_limits<size_t>::max()}){}
+
+            auto set_cuda_device(int cuda_device_id) -> OptimizerInterface&{
+
+                this->config.cuda_device_id = cuda_device_id;
+                return *this;
+            }
             
-            auto optimize(cublas_handle_t cublas_handle_object, const syntax_tree::AbstractNode& node) -> syntax_tree::AbstractNode{
+            auto set_memory_cap(size_t memory_cap) -> OptimizerInterface&{
 
-                std::vector<syntax_tree::AbstractNode> abstract_states = this->state_search_engine->search(node);
-                std::chrono::nanoseconds max_ts = std::chrono::duration_values<std::chrono::nanoseconds>::max();
-                syntax_tree::AbstractNode rs    = syntax_tree::deepcopy(node);
+                this->config.optimization_memory_cap = memory_cap;
+                return *this;
+            }
 
-                for (const syntax_tree::AbstractNode& abstract_state: abstract_states){
-                    syntax_tree::Node state         = this->abstract_node_randomizer->randomize(abstract_state);
-                    std::chrono::nanoseconds cur_ts = this->benchmark_engine->benchmark(cublas_handle_object, state);
+            auto optimize(const std::unique_ptr<AbstractNode>& root) -> std::unique_ptr<AbstractNode>{
+
+                std::chrono::nanoseconds max_ts     = std::chrono::duration_values<std::chrono::nanoseconds>::max();
+                std::unique_ptr<AbstractNode> rs    = utility::deepcopy(root);
+
+                for (const std::unique_ptr<AbstractNode>& abstract_state: this->state_search_engine->search(root)){
+                    size_t memory_overhead = this->overhead_calculator->get_memory_overhead(abstract_state);
+
+                    if (memory_overhead > config.optimization_memory_cap){
+                        continue;
+                    }
+
+                    std::unique_ptr<Node> state     = this->abstract_node_randomizer->randomize(abstract_state);
+                    std::chrono::nanoseconds cur_ts = this->benchmark_engine->benchmark(config.cuda_device_id, state);
 
                     if (cur_ts < max_ts){
                         max_ts = cur_ts;
-                        rs = syntax_tree::deepcopy(abstract_state);
+                        rs = utility::deepcopy(abstract_state);
                     }
                 }
 
                 return rs;
             } 
     };
-
 } 
 
 namespace dg::cublas_x{

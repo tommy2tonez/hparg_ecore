@@ -610,7 +610,7 @@ namespace dg::network_postgres_db{
         return std::make_unique<CommitableWrapper<decltype(func)>>(std::move(func));
     }
 
-    void commit(dg::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
+    auto commit(dg::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
 
         auto lck_grd = dg::network_genult::lock_guard(mtx);
 
