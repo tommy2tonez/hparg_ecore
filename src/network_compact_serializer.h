@@ -116,46 +116,79 @@ namespace dg::network_compact_serializer::types_space{
         using type = std::pair<typename T::key_type, typename T::mapped_type>; //I dont want to complicate this further by adding const to key_type (since this is an application) - 
     };
 
+    template <class T>
+    using containee_or_none_t = std::conditional_t<std::disjunction_v<is_vector<T>, is_unordered_set<T>, is_set<T>, is_basic_string<T>>,
+                                                                      container_value_or_empty<T>,
+                                                                      std::conditional_t<std::disjunction_v<is_unordered_map<T>, is_map<T>>, 
+                                                                                         container_bucket_or_empty<T>, 
+                                                                                         void>>;
 
     template <class T>
-    using containee_or_empty = std::conditional_t<std::disjunction_v<is_vector<T>, is_unordered_set<T>, is_set<T>, is_basic_string<T>>,
-                                                                     container_value_or_empty<T>,
-                                                                     std::conditional_t<std::disjunction_v<is_unordered_map<T>, is_map<T>>, 
-                                                                                        container_bucket_or_empty<T>, 
-                                                                                        void>>;
+    using containee_t = typename containee_or_none_t<T>::type;
+
+    template <class T, class = void>
+    struct containee_or_empty{
+        using type = void;
+    };
 
     template <class T>
-    using containee_t = typename containee_or_empty<T>::type;
+    struct containee_or_empty<T, std::void_t<containee_t<T>>>{
+        using type = containee_t<T>;
+    };
 
     template <class T>
-    static constexpr bool has_unique_serializable_representations_v = std::disjunction_v<std::is_same<T, char>, std::is_same<T, unsigned char>>;
+    using containee_or_empty_t = typename containee_or_empty<T>::type; 
+
+    template <class T>
+    static constexpr bool has_unique_serializable_representations_v             = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>>;
     
     template <class T>
-    static constexpr bool is_cpyable_linear_container_v             = std::disjunction_v<is_vector<T>, is_basic_string<T>> && has_unique_serializable_representations_v<containee_t<T>>; //is_vector<T> is undefined - according to std - vector is not ptr-arithemtic-qualified or memcpy-qualified - due to the underlying storage being not allocated by new[]
+    static constexpr bool has_unique_serializable_sameendian_representations_v  = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>, 
+                                                                                                     std::is_same<T, int16_t>, std::is_same<T, uint16_t>, 
+                                                                                                     std::is_same<T, int32_t>, std::is_same<T, uint32_t>, 
+                                                                                                     std::is_same<T, int64_t>, std::is_same<T, uint64_t>>;
 
     template <class T>
-    static constexpr bool is_noncpyable_linear_container_v          = std::disjunction_v<is_vector<T>, is_basic_string<T>> && !has_unique_serializable_representations_v<containee_t<T>>;
+    static constexpr bool is_cpyable_linear_container_v                         = std::disjunction_v<is_vector<T>, is_basic_string<T>> && (has_unique_serializable_representations_v<containee_or_empty_t<T>> || has_unique_serializable_sameendian_representations_v<containee_or_empty_t<T>> && (std::endian::native == constants::endianness)); //this requires inter-compatible with noncpyable_linear
 
     template <class T>
-    static constexpr bool is_nonlinear_container_v                  = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_set<T>>;
+    static constexpr bool is_noncpyable_linear_container_v                      = std::disjunction_v<is_vector<T>, is_basic_string<T>> && !is_cpyable_linear_container_v<T>;
 
     template <class T>
-    static constexpr bool is_tuple_v                                = is_tuple<T>::value; 
+    static constexpr bool is_nonlinear_container_v                              = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_set<T>>;
 
     template <class T>
-    static constexpr bool is_unique_ptr_v                           = is_unique_ptr<T>::value;
+    static constexpr bool is_tuple_v                                            = is_tuple<T>::value; 
 
     template <class T>
-    static constexpr bool is_optional_v                             = is_optional<T>::value;
+    static constexpr bool is_unique_ptr_v                                       = is_unique_ptr<T>::value;
 
     template <class T>
-    static constexpr bool is_reflectible_v                          = is_reflectible<T>::value;
+    static constexpr bool is_optional_v                                         = is_optional<T>::value;
 
     template <class T>
-    using base_type_t                                               = dg::network_type_traits_x::base_type_t<T>;
+    static constexpr bool is_reflectible_v                                      = is_reflectible<T>::value;
 
     template <class T>
-    static constexpr bool is_dg_arithmetic_v                        = is_dg_arithmetic<T>::value;
+    struct base_type: std::enable_if<true, T>{};
+
+    template <class T>
+    struct base_type<const T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<volatile T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&&>: base_type<T>{};
+
+    template <class T>
+    using base_type_t = typename base_type<T>::type;
+
+    template <class T>
+    static constexpr bool is_dg_arithmetic_v                                    = is_dg_arithmetic<T>::value;
 }
 
 namespace dg::network_compact_serializer::utility{
@@ -371,7 +404,6 @@ namespace dg::network_compact_serializer::archive{
 
             this->put(buf, dg::network_genult::safe_integer_cast<types::size_type>(data.size()));
 
-            //optimizable - worth or not worth it
             for (const auto& e: data){
                 this->put(buf, e);
             }
@@ -392,6 +424,7 @@ namespace dg::network_compact_serializer::archive{
             std::memcpy(dst, src, cpy_sz);
             std::advance(buf, cpy_sz);
         }
+
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{

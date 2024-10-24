@@ -21,6 +21,10 @@ namespace dg::network_allocation{
     //each group of node_lifetime and node_sz has the optimal corresponding MANAGEMENT_SZ
     //this is often called "pages" by other allocators
     //yet the policy of reusing pages (FIFO) by other allocators often lead to serious fragmentation in a long run 
+    //when I explained to Mom that this is literally the polymorphic buffer problem
+    //user specify literally the allocation_trait, like dg::fast_string sth... dg::long_string, dg::long_fast_string, etc. 
+    //and appropriate allocation is used for that specific need of cache efficiency
+    //the thing when you tried to combine all allocation traits into one allocator is that it will fragment bad, and most people measure those things on the wrong scale anyway
 
     using ptr_type                                              = uint64_t;
     using alignment_type                                        = uint16_t;

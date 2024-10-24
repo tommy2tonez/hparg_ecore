@@ -74,10 +74,13 @@ namespace dg::network_log::implementation{
         private:
 
             std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec;
+            std::unique_ptr<std::atomic_flag> lck;
 
         public:
 
-            BatchLogger(std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec) noexcept: syslog_vec(std::move(syslog_vec)){} 
+            BatchLogger(std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec,
+                        std::unique_ptr<std::atomic_flag> lck) noexcept: syslog_vec(std::move(syslog_vec)),
+                                                                         lck(std::move(lck)){} 
 
             ~BatchLogger() noexcept{
 
@@ -90,6 +93,8 @@ namespace dg::network_log::implementation{
             }
 
             void log(std::string_view content, std::string_view kind){
+
+                auto lck_grd = stdx::lock_guard(this->lck); 
 
                 if (this->syslog_vec.size() == this->syslog_vec.capacity()){
                     this->flush();
@@ -106,6 +111,8 @@ namespace dg::network_log::implementation{
 
             void flush(){
                 
+                auto lck_grd = stdx::lock_guard(this->lck); 
+
                 std::vector<std::unique_ptr<dg::network_postgres_db::CommitableInterface>> commitable_vec{};
 
                 for (auto& syslog: this->syslog_vec){
@@ -262,9 +269,11 @@ namespace dg::network_log::implementation{
             }
 
             std::vector<dg::network_postgres_db::model::SystemLog> syslog_vec{};
+            std::unique_ptr<std::atomic_flag> lck = std::make_unique<std::atomic_flag>();
+            lck->clear();
             syslog_vec.reserve(capacity);
 
-            return std::make_unique<BatchLogger>(std::move(syslog_vec));
+            return std::make_unique<BatchLogger>(std::move(syslog_vec), std::move(lck));
         }
 
         static auto spawn_concurrent_logger(std::vector<std::unique_ptr<LoggerInterface>> logger_vec) -> std::unique_ptr<LoggerInterface>{
@@ -285,15 +294,13 @@ namespace dg::network_log::implementation{
 
         static auto spawn_kind_logger(size_t fastlog_capacity, size_t concurrency_sz) -> std::unique_ptr<KindLoggerInterface>{
 
-            std::vector<std::unique_ptr<LoggerInterface>> instant_logger_vec    = {};
-            std::vector<std::unique_ptr<LoggerInterface>> batch_logger_vec      = {};
+            std::vector<std::unique_ptr<LoggerInterface>> batch_logger_vec = {};
 
             for (size_t i = 0u; i < concurrency_sz; ++i){
-                instant_logger_vec.push_back(spawn_instant_logger());
                 batch_logger_vec.push_back(spawn_batch_logger(fastlog_capacity));
             }
 
-            std::unique_ptr<LoggerInterface> concurrent_instant_logger  = spawn_concurrent_logger(std::move(instant_logger_vec));
+            std::unique_ptr<LoggerInterface> concurrent_instant_logger  = spawn_instant_logger();
             std::unique_ptr<LoggerInterface> concurrent_batch_logger    = spawn_concurrent_logger(std::move(batch_logger_vec));
 
             return std::make_unique<KindLoggerInterface>(std::move(concurrent_instant_logger), std::move(concurrent_batch_logger));
@@ -496,8 +503,6 @@ namespace dg::network_log_stackdump{
 }
 
 namespace dg::network_log_scope{
-
-    using network_log::err_t; 
 
     auto critical_terminate() noexcept{
 
