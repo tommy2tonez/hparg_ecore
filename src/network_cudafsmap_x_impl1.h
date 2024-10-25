@@ -13,6 +13,7 @@
 #include "network_allocation_clib.h"
 #include "network_std_container.h"
 #include "network_pointer.h"
+#include "stdx.h"
 
 namespace dg::network_cudafsmap_x_impl1::model{
 
@@ -459,7 +460,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
     
             auto priority_queue                 = dg::vector<std::unique_ptr<HeapNode>>{};
             std::shared_ptr<cuda_ptr_t> memblk  = dg::network_allocation_cuda_x::cuda_aligned_malloc(gpu_device, memregion_sz, memregion_sz * (memory_node_count + 1));
-            auto registered_stable_ptr          = std::vector<std::pair<cuda_ptr_t, size_t>>{};
+            auto registered_stable_ptr          = stdx::vector<std::pair<cuda_ptr_t, size_t>>{};
 
             for (size_t i = 0u; i < memory_node_count; ++i){
                 HeapNode node{};

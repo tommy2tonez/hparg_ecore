@@ -13,8 +13,7 @@
 #include <bit>
 #include <optional>
 #include <numeric>
-#include "network_type_traits_x.h"
-// #include "network_exception.h"
+#include "network_exception.h"
 #include "network_hash.h"
 #include <type_traits>
 #include <array>
@@ -100,6 +99,15 @@ namespace dg::network_compact_serializer::types_space{
     template <class T>
     struct is_dg_arithmetic<T, std::void_t<std::enable_if_t<std::is_floating_point_v<T>>>>: std::bool_constant<std::numeric_limits<T>::is_iec559>{}; 
  
+    template <class T>
+    struct is_byte_stream_container: std::false_type{};
+
+    template <class ...Args>
+    struct is_byte_stream_container<std::vector<char, Args...>>: std::true_type{};
+
+    template <class ...Args>
+    struct is_byte_stream_container<std::basic_string<char, Args...>>: std::true_type{};
+
     template <class T, class = void>
     struct container_value_or_empty{};
 
@@ -140,34 +148,40 @@ namespace dg::network_compact_serializer::types_space{
     using containee_or_empty_t = typename containee_or_empty<T>::type; 
 
     template <class T>
-    static constexpr bool has_unique_serializable_representations_v             = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>>;
+    static inline constexpr bool has_unique_serializable_representations_v              = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>>;
     
     template <class T>
-    static constexpr bool has_unique_serializable_sameendian_representations_v  = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>, 
-                                                                                                     std::is_same<T, int16_t>, std::is_same<T, uint16_t>, 
-                                                                                                     std::is_same<T, int32_t>, std::is_same<T, uint32_t>, 
-                                                                                                     std::is_same<T, int64_t>, std::is_same<T, uint64_t>>;
+    static inline constexpr bool has_unique_serializable_sameendian_representations_v   = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>, 
+                                                                                                             std::is_same<T, int16_t>, std::is_same<T, uint16_t>, 
+                                                                                                             std::is_same<T, int32_t>, std::is_same<T, uint32_t>, 
+                                                                                                             std::is_same<T, int64_t>, std::is_same<T, uint64_t>>;
 
     template <class T>
-    static constexpr bool is_cpyable_linear_container_v                         = std::disjunction_v<is_vector<T>, is_basic_string<T>> && (has_unique_serializable_representations_v<containee_or_empty_t<T>> || has_unique_serializable_sameendian_representations_v<containee_or_empty_t<T>> && (std::endian::native == constants::endianness)); //this requires inter-compatible with noncpyable_linear
+    static inline constexpr bool is_cpyable_linear_container_v                          = std::disjunction_v<is_vector<T>, is_basic_string<T>> && (has_unique_serializable_representations_v<containee_or_empty_t<T>> || has_unique_serializable_sameendian_representations_v<containee_or_empty_t<T>> && (std::endian::native == constants::endianness)); //this requires inter-compatible with noncpyable_linear
 
     template <class T>
-    static constexpr bool is_noncpyable_linear_container_v                      = std::disjunction_v<is_vector<T>, is_basic_string<T>> && !is_cpyable_linear_container_v<T>;
+    static inline constexpr bool is_noncpyable_linear_container_v                       = std::disjunction_v<is_vector<T>, is_basic_string<T>> && !is_cpyable_linear_container_v<T>;
 
     template <class T>
-    static constexpr bool is_nonlinear_container_v                              = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_set<T>>;
+    static inline constexpr bool is_nonlinear_container_v                               = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_set<T>>;
 
     template <class T>
-    static constexpr bool is_tuple_v                                            = is_tuple<T>::value; 
+    static inline constexpr bool is_tuple_v                                             = is_tuple<T>::value; 
 
     template <class T>
-    static constexpr bool is_unique_ptr_v                                       = is_unique_ptr<T>::value;
+    static inline constexpr bool is_unique_ptr_v                                        = is_unique_ptr<T>::value;
 
     template <class T>
-    static constexpr bool is_optional_v                                         = is_optional<T>::value;
+    static inline constexpr bool is_optional_v                                          = is_optional<T>::value;
 
     template <class T>
-    static constexpr bool is_reflectible_v                                      = is_reflectible<T>::value;
+    static inline constexpr bool is_reflectible_v                                       = is_reflectible<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_dg_arithmetic_v                                     = is_dg_arithmetic<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_byte_stream_container_v                             = is_byte_stream_container<T>::value;
 
     template <class T>
     struct base_type: std::enable_if<true, T>{};
@@ -186,9 +200,6 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class T>
     using base_type_t = typename base_type<T>::type;
-
-    template <class T>
-    static constexpr bool is_dg_arithmetic_v                                    = is_dg_arithmetic<T>::value;
 }
 
 namespace dg::network_compact_serializer::utility{
@@ -607,6 +618,44 @@ namespace dg::network_compact_serializer{
         }
 
         deserialize_into(obj, first);
+    }
+
+    template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto serialize(const T& obj) -> Stream{
+        
+        Stream stream{};
+        stream.resize(size(obj)); //this is precisely why I dont like the std container - 99% of problem that serialization programmers succum into could be solved with raw malloc + resize
+        serialize_into(stream.data(), obj);
+
+        return stream;
+    }
+
+    template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto integrity_serialize(const T& obj) -> Stream{
+
+        Stream stream{};
+        stream.resize(integrity_size(obj));
+        integrity_serialize_into(stream.data(), obj);
+        
+        return stream;
+    }
+
+    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto deserialize(const Stream& stream) -> T{
+
+        T rs{};
+        deserialize_into(rs, stream.data());
+
+        return rs;
+    }
+
+    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto integrity_deserialize(const Stream& stream) -> T{
+
+        T rs{};
+        integrity_deserialize_into(rs, stream.data(), stream.size());
+
+        return rs;
     }
 }
 

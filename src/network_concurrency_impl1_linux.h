@@ -12,6 +12,7 @@
 #include "network_exception.h"
 #include "network_log.h"
 #include "network_utility.h"
+#include "stdx.h"
 
 namespace dg::network_concurrency_impl1_linux::daemon_option_ns{
 
@@ -162,13 +163,13 @@ namespace dg::network_concurrency_impl1_linux{
 
             void internal_set_worker(std::shared_ptr<WorkerInterface> worker) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->worker = std::move(worker);
             }
 
             void internal_get_worker() noexcept -> std::shared_ptr<WorkerInterface>{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 return this->worker;
             }
     };
@@ -210,21 +211,21 @@ namespace dg::network_concurrency_impl1_linux{
 
         private:
 
-            std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map;
-            std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map;
+            stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>> daemon_id_map;
+            stdx::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            DaemonController(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
-                             std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map,
+            DaemonController(stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>> daemon_id_map,
+                             stdx::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map,
                              std::unique_ptr<std::mutex> mtx) noexcept: daemon_id_map(std::move(daemon_id_map)),
                                                                         id_runner_map(std::move(id_runner_map)),
                                                                         mtx(std::move(mtx)){}
 
             auto _register(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 auto map_ptr = this->daemon_id_map.find(daemon_kind);
 
                 if (map_ptr == this->daemon_id_map.end()){
@@ -244,7 +245,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             auto deregister(size_t encoded) noexcept{
 
-                auto lck_grd            = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd            = stdx::lock_guard(*this->mtx);
                 auto [id, daemon_kind]  = this->decode(encoded);
                 auto worker             = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(WorkerFactory::spawn_rest)());
                 
@@ -342,7 +343,7 @@ namespace dg::network_concurrency_impl1_linux{
             }
         }
 
-        static auto spawn_thread(std::shared_ptr<StdDaemonRunnableInterface> runnable, std::vector<int> cpu_vec) -> std::unique_ptr<std::thread>{
+        static auto spawn_thread(std::shared_ptr<StdDaemonRunnableInterface> runnable, stdx::vector<int> cpu_vec) -> std::unique_ptr<std::thread>{
 
             auto executable = [=]() noexcept{
                 runnable->run();
@@ -371,7 +372,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonRunnerFactory{
 
-        static auto spawn_std_daemon_affine_runner(std::vector<int> cpu_set) -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
+        static auto spawn_std_daemon_affine_runner(stdx::vector<int> cpu_set) -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
 
             using namespace std::chrono_literals;
              
@@ -407,8 +408,8 @@ namespace dg::network_concurrency_impl1_linux{
     struct ControllerFactory{
 
         //need to abstractize this
-        static auto spawn_daemon_controller(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
-                                            std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map) -> std::unique_ptr<DaemonControllerInterface>{
+        static auto spawn_daemon_controller(stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>> daemon_id_map,
+                                            stdx::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map) -> std::unique_ptr<DaemonControllerInterface>{
 
             return std::make_unique<DaemonController>(std::move(daemon_id_map), std::move(id_runner_map), std::make_unique<std::mutex>());
         }

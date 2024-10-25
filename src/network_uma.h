@@ -7,6 +7,7 @@
 #include "network_uma_tlb.h"
 #include "network_exception_handler.h"
 #include "network_randomizer.h" 
+#include "stdx.h"
 
 namespace dg::network_uma{
     
@@ -168,7 +169,7 @@ namespace dg::network_uma{
         if (map_resource.responsibility_flag){
             map_release(map_resource.handle);
 
-            std::unordered_map<uma_ptr_t, std::pair<device_id_t, map_resource_handle_t>>& map_ins = map_recursive_resource_instance::get();
+            stdx::unordered_map<uma_ptr_t, std::pair<device_id_t, map_resource_handle_t>>& map_ins = map_recursive_resource_instance::get();
             auto map_ptr = map_ins.find(map_resource.region_ptr);
 
             if (map_ptr == map_ins.end()){ //DEBUG_FLAG here - all internal error should be disable-able
@@ -186,7 +187,7 @@ namespace dg::network_uma{
 
     auto mapsafe_recusivetry_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>>{
         
-        std::unordered_map<uma_ptr_t, std::pair<device_id_t, map_resource_handle_t>>& map_ins = map_recursive_resource_instance::get();
+        stdx::unordered_map<uma_ptr_t, std::pair<device_id_t, map_resource_handle_t>>& map_ins = map_recursive_resource_instance::get();
         uma_ptr_t region_ptr        = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         size_t region_off           = dg::memult::region_offset(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr                = map_ins.find(region_ptr);

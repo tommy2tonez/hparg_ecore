@@ -12,6 +12,7 @@
 #include "network_exception.h"
 #include <mutex>
 #include <optional>
+#include "stdx.h"
 
 namespace dg::network_memlock_proxyspin{
 
@@ -271,7 +272,7 @@ namespace dg::network_memlock_proxyspin{
 
             static inline auto internal_acquire_try(size_t table_idx) noexcept -> std::optional<proxy_id_t>{
 
-                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
 
                 if (lck_table[table_idx].refcount != REFERENCE_EMPTY_VALUE){
                     return std::nullopt;
@@ -292,14 +293,14 @@ namespace dg::network_memlock_proxyspin{
 
             static inline void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 lck_table[table_idx].proxy_id = new_proxy_id;
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_VALUE;
             }
 
             static inline auto internal_reference_try(size_t table_idx, proxy_id_t expected_proxy_id) noexcept -> bool{
 
-                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
 
                 if (lck_table[table_idx].proxy_id != expected_proxy_id){
                     return false;
@@ -320,7 +321,7 @@ namespace dg::network_memlock_proxyspin{
 
             static inline void internal_reference_release(size_t table_idx) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(lck_table[table_idx].lck);
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 lck_table[table_idx].refcount -= 1;
             }
 

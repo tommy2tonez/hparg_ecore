@@ -11,6 +11,7 @@
 #include <deque>
 #include "network_concurrency.h"
 #include "network_exception.h"
+#include "stdx.h"
 
 namespace dg::network_cuda_stream{
 
@@ -124,7 +125,7 @@ namespace dg::network_cuda_controller{
 
     auto cuda_set_device(int * device, size_t sz) noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
+        auto lck_grd    = stdx::lock_guard(*controller_resource->mtx);
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(device, sz));
 
         if (dg::network_exception::is_failed(err)){
@@ -137,7 +138,7 @@ namespace dg::network_cuda_controller{
 
     auto cuda_malloc(void ** ptr, size_t blk_sz) noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
+        auto lck_grd    = stdx::lock_guard(*controller_resource->mtx);
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaMalloc(ptr, blk_sz));
 
         return err;
@@ -145,7 +146,7 @@ namespace dg::network_cuda_controller{
 
     auto cuda_free(void * ptr) noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
+        auto lck_grd    = stdx::lock_guard(*controller_resource->mtx);
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaFree(ptr));
 
         return err;
@@ -153,7 +154,7 @@ namespace dg::network_cuda_controller{
 
     auto cuda_memset(void * dst, int c, size_t sz) noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
+        auto lck_grd    = stdx::lock_guard(*controller_resource->mtx);
         auto stream     = dg::network_cuda_stream::cuda_stream_raiicreate(dg::network_cuda_stream::SYNC_FLAG);
 
         if (!stream.has_value()){
@@ -165,7 +166,7 @@ namespace dg::network_cuda_controller{
 
     auto cuda_memcpy(void * dst, const void * src, size_t sz, cudaMemcpyKind kind) noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
+        auto lck_grd    = stdx::lock_guard(*controller_resource->mtx);
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaMemcpy(dst, src, sz, kind));
 
         return err;
@@ -184,7 +185,7 @@ namespace dg::network_cuda_controller{
    
     auto cuda_synchronize() noexcept -> exception_t{
 
-        auto lck_grd    = dg::network_genult::lock_guard(*controller_resource->mtx);
+        auto lck_grd    = stdx::lock_guard(*controller_resource->mtx);
         exception_t err = dg::network_exception::wrap_cuda_exception(cudaDeviceSynchronize());
 
         return err;
@@ -333,13 +334,13 @@ namespace dg::network_cuda_kernel_par_launcher{
             
             void push(WorkOrder wo) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->work_order_vec.push_back(std::move(wo));
             }
 
-            auto pop() noexcept -> dg::vector<WorkOrder>{ //even though I think std::optional<std::vector<WorkOrder>> is way more performant than this - I think that's the vector container's responsibility than an optimization to make
+            auto pop() noexcept -> dg::vector<WorkOrder>{ //even though I think std::optional<stdx::vector<WorkOrder>> is way more performant than this - I think that's the vector container's responsibility than an optimization to make
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (!this->internal_is_due()){
                     return {};
@@ -398,20 +399,20 @@ namespace dg::network_cuda_kernel_par_launcher{
         private:
 
             size_t wo_sz;
-            std::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map;
+            stdx::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map;
             std::unique_ptr<std::mutex> mtx;
 
         public:
             
             WorkTicketController(size_t wo_sz, 
-                                 std::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map,
+                                 stdx::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map,
                                  std::unique_ptr<std::mutex> mtx) noexcept: wo_sz(wo_sz),
                                                                             wo_status_map(std::move(wo_status_map)),
                                                                             mtx(std::move(mtx)){}
 
             auto next_ticket() noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
-                auto lck_grd            = dg::network_genult::lock_guard(*this->mtx); 
+                auto lck_grd            = stdx::lock_guard(*this->mtx); 
                 wo_ticketid_t nxt_id    = dg::network_genult::safe_integer_cast<wo_ticketid_t>(this->wo_sz);
                 this->wo_sz             += 1;
 
@@ -428,7 +429,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
             void set_status(wo_ticketid_t id, launch_exception_t err) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->wo_status_map.find(id);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -443,7 +444,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
             auto get_status(wo_ticketid_t id) noexcept -> launch_exception_t{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->wo_status_map.find(id);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -458,7 +459,7 @@ namespace dg::network_cuda_kernel_par_launcher{
 
             void close_ticket(wo_ticketid_t id) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->wo_status_map.find(id);
 
                 if constexpr(DEBUG_MODE_FLAG){

@@ -6,6 +6,7 @@
 #include "network_std_container.h"
 #include <chrono>
 #include "network_exception.h"
+#include "stdx.h"
 
 namespace dg::network_post_rest::model{
 
@@ -274,13 +275,13 @@ namespace dg::network_post_rest::client_impl1{
 
             void push(model::InternalRequest request) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->container.push_back(std::move(request));
             }
 
             auto pop() noexcept -> std::optional<model::InternalRequest>{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->container.empty()){
                     return std::nullopt;
@@ -330,7 +331,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto internal_push(model::InternalRequest& request) noexcept -> bool{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->cur_sz == this->capacity){
                     return false;
@@ -344,7 +345,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto internal_pop() noexcept -> std::optional<model::InternalRequest>{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 std::optional<model::InternalRequest> rs = this->base->pop();
 
                 if (rs.has_value()){
@@ -379,7 +380,7 @@ namespace dg::network_post_rest::client_impl1{
             
             auto register_clock(std::chrono::nanoseconds dur) noexcept -> std::expected<size_t, exception_t>{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 
                 if (std::clamp(dur.count(), this->min_dur.count(), this->max_dur.count()) != dur.count()){
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -399,7 +400,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto is_timeout(size_t id) noexcept -> std::expected<bool, exception_t>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->expiry_map.find(id);
 
                 if (map_ptr == this->expiry_map.end()){
@@ -414,7 +415,7 @@ namespace dg::network_post_rest::client_impl1{
 
             void deregister_clock(size_t id) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->expiry_map.find(id);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -447,7 +448,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto get_ticket() noexcept -> std::expected<model::ticket_id_t, exception_t>{
 
-                auto lck_grd                    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd                    = stdx::lock_guard(*this->mtx);
                 model::ticket_id_t nxt_ticket   = dg::network_genult::wrap_safe_integer_cast(this->ticket_sz);
                 auto [map_ptr, status]          = this->response_map.emplace(std::make_pair(nxt_ticket, std::optional<model::Response>{}));
 
@@ -461,7 +462,7 @@ namespace dg::network_post_rest::client_impl1{
 
             void close_ticket(model::ticket_id_t ticket_id) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->response_map.find(ticket_id);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -476,7 +477,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto set_ticket_resource(model::ticket_id_t ticket_id, model::Response response) noexcept -> exception_t{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->response_map.find(ticket_id);
 
                 if (map_ptr == this->response_map.end()){
@@ -489,7 +490,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto is_resource_available(model::ticket_id_t ticket_id) noexcept -> std::expected<bool, exception_t>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->response_map.find(ticket_id);
                 
                 if (map_ptr == this->response_map.end()){
@@ -501,7 +502,7 @@ namespace dg::network_post_rest::client_impl1{
 
             auto get_ticket_resource(model::ticket_id_t ticket_id) noexcept -> std::expected<model::Response, exception_t>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->response_map.find(ticket_id);
 
                 if (map_ptr == this->response_map.end()){
@@ -630,7 +631,7 @@ namespace dg::network_post_rest::client_impl1{
                 }
 
                 {
-                    auto lck_grd = dg::network_genult::lock_guard(*this->map_mtx);
+                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
                     auto [map_ptr, status] = this->ticket_clockid_map.emplace(std::make_pair(ticket_id.value(), clock_id.value()));
 
                     if (!status){
@@ -649,7 +650,7 @@ namespace dg::network_post_rest::client_impl1{
                 size_t clock_id = {};
 
                 {
-                    auto lck_grd = dg::network_genult::lock_guard(*this->map_mtx);
+                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
                     auto map_ptr = this->ticket_clockid_map.find(ticket_id);
 
                     if (map_ptr == this->ticket_clockid_map.end()){
@@ -683,7 +684,7 @@ namespace dg::network_post_rest::client_impl1{
                 size_t clock_id = {};
 
                 {
-                    auto lck_grd = dg::network_genult::lock_guard(*this->map_mtx);
+                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
                     auto map_ptr = this->ticket_clockid_map.find(ticket_id);
 
                     if (map_ptr == this->ticket_clockid_map.end()){
@@ -711,7 +712,7 @@ namespace dg::network_post_rest::client_impl1{
                 size_t clock_id = {};
 
                 {
-                    auto lck_grd = dg::network_genult::lock_guard(*this->map_mtx);
+                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
                     auto map_ptr = this->ticket_clockid_map.find(ticket_id);
 
                     if constexpr(DEBUG_MODE_FLAG){

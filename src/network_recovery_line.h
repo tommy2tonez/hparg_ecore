@@ -7,6 +7,7 @@
 #include <network_concurrency.h>
 #include "network_std_container.h"
 #include <optional>
+#include "stdx.h"
 
 namespace dg::network_recovery_line{
 
@@ -81,13 +82,13 @@ namespace dg::network_recovery_line{
 
             void push(size_t ticket_id) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->tickets.push_back(ticket_id); 
             }
 
             auto pop() noexcept -> std::optional<size_t>{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->tickets.empty()){
                     return std::nullopt;
@@ -115,7 +116,7 @@ namespace dg::network_recovery_line{
 
             void set_recovery_line_resource(size_t line_id, std::shared_ptr<RecoveryExecutableInterface> resource) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->resource_map.find(line_id);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -130,7 +131,7 @@ namespace dg::network_recovery_line{
 
             auto get_recovery_line_resource(size_t line_id) noexcept -> std::shared_ptr<RecoveryExecutableInterface>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->resource_map.find(line_id);
 
                 if constexpr(DEBUG_MODE_FLAG){

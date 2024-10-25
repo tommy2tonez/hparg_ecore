@@ -9,6 +9,7 @@
 #include "network_log.h"
 #include "network_concurrency.h"
 #include "network_concurrency_x.h"
+#include "stdx.h"
 
 namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
@@ -36,13 +37,13 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
             
             void tick(size_t incoming_sz) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->count += incoming_sz;
             }
 
             auto get() noexcept -> std::pair<size_t, std::chrono::nanoseconds>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto curstamp   = static_cast<std::chrono::nanoseconds>(dg::network_genult::unix_timestamp());
                 auto rs         = std::make_pair(this->count, dg::network_genult::timelapsed(curstamp, this->unixstamp));
                 this->count     = 0u;
@@ -114,14 +115,14 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
         private:
 
-            std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
+            stdx::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
             std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox;
             std::shared_ptr<MeterInterface> send_meter;
             std::shared_ptr<MeterInterface> recv_meter;
         
         public:
 
-            MeteredMailBox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemons, 
+            MeteredMailBox(stdx::vector<dg::network_concurrency::daemon_raii_handle_t> daemons, 
                            std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox,
                            std::shared_ptr<MeterInterface> send_meter,
                            std::shared_ptr<MeterInterface> recv_meter): daemons(std::move(daemons)),
@@ -309,7 +310,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             
             void tick(const GlobalIdentifier& key) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 size_t entry_id = this->id_size;
                 std::chrono::nanoseconds now = dg::network_genult::unix_timestamp();
                 EntranceEntry entry{now, key, entry_id};
@@ -321,7 +322,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto get_expired() noexcept -> dg::vector<GlobalIdentifier>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto expired    = static_cast<std::chrono::nanoseconds>(dg::network_genult::unix_timestamp()) - this->expiry_period;
                 auto rs         = dg::vector<GlobalIdentifier>{};
 
@@ -371,7 +372,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             
             auto assemble(PacketSegment segment) noexcept -> std::optional<AssembledPacket>{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 auto map_ptr = this->packet_map.find(segment.id);
 
                 if (map_ptr == this->packet_map.end()){
@@ -396,7 +397,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             void destroy(const GlobalIdentifier& id) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->packet_map.erase(id);
             }
         
@@ -458,7 +459,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto internal_assemble(PacketSegment& segment, std::optional<AssembledPacket>& rs) noexcept -> bool{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 
                 if (this->size == this->capacity){
                     return false;
@@ -487,7 +488,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             void internal_destroy(const GlobalIdentifier& id) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->counter_map.find(id);
 
                 if (map_ptr != this->counter_map.end()){
@@ -514,13 +515,13 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             
             void push(dg::string buf) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->vec.push_back(std::move(buf));
             }
 
             auto pop() noexcept -> std::optional<dg::string>{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 
                 if (this->vec.empty()){
                     return std::nullopt;
@@ -573,7 +574,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto internal_push(dg::string& data) noexcept -> bool{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->size == this->capacity){
                     return false;
@@ -587,7 +588,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto internal_pop() noexcept -> std::optional<dg::string>{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 std::optional<dg::string> rs = this->base->pop();
 
                 if (rs.has_value()){
@@ -990,7 +991,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             auto thru_one(size_t incoming_sz) noexcept -> bool{
                 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx); 
+                auto lck_grd = stdx::lock_guard(*this->mtx); 
 
                 if (this->cur_sz == this->capacity){
                     return false;
@@ -1002,7 +1003,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             void exit_one(size_t outcoming_sz) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx); 
+                auto lck_grd = stdx::lock_guard(*this->mtx); 
                 this->cur_sz -= 1;
             }
     };
@@ -1022,7 +1023,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             auto pop(radix_t radix) noexcept -> std::optional<dg::string>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto ptr        = this->map.find(radix);
 
                 if (ptr == this->map.end()){
@@ -1041,7 +1042,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             void push(radix_t radix, dg::string content) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->map[radix].push_back(std::move(content));
             }
     };
@@ -1081,7 +1082,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             auto internal_push(radix_t& radix, dg::string& content) noexcept -> bool{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto ec_ptr     = this->exhaustion_controller_map.find(radix);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -1101,7 +1102,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             auto internal_pop(radix_t radix) noexcept -> std::optional<dg::string>{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto rs         = this->base->pop(radix);
 
                 if (!rs.has_value()){
@@ -1308,7 +1309,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
             void recv_signal(const Address& addr) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 auto ptr = this->address_ts_dict.find(addr);
 
                 if (ptr == this->address_ts_dict.end()){
@@ -1322,7 +1323,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
             bool check() noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 std::chrono::nanoseconds now = dg::network_genult::unix_timestamp(); 
                 bool status = true; 
 
@@ -1465,11 +1466,11 @@ namespace dg::network_kernel_mailbox_impl1_concurrentx{
 
         private:
 
-            std::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface>> mailbox_vec;
+            stdx::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface>> mailbox_vec;
         
         public:
 
-            ConcurrentMailBox(std::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface>> mailbox_vec,
+            ConcurrentMailBox(stdx::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface>> mailbox_vec,
                               std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: mailbox_vec(std::move(mailbox_vec)){}
 
             void send(Address addr, dg::string buf, radix_t radix) noexcept{

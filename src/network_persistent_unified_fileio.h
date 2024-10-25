@@ -6,6 +6,7 @@
 #include <filesystem>
 #include "network_exception.h"
 #include "network_atomic_x.h"
+#include "stdx.h"
 
 namespace dg::network_persistent_unified_fileio{
 
@@ -26,13 +27,13 @@ namespace dg::network_persistent_unified_fileio{
 
         private:
 
-            std::unordered_map<std::string, std::vector<std::filesystem::path>> unified_fsys_map;
-            std::unordered_map<std::string, std::vector<bool>> unified_fsys_flag_map;
+            stdx::unordered_map<stdx::string, stdx::vector<std::filesystem::path>> unified_fsys_map;
+            stdx::unordered_map<stdx::string, stdx::vector<bool>> unified_fsys_flag_map;
 
         public:
 
-            UnifiedFsysController(std::unordered_map<std::string, std::vector<std::filesystem::path>> unified_fsys_map,
-                                  std::unordered_map<std::string, std::vector<bool>> unified_fsys_flag_map) noexcept: unified_fsys_map(std::move(unified_fsys_map)),
+            UnifiedFsysController(stdx::unordered_map<stdx::string, stdx::vector<std::filesystem::path>> unified_fsys_map,
+                                  stdx::unordered_map<stdx::string, stdx::vector<bool>> unified_fsys_flag_map) noexcept: unified_fsys_map(std::move(unified_fsys_map)),
                                                                                                                       unified_fsys_flag_map(std::move(unified_fsys_flag_map)){}
             
             auto exists(const char * unified_fp) const noexcept -> bool{
@@ -281,7 +282,7 @@ namespace dg::network_persistent_unified_fileio{
         }
 
         size_t replication_sz   = controller->replication_size(unified_fp);
-        auto exception_vec      = std::vector<exception_t>(); 
+        auto exception_vec      = stdx::vector<exception_t>(); 
 
         for (size_t i = 0u; i < replication_sz; ++i){
             const char * fp = controller->replication_fpath(unified_fp, i).c_str();
@@ -320,7 +321,7 @@ namespace dg::network_persistent_unified_fileio{
         }
 
         size_t replication_sz   = controller->replication_size(unified_fp);
-        auto exception_vec      = std::vector<exception_t>();
+        auto exception_vec      = stdx::vector<exception_t>();
 
         for (size_t i = 0u; i < replication_sz; ++i){
             const char * fp = controller->replication_fpath(unified_fp, i).c_str();

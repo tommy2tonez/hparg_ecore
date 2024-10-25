@@ -8,6 +8,7 @@
 #include "network_trivial_serializer.h"
 #include "network_std_container.h"
 #include <chrono>
+#include "stdx.h"
 
 namespace dg::network_postgres_db::model{
 
@@ -163,9 +164,9 @@ namespace dg::network_postgres_db::constants{
 
 namespace dg::network_postgres_db::hex_encoder{
 
-    static inline std::vector<char> hex_fwd_dict{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-    static inline std::vector<uint8_t> hex_bwd_dict = []{
-        std::vector<uint8_t> rs(256);
+    static inline stdx::vector<char> hex_fwd_dict{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    static inline stdx::vector<uint8_t> hex_bwd_dict = []{
+        stdx::vector<uint8_t> rs(256);
         rs[std::bit_cast<uint8_t>(char('0'))] = 0;
         rs[std::bit_cast<uint8_t>(char('1'))] = 1;
         rs[std::bit_cast<uint8_t>(char('2'))] = 2;
@@ -346,7 +347,7 @@ namespace dg::network_postgres_db{
 
     void init(const dg::string& pq_conn_arg) noexcept -> exception_t{
         
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
         auto lambda = [&]{
             pq_conn = std::make_unique<pqxx::connection>(pq_conn_arg.c_str());
         };
@@ -356,13 +357,13 @@ namespace dg::network_postgres_db{
 
     void deinit() noexcept{
 
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
         pq_conn = nullptr;
     }
 
     auto get_heartbeat() noexcept -> bool{
         
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
 
         if (!pq_conn){
             return false;
@@ -397,7 +398,7 @@ namespace dg::network_postgres_db{
 
     auto get_user_by_id(const dg::string& id) noexcept -> std::expected<model::UserEntry, exception_t>{
 
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -427,7 +428,7 @@ namespace dg::network_postgres_db{
 
     auto get_legacyauth_by_userid(const dg::string& user_id) noexcept -> std::expected<model::LegacyAuthEntry, exception_t>{
 
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -458,7 +459,7 @@ namespace dg::network_postgres_db{
     
     auto get_systemlog(const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::SystemLogEntry>, exception_t>{
 
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -498,7 +499,7 @@ namespace dg::network_postgres_db{
 
     auto get_userlog(const dg::string& user_id, const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::UserLogEntry>, exception_t>{
 
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -612,7 +613,7 @@ namespace dg::network_postgres_db{
 
     auto commit(dg::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
 
-        auto lck_grd = dg::network_genult::lock_guard(mtx);
+        auto lck_grd = stdx::lock_guard(mtx);
 
         if (!pq_conn){
             return dg::network_exception::POSTGRES_NOT_INITIALIZED;

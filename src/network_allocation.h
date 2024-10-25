@@ -11,7 +11,7 @@
 #include <bit>
 #include "network_utility.h"
 #include <vector>
-#include "network_memult.h"
+#include "stdx.h"
 
 namespace dg::network_allocation{
 
@@ -107,19 +107,19 @@ namespace dg::network_allocation{
 
              std::optional<interval_type> alloc(store_type arg) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
                 return this->allocator->alloc(arg);
              }
 
              void free(const interval_type& arg) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
                 this->allocator->free(arg);
              }
 
              void gc() noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
 
                 try{
                     this->allocator = dg::heap::user_interface::get_allocator_x(this->management_buf.get());
@@ -214,11 +214,11 @@ namespace dg::network_allocation{
 
         private:
 
-            std::vector<std::unique_ptr<Allocator>> allocator_vec;
+            stdx::vector<std::unique_ptr<Allocator>> allocator_vec;
 
         public:
 
-            MultiThreadAllocator(std::vector<std::unique_ptr<Allocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
+            MultiThreadAllocator(stdx::vector<std::unique_ptr<Allocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
 
             auto malloc(size_t blk_sz) noexcept -> ptr_type{
 
@@ -373,7 +373,7 @@ namespace dg::network_allocation{
             return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator), leaf_sz);
         }
 
-        static auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
+        static auto spawn_concurrent_allocator(stdx::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
 
             const size_t MIN_ALLOCATOR_SZ   = 1u;
             const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 8;
@@ -419,7 +419,7 @@ namespace dg::network_allocation{
 
     void init(size_t leaf_sz, size_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
 
-        std::vector<std::unique_ptr<Allocator>> allocator_vec{};
+        stdx::vector<std::unique_ptr<Allocator>> allocator_vec{};
 
         for (size_t i = 0u; i < num_allocator; ++i){
             allocator_vec.push_back(Factory::spawn_allocator(leaf_sz, least_buf_sz));

@@ -5,11 +5,18 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
+#include <set>
+#include <deque>
+#include <atomic>
+#include <mutex>
 
 namespace stdx{
+    
+    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED = true; 
 
     template <class T>
-    struct NoExceptAllocator: protected std::allocator<T>{
+    struct NoExceptAllocator: private std::allocator<T>{
         
         using value_type                                = T;
         using pointer                                   = T *;
@@ -84,7 +91,83 @@ namespace stdx{
         }
     };
 
+    template <class T>
+    using vector            = std::vector<T, NoExceptAllocator<T>>;
 
+    template <class T>
+    using string            = std::basic_string<char, std::char_traits<char>, NoExceptAllocator<char>>;
+
+    template <class Key, class Value, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>>
+    using unordered_map     = std::unordered_map<Key, Value, Haser, Pred, NoExceptAllocator<std::pair<const Key, Value>>>;
+
+    template <class Key, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>>
+    using unordered_set     = std::unordered_set<Key, Hasher, Pred, NoExceptAllocator<Key>>;
+
+    template <class Key, class Value, class Cmp = std::less<Key>>
+    using map               = std::map<Key, Value, Cmp, NoExceptAllocator<std::pair<const Key, Value>>;
+
+    template <class Key, class Cmp = std::less<Key>>
+    using set               = std::set<Key, Cmp, NoExceptAllocator<Key>>;
+
+    template <class T>
+    using deque             = std::deque<T, NoExceptAllocator<T>>;
+
+    template <class T, class Deleter = std::default_delete<T>>
+    using unique_ptr        = std::unique_ptr<T, Deleter>;
+    
+    template <class T>
+    using shared_ptr        = std::shared_ptr<T>;
+
+    template <class T, class ...Args>
+    auto make_unique(Args&& ...args){
+
+        return std::make_unique<T>(std::forward<Args>(args)...);
+    }
+
+    template <class T, class ...Args>
+    auto make_shared(Args&& ...args){
+
+        return std::make_shared<T>(std::forward<Args>(args)...);
+    }
+
+    auto lock_guard(std::atomic_flag& lck) noexcept{
+
+        //atomic operations don't work - its a lame implementation of mutual exclusion in most operating system
+        //use atomic flag and do your atomic operations foo - this way you compromise concurrent memory access at lock_guard which can do memory flush for you  
+
+        static int i    = 0u;
+        auto destructor = [&](int *) noexcept{
+            if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+                std::atomic_thread_fence(std::memory_order_acq_rel);
+            }
+            lck.clear(std::memory_order_release);
+        };
+
+        while (!lck.test_and_set(std::memory_order_acquire)){}
+        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+            std::atomic_thread_fence(std::memory_order_acq_rel);
+        }  
+
+        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+    }
+
+    auto lock_guard(std::mutex& lck) noexcept{
+
+        static int i    = 0u;
+        auto destructor = [&](int *) noexcept{
+            if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+                std::atomic_thread_fence(std::memory_order_acq_rel);
+            }
+            lck.unlock();
+        };
+
+        lck.lock();
+        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+            std::atomic_thread_fence(std::memory_order_acq_rel);
+        }
+
+        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+    }
 }
 
 #endif

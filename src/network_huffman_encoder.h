@@ -14,6 +14,7 @@
 #include <array>
 #include "assert.h"
 #include <deque>
+#include "stdx.h"
 
 namespace dg::network_huffman_encoder::constants{
 
@@ -77,18 +78,18 @@ namespace dg::network_huffman_encoder::model{
 namespace dg::network_huffman_encoder::utility{
 
     template <class T, class TransformLambda>
-    static auto vector_transform(const std::vector<T>& lhs, const TransformLambda& transform_lambda) -> std::vector<decltype(transform_lambda(std::declval<T>()))>{
+    static auto vector_transform(const stdx::vector<T>& lhs, const TransformLambda& transform_lambda) -> stdx::vector<decltype(transform_lambda(std::declval<T>()))>{
 
-        auto rs = std::vector<decltype(transform_lambda(std::declval<T>()))>();
+        auto rs = stdx::vector<decltype(transform_lambda(std::declval<T>()))>();
         std::transform(lhs.begin(), lhs.end(), std::back_inserter(rs), transform_lambda);
 
         return rs;
     } 
 
     template <class T,  std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    static auto to_bit_deque(T val) -> std::deque<bool>{
+    static auto to_bit_deque(T val) -> stdx::deque<bool>{
 
-        auto rs         = std::deque<bool>();
+        auto rs         = stdx::deque<bool>();
         auto idx_seq    = std::make_index_sequence<sizeof(T) * CHAR_BIT>{};
 
         [&]<size_t ...IDX>(const std::index_sequence<IDX...>&){
@@ -210,7 +211,7 @@ namespace dg::network_huffman_encoder::bit_array{
         return {static_cast<bit_container_type>(c), 1u};
     }
 
-    auto to_bit_array(const std::vector<bool>& vec) -> bit_array_type{
+    auto to_bit_array(const stdx::vector<bool>& vec) -> bit_array_type{
 
         assert(vec.size() <= array_cap());
         auto rs = bit_array_type{};
@@ -288,9 +289,9 @@ namespace dg::network_huffman_encoder::make{
         word_type c;
     };
 
-    static auto count(const char * buf, size_t sz) -> std::vector<size_t>{
+    static auto count(const char * buf, size_t sz) -> stdx::vector<size_t>{
 
-        auto counter    = std::vector<size_t>(constants::DICT_SIZE);
+        auto counter    = stdx::vector<size_t>(constants::DICT_SIZE);
         auto cycles     = sz / constants::ALPHABET_SIZE;
         auto ibuf       = buf;
         std::fill(counter.begin(), counter.end(), size_t{0u}); 
@@ -305,7 +306,7 @@ namespace dg::network_huffman_encoder::make{
         return counter;
     }
 
-    static auto clamp(std::vector<size_t> counter) -> std::vector<size_t>{
+    static auto clamp(stdx::vector<size_t> counter) -> stdx::vector<size_t>{
 
         if (counter.size() != constants::DICT_SIZE){
             std::abort();
@@ -321,14 +322,14 @@ namespace dg::network_huffman_encoder::make{
         return counter;
     }
 
-    static auto build(std::vector<size_t> counter) -> std::unique_ptr<CounterNode>{
+    static auto build(stdx::vector<size_t> counter) -> std::unique_ptr<CounterNode>{
 
         if (counter.size() != constants::DICT_SIZE){
             std::abort();
         }
 
         auto cmp        = [](const auto& lhs, const auto& rhs){return lhs->count > rhs->count;};
-        auto heap       = std::vector<std::unique_ptr<CounterNode>>{};
+        auto heap       = stdx::vector<std::unique_ptr<CounterNode>>{};
 
         for (size_t i = 0; i < constants::DICT_SIZE; ++i){
             if (counter[i] == 0u){
@@ -388,7 +389,7 @@ namespace dg::network_huffman_encoder::make{
         return rs;
     }
 
-    static void encode_dictionarize(model::DelimNode * root, std::vector<std::vector<bool>>& op, std::vector<bool>& trace){
+    static void encode_dictionarize(model::DelimNode * root, stdx::vector<stdx::vector<bool>>& op, stdx::vector<bool>& trace){
 
         bool is_leaf = !bool{root->r} && !bool{root->l};
 
@@ -408,16 +409,16 @@ namespace dg::network_huffman_encoder::make{
         trace.pop_back();
     }
 
-    static auto encode_dictionarize(model::DelimNode * root) -> std::vector<std::vector<bool>>{
+    static auto encode_dictionarize(model::DelimNode * root) -> stdx::vector<stdx::vector<bool>>{
 
-        auto rs     = std::vector<std::vector<bool>>(constants::DICT_SIZE);
-        auto trace  = std::vector<bool>();
+        auto rs     = stdx::vector<stdx::vector<bool>>(constants::DICT_SIZE);
+        auto trace  = stdx::vector<bool>();
         encode_dictionarize(root, rs, trace);
 
         return rs;
     }
     
-    static auto walk(model::DelimNode * root, std::deque<bool> trace) -> std::pair<std::vector<char>, size_t>{
+    static auto walk(model::DelimNode * root, stdx::deque<bool> trace) -> std::pair<stdx::vector<char>, size_t>{
 
         auto cursor     = root;
         auto init_sz    = trace.size();
@@ -446,7 +447,7 @@ namespace dg::network_huffman_encoder::make{
                     return {{cursor->c.begin(), cursor->c.end()}, trace.size()};
                 }
 
-                auto aggregated = std::vector<char>(cursor->c.begin(), cursor->c.end());
+                auto aggregated = stdx::vector<char>(cursor->c.begin(), cursor->c.end());
                 aggregated.insert(aggregated.end(), byte_rep.begin(), byte_rep.end());
 
                 return {aggregated, trailing};
@@ -456,9 +457,9 @@ namespace dg::network_huffman_encoder::make{
         return {{}, init_sz};    
     } 
 
-    static auto decode_dictionarize(model::DelimNode * root) -> std::vector<std::pair<std::vector<char>, size_t>>{
+    static auto decode_dictionarize(model::DelimNode * root) -> stdx::vector<std::pair<stdx::vector<char>, size_t>>{
 
-        auto rs     = std::vector<std::pair<std::vector<char>, size_t>>(constants::DICT_SIZE);
+        auto rs     = stdx::vector<std::pair<stdx::vector<char>, size_t>>(constants::DICT_SIZE);
 
         for (size_t i = 0; i < constants::DICT_SIZE; ++i){
             rs[i]   = walk(root, utility::to_bit_deque(static_cast<num_rep_type>(i))); 
@@ -498,7 +499,7 @@ namespace dg::network_huffman_encoder::make{
         return delim_model;
     } 
 
-    static void find_delim(model::DelimNode * root, std::vector<std::vector<bool>>& rs, std::vector<bool>& trace){
+    static void find_delim(model::DelimNode * root, stdx::vector<stdx::vector<bool>>& rs, stdx::vector<bool>& trace){
 
         bool is_leaf    = !bool{root->l} && !bool{root->r};
 
@@ -516,10 +517,10 @@ namespace dg::network_huffman_encoder::make{
         trace.pop_back();
     }
 
-    static auto find_delim(model::DelimNode * root) -> std::vector<std::vector<bool>>{
+    static auto find_delim(model::DelimNode * root) -> stdx::vector<stdx::vector<bool>>{
 
-        auto trace  = std::vector<bool>{};
-        auto rs     = std::vector<std::vector<bool>>(constants::ALPHABET_SIZE);
+        auto trace  = stdx::vector<bool>{};
+        auto rs     = stdx::vector<stdx::vector<bool>>(constants::ALPHABET_SIZE);
         find_delim(root, rs, trace);
 
         return rs;
@@ -529,8 +530,8 @@ namespace dg::network_huffman_encoder::make{
 namespace dg::network_huffman_encoder::serialization{
 
     struct SerializableModel{
-        std::vector<bool> header;
-        std::vector<model::word_type> c_vec;
+        stdx::vector<bool> header;
+        stdx::vector<model::word_type> c_vec;
     };
 
     static auto to_serializable_model_helper(model::Node * root, SerializableModel& op){
@@ -575,10 +576,10 @@ namespace dg::network_huffman_encoder::serialization{
         return to_model_helper(model, bit_cursor, word_cursor);
     }
 
-    static auto serialize_model(const SerializableModel& model) -> std::string{
+    static auto serialize_model(const SerializableModel& model) -> stdx::string{
 
         size_t bitarr_sz                = model.header.size() / (sizeof(uint32_t) * CHAR_BIT);
-        std::vector<uint32_t> bitarr    = std::vector<uint32_t>(bitarr_sz, uint32_t{0u});
+        stdx::vector<uint32_t> bitarr    = stdx::vector<uint32_t>(bitarr_sz, uint32_t{0u});
         size_t bitarr_bitlength         = bitarr_sz * (sizeof(uint32_t) * CHAR_BIT);
 
         for (size_t i = 0u; i < bitarr_bitlength; ++i){
@@ -587,18 +588,18 @@ namespace dg::network_huffman_encoder::serialization{
             bitarr[slot] |= uint32_t{model.header[i]} << offs;
         }
 
-        std::vector<bool> rem(model.header.begin() + bitarr_bitlength, model.header.end());
+        stdx::vector<bool> rem(model.header.begin() + bitarr_bitlength, model.header.end());
         auto serializable = std::make_tuple(std::move(bitarr), std::move(rem), model.c_vec); 
-        std::string bstream(dg::network_compact_serializer::integrity_size(serializable), ' ');
+        stdx::string bstream(dg::network_compact_serializer::integrity_size(serializable), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), serializable);
 
         return bstream;
     }
 
-    static auto deserialize_model(const std::string& bstream) -> SerializableModel{
+    static auto deserialize_model(const stdx::string& bstream) -> SerializableModel{
 
         SerializableModel rs{};
-        std::tuple<std::vector<uint32_t>, std::vector<bool>, std::vector<model::word_type>> serializable{};
+        std::tuple<stdx::vector<uint32_t>, stdx::vector<bool>, stdx::vector<model::word_type>> serializable{};
         dg::network_compact_serializer::integrity_deserialize_into(serializable, bstream.data(), bstream.size());
         auto [bit_arr, rem, c_vec] = std::move(serializable);
         size_t bitarr_bitlength = bit_arr.size() * (sizeof(uint32_t) * CHAR_BIT);
@@ -617,13 +618,13 @@ namespace dg::network_huffman_encoder::serialization{
         return rs;
     }
 
-    auto serialize(model::Node * model) -> std::string{
+    auto serialize(model::Node * model) -> stdx::string{
 
         auto serializable_model = to_serializable_model(model);
         return serialize_model(serializable_model);
     }
 
-    auto deserialize(const std::string& bstream) -> std::unique_ptr<model::Node>{
+    auto deserialize(const stdx::string& bstream) -> std::unique_ptr<model::Node>{
 
         auto serializable_model = deserialize_model(bstream);
         return to_model(serializable_model);
@@ -638,17 +639,17 @@ namespace dg::network_huffman_encoder::core{
 
         private:
 
-            std::vector<bit_array_type> encoding_dict;
-            std::vector<bit_array_type> delim;
+            stdx::vector<bit_array_type> encoding_dict;
+            stdx::vector<bit_array_type> delim;
             std::unique_ptr<model::DelimNode> delim_tree;
-            std::vector<std::pair<std::vector<char>, size_t>> decoding_dict;
+            stdx::vector<std::pair<stdx::vector<char>, size_t>> decoding_dict;
 
         public:
 
-            FastEngine(std::vector<bit_array_type> encoding_dict, 
-                       std::vector<bit_array_type> delim, 
+            FastEngine(stdx::vector<bit_array_type> encoding_dict, 
+                       stdx::vector<bit_array_type> delim, 
                        std::unique_ptr<model::DelimNode> delim_tree,
-                       std::vector<std::pair<std::vector<char>, size_t>> decoding_dict): encoding_dict(std::move(encoding_dict)),
+                       stdx::vector<std::pair<stdx::vector<char>, size_t>> decoding_dict): encoding_dict(std::move(encoding_dict)),
                                                                                          delim(std::move(delim)),
                                                                                          delim_tree(std::move(delim_tree)),
                                                                                          decoding_dict(std::move(decoding_dict)){}
@@ -762,13 +763,13 @@ namespace dg::network_huffman_encoder::core{
 
         private:
 
-            std::vector<std::unique_ptr<FastEngine>> encoders;
+            stdx::vector<std::unique_ptr<FastEngine>> encoders;
         
         public:
 
-            RowEncodingEngine(std::vector<std::unique_ptr<FastEngine>> encoders): encoders(std::move(encoders)){}
+            RowEncodingEngine(stdx::vector<std::unique_ptr<FastEngine>> encoders): encoders(std::move(encoders)){}
 
-            auto encode_into(const std::vector<std::pair<const char *, size_t>>& data, char * buf) const -> char *{
+            auto encode_into(const stdx::vector<std::pair<const char *, size_t>>& data, char * buf) const -> char *{
 
                 assert(data.size() == this->encoders.size()); 
                 auto rdbuf = types::bit_array_type{};
@@ -780,7 +781,7 @@ namespace dg::network_huffman_encoder::core{
                 return bit_stream::exhaust_to(buf, rdbuf);
             }
 
-            auto decode_into(const char * buf, std::vector<std::pair<char *, size_t>>& data) const -> const char *{
+            auto decode_into(const char * buf, stdx::vector<std::pair<char *, size_t>>& data) const -> const char *{
 
                 assert(data.size() == this->encoders.size());
                 auto buf_bit_offs   = size_t{0u};
@@ -800,12 +801,12 @@ namespace dg::network_huffman_encoder{
 
     using namespace network_huffman_encoder::types; 
 
-    auto count(const char * buf, size_t sz) -> std::vector<size_t>{
+    auto count(const char * buf, size_t sz) -> stdx::vector<size_t>{
 
         return make::count(buf, sz);
     }
 
-    auto build(std::vector<size_t> counter) -> std::unique_ptr<model::Node>{
+    auto build(stdx::vector<size_t> counter) -> std::unique_ptr<model::Node>{
 
         auto counter_node   = make::build(make::clamp(std::move(counter)));
         return make::to_model(counter_node.get());
@@ -818,14 +819,14 @@ namespace dg::network_huffman_encoder{
         auto encoding_dict  = make::encode_dictionarize(decoding_tree.get());
         auto delim          = make::find_delim(decoding_tree.get());
 
-        auto transformed_ed = utility::vector_transform(encoding_dict, static_cast<bit_array_type(*)(const std::vector<bool>&)>(bit_array::to_bit_array));
-        auto transformed_dl = utility::vector_transform(delim, static_cast<bit_array_type(*)(const std::vector<bool>&)>(bit_array::to_bit_array));
+        auto transformed_ed = utility::vector_transform(encoding_dict, static_cast<bit_array_type(*)(const stdx::vector<bool>&)>(bit_array::to_bit_array));
+        auto transformed_dl = utility::vector_transform(delim, static_cast<bit_array_type(*)(const stdx::vector<bool>&)>(bit_array::to_bit_array));
         auto engine         = core::FastEngine(std::move(transformed_ed), std::move(transformed_dl), std::move(decoding_tree), std::move(decoding_dict));
 
         return std::make_unique<core::FastEngine>(std::move(engine));
     }
 
-    auto spawn_row_engine(std::vector<std::unique_ptr<core::FastEngine>> engines) -> std::unique_ptr<core::RowEncodingEngine>{
+    auto spawn_row_engine(stdx::vector<std::unique_ptr<core::FastEngine>> engines) -> std::unique_ptr<core::RowEncodingEngine>{
 
         return std::make_unique<core::RowEncodingEngine>(std::move(engines));
     }
@@ -847,7 +848,7 @@ namespace dg::network_huffman_encoder{
         return last;
     }   
 
-    auto serialize_model(model::Node * model) -> std::string{
+    auto serialize_model(model::Node * model) -> stdx::string{
         
         if (model == nullptr){
             std::abort();
@@ -856,7 +857,7 @@ namespace dg::network_huffman_encoder{
         return serialization::serialize(model);
     }
 
-    auto deserialize_model(const std::string& bstream) -> std::unique_ptr<model::Node>{
+    auto deserialize_model(const stdx::string& bstream) -> std::unique_ptr<model::Node>{
 
         return serialization::deserialize(bstream);
     }
@@ -865,7 +866,7 @@ namespace dg::network_huffman_encoder{
     auto encode(const std::basic_string<char, Args...>& inp) -> std::basic_string<char, Args...>{
 
         std::unique_ptr<model::Node> model  = build(count(inp.data(), inp.size())); 
-        std::string model_stream            = serialize(model.get());
+        stdx::string model_stream            = serialize(model.get());
         size_t rs_sz                        = inp.size() * constants::MAX_ENCODING_SZ_PER_BYTE + constants::MAX_ENCODING_OVERHEAD;         
         auto msg                            = std::basic_string<char, Args...>(rs_sz, ' ');
         char * last                         = encode_into(msg.data(), inp.data(), inp.size(), model.get());
@@ -880,7 +881,7 @@ namespace dg::network_huffman_encoder{
     template <class ...Args>
     auto decode(const std::basic_string<char, Args...>& inp) -> std::basic_string<char, Args...>{
 
-        std::pair<std::basic_string<char, Args...>, std::string> serializable{};
+        std::pair<std::basic_string<char, Args...>, stdx::string> serializable{};
         dg::network_compact_serializer::integrity_deserialize_into(serializable, inp.data(), inp.size());
         auto model          = deserialize(std::get<1>(serializable));
         size_t decoded_sz   = std::get<0>(serializable).size() * constants::MAX_DECODING_SZ_PER_BYTE;

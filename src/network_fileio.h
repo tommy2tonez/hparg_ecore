@@ -4,6 +4,7 @@
 #include "network_trivial_serializer.h" 
 #include "network_hash.h"
 #include "network_utility.h"
+#include "stdx.h"
 
 #ifdef __linux__
 #include "network_fileio_linux.h"
@@ -25,31 +26,24 @@ static_assert(false);
 
 namespace dg::network_fileio_chksum_x{
 
-    //separate header file is the right approach - not an intuitive one - yet the "not intuitive" is a problem to solve - not a problem to blame
-    //don't argue with me about file and offset - that's also another problem to solve
-    //different files guarantee concurrent support from OS - I never get the "offset" thing
-    //this component is to solve one specific problem - hardware corrupted file - once in a bluemoon problem - don't use this component if you want to solve everything file-related - it's purely wrong
-    //this component is supposed to be used solely - such that a file created by this component is written, deleted, read by this component - an attempt to do these operations outside of this component scope is undefined behavior
-    //this component guarantees that open-close operation is atomic for the duration of the program - if contract cannot be fullfilled then program is aborted - a file recovery is required to snap the states back to valid - or a default initialization is required  
-
     struct FileHeader{
         uint64_t chksum;
-        uint64_t content_size; //not necessarily the file_sz - maybe a portion of a file - for performance
+        uint64_t content_size;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const{
+        void dg_reflect(const Reflector& reflector) const{
 
             reflector(chksum, content_size);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector){
+        void dg_reflect(const Reflector& reflector){
 
             reflector(chksum, content_size);
         }
     };
 
-    static inline std::string METADATA_SUFFIX = "DG_NETWORK_CHKSUM_X_METADATA"; 
+    static inline stdx::string METADATA_SUFFIX = "DG_NETWORK_CHKSUM_X_METADATA"; 
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 

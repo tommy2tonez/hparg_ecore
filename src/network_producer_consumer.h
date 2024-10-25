@@ -7,6 +7,7 @@
 #include <memory>
 #include <atomic> 
 #include "network_concurrency_x.h"
+#include "stdx.h"
 
 namespace dg::network_producer_consumer{
 
@@ -156,7 +157,7 @@ namespace dg::network_producer_consumer{
                     }
                 }
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->vec.size() + sz > this->vec.capacity()){
                     return false;
@@ -168,7 +169,7 @@ namespace dg::network_producer_consumer{
 
             void get(EventType * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
-                auto lck_grd    = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
                 dst_sz          = std::min(dst_cap, this->vec.size());
                 size_t new_sz   = this->vec.size() - dst_sz;
                 std::copy(this->vec.begin() + new_sz, this->vec.end(), dst);
@@ -362,7 +363,7 @@ namespace dg::network_raii_producer_consumer{
                     }
                 }
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->vec.size() + ingesting_vec.size() > this->vec.capacity()){
                     return ingesting_vec;
@@ -377,7 +378,7 @@ namespace dg::network_raii_producer_consumer{
 
             auto get(size_t cap) noexcept -> dg::vector<event_t>{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->mtx);
+                auto lck_grd = stdx::lock_guard(*this->mtx);
                 dg::vector<EventType> rs{};
 
                 for (size_t i = 0u; i < cap; ++i){

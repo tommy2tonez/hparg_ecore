@@ -6,6 +6,7 @@
 #include "network_concurrency.h"
 #include "network_std_container.h"
 #include "network_type_trait_x.h"
+#include "stdx.h"
 
 namespace dg::network_extmemcommit_dropbox{
 
@@ -56,13 +57,13 @@ namespace dg::network_extmemcommit_dropbox{
 
             void push(Request request) noexcept{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
                 this->request_vec.push_back(std::move(request));
             }
 
             auto pop() noexcept -> std::optional<Request>{
 
-                auto lck_grd = dg::network_genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
                 
                 if (this->request_vec.empty()){
                     return std::nullopt;

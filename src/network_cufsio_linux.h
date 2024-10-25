@@ -11,6 +11,7 @@
 #include <thread>
 #include "network_std_container.h"
 #include "network_cuda_controller.h"
+#include "stdx.h"
 
 namespace dg::network_cufsio_linux::constants{
 
@@ -38,9 +39,6 @@ namespace dg::network_cufsio_linux::utility{
 
 namespace dg::network_cufsio_linux::driver_x{
 
-    //its fine to treat global memory exhaustion as a non-error for these tasks - not necessarily a good practice
-    //because these are small allocations - exception also requires dynamic allocation - which will eventually terminate the program
-
     struct ObjectInterface{
         virtual ~ObjectInterface() noexcept = default;
     };
@@ -53,8 +51,8 @@ namespace dg::network_cufsio_linux::driver_x{
 
     struct CUFSDriverResource{
         size_t reference;
-        std::unordered_map<int, std::vector<std::unique_ptr<ObjectInterface>>> rtti_resource; //this is important - acquire all resource then do self-managed allocation in another component if necessary 
-        std::vector<int> fd_vec;
+        stdx::unordered_map<int, stdx::vector<std::unique_ptr<ObjectInterface>>> rtti_resource;
+        stdx::vector<int> fd_vec;
         std::mutex mtx;
     };
 
@@ -122,7 +120,7 @@ namespace dg::network_cufsio_linux::driver_x{
 
     auto dg_cufs_driver_open() noexcept -> std::expected<int, exception_t>{
 
-        auto lck_grd = dg::network_genult::lock_guard(cufs_driver_resource.mtx);
+        auto lck_grd = stdx::lock_guard(cufs_driver_resource.mtx);
 
         if (cufs_driver_resource.reference == 0u){
             exception_t err = dg_cufs_legacy_driver_open(); 
@@ -150,7 +148,7 @@ namespace dg::network_cufsio_linux::driver_x{
 
     void dg_cufs_driver_close(int fd) noexcept{
 
-        auto lck_grd    = dg::network_genult::lock_guard(cufs_driver_resource.mtx);
+        auto lck_grd    = stdx::lock_guard(cufs_driver_resource.mtx);
         auto rm_ptr     = cufs_driver_resource.rtti_resource.find(fd);
 
         if constexpr(DEBUG_FLAG_MODE){
@@ -179,7 +177,7 @@ namespace dg::network_cufsio_linux::driver_x{
  
         static_assert(std::is_nothrow_move_constructible_v<T>);
 
-        auto lck_grd    = dg::network_genult::lock_guard(cufs_driver_resource.mtx); 
+        auto lck_grd    = stdx::lock_guard(cufs_driver_resource.mtx); 
         auto raii_obj   = std::make_unique<Object<T>>(Object<T>{std::move(resource)}); //TODOs: either compromise log at make_unique or macro resolution
         auto dict_ptr   = cufs_driver_resource.rtti_resource.find(fd);
 
@@ -522,14 +520,14 @@ namespace dg::network_cufsio_linux::implementation{
         private:
 
             std::unique_ptr<CuFSIOInterface> cu_fsio;
-            std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> kernelptr_to_cufs_dict;
-            std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> cudaptr_to_cufs_dict;
+            stdx::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> kernelptr_to_cufs_dict;
+            stdx::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> cudaptr_to_cufs_dict;
         
         public:
 
             CuPreallocatedStableFsysIO(std::unique_ptr<CuFSIOInterface> cu_fsio,
-                                       std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> kernelptr_to_cufs_dict,
-                                       std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> cudaptr_to_cufs_dict) noexcept: cu_fsio(std::move(cu_fsio)),
+                                       stdx::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> kernelptr_to_cufs_dict,
+                                       stdx::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t> cudaptr_to_cufs_dict) noexcept: cu_fsio(std::move(cu_fsio)),
                                                                                                                                      kernelptr_to_cufs_dict(std::move(kernelptr_to_cufs_dict)),
                                                                                                                                      cudaptr_to_cufs_dict(std::move(cudaptr_to_cufs_dict)){}
 
@@ -717,12 +715,12 @@ namespace dg::network_cufsio_linux::implementation{
 
     struct FsysIOFactory{
 
-        static auto spawn_preallocated_direct_stable_fsysio(const std::vector<std::pair<cuda_ptr_t, size_t>>& cuda_stable_ptr_vec,
-                                                            const std::vector<std::pair<void *, size_t>>& host_stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
+        static auto spawn_preallocated_direct_stable_fsysio(const stdx::vector<std::pair<cuda_ptr_t, size_t>>& cuda_stable_ptr_vec,
+                                                            const stdx::vector<std::pair<void *, size_t>>& host_stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
             
             auto cudriver_ins       = driver_x::dg_cufs_driver_safe_open();
-            auto cuda_to_cufs_dict  = std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t>{};
-            auto host_to_cufs_dict  = std::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t>{};
+            auto cuda_to_cufs_dict  = stdx::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t>{};
+            auto host_to_cufs_dict  = stdx::unordered_map<std::pair<uintptr_t, size_t>, cufs_sptr_t>{};
             auto cufs_sptr_hashset  = std::unordered_set<cufs_sptr_t>{};
 
             if (!cudriver_ins.has_value()){
@@ -773,11 +771,11 @@ namespace dg::network_cufsio_linux::implementation{
             return std::make_unique<StdFsysIO>(std::move(fast), std::move(slow));
         }
 
-        static auto spawn_prereg_direct_or_default_fsysio(const std::vector<std::pair<cuda_ptr_t, size_t>>& cuda_stable_ptr_vec,
-                                                          const std::vector<std::pair<void *, size_t>>& host_stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
+        static auto spawn_prereg_direct_or_default_fsysio(const stdx::vector<std::pair<cuda_ptr_t, size_t>>& cuda_stable_ptr_vec,
+                                                          const stdx::vector<std::pair<void *, size_t>>& host_stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
             
-            auto aligned_cuda_stable_ptr_vec    = std::vector<std::pair<cuda_ptr_t, size_t>>{};
-            auto aligned_host_stable_ptr_vec    = std::vector<std::pair<void *, size_t>>{};
+            auto aligned_cuda_stable_ptr_vec    = stdx::vector<std::pair<cuda_ptr_t, size_t>>{};
+            auto aligned_host_stable_ptr_vec    = stdx::vector<std::pair<void *, size_t>>{};
 
             auto cuda_filter = [](const std::pair<cuda_ptr_t, size_t>& e){
                 return utility::is_met_cudadirect_dgio_ptralignment_requirement(pointer_cast<uintptr_t>(std::get<0>(e))) && utility::is_met_cudadirect_dgio_blksz_requirement(std::get<1>(e));
@@ -802,7 +800,7 @@ namespace dg::network_cufsio_linux::implementation{
 
 namespace dg::network_cufsio_linux{
 
-    auto make_cuda_fsys_loader(const std::vector<std::pair<cuda_ptr_t, size_t>>& stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
+    auto make_cuda_fsys_loader(const stdx::vector<std::pair<cuda_ptr_t, size_t>>& stable_ptr_vec) -> std::unique_ptr<FsysIOInterface>{
 
         return implementation::Factory::spawn_prereg_direct_or_default_fsysio(stable_ptr_vec, {});
     }

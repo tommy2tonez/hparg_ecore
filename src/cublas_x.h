@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 #include <algorithm>
+#include <optional>
 
 namespace dg::cublas_x::syntax_tree{
 
@@ -94,22 +95,27 @@ namespace dg::cublas_x::syntax_tree{
             reflector(row_sz, column_sz);
         }
     };
+    
+    //feature extractions - base case simulations + populate optimization dictionary
+    //its fine to brute force optimization for XLA
 
     struct AbstractNode{
         std::vector<std::unique_ptr<AbstractNode>> descendants;
+        std::vector<size_t> descendants_positional_vec;
         transform_kind_t transform_kind; //
         MatrixDimension dim;
-        std::string value_identifier;
+        std::string val_id; //
+        std::string id; //
         logit_kind_t logit_kind;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(descendants, transform_kind, dim, value_identifier, logit_kind);
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(descendants, descendants_positional_vec, transform_kind, dim, val_id, id, logit_kind);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(descendants, transform_kind, dim, value_identifier, logit_kind);
+        void dg_reflect(const Reflector& reflector){
+            reflector(descendants, descendants_positional_vec, transform_kind, dim, val_id, id, logit_kind);
         }
     };
 
@@ -118,12 +124,12 @@ namespace dg::cublas_x::syntax_tree{
         std::vector<std::unique_ptr<AbstractNode>> leaf_descendants;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
+        void dg_reflect(const Reflector& reflector) const{
             reflector(upper, leaf_descendants);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
+        void dg_reflect(const Reflector& reflector){
             reflector(upper, leaf_descendants);
         }
     };
@@ -339,7 +345,6 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
     };
 } 
 
-
 namespace dg::cublas_x::utility{
 
     template <class T>
@@ -469,16 +474,16 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
         }
     };
-
-    //this is the very basic of optimization - heuristics could be applied to do pruning - eliminating state search
-    //this component alone could be 20k-30k LOC
-    //there are many objectives:
-    //(1): heuristics pruning 
-    //(2): base case greedy optimizations
-    //(3): fast greedy optimization
-    //(4): fast grouping - rotate + permute
-    //(5): trade off between tree-height + tree nodes and runtime  
     
+    //this is one poor man optimization implementation - it covers all the cases yet there's a need for heuristics + optimization_cost/ optimizability tradeoff
+    //optimization_cost/ optimizability is usually a f(x) = sqrt(x) chart - approx this
+    //optimization is platform depedent + available cuda instruction set
+    //such information forms a database - store this
+    //base case optimizations are user-populated
+    //base case optimizations can be as simple as transform_u8(transform_u8(tile)) -> transform_u8(tile)
+    //  or a = b, c = a -> c = b
+    //  fuse operations, etc. 
+
     class AbstractNodeCollapser: public virtual AbstractNodeCollapserInterface{
 
         public:
@@ -584,8 +589,9 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 std::vector<std::unique_ptr<CollapsedAbstractNode>> rs      = this->permute_join(root, descendants_collapsed_vec);
                 std::unique_ptr<CollapsedAbstractNode> self_abstract_node   = std::make_unique<CollapsedAbstractNode>();
                 self_abstract_node->upper                                   = utility::deepcopy(root);
-                self_abstract_node->upper->transform_kind                   = syntax_tree::transform_kind_none;
                 self_abstract_node->upper->descendants                      = {};
+                self_abstract_node->upper->descendants_positional_vec       = {};
+                self_abstract_node->upper->transform_kind                   = syntax_tree::transform_kind_none;
                 self_abstract_node->leaf_descendants.push_back(utility::deepcopy(root));
                 rs.push_back(std::move(self_abstract_node));
 
@@ -601,10 +607,8 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
                 std::vector<transform_kind_t> transform_kind_vec{};
                 this->postorder_traversal(root, transform_kind_vec);
-                std::string bstream(dg::network_compact_serializer::size(transform_kind_vec), ' ');
-                dg::network_compact_serializer::serialize_into(bstream.data(), transform_kind_vec);
 
-                return bstream;
+                return dg::network_compact_serializer::serialize<std::string>(transform_kind_vec);
             }
         
         private:
@@ -635,13 +639,6 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
             auto to_unique_representation(const std::unique_ptr<AbstractNode>& root) -> std::unique_ptr<AbstractNode>{
 
-                return this->internal_to_unique_representation(root);
-            }
-        
-        private:
-
-            auto internal_to_unique_representation(const std::unique_ptr<AbstractNode>& root) -> std::unique_ptr<AbstractNode>{
-
                 if (root == nullptr){
                     return nullptr;
                 }
@@ -651,7 +648,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 rs->descendants = {};
 
                 for (const auto& descendant: root->descendants){
-                    descendant_vec.push_back(this->internal_to_unique_representation(descendant));
+                    descendant_vec.push_back(this->to_unique_representation(descendant));
                 }
 
                 std::vector<std::pair<std::string, size_t>> cmpable_representation_vec{};
@@ -662,8 +659,10 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
                 std::sort(cmpable_representation_vec.begin(), cmpable_representation_vec.end());
 
-                for (const auto& pair: cmpable_representation_vec){
-                    rs->descendants.push_back(std::move(descendant_vec[std::get<1>(pair)]));
+                for (size_t i = 0u; i < cmpable_representation_vec.size(); ++i){
+                    size_t old_idx = std::get<1>(cmpable_representation_vec[i]);
+                    rs->descendants_positional_vec[i] = root->descendants_positional_vec[old_idx];
+                    rs->descendants.push_back(std::move(descendant_vec[old_idx]));
                 }
 
                 return rs;
@@ -743,7 +742,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 }
 
                 if (root->descendants.empty()){
-                    identifier_vec.push_back(root->value_identifier);
+                    identifier_vec.push_back(root->id);
                 }
             }
 
@@ -755,6 +754,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
                 auto old_node_leaf_identifier_vec   = std::vector<std::string>{};
                 auto new_node_leaf_identifier_vec   = std::vector<std::string>{};
+                auto old_descendants                = utility::deepcopy(descendants);
                 auto new_descendants                = std::vector<std::unique_ptr<AbstractNode>>{};
                 auto rs                             = utility::deepcopy(new_node); 
 
@@ -764,8 +764,11 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 for (size_t i = 0u ; i < descendants.size(); ++i){
                     auto ptr    = std::find(old_node_leaf_identifier_vec.begin(), old_node_leaf_identifier_vec.end(), new_node_leaf_identifier_vec[i]);
                     size_t idx  = std::distance(old_node_leaf_identifier_vec.begin(), ptr);
-                    new_descendants.push_back(utility::deepcopy(descendants[idx]));
+                    auto dptr   = descendants.begin() + idx; 
+
+                    new_descendants.push_back(utility::deepcopy(*dptr));
                     old_node_leaf_identifier_vec.erase(ptr);
+                    old_descendants.erase(dptr);
                 }
 
                 rs->descendants = std::move(new_descendants);
@@ -833,14 +836,19 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 size_t idx                  = 0u; 
 
                 while (idx != space_size){
-                    auto appendee               = std::make_unique<AbstractNode>();
+                    auto appendee = std::make_unique<AbstractNode>();
+                    
                     for (size_t i = 0u; i < ptr.size(); ++i){
                         appendee->descendants.push_back(utility::deepcopy(descendants[i][ptr[i]]));
                     }
-                    appendee->dim               = root->dim;
-                    appendee->logit_kind        = root->logit_kind;
-                    appendee->transform_kind    = root->transform_kind;
-                    appendee->value_identifier  = root->value_identifier;
+                    
+                    appendee->descendants_positional_vec    = root->descendants_positional_vec;
+                    appendee->transform_kind                = root->transform_kind;
+                    appendee->dim                           = root->dim;
+                    appendee->val_id                        = root->val_id;
+                    appendee->id                            = root->id;
+                    appendee->logit_kind                    = root->logit_kind;
+
                     rs.push_back(std::move(appendee));
                     this->iter_increment(ptr, space);
                     ++idx;
@@ -936,6 +944,12 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                     }
                 }
 
+                size_t memory_overhead = this->overhead_calculator->get_memory_overhead(rs);
+
+                if (memory_overhead > config.optimization_memory_cap){
+                    throw std::exception();
+                }
+
                 return rs;
             } 
     };
@@ -947,7 +961,7 @@ namespace dg::cublas_x{
     using cublas_plan_t = std::unique_ptr<AbstractNode>;
     using logit_kind_t  = syntax_tree::logit_kind_t;
 
-    auto cublas_make_matrix(size_t m, size_t n, std::string value_identifier, logit_kind_t logit_kind) -> std::unique_ptr<AbstractNode>{
+    auto cublas_make_matrix(size_t m, size_t n, logit_kind_t logit_kind, std::optional<std::string> id = std::nullopt, std::optional<std::string> val_id = std::nullopt) -> std::unique_ptr<AbstractNode>{
         
         using namespace syntax_tree; 
 
@@ -959,7 +973,15 @@ namespace dg::cublas_x{
             throw exception::invalid_argument{};
         }
 
-        return std::make_unique<AbstractNode>(AbstractNode{{}, transform_kind_none, MatrixDimension{m, n}, utility::make_identifier(value_identifier), logit_kind});
+        if (!id.has_value()){
+            id = next_id(); 
+        }
+
+        if (!val_id.has_value()){
+            val_id = next_id();
+        }
+
+        return std::make_unique<AbstractNode>(AbstractNode{{}, {}, transform_kind_none, MatrixDimension{m, n}, *val_id, *id, logit_kind});
     }
     
     auto cublas_split(const std::unique_ptr<AbstractNode>& plan, size_t split_factor) -> std::vector<std::unique_ptr<AbstractNode>>{
@@ -979,12 +1001,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_saturate_01;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_saturate_01));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_saturate_01));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_rounddown_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -996,12 +1020,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_rounddown_optional;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_rounddown_optional));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_rounddown_optional));
+        std::string id                  = utiltiy::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     } 
 
     auto cublas_mono_rounddown(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1013,12 +1039,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_rounddown;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_rounddown)); 
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_rounddown)); 
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_roundup_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1030,12 +1058,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_roundup_optional;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundup_optional));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundup_optional));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_roundup(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1047,12 +1077,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_roundup;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundup));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundup));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_fastmath(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1064,12 +1096,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_fastmath;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_fastmath));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_fastmath));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_roundeven_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1081,12 +1115,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_roundeven_optional;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundeven_optional));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundeven_optional));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_roundeven(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1098,12 +1134,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_roundeven;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundeven));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundeven));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_roundzero_optional(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1115,12 +1153,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_roundzero_optional;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundzero_optional));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundzero_optional));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_roundzero(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1132,12 +1172,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_roundzero;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_roundzero));
-        logit_kind_t logit_kind         = plan->logit_kind; 
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundzero));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_clone(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1149,12 +1191,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_clone;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_clone));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_clone));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_relu(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1166,12 +1210,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_relu;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_relu));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_relu));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_cast(const std::unique_ptr<AbstractNode>& plan, logit_kind_t logit_kind) -> std::unique_ptr<AbstractNode>{
@@ -1182,7 +1228,8 @@ namespace dg::cublas_x{
             throw exception::invalid_argument();
         }
 
-        auto descendants = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto descendants    = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec = std::vector<size_t>{0u};
         transform_kind_t transform_kind{};
 
         switch (logit_kind){
@@ -1213,9 +1260,10 @@ namespace dg::cublas_x{
         }
 
         MatrixDimension dim     = plan->dim;
-        std::string identifier  = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind));
+        std::string val_id      = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind));
+        std::string id          = utility::combine_identifier(plan->id, next_transform_id()); 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_sign(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1227,12 +1275,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_sign;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_sign));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_sign));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id()); 
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_exp(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1244,12 +1294,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_exp;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_exp));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_exp));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_exp2(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1261,12 +1313,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_exp2;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_exp2));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_exp2));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_exp10(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1278,12 +1332,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_exp10;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_exp10));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_exp10));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_log(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1295,12 +1351,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_log;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_log));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_log));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_log2(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1312,12 +1370,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_log2;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_log2));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_log2));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_log10(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1329,12 +1389,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u}; 
         transform_kind_t transform_kind = transform_kind_log10;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_log10));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_log10));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     } 
 
     auto cublas_mono_abs(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1346,12 +1408,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_abs;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_abs));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_abs));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_cos(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1363,12 +1427,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_cos;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_cos));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_cos));
+        std::string id                  = utility::combine_identifier(plan->id, next_tranform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_acos(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1380,12 +1446,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_acos;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_acos));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_acos));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_sin(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1397,12 +1465,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_sin;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_sin));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_sin));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_asin(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1414,12 +1484,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_asin;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_asin));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_asin));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
  
     auto cublas_mono_tan(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1431,12 +1503,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_tan;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_tan));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_tan));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_atan(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1448,12 +1522,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_atan;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_atan));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_atan));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_sqrt(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1465,12 +1541,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_sqrt;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_sqrt));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_sqrt));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_invsqrt(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1482,12 +1560,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_invsqrt;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_invsqrt));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_invsqrt));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_negative(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1499,12 +1579,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_negative;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_negative));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_negative));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_negate(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1516,12 +1598,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_negate;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_negate));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_negate));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_mono_transpose(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<AbstractNode>{
@@ -1533,12 +1617,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(plan)};
+        auto positional_vec             = std::vector<size_t>{0u};
         transform_kind_t transform_kind = transform_kind_transpose;
         MatrixDimension dim             = plan->dim;
-        std::string identifier          = utility::combine_identifier(plan->value_identifier, transform_kind_cstr(transform_kind_transpose));
+        std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_transpose));
+        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_linear(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1562,12 +1648,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_linear;
         MatrixDimension dim             = MatrixDimension{lhs->dim.row_sz, rhs->dim.column_sz};
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_linear));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_linear));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id()); 
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_dot(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1591,12 +1679,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_dot;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_linear));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_linear));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_add(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1624,12 +1714,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_add;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_add));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_add));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_sub(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1657,12 +1749,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_sub;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_sub));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_sub));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_mul(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1690,12 +1784,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_mul;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_mul));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_mul));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_div(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1723,12 +1819,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_div;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_div));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_div));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_pow(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1752,12 +1850,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_pow;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_div));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_div));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_min(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1781,12 +1881,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_min;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_min));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_min));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
         
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_pair_max(const std::unique_ptr<AbstractNode>& lhs, const std::unique_ptr<AbstractNode>& rhs) -> std::unique_ptr<AbstractNode>{
@@ -1810,12 +1912,14 @@ namespace dg::cublas_x{
         }
 
         auto descendants                = std::vector<std::unique_ptr<AbstractNode>>{utility::deepcopy(lhs), utility::deepcopy(rhs)};
+        auto positional_vec             = std::vector<size_t>{0u, 1u};
         transform_kind_t transform_kind = transform_kind_max;
         MatrixDimension dim             = lhs->dim;
-        std::string identifier          = utility::combine_identifier(utility::combine_identifier(lhs->value_identifier, rhs->value_identifier), transform_kind_cstr(transform_kind_max));
+        std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_max));
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
-        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), transform_kind, dim, std::move(identifier), logit_kind});
+        return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
 
     auto cublas_optimize_fast(int device_id, const std::unique_ptr<AbstractNode>& plan, size_t buf_cap) -> std::unique_ptr<AbstractNode>{
