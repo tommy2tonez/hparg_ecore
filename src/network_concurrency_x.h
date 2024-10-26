@@ -96,7 +96,7 @@ namespace dg::network_concurrency_infretry_x{
             static_assert(dg::network_type_traits_x::is_base_type_v<Lambda>);
             static_assert(std::is_nothrow_destructible_v<Lambda>);
             static_assert(std::is_nothrow_move_constructible_v<Lambda>);
-            static_assert(std::is_nothrow_invokable_v<Lambda>);
+            static_assert(std::is_nothrow_invocable_v<Lambda>);
             static_assert(std::is_same_v<bool, decltype(std::declval<Lambda>()())>);
 
             ExecutableWrapper(Lambda lambda) noexcept: lambda(std::move(lambda)){}

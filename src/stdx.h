@@ -10,101 +10,56 @@
 #include <deque>
 #include <atomic>
 #include <mutex>
+#include <functional>
 
 namespace stdx{
     
-    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED = true; 
+    //verison controls are cross-the-t-dot-the-i tasks - not to worry now 
 
-    template <class T>
-    struct NoExceptAllocator: private std::allocator<T>{
-        
-        using value_type                                = T;
-        using pointer                                   = T *;
-        using const_pointer                             = const T *;
-        using reference                                 = T&;
-        using const_reference                           = const T&;
-        using size_type                                 = size_t;
-        using difference_type                           = intmax_t;
-        using is_always_equal                           = std::true_type;
-        using propagate_on_container_move_assignment    = std::true_type;
-        
-        template <class U>
-        struct rebind{
-            using other = NoExceptAllocator<U>;
+    using max_signed_t = __int128_t; //macro
+
+    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
+    static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
+
+    #if __cplusplus >= 202002L
+        #if __cplusplus <= 202302L
+
+        template <class T>
+        struct NoExceptAllocator: public std::allocator<T>{
+            
+            constexpr auto allocate(size_t n) -> T *{
+                
+                try{
+                    return std::allocator<T>::allocate(n);
+                } catch (std::bad_alloc& e){
+                    std::abort();
+                }
+
+                return {};
+            }
+            
+            constexpr void deallocate(T * p, size_t n){
+                
+                std::allocator<T>::deallocate(p, n);
+            }
         };
 
-        auto address(reference x) const noexcept -> pointer{
-
-            return std::allocator<T>::address(x);
-        }
-
-        auto address(const_reference x) const noexcept -> const_pointer{
-
-            return std::allocator<T>::address(x);
-        }
-        
-        auto allocate(size_t n, const void * hint) -> pointer{ //noexcept is guaranteed internally - this is to comply with std
-
-            if (n == 0u){
-                return nullptr;
-            }
-
-            pointer rs = std::allocator<T>::allocate(n, hint);
-
-            if (!rs){                
-                std::abort();
-            }
-
-            return rs;
-        }
-
-        auto allocate(size_t n) -> pointer{
-            
-            return std::allocator<T>::allocate(n);
-        }
-        
-        //according to std - deallocate arg is valid ptr - such that allocate -> std::optional<ptr_type>, void deallocate(ptr_type)
-        void deallocate(pointer p, size_t n){ //noexcept is guaranteed internally - this is to comply with std
-
-            if (n == 0u){
-                return;
-            }
-
-            std::allocator<T>::deallocate(p, n);
-        }
-
-        consteval auto max_size() const noexcept -> size_type{
-
-            return std::allocator<T>::max_size();
-        }
-        
-        template <class U, class... Args>
-        void construct(U * p, Args&&... args) noexcept(std::is_nothrow_constructible_v<U, Args...>){
-
-            return std::allocator<T>::construct(p, std::forward<Args>(args)...);
-        }
-
-        template <class U>
-        void destroy(U * p) noexcept(std::is_nothrow_destructible_v<U>){
-
-            std::allocator<T>::destroy(p);
-        }
-    };
+        #endif
+    #endif
 
     template <class T>
     using vector            = std::vector<T, NoExceptAllocator<T>>;
 
-    template <class T>
     using string            = std::basic_string<char, std::char_traits<char>, NoExceptAllocator<char>>;
 
     template <class Key, class Value, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>>
-    using unordered_map     = std::unordered_map<Key, Value, Haser, Pred, NoExceptAllocator<std::pair<const Key, Value>>>;
+    using unordered_map     = std::unordered_map<Key, Value, Hasher, Pred, NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class Key, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>>
     using unordered_set     = std::unordered_set<Key, Hasher, Pred, NoExceptAllocator<Key>>;
 
     template <class Key, class Value, class Cmp = std::less<Key>>
-    using map               = std::map<Key, Value, Cmp, NoExceptAllocator<std::pair<const Key, Value>>;
+    using map               = std::map<Key, Value, Cmp, NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class Key, class Cmp = std::less<Key>>
     using set               = std::set<Key, Cmp, NoExceptAllocator<Key>>;
@@ -131,9 +86,6 @@ namespace stdx{
     }
 
     auto lock_guard(std::atomic_flag& lck) noexcept{
-
-        //atomic operations don't work - its a lame implementation of mutual exclusion in most operating system
-        //use atomic flag and do your atomic operations foo - this way you compromise concurrent memory access at lock_guard which can do memory flush for you  
 
         static int i    = 0u;
         auto destructor = [&](int *) noexcept{
@@ -167,6 +119,66 @@ namespace stdx{
         }
 
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+    }
+
+    template <class Destructor>
+    auto resource_guard(Destructor destructor) noexcept{
+        
+        static_assert(std::is_nothrow_move_constructible_v<Destructor>);
+        static_assert(std::is_nothrow_invocable_v<Destructor>);
+
+        static int i    = 0;
+        auto backout_ld = [destructor_arg = std::move(destructor)](int *) noexcept{
+            destructor_arg();
+        };
+
+        return std::unique_ptr<int, decltype(backout_ld)>(&i, backout_ld);
+    }
+
+    template <class T, class T1, std::enable_if_t<std::numeric_limits<T>::is_integer && std::numeric_limits<T1>::is_integer, bool> = true>
+    constexpr auto pow2mod_unsigned(T lhs, T1 rhs) noexcept -> std::conditional_t<(sizeof(T) > sizeof(T1)), T, T1>{
+
+        using promoted_t = std::conditional_t<(sizeof(T) > sizeof(T1)), T, T1>;
+        return static_cast<promoted_t>(lhs) & static_cast<promoted_t>(rhs - 1);
+    }
+
+    template <class T, class T1>
+    constexpr auto safe_integer_cast(T1 value) noexcept -> T{
+
+        static_assert(std::numeric_limits<T>::is_integer);
+        static_assert(std::numeric_limits<T1>::is_integer);
+
+        if constexpr(IS_SAFE_INTEGER_CONVERSION_ENABLED){
+            using promoted_t = stdx::max_signed_t; 
+
+            static_assert(sizeof(promoted_t) > sizeof(T));
+            static_assert(sizeof(promoted_t) > sizeof(T1));
+
+            if (std::clamp(static_cast<promoted_t>(value), static_cast<promoted_t>(std::numeric_limits<T>::min()), static_cast<promoted_t>(std::numeric_limits<T>::max())) != static_cast<promoted_t>(value)){
+                std::abort();
+            }
+        }
+
+        return value;
+    }
+
+    template <class T>
+    struct safe_integer_cast_wrapper{
+
+        static_assert(std::numeric_limits<T>::is_integer);
+        T value;
+
+        template <class U>
+        constexpr operator U() const noexcept{
+
+            return safe_integer_cast<U>(this->value);
+        }
+    };
+
+    template <class T>
+    constexpr auto wrap_safe_integer_cast(T value) noexcept{
+
+        return safe_integer_cast_wrapper<T>{value};
     }
 }
 

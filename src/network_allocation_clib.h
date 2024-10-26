@@ -9,6 +9,7 @@
 #include "network_log.h"
 #include <memory>
 #include "network_utility.h"
+#include "stdx.h"
 
 namespace dg::network_allocation_clib{
 
@@ -85,7 +86,7 @@ namespace dg::network_allocation_clib{
         auto mem_backout    = [rs]() noexcept{
             dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::cuda_free(rs));
         };
-        auto mem_guard      = dg::network_genult::resource_guard(std::move(mem_backout));
+        auto mem_guard      = stdx::resource_guard(std::move(mem_backout));
         void * aligned_ptr  = dg::memult::align(dg::memult::badvance(rs, sizeof(cuda_ptr_header_t)), alignment_sz);
         void * header_ptr   = dg::memult::badvance(aligned_ptr, -static_cast<intmax_t>(sizeof(cuda_ptr_header_t)));
         auto header         = static_cast<cuda_ptr_header_t>(dg::memult::distance(rs, aligned_ptr));

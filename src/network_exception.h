@@ -102,6 +102,10 @@ namespace dg::network_exception{
 
     }
 
+    inline auto wrap_std_exception(std::exception_ptr){
+
+    }
+
     inline auto is_success(exception_t) noexcept -> bool{
 
     }
@@ -141,7 +145,7 @@ namespace dg::network_exception{
     template <class Functor>
     inline auto to_cstyle_function(Functor functor) noexcept{
 
-        static_assert(std::is_nothrow_move_constructible<Functor>);
+        static_assert(std::is_nothrow_move_constructible_v<Functor>);
 
         auto rs = [f = std::move(functor)]<class ...Args>(Args&& ...args) noexcept(noexcept(functor(std::forward<Args>(args)...))){
             using ret_t = decltype(f(std::forward<Args>(args)...));
@@ -155,7 +159,7 @@ namespace dg::network_exception{
                 }
             } else{
                 try{
-                    static_assert(std::is_nothrow_move_constructible<ret_t>);
+                    static_assert(std::is_nothrow_move_constructible_v<ret_t>);
                     static_assert(std::is_same_v<ret_t, base_type_t<ret_t>>);
                     return std::expected<ret_t, exception_t>(f(std::forward<Args>(args)...));
                 } catch (...){

@@ -80,7 +80,7 @@ namespace dg::network_cufsio_linux::driver_x{
             return err;
         }
         
-        auto driver_grd = dg::network_genult::resource_guard(dg_cufs_legacy_driver_close);
+        auto driver_grd = stdx::resource_guard(dg_cufs_legacy_driver_close);
 
         if (static_cast<bool>(DG_CUFS_POLL_THRESHOLD_SIZE)){
             err = dg::network_exception::wrap_cuda_exception(cuFileDriverSetPollMode(true, DG_CUFS_POLL_THRESHOLD_SIZE.value()));

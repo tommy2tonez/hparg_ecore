@@ -4,148 +4,150 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <chrono>
-#include "network_function_concurrent_buffer.h"
 #include <ratio>
 #include "network_producer_consumer.h"
+#include "network_mempress.h"
+#include "network_concurrency.h" 
+#include "network_randomizer.h"
+#include "network_std_container.h"
 
 namespace dg::network_mempress_collector{
 
-    using epoch_milli_t                 = size_t;  
-    using event_loop_register_t         = void (*)(void (*)(void) noexcept); 
-    
-    template <class ...Args>
-    struct tags{}; 
+    using event_t   = dg::network_memcommit::virtual_mmeory_event_t;
 
-    template <class ID, class Frequency, class Producer, class Consumer, class CollectCapacity>
-    class ScanCollector{}; 
+    struct MempressRetranslatorInterface{
+        virtual ~MempressRetranslatorInterface() noexcept = default;
+        virtual auto size() noexcept -> size_t = 0;
+        virtual auto get(size_t, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
+    };
 
-    template <class ID, size_t FREQUENCY, class T, class T1, size_t COLLECT_CAPACITY>
-    class ScanCollector<ID, std::integral_constant<size_t, FREQUENCY>, dg::network_producer_consumer::DistributedProducerInterface<T>, dg::network_producer_consumer::ConsumerInterface<T1>, std::integral_constant<size_t, COLLECT_CAPACITY>>{
+    class MempressRetranslator: public virtual MempressRetranslatorInterface{
 
         private:
 
-            using self              = ScanCollector; 
-            using producer          = dg::network_producer_consumer::DistributedProducerInterface<T>;  
-            using consumer          = dg::network_producer_consumer::ConsumerInterface<T1>;
-            using event_t           = typename producer::event_t; 
-
-            static inline epoch_milli_t last_collected_time{};
-
-            static consteval auto delta_submit_time_in_millisecond() noexcept -> size_t{
-
-                return double{size_t{1} << 20} / FREQUENCY;
-            } 
-            
+            std::vector<uma_ptr_t> idx_map;
+            std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress;
+        
         public:
 
-            static_assert(FREQUENCY != 0u);
-            static_assert(std::is_same_v<typename producer::event_t, typename consumer::event_t>);
-            static_assert(COLLECT_CAPACITY > 0);
+            MempressRetranslator(std::vector<uma_ptr_t> idx_map,
+                                 std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress) noexcept: idx_map(std::move(idx_map)),
+                                                                                                                 mempress(std::move(mempress)){}
 
-            static void run() noexcept{
+            auto size() noexcept -> size_t{
 
-                using namespace std::chrono;
-
-                struct signature_collect{};
-
-                using functor_signature = tags<self, signature_collect>; 
-                using event_array_tag   = dg::network_function_concurrent_local_array::Tag<functor_signature, event_t, COLLECT_CAPACITY>;
-
-                epoch_milli_t cur       = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-                intmax_t delta          = static_cast<intmax_t>(cur) - static_cast<intmax_t>(last_collected_time);
-                event_t * events        = dg::network_function_concurrent_local_array::get_array(event_array_tag{});
-                size_t sz               = {};
-
-                if (delta < delta_submit_time_in_millisecond()){
-                    return;
-                }
-
-                for (size_t i = 0; i < producer::range(); ++i){
-                    producer::get(i, events, sz, COLLECT_CAPACITY);
-                    consumer::push(events, sz);
-                }
-
-                last_collected_time = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
+                return this->idx_map.size()
             }
 
-            static void init(event_loop_register_t event_loop_register) noexcept{
+            auto get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
-                using namespace std::chrono;
-                last_collected_time = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-                event_loop_register(run);
+                uma_ptr_t region = this->idx_map[idx];
+                this->mempress->collect(region, dst, dst_sz, dst_cap);
             }
     };
 
-    template <class ID, class Frequency, class HalfLifeRatio, class Producer, class Consumer, class CollectCapacity>
-    class HalfLifeCollector{};
-
-    template <class ID, size_t FREQUENCY, intmax_t HALF_LIFE_DEN, intmax_t HALF_LIFE_NUM, class T, class T1, size_t COLLECT_CAPACITY>
-    class HalfLifeCollector<ID, std::integral_constant<size_t, FREQUENCY>, std::ratio<HALF_LIFE_DEN, HALF_LIFE_NUM>, dg::network_producer_consumer::DistributedProducerInterface<T>, dg::network_producer_consumer::ConsumerInterface<T1>, std::integral_constant<size_t, COLLECT_CAPACITY>>{
+    class TemporalCollector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            using self              = HalfLifeCollector; 
-            using producer          = dg::network_producer_consumer::DistributedProducerInterface<T>;  
-            using consumer          = dg::network_producer_consumer::ConsumerInterface<T1>;
-            using event_t           = typename producer::event_t; 
-
-            static inline epoch_milli_t last_collected_time{};
-
-            static consteval auto half_life() noexcept -> double{
-
-                return double{HALF_LIFE_DEN} / double{HALF_LIFE_NUM};
-            } 
-
-            static consteval auto delta_submit_time_in_millisecond() noexcept -> size_t{
-
-                return double{size_t{1} << 20} / FREQUENCY;
-            } 
+            std::unique_ptr<MempressRetranslatorInterface> mempress;
+            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer;
+            std::unique_ptr<event_t[]> event_buf; //fine - refactorables
+            size_t event_buf_cap; //fine - refactorables
+            std::chrono::nanoseconds last;
+            std::chrono::nanoseconds diff;
 
         public:
 
-            static_assert(FREQUENCY != 0u);
-            static_assert(std::is_same_v<typename producer::event_t, typename consumer::event_t>);
-            static_assert(COLLECT_CAPACITY > 0);
+            TemporalCollector(std::unique_ptr<MempressRetranslatorInterface>  mempress,
+                              std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                              std::unique_ptr<event_t[]> event_buf,
+                              size_t event_buf_cap,
+                              std::chrono::nanoseconds last,
+                              std::chrono::nanoseconds diff) noexcept: mempress(std::move(mempress)),
+                                                                       consumer(std::move(consumer)),
+                                                                       event_buf(std::move(event_buf)),
+                                                                       event_buf_cap(event_buf_cap),
+                                                                       last(last),
+                                                                       diff(diff){}
+            
+            auto run_one_epoch() noexcept -> bool{
 
-            static void run() noexcept{
+                std::chrono::nanoseconds now        = dg::network_genult::unix_timestamp();
+                std::chrono::nanoseconds last_diff  = dg::network_genult::timelapsed(this->last, now); 
 
-                using namespace std::chrono;
-
-                struct signature_collect{};
-
-                using functor_signature = tags<self, signature_collect>; 
-                using event_array_tag   = dg::network_function_concurrent_local_array::Tag<functor_signature, event_t, COLLECT_CAPACITY>;
-
-                epoch_milli_t cur       = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-                intmax_t delta          = static_cast<intmax_t>(cur) - static_cast<intmax_t>(last_collected_time);
-                event_t * events        = dg::network_function_concurrent_local_array::get_array(event_array_tag{});
-                size_t sz               = {};
-                size_t nxt_chk_pt       = producer::range() * half_life();
-
-                if (delta < delta_submit_time_in_millisecond()){
-                    return;
+                if (last_diff < this->diff){
+                    return false;
                 }
 
-                for (size_t i = 0; i < producer::range(); ++i){
-                    if (i > nxt_chk_pt){
-                        if (dg::network_randomizer::randomize_bool()){
-                            return;
+                for (size_t i = 0u; i < this->mempress->size(); ++i){
+                    size_t event_buf_sz{};
+                    this->mempress->get(i, this->event_buf.get(), event_buf_sz, this->event_buf_cap);
+                    this->consumer->push(this->event_buf.get(), event_buf_sz);
+                }
+
+                this->last = dg::network_genult::unix_timestamp();
+                return true;
+            }
+    };
+
+    class HalfLifeCollector: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+            
+            std::unique_ptr<MempressRetranslatorInterface> mempress;
+            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer;
+            std::unique_ptr<event_t[]> event_buf;
+            size_t event_buf_cap;
+            std::chrono::nanoseconds last;
+            std::chrono::nanoseconds diff;
+            double halflife;
+        
+        public:
+
+            HalfLifeCollector(std::unique_ptr<MempressRetranslatorInterface> mempress,
+                              std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                              std::unique_ptr<event_t[]> event_buf,
+                              size_t event_buf_cap,
+                              std::chrono::nanoseconds last,
+                              std::chrono::nanoseconds diff,
+                              double halflife) noexcept: mempress(std::move(mempress)),
+                                                         consumer(std::move(consumer)),
+                                                         event_buf(std::move(event_buf)),
+                                                         event_buf_cap(event_buf_cap),
+                                                         last(last),
+                                                         diff(diff),
+                                                         halflife(halflife){}
+
+            auto run_one_epoch() noexcept -> bool{
+
+                std::chrono::nanoseconds now        = dg::network_genult::unix_timestamp();
+                std::chrono::nanoseconds last_diff  = dg::network_genult::timelapsed(this->last, now);
+
+                if (last_diff < diff){
+                    return false;
+                }
+
+                size_t nxt_chk_pt = this->mempress->size() * this->halflife;
+
+                for (size_t i = 0u; i < this->mempress->size(); ++i){
+                    if (i == nxt_chk_pt){
+                        bool coin_flip = dg::network_randomizer::randomize_bool();
+
+                        if (coin_flip){
+                            break;
                         }
-                        nxt_chk_pt += (producer::range() - i) * half_life();
+
+                        nxt_chk_pt += (this->mempress->size() - i) * this->halflife;
                     }
 
-                    producer::collect(i, events, sz, COLLECT_CAPACITY);
-                    consumer::push(events, sz);
+                    size_t event_buf_sz{};
+                    this->mempress->get(i, this->event_buf.get(), event_buf_sz, this->event_buf_cap);
+                    this->consumer->push(this->event_buf.get(), event_buf_sz);
                 }
 
-                last_collected_time = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-            }
-
-            static void init(event_loop_register_t event_loop_register) noexcept{
-
-                using namespace std::chrono;
-                last_collected_time = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-                event_loop_register(run);
+                this->last = dg::network_genult::unix_timestamp();
+                return true;
             }
     };
 }

@@ -26,22 +26,22 @@ namespace dg::network_genult{
 
         public:
 
-            operator std::chrono::nanoseconds() const noexcept{
+            constexpr operator std::chrono::nanoseconds() const noexcept{
 
                 return this->ts;
             }
 
-            operator std::chrono::microseconds() const noexcept{
+            constexpr operator std::chrono::microseconds() const noexcept{
 
                 return std::chrono::duration_cast<std::chrono::microseconds>(this->ts);
             }
 
-            operator std::chrono::milliseconds() const noexcept{
+            constexpr operator std::chrono::milliseconds() const noexcept{
 
                 return std::chrono::duration_cast<std::chrono::milliseconds>(this->ts);
             }
 
-            operator std::chrono::seconds() const noexcept{
+            constexpr operator std::chrono::seconds() const noexcept{
 
                 return std::chrono::duration_cast<std::chrono::seconds>(this->ts);
             }
@@ -51,9 +51,9 @@ namespace dg::network_genult{
     auto backsplit_str(std::basic_string<Args...> s, size_t sz) -> std::pair<std::basic_string<Args...>, std::basic_string<Args...>>{
 
         size_t rhs_sz = std::min(s.size(), sz); 
-        std::basic_string<Args...> rhs(rhs_sz);
+        std::basic_string<Args...> rhs(rhs_sz, ' ');
 
-        for (size_t i = rhs_sz; i != 0; --i){
+        for (size_t i = rhs_sz; i != 0u; --i){
             rhs[i - 1] = s.back();
             s.pop_back();
         }
@@ -83,18 +83,20 @@ namespace dg::network_genult{
         return ptr;
     }
 
-    template <class T, class T1, std::enable_if_t<std::conjunction_v<dg::network_type_traits_x::is_stdprimitive_integer<T>, 
-                                                                     dg::network_type_traits_x::is_stdprimitive_integer<T1>>, bool> = true>
-    auto safe_integer_cast(T1 value) -> T{
+    template <class T, class T1>
+    constexpr auto safe_integer_cast(T1 value) noexcept -> T{
+
+        static_assert(std::numeric_limits<T>::is_integer);
+        static_assert(std::numeric_limits<T1>::is_integer);
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
-            if (value > std::numeric_limits<T>::max()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_NUMERIC_CAST));
-                std::abort();
-            }
+            using promoted_t = dg::max_signed_t; 
 
-            if (value < std::numeric_limtis<T>::min()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_NUMERIC_CAST));
+            static_assert(sizeof(promoted_t) > sizeof(T));
+            static_assert(sizeof(promoted_t) > sizeof(T1));
+
+            if (std::clamp(static_cast<promoted_t>(value), static_cast<promoted_t>(std::numeric_limits<T>::min()), static_cast<promoted_t>(std::numeric_limits<T>::max())) != static_cast<promoted_t>(value)){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
                 std::abort();
             }
         }
@@ -109,35 +111,17 @@ namespace dg::network_genult{
         T value;
 
         template <class U>
-        operator U() const noexcept{
+        constexpr operator U() const noexcept{
 
             return safe_integer_cast<U>(this->value);
         }
     };
 
     template <class T>
-    auto wrap_safe_integer_cast(T value) noexcept{
+    constexpr auto wrap_safe_integer_cast(T value) noexcept{
 
         return safe_integer_cast_wrapper<T>{value};
     }
-
-    template <class T, class T1>
-    auto safe_non_negative_integer_sub(T lhs, T1 rhs) noexcept -> decltype(lhs - rhs){
-
-        static_assert(dg::network_type_traits_x::is_stdprimitive_integer_v<T>);
-        static_assert(dg::network_type_traits_x::is_stdprimitive_integer_v<T1>);
-
-        if constexpr(IS_SAFE_ACCESS_ENABLED){ //weird
-            if (lhs < rhs){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            } else{
-                return lhs - rhs;
-            }
-        } else{
-            return lhs - rhs;
-        }
-    } 
 
     template <class T>
     auto safe_optional_access(std::optional<T>& obj) noexcept -> std::optional<T>&{
@@ -151,71 +135,6 @@ namespace dg::network_genult{
 
         return obj;
     } 
-
-    template <class T, std::enable_if_t<std::is_trivial_v<T>, bool> = true>
-    auto inplace_make_set(T * data, size_t sz) noexcept -> size_t{
-
-        if (sz == 0u){
-            return data;
-        }
-
-        std::sort(data, data + sz);
-        T * last = data + 1;
-
-        for (size_t i = 1u; i < sz; ++i){
-            if (data[i] != data[i - 1]){
-                *(last++) = data[i];
-            }
-        }
-
-        return std::distance(data, last);
-    }
-
-    //defined for every std::lock_guard use cases
-    //undefined otherwise
-    auto lock_guard(std::atomic_flag& lck) noexcept{
-
-        static int i    = 0;
-        auto destructor = [&](int *) noexcept{
-            dg::network_atomic_x::thread_fence_optional();
-            lck.clear(std::memory_order_acq_rel);
-        };
-
-        while (!lck.test_and_set(std::memory_order_acq_rel)){}
-        dg::network_atomic_x::thread_fence_optional();
-
-        return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor));
-    }
-
-    //defined for every std::lock_guard use cases
-    //undefined otherwise
-    auto lock_guard(std::mutex& lck) noexcept{
-
-        static int i    = 0;
-        auto destructor = [&](int *) noexcept{
-            dg::network_atomic_x::thread_fence_optional();
-            lck.unlock();
-        };
-
-        lck.lock();
-        dg::network_atomic_x::thread_fence_optional();
-        
-        return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor));
-    }
-
-    template <class Destructor>
-    auto resource_guard(Destructor destructor) noexcept{
-        
-        static_assert(std::is_nothrow_copy_constructible_v<Destructor>);
-        static_assert(dg::network_type_traits_x::is_nothrow_invokable_v<Destructor>);
-
-        static int i    = 0;
-        auto backout_ld = [=](int *) noexcept{
-            destructor();
-        };
-
-        return std::unique_ptr<int, decltype(backout_ld)>(&i, backout_ld);
-    }
 
     template <class ID, class T>
     class singleton{
@@ -451,7 +370,7 @@ namespace dg::network_genult{
     
     template <class ResourceType, class ResourceDeallocator>
     class nothrow_immutable_unique_raii_wrapper<ResourceType, ResourceDeallocator, std::void_t<std::enable_if_t<std::conjunction_v<std::is_trivial<ResourceType>,
-                                                                                                                                   dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>, 
+                                                                                                                                   std::is_nothrow_invocable<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>, 
                                                                                                                                    std::is_nothrow_move_constructible<ResourceDeallocator>,
                                                                                                                                    dg::network_type_traits_x::is_base_type_v<ResourceDeallocator>>>>>{
 
@@ -535,7 +454,7 @@ namespace dg::network_genult{
     template <class ResourceType, class ResourceDeallocator>
     class nothrow_unique_raii_wrapper<ResourceType, ResourceDeallocator, std::void_t<std::enable_if_t<std::conjunction_v<std::is_nothrow_move_constructible<ResourceType>,
                                                                                                                          std::is_nothrow_move_constructible<ResourceDeallocator>,
-                                                                                                                         dg::network_type_traits_x::is_nothrow_invokable<ResourceDeallocator, std::add_rvalue_reference_t<ResourceType>>, //this is strange + confusing - rather to do dynamic allocation 
+                                                                                                                         std::is_nothrow_invocable<ResourceDeallocator, std::add_rvalue_reference_t<ResourceType>>,
                                                                                                                          dg::network_type_traits_x::is_base_type_v<ResourceType>,
                                                                                                                          dg::network_type_traits_x::is_base_type_v<ResourceDeallocator>>>>>{
         

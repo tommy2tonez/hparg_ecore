@@ -110,7 +110,6 @@ namespace dg::network_memlock{
 namespace dg::network_memlock_host{
 
     using namespace dg::network_memlock;
-    using namespace dg::network_lang_x;
 
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
     struct AtomicFlagLock{}; 
@@ -663,6 +662,8 @@ namespace dg::network_memlock_utility{
             }
     };
 
+    //todos: refactor
+    
     template <class T, class ptr_t>
     auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T>, ptr_t ptr) noexcept{
         

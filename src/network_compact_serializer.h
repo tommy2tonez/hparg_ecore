@@ -17,6 +17,7 @@
 #include "network_hash.h"
 #include <type_traits>
 #include <array>
+#include "stdx.h"
 
 namespace dg::network_compact_serializer::constants{
 
@@ -413,7 +414,7 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
         void put(char *& buf, T&& data) const noexcept{
 
-            this->put(buf, dg::network_genult::safe_integer_cast<types::size_type>(data.size()));
+            this->put(buf, stdx::safe_integer_cast<types::size_type>(data.size()));
 
             for (const auto& e: data){
                 this->put(buf, e);
@@ -426,7 +427,7 @@ namespace dg::network_compact_serializer::archive{
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
 
-            this->put(buf, dg::network_genult::safe_integer_cast<types::size_type>(data.size()));
+            this->put(buf, stdx::safe_integer_cast<types::size_type>(data.size()));
 
             void * dst          = buf;
             const void * src    = data.data();

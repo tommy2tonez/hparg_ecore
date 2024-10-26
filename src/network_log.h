@@ -163,17 +163,19 @@ namespace dg::network_log::implementation{
 
             void log(std::string_view content, std::string_view kind){
                 
-                size_t logger_sz = this->logger_vec.size();
-                [[assume(loggser_sz != 0 && (logger_sz & (logger_sz -1)) == 0)]];
-                size_t idx = std::bit_cast<size_t>(std::this_thread::get_id()) % logger_sz;
+                size_t thr_id       = std::bit_cast<size_t>(std::this_thread::get_id());
+                size_t logger_sz    = this->logger_vec.size();
+                size_t idx          = stdx::unsigned_pow2_mod(thr_id, logger_sz);
+;
                 this->logger_vec[idx]->log(content, kind);
             }
 
             void flush(){
+                
+                size_t thr_id       = std::bit_cast<size_t>(std::this_thread::get_id());
+                size_t logger_sz    = this->logger_vec.size();
+                size_t idx          = stdx::unsigned_pow2_mod(thr_id, logger_sz);
 
-                size_t logger_sz = this->logger_vec.size();
-                [[assume(loggser_sz != 0 && (logger_sz & (logger_sz -1)) == 0)]];
-                size_t idx = std::bit_cast<size_t>(std::this_thread::get_id()) % logger_sz;
                 this->logger_vec[idx]->flush();
             }
     };

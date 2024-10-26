@@ -225,7 +225,7 @@ namespace dg::network_postgres_db::hex_encoder{
         }
 
         size_t rs_sz = s.size() / 2;
-        dg::string rs(rs_sz);
+        dg::string rs(rs_sz, ' ');
 
         for (size_t i = 0u; i < rs_sz; ++i){
             size_t hidx = i * 2;

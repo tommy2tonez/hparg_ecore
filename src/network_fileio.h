@@ -183,7 +183,7 @@ namespace dg::network_fileio_chksum_x{
             }
         };
 
-        auto backout_guard  = dg::network_genult::resource_guard(std::move(backout_lambda));
+        auto backout_guard  = stdx::resource_guard(std::move(backout_lambda));
         exception_t err     = dg::network_fileio::dg_create_cbinary(fp, fsz);
 
         if (dg::network_exception::is_failed(err)){

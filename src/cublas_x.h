@@ -13,6 +13,10 @@
 #include <utility>
 #include <algorithm>
 #include <optional>
+#include <random>
+#include <mutex>
+#include <functional>
+#include "stdx.h"
 
 namespace dg::cublas_x::syntax_tree{
 
@@ -96,16 +100,13 @@ namespace dg::cublas_x::syntax_tree{
         }
     };
     
-    //feature extractions - base case simulations + populate optimization dictionary
-    //its fine to brute force optimization for XLA
-
     struct AbstractNode{
         std::vector<std::unique_ptr<AbstractNode>> descendants;
         std::vector<size_t> descendants_positional_vec;
-        transform_kind_t transform_kind; //
+        transform_kind_t transform_kind;
         MatrixDimension dim;
-        std::string val_id; //
-        std::string id; //
+        std::string val_id;
+        std::string id;
         logit_kind_t logit_kind;
 
         template <class Reflector>
@@ -134,13 +135,19 @@ namespace dg::cublas_x::syntax_tree{
         }
     };
 
+    struct CudaPtr{
+        void * cuda_ptr;
+        int cuda_device_id;
+    };
+
     struct Node{
         std::vector<std::unique_ptr<Node>> descendants;
+        std::vector<size_t> descendants_positional_vec;
         transform_kind_t transform_kind;
         MatrixDimension dim;
         std::string value_identifier;
         logit_kind_t logit_kind;
-        std::shared_ptr<cuda_ptr_t> data;
+        std::shared_ptr<CudaPtr> cuda_ptr;
     };
 
     auto transform_kind_cstr(transform_kind_t transform_kind) -> const char *{
@@ -254,19 +261,16 @@ namespace dg::cublas_x::exception{
     struct invalid_argument: std::exception{};
 }
 
-namespace dg::cublas_x::exec_engine{
+namespace dg::cublas_x::engine{
 
     class ExecutorInterface{
 
         public:
 
             virtual ~ExecutorInterface() noexcept = default;
-            virtual void exec(int device_id, const std::multimap<std::string, void *>& arguments, void * dst, size_t dst_cap) = 0;
+            virtual void exec(int device_id, const std::unordered_map<std::string, void *>& arguments, void * dst, size_t dst_cap) = 0;
     };
-}
 
-namespace dg::cublas_x::opti_engine{
- 
     class OptimizerInterface{
 
         public:
@@ -278,14 +282,58 @@ namespace dg::cublas_x::opti_engine{
     };
 }
 
+namespace dg::cublas_x::utility{
+
+    template <class T>
+    auto deepcopy(const T& inp) -> T{
+
+        dg::network_compact_serializer::deserialize<T>(dg::network_compact_serializer::serialize<std::string>(inp));
+    }
+
+    auto make_identifier(const std::string& identifier) -> std::string{
+
+    } 
+
+    auto combine_identifier(const std::string& lhs, const std::string& rhs) -> std::string{
+        
+    }
+
+    struct IdFactory{
+
+        private:
+
+            static inline constexpr size_t ID_SIZE = 32;
+            static inline std::mutex mtx{};
+            static inline auto random_device = std::bind(std::uniform_int_distribution<char>{}, std::mt19937{});
+
+        public:
+
+            static auto next_id() -> std::string{
+
+                auto lck_grd = stdx::lock_guard(mtx);
+                std::string rs(ID_SIZE, ' ');
+                std::generate(rs.begin(), rs.end(), std::ref(random_device));
+
+                return rs;
+            }
+    };
+
+    auto next_id() -> std::string{
+
+        return IdFactory::next_id();
+    }
+}
+
 namespace dg::cublas_x::exhaustive_ss_opti_engine{
+
+    using namespace syntax_tree; 
 
     class SpaceRandomizerInterface{
 
         public:
 
             virtual ~SpaceRandomizerInterface() noexcept = default;
-            virtual auto randomize(const syntax_tree::MatrixDimension&) -> std::shared_ptr<cuda_ptr_t> = 0;
+            virtual auto randomize(const syntax_tree::MatrixDimension&) -> std::shared_ptr<syntax_tree::CudaPtr> = 0;
     };
 
     class AbstractNodeRandomizerInterface{
@@ -343,146 +391,6 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
             virtual ~AbstractNodeUniqueRepresentationGeneratorInterface() noexcept = default;
             virtual auto to_unique_representation(const std::unique_ptr<syntax_tree::AbstractNode>&) -> std::unique_ptr<syntax_tree::AbstractNode> = 0;
     };
-} 
-
-namespace dg::cublas_x::utility{
-
-    template <class T>
-    auto deepcopy(const T& inp) -> T{
-
-        std::string bstream(dg::network_compact_serializer::size(inp), ' ');
-        dg::network_compact_serializer::serialize_into(bstream.data(), inp);
-        T rs{};
-        dg::network_compact_serializer::deserialize_into(rs, bstream.data());
-
-        return rs;
-    } 
-
-    auto make_identifier(const std::string& identifier) -> std::string{
-
-        auto new_identifier = std::vector<std::string> {identifier};
-        auto rs             = std::string(dg::network_compact_serializer::size(new_identifier), ' ');
-        dg::network_compact_serializer::serialize_into(rs.data(), new_identifier);
-
-        return rs;
-    } 
-
-    auto combine_identifier(const std::string& lhs, const std::string& rhs) -> std::string{
-        
-        // return lhs + rhs;
-
-    }
-}
-
-namespace dg::cublas_x::exhaustive_ss_opti_engine{
-
-    using namespace syntax_tree; 
-
-    template <class arithemtic_ops_t>
-    struct coerced_x_math{
-
-        static __device__ inline auto sign(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        } 
-
-        static __device__ inline auto exp(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto ln(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto abs(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto cos(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto acos(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto sin(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto asin(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto tan(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto atan(arithemtic_ops_t value) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto sqrt(arithemtic_ops_t value) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto invsqrt(arithemtic_ops_t value) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto negative(arithemtic_ops_t value) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto add(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto sub(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto mul(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithemtic_ops_t{
-
-        }
-
-        static __device__ inline auto div(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto pow(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithmetic_ops_t{
-
-        }
-
-        template <size_t RHS_VALUE>
-        static __device__ inline auto pow(arithemtic_ops_t lhs, const std::integral_constant<size_t, RHS_VALUE>) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto fma(arithmetic_ops_t first, arithmetic_ops_t second, arithemtic_ops_t third) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto min(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto max(arithemtic_ops_t lhs, arithemtic_ops_t rhs) -> arithmetic_ops_t{
-
-        }
-
-        static __device__ inline auto eqcmp_mul(arithemtic_ops_t lcmp, arithemtic_ops_t rcmp, arithemtic_ops_t val) -> arithmetic_ops_t{
-
-        }
-    };
-    
-    //this is one poor man optimization implementation - it covers all the cases yet there's a need for heuristics + optimization_cost/ optimizability tradeoff
-    //optimization_cost/ optimizability is usually a f(x) = sqrt(x) chart - approx this
-    //optimization is platform depedent + available cuda instruction set
-    //such information forms a database - store this
-    //base case optimizations are user-populated
-    //base case optimizations can be as simple as transform_u8(transform_u8(tile)) -> transform_u8(tile)
-    //  or a = b, c = a -> c = b
-    //  fuse operations, etc. 
 
     class AbstractNodeCollapser: public virtual AbstractNodeCollapserInterface{
 
@@ -552,7 +460,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                     std::abort();
                 }
 
-                std::vector<size_t> space   = get_space(descendants);
+                std::vector<size_t> space   = this->get_space(descendants);
                 auto rs                     = std::vector<std::unique_ptr<CollapsedAbstractNode>>{};
                 auto ptr                    = std::vector<size_t>(0u, space.size());
                 size_t idx                  = 0u;
@@ -620,7 +528,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
                 }
 
                 for (const auto& descendant: root->descendants){
-                    postorder_traversal(descendant, rs);
+                    this->postorder_traversal(descendant, rs);
                 }
                 
                 rs.push_back(root->transform_kind);
@@ -776,7 +684,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
             }
     };
 
-    class PermuteStateSearchEngine: public virtual StateSearchEngineInterface{
+    class CombinatorialStateSearchEngine: public virtual StateSearchEngineInterface{
 
         private:
 
@@ -784,7 +692,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
         public:
 
-            PermuteStateSearchEngine(std::unique_ptr<StateSearchEngineInterface> base_search) noexcept: base_search(std::move(base_search)){}
+            CombinatorialStateSearchEngine(std::unique_ptr<StateSearchEngineInterface> base_search) noexcept: base_search(std::move(base_search)){}
 
             auto search(const std::unique_ptr<AbstractNode>& root) -> std::vector<std::unique_ptr<AbstractNode>>{
 
@@ -885,7 +793,7 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
             }
     };
 
-    class OptimizerEngine: public virtual opti_engine::OptimizerInterface{
+    class OptimizerEngine: public virtual engine::OptimizerInterface{
 
         private:
 
@@ -925,6 +833,10 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
             auto optimize(const std::unique_ptr<AbstractNode>& root) -> std::unique_ptr<AbstractNode>{
 
+                if (!root){
+                    return {};
+                }
+
                 std::chrono::nanoseconds max_ts     = std::chrono::duration_values<std::chrono::nanoseconds>::max();
                 std::unique_ptr<AbstractNode> rs    = utility::deepcopy(root);
 
@@ -957,6 +869,10 @@ namespace dg::cublas_x::exhaustive_ss_opti_engine{
 
 namespace dg::cublas_x{
 
+    //goals tmr:   - get basic optimizations done - skip, fuse, simd  
+    //             - optimization tree height -> 1 << 6
+
+    
     using AbstractNode  = syntax_tree::AbstractNode;
     using cublas_plan_t = std::unique_ptr<AbstractNode>;
     using logit_kind_t  = syntax_tree::logit_kind_t;
@@ -974,11 +890,11 @@ namespace dg::cublas_x{
         }
 
         if (!id.has_value()){
-            id = next_id(); 
+            id = utility::next_id(); 
         }
 
         if (!val_id.has_value()){
-            val_id = next_id();
+            val_id = utility::next_id();
         }
 
         return std::make_unique<AbstractNode>(AbstractNode{{}, {}, transform_kind_none, MatrixDimension{m, n}, *val_id, *id, logit_kind});
@@ -1005,7 +921,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_saturate_01;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_saturate_01));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1024,7 +940,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_rounddown_optional;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_rounddown_optional));
-        std::string id                  = utiltiy::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1043,7 +959,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_rounddown;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_rounddown)); 
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1062,7 +978,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_roundup_optional;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundup_optional));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1081,7 +997,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_roundup;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundup));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1100,7 +1016,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_fastmath;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_fastmath));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1119,7 +1035,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_roundeven_optional;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundeven_optional));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1138,7 +1054,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_roundeven;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundeven));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1157,7 +1073,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_roundzero_optional;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundzero_optional));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1176,7 +1092,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_roundzero;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_roundzero));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1195,7 +1111,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_clone;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_clone));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1214,7 +1130,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_relu;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_relu));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1261,7 +1177,7 @@ namespace dg::cublas_x{
 
         MatrixDimension dim     = plan->dim;
         std::string val_id      = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind));
-        std::string id          = utility::combine_identifier(plan->id, next_transform_id()); 
+        std::string id          = utility::combine_identifier(plan->id, utility::next_id()); 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
     }
@@ -1279,7 +1195,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_sign;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_sign));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id()); 
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id()); 
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1298,7 +1214,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_exp;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_exp));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1317,7 +1233,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_exp2;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_exp2));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1336,7 +1252,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_exp10;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_exp10));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1355,7 +1271,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_log;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_log));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1374,7 +1290,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_log2;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_log2));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1393,7 +1309,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_log10;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_log10));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1412,7 +1328,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_abs;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_abs));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1431,7 +1347,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_cos;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_cos));
-        std::string id                  = utility::combine_identifier(plan->id, next_tranform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1450,7 +1366,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_acos;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_acos));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1469,7 +1385,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_sin;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_sin));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1488,7 +1404,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_asin;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_asin));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1507,7 +1423,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_tan;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_tan));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1526,7 +1442,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_atan;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_atan));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1545,7 +1461,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_sqrt;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_sqrt));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1564,7 +1480,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_invsqrt;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_invsqrt));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind; 
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1583,7 +1499,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_negative;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_negative));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1602,7 +1518,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_negate;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_negate));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1621,7 +1537,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_transpose;
         MatrixDimension dim             = plan->dim;
         std::string val_id              = utility::combine_identifier(plan->val_id, transform_kind_cstr(transform_kind_transpose));
-        std::string id                  = utility::combine_identifier(plan->id, next_transform_id());
+        std::string id                  = utility::combine_identifier(plan->id, utility::next_id());
         logit_kind_t logit_kind         = plan->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1652,7 +1568,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_linear;
         MatrixDimension dim             = MatrixDimension{lhs->dim.row_sz, rhs->dim.column_sz};
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_linear));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id()); 
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id()); 
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1683,7 +1599,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_dot;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_linear));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1718,7 +1634,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_add;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_add));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1753,7 +1669,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_sub;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_sub));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1788,7 +1704,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_mul;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_mul));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1823,7 +1739,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_div;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_div));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1854,7 +1770,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_pow;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_div));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1885,7 +1801,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_min;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_min));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
         
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1916,7 +1832,7 @@ namespace dg::cublas_x{
         transform_kind_t transform_kind = transform_kind_max;
         MatrixDimension dim             = lhs->dim;
         std::string val_id              = utility::combine_identifier(utility::combine_identifier(lhs->val_id, rhs->val_id), transform_kind_cstr(transform_kind_max));
-        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), next_transform_id());
+        std::string id                  = utility::combine_identifier(utility::combine_identifier(lhs->id, rhs->id), utility::next_id());
         logit_kind_t logit_kind         = lhs->logit_kind;
 
         return std::make_unique<AbstractNode>(AbstractNode{std::move(descendants), std::move(positional_vec), transform_kind, dim, std::move(val_id), std::move(id), logit_kind});
@@ -1930,7 +1846,7 @@ namespace dg::cublas_x{
 
     }
 
-    auto cublas_make_executable(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<exec_engine::ExecutorInterface>{
+    auto cublas_make_executable(const std::unique_ptr<AbstractNode>& plan) -> std::unique_ptr<engine::ExecutorInterface>{
 
     }
 } 

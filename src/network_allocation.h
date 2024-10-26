@@ -33,9 +33,10 @@ namespace dg::network_allocation{
     static inline constexpr size_t ALLOCATOR_ID_BSPACE          = sizeof(uint8_t) * CHAR_BIT;
     static inline constexpr size_t ALIGNMENT_BSPACE             = sizeof(uint8_t) * CHAR_BIT;
     static inline constexpr ptr_type NETALLOC_NULLPTR           = ptr_type{0u}; 
-    static inline constexpr size_t DEFLT_ALIGNMENT              = alignof(std::max_align_t);
-    static inline constexpr size_t LEAST_GUARANTEED_ALIGNMENT   = 8u;
-
+    static inline constexpr size_t DEFLT_ALIGNMENT              = alignof(double);
+    static inline constexpr size_t LEAF_SZ                      = 8u;
+    static inline constexpr size_t LEAST_GUARANTEED_ALIGNMENT   = LEAF_SZ;
+ 
     static_assert(PTROFFS_BSPACE + PTRSZ_BSPACE + ALLOCATOR_ID_BSPACE + ALIGNMENT_BSPACE <= sizeof(ptr_type) * CHAR_BIT);
     static_assert(-1 == ~0);
     static_assert(!NETALLOC_NULLPTR);
@@ -136,21 +137,16 @@ namespace dg::network_allocation{
 
             std::unique_ptr<char[], decltype(&std::free)> buf;
             std::unique_ptr<GCHeapAllocator> base_allocator;
-            size_t leaf_sz;
 
         public:
             
             Allocator(std::unique_ptr<char[], decltype(&std::free)> buf,
-                      std::unique_ptr<GCHeapAllocator> base_allocator,
-                      size_t leaf_sz) noexcept: buf(std::move(buf)),
-                                                base_allocator(std::move(base_allocator)),
-                                                leaf_sz(leaf_sz){}
+                      std::unique_ptr<GCHeapAllocator> base_allocator) noexcept: buf(std::move(buf)),
+                                                                                 base_allocator(std::move(base_allocator)){}
             
             auto malloc(size_t blk_sz) noexcept -> ptr_type{
 
-                [[assume(this->leaf_sz != 0 && (this->leaf_sz & (this->leaf_sz - 1)) == 0)]];
-
-                size_t req_node_sz = blk_sz / this->leaf_sz + size_t{blk_sz % this->leaf_sz != 0};
+                size_t req_node_sz = blk_sz / LEAF_SZ + size_t{blk_sz % LEAF_SZ != 0u};
                 std::optional<interval_type> resp = this->base_allocator->alloc(req_node_sz);
 
                 if (!resp.has_value()){
@@ -180,11 +176,9 @@ namespace dg::network_allocation{
                     return nullptr;
                 }
 
-                [[assume(this->leaf_sz != 0 && (this->leaf_sz & (this->leaf_sz - 1)) == 0)]];
-
                 auto [offs, _] = decode_ptr(ptr);
                 char * rs = this->buf.get();
-                std::advance(rs, offs * this->leaf_sz);
+                std::advance(rs, offs * LEAF_SZ);
 
                 return rs;
             }
@@ -278,9 +272,8 @@ namespace dg::network_allocation{
 
                 size_t thr_idx  = dg::network_concurrency::this_thread_idx();
                 size_t vec_sz   = this->allocator_vec.size();
-                [[assume(vec_sz != 0 && (vec_sz & (vec_sz - 1)) == 0)]];
 
-                return thr_idx % vec_sz;
+                return stdx::pow2mod_unsigned(thr_idx % vec_sz);
             }
     };
 
@@ -303,20 +296,10 @@ namespace dg::network_allocation{
 
     struct Factory{
 
-        static auto spawn_heap_allocator(size_t leaf_sz, size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
+        static auto spawn_heap_allocator(size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
 
-            const size_t MIN_LEAF_SZ        = 1;
-            const size_t MAX_LEAF_SZ        = size_t{1} << 10;
-            const size_t MIN_BASE_SZ        = 1u;
-            const size_t MAX_BASE_SZ        = size_t{1} << 40;
-
-            if (std::clamp(leaf_sz, MIN_LEAF_SZ, MAX_LEAF_SZ) != leaf_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (!dg::memult::is_pow2(leaf_sz)){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+            const size_t MIN_BASE_SZ    = 1u;
+            const size_t MAX_BASE_SZ    = size_t{1} << 40;
 
             if (std::clamp(base_sz, MIN_BASE_SZ, MAX_BASE_SZ) != base_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -342,35 +325,25 @@ namespace dg::network_allocation{
             return rs;
         }
 
-        static auto spawn_allocator(size_t leaf_sz, size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
+        static auto spawn_allocator(size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
 
-            const size_t MIN_LEAF_SZ        = LEAST_GUARANTEED_ALIGNMENT;
-            const size_t MAX_LEAF_SZ        = size_t{1} << 10;
             const size_t MIN_LEAST_BUF_SZ   = 1u;
             const size_t MAX_LEAST_BUF_SZ   = size_t{1} << 40;
-
-            if (std::clamp(leaf_sz, MIN_LEAF_SZ, MAX_LEAF_SZ) != leaf_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (!dg::memult::is_pow2(leaf_sz)){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
 
             if (std::clamp(least_buf_sz, MIN_LEAST_BUF_SZ, MAX_LEAST_BUF_SZ) != least_buf_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t buf_sz   = dg::memult::least_pow2_greater_eq_than(std::max(least_buf_sz, leaf_sz));
-            size_t base_sz  = buf_sz / leaf_sz;
-            auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(leaf_sz, buf_sz)), std::free);  
+            size_t buf_sz   = dg::memult::least_pow2_greater_eq_than(std::max(least_buf_sz, LEAF_SZ));
+            size_t base_sz  = buf_sz / LEAF_SZ;
+            auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(LEAF_SZ, buf_sz)), std::free);  
 
             if (!buf){
                 dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
             }
 
-            std::unique_ptr<GCHeapAllocator> base_allocator = spawn_heap_allocator(leaf_sz, base_sz);
-            return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator), leaf_sz);
+            std::unique_ptr<GCHeapAllocator> base_allocator = spawn_heap_allocator(base_sz);
+            return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator));
         }
 
         static auto spawn_concurrent_allocator(stdx::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
@@ -417,12 +390,12 @@ namespace dg::network_allocation{
 
     inline AllocationResource allocation_resource;
 
-    void init(size_t leaf_sz, size_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
+    void init(ize_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
 
         stdx::vector<std::unique_ptr<Allocator>> allocator_vec{};
 
         for (size_t i = 0u; i < num_allocator; ++i){
-            allocator_vec.push_back(Factory::spawn_allocator(leaf_sz, least_buf_sz));
+            allocator_vec.push_back(Factory::spawn_allocator(least_buf_sz));
         }
 
         std::shared_ptr<MultiThreadAllocator> allocator = Factory::spawn_concurrenct_allocator(std::move(allocator_vec));

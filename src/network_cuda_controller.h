@@ -205,7 +205,7 @@ namespace dg::network_cuda_controller{
         };
 
         dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaSetValidDevices(device, sz)));
-        return dg::network_genult::resource_guard(std::move(resource_backout)); //not semantically accurate - yet functionally accurate - improvement required
+        return stdx::resource_guard(std::move(resource_backout)); //not semantically accurate - yet functionally accurate - improvement required
     }
     //----
 }
