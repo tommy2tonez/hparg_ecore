@@ -132,7 +132,7 @@ namespace stdx{
             destructor_arg();
         };
 
-        return std::unique_ptr<int, decltype(backout_ld)>(&i, backout_ld);
+        return std::unique_ptr<int, decltype(backout_ld)>(&i, std::move(backout_ld));
     }
 
     template <class T, class T1, std::enable_if_t<std::numeric_limits<T>::is_integer && std::numeric_limits<T1>::is_integer, bool> = true>
