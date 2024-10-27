@@ -79,6 +79,10 @@
         "format": "cpp",
         "span": "cpp",
         "expected": "cpp",
-        "stdfloat": "cpp"
+        "stdfloat": "cpp",
+        "transaction": "cpp",
+        "pqxx": "cpp",
+        "bitset": "cpp",
+        "ranges": "cpp"
     }
 }

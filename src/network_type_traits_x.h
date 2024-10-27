@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <utility>
 #include <expected>
+#include <string>
 
 namespace dg::network_type_traits_x{
     
@@ -51,14 +52,14 @@ namespace dg::network_type_traits_x{
     template <class T>
     static inline constexpr bool is_tuple_v = is_tuple<T>::value;
 
-    template <class T, class = void>
-    struct is_stdprimitive_integer: std::false_type{};
+    template <class T>
+    struct is_basic_string: std::false_type{};
+
+    template <class ...Args>
+    struct is_basic_string<std::basic_string<Args...>>: std::true_type{};
 
     template <class T>
-    struct is_stdprimitive_integer<T, std::void_t<std::enable_if_t<std::numeric_limits<T>::is_integer>>>: std::true_type{}; 
-
-    template <class T>
-    static inline constexpr bool is_stdprimitive_integer_v = is_stdprimitive_integer<T>::value; 
+    static inline constexpr bool is_basic_string_v = is_basic_string<T>::value;
 
     template <class T>
     struct mono_reduction_type_helper{};
@@ -88,17 +89,31 @@ namespace dg::network_type_traits_x{
     template <class ...Args>
     using mono_reduction_type_t = typename mono_reduction_type<Args...>::type; 
 
-    template <class Functor, class Tag, class = void>
-    struct is_nothrow_invokable_helper: std::false_type{};
+    template <size_t BYTE_LENGTH>
+    struct unsigned_of_byte{};
 
-    template <class Functor, class ...Args>
-    struct is_nothrow_invokable_helper<Functor, tags<Args...>, std::void_t<std::enable_if_t<noexcept(std::declval<Functor>()(std::declval<Args>()...))>>>: std::true_type{}; 
+    template <>
+    struct unsigned_of_byte<1>{
+        using type = uint8_t;
+    };
 
-    template <class Functor, class ...Args>
-    struct is_nothrow_invokable: is_nothrow_invokable_helper<Functor, tags<Args...>>{}; 
+    template <>
+    struct unsigned_of_byte<2>{
+        using type = uint16_t;
+    };
 
-    template <class Functor, class ...Args>
-    static inline constexpr bool is_nothrow_invokable_v = is_nothrow_invokable<Functor, Args...>::value; 
-} 
+    template <>
+    struct unsigned_of_byte<4>{
+        using type = uint32_t;
+    };
+
+    template <>
+    struct unsigned_of_byte<8>{
+        using type = uint64_t;
+    };
+
+    template <size_t BYTE_LENGTH>
+    using unsigned_of_byte_t = typename unsigned_of_byte<BYTE_LENGTH>::type;
+}
 
 #endif

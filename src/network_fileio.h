@@ -3,7 +3,6 @@
 
 #include "network_trivial_serializer.h" 
 #include "network_hash.h"
-#include "network_utility.h"
 #include "stdx.h"
 
 #ifdef __linux__
@@ -31,13 +30,13 @@ namespace dg::network_fileio_chksum_x{
         uint64_t content_size;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
 
             reflector(chksum, content_size);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
 
             reflector(chksum, content_size);
         }
@@ -52,12 +51,12 @@ namespace dg::network_fileio_chksum_x{
         try{
             auto ext            = std::filesystem::path(fp).extension();
             auto rawname        = std::filesystem::path(fp).replace_extension("").filename();
-            auto new_rawname    = std::format("{}_{}", rawname, METADATA_SUFFIX); 
+            auto new_rawname    = std::format("{}_{}", rawname.native(), METADATA_SUFFIX); 
             auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(ext);
 
             return new_fp;
         } catch (...){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception_ptr(std::current_exception())));
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception(std::current_exception())));
             std::abort();
             return {};
         }
@@ -196,7 +195,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        auto header = FileHeader{dg::network_hash::cmurmur_hash(fsz), fsz}; 
+        auto header = FileHeader{dg::network_hash::cmurmur_hash(fsz), fsz};  //
         err         = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){

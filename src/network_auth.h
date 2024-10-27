@@ -2,23 +2,16 @@
 #define __DG_NETWORK_AUTH_H__
 
 #include "network_std_container.h"
+#include "stdx.h"
+#include "network_postgres_db.h"
+#include <chrono>
+#include "network_exception.h"
 
 namespace dg::network_auth_utility{
 
     struct Token{
         std::chrono::nanoseconds expiry_time;
-        std::chrono::nanoseconds refresh_expiry_time;
         dg::string content;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(expiry_time, refresh_expiry_time, content);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(expiry_time, refresh_expiry_time, content);
-        }
     };
 
     struct EncoderInterface{
@@ -29,9 +22,8 @@ namespace dg::network_auth_utility{
 
     struct TokenControllerInterface{
         virtual ~TokenControllerInterface() noexcept = default;
-        virtual auto tokenize(const dg::string&) noexcept -> std::expected<dg::string, exception_t> = 0;
+        virtual auto tokenize(const dg::string&, std::chrono::nanoseconds)  noexcept -> std::expected<dg::string, exception_t> = 0; //its look weird that encoder and tokenizer have the same interface
         virtual auto detokenize(const dg::string&) noexcept -> std::expected<dg::string, exception_t> = 0;
-        virtual auto renew_token(const dg::string&) noexcept -> std::expected<dg::string, exception_t> = 0;
     };
 
     struct MurMurMessage{
@@ -267,23 +259,16 @@ namespace dg::network_auth_utility{
         private:
 
             std::unique_ptr<EncoderInterface> encoder;
-            std::chrono::nanoseconds token_expiry_interval;
-            std::chrono::nanoseconds refresh_expiry_interval;
         
         public:
 
-            TokenController(std::unique_ptr<EncoderInterface> encoder,
-                            std::chrono::nanoseconds token_expiry_interval,
-                            std::chrono::nanoseconds refresh_expiry_interval) noexcept: encoder(std::move(encoder)),
-                                                                                        token_expiry_interval(token_expiry_interval),
-                                                                                        refresh_expiry_interval(refresh_expiry_interval){}
+            TokenController(std::unique_ptr<EncoderInterface> encoder) noexcept: encoder(std::move(encoder)){}
                                                                                                          
-            auto tokenize(const dg::string& content) noexcept -> std::expected<dg::string, exception_t>{
+            auto tokenize(const dg::string& content, std::chrono::nanoseconds expiry_interval) noexcept -> std::expected<dg::string, exception_t>{
 
-                std::chrono::nanoseconds now                = dg::network_genult::utc_timestamp();
-                std::chrono::nanoseconds token_expiry       = now + this->token_expiry_interval;
-                std::chrono::nanoseconds refresh_expiry     = now + this->refresh_expiry_interval;
-                Token token{token_expiry, refresh_expiry, content};
+                std::chrono::nanoseconds now            = stdx::utc_timestamp();
+                std::chrono::nanoseconds token_expiry   = now + expiry_interval;
+                Token token                             = Token{token_expiry, content};
                 
                 return this->encoder->encode(this->token_serialize(token));
             }
@@ -302,7 +287,7 @@ namespace dg::network_auth_utility{
                     return std::unexpected(deserialized.error());
                 }
 
-                std::chrono::nanoseconds now = dg::network_genult::utc_timestamp();
+                std::chrono::nanoseconds now = stdx::utc_timestamp();
 
                 if (deserialized.value().expiry_time < now){
                     return std::unexpected(dg::network_exception::EXPIRED_TOKEN);
@@ -311,94 +296,100 @@ namespace dg::network_auth_utility{
                 return deserialized.value().content;
             } 
 
-            auto renew_token(const dg::string& token) noexcept -> std::expected<dg::string, exception_t>{
-
-                std::expected<dg::string, exception_t> decoded = this->encoder->decode(token);
-
-                if (!decoded.has_value()){
-                    return std::unexpected(decoded.error());
-                }
-
-                std::expected<Token, exception_t> deserialized = this->token_deserialize(decoded.value());
-
-                if (!deserialized.has_value()){
-                    return std::unexpected(deserialized.error());
-                }
-                
-                Token token = std::move(deserialized.value());
-                std::chrono::nanoseconds now = dg::network_genult::utc_timestamp();
-
-                if (token.refresh_time < now){
-                    return std::unexpected(dg::network_exception::EXPIRED_TOKEN);
-                }
-
-                token.expiry_time = now + this->token_expiry_interval;
-                return this->encoder->encode(this->token_serialize(token));
-            }
-
         private:
 
             auto token_serialize(const Token& token) noexcept -> dg::string{
 
-                auto bstream = dg::string(dg::network_compact_serializer::integrity_size(token), ' ');
-                dg::network_compact_serializer::integrity_serialize_into(bstream.data(), token);
+                auto inter_rep  = std::make_tuple(static_cast<uint64_t>(token.expiry_time.count()), token.content);
+                auto bstream    = dg::string(dg::network_compact_serializer::integrity_size(inter_rep), ' ');
+                dg::network_compact_serializer::integrity_serialize_into(bstream.data(), inter_rep);
 
                 return bstream;
             }
 
             auto token_deserialize(const dg::string& bstream) noexcept -> std::expected<Token, exception_t>{
 
-                Token token{};
-                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::deserialize_into<Token>)(token, bstream.data(), bstream.size());
+                auto inter_rep  = std::tuple<uint64_t, dg::string>{};
+                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::deserialize_into<std::tuple<uint64_t, dg::string>>)(inter_rep, bstream.data(), bstream.size());
 
                 if (dg::network_exception::is_failed(err)){
                     return std::unexpected(err);
                 } 
 
-                return token;
+                return Token{std::chrono::nanoseconds(std::get<0>(inter_rep)), std::get<1>(inter_rep)};
             }
+    };
+
+    struct Factory{
+
+        static auto spawn_encoder(const dg::string& secret) -> std::unique_ptr<EncoderInterface>{
+
+            const size_t MIN_SECRET_SIZE    = size_t{1} << 5;
+            const size_t MAX_SECRET_SIZE    = size_t{1} << 20;
+
+            if (std::clamp(static_cast<size_t>(secret.size()), MIN_SECRET_SIZE, MAX_SECRET_SIZE) != secret.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMNET);
+            }
+
+            uint64_t numerical_secert                           = dg::network_hash::hash_bytes(secret.data(), secret.size());
+            std::unique_ptr<EncoderInterface> base_encoder      = std::make_unique<MurMurEncoder>(numerical_secret);
+            mt19937 rand_gen                                    = {};
+            std::unique_ptr<EncoderInterface> mt_encoder        = std::make_unique<Mt19937Encoder>(secret, std::move(rand_gen));
+            std::unique_ptr<EncoderInterface> combined_encoder  = std::make_unique<DoubleEncoder>(std::move(base_encoder), std::move(mt_encoder));
+
+            return combined_encoder;
+        }
+
+        static auto spawn_token_controller(const dg::string& secret) -> std::unique_ptr<TokenControllerInterface>{
+            
+            std::unique_ptr<EncoderInterface> encoder       = spawn_encoder(secret); 
+            std::unique_ptr<TokenControllerInterface> rs    = std::make_unique<TokenController>(std::move(encoder));
+
+            return rs;
+        }
     };
 }
 
 namespace dg::network_user{
 
-    //I dont see anything wrong with this - except for init, deinit should be disk-persistent -  
+    //precond validations are this component responsibility - give an overview of validations if model is unique_reference by the component
 
-    struct UserBaseResource{
+    struct Resource{
         std::unique_ptr<network_auth_utility::TokenControllerInterface> token_controller;
         std::unique_ptr<network_auth_utility::EncoderInterface> pw_encoder;
         std::unique_ptr<network_auth_utility::EncoderInterface> auth_shared_encoder;
+        std::chrono::nanoseconds token_expiry;
     };
 
-    inline UserBaseResource resource{};
+    inline std::unique_ptr<Resource> resource{};
 
-    void init(){
+    void init(const dg::string& private_database_secret, const dg::string& shared_secret, std::chrono::nanoseconds token_expiry){ //these are disk-presistent
 
+        resource                        = std::make_unique<Resource>();
+        resource->token_controller      = network_auth_utility::Factory::spawn_token_controller(shared_secret);
+        resource->pw_encoder            = network_auth_utility::Factory::spawn_encoder(private_database_secret);
+        resource->auth_shared_encoder   = network_auth_utility::Factory::spawn_encoder(shared_secret);
+        resource->token_expiry          = token_expiry;
     }
 
     void deinit() noexcept{
 
+        resource = nullptr;
     }
 
     auto user_register(const dg::string& user_id, const dg::string& pwd, const dg::string& clearance) noexcept -> exception_t{
 
         constexpr size_t SALT_FLEX_SZ                   = dg::network_postgres_db::model::LEGACYAUTH_SALT_MAX_LENGTH - dg::network_postgres_db_model::LEGACYAUTH_SALT_MIN_LENGTH;
         size_t salt_length                              = dg::network_postgres_db::model::LEGACYAUTH_SALT_MIN_LENGTH + dg::network_randomizer::randomize_range(SALT_FLEX_SZ);
-        dg::string salt                                 = dg::network_randomizer::randomize_string(salt_length);
+        dg::string salt                                 = dg::network_randomizer::randomize_string<dg::string>(salt_length);
         dg::string xpwd                                 = pwd + salt;
-        std::expected<dg::string, exception_t> encoded  = resource.pw_encoder->encode(xpwd);
+        std::expected<dg::string, exception_t> encoded  = resource->pw_encoder->encode(xpwd);
 
         if (!encoded.has_value()){
             return encoded.error();
         }
 
-        auto auth = dg::network_postgres_db::model_factory::make_legacy_auth{salt, encoded.value(), user_id};
-
-        if (!auth.has_value()){
-            return auth.error();
-        }
-
-        auto user = dg::network_postgres_db::model_factory::make_user(user_id, clearance);
+        auto user = dg::network_postgres_db::model_factory::make_user(user_id, clearance, salt, encoded.value());
 
         if (!user.has_value()){
             return user.error();
@@ -408,20 +399,14 @@ namespace dg::network_user{
 
         if (!user_commit_wo.has_value()){
             return user_commit_wo.error();
-        } 
-
-        auto auth_commit_wo = dg::network_postgres_db::make_commitable_create_legacy_auth(auth.value());
-
-        if (!auth_commit_wo.has_value()){
-            return auth_commit_wo.error();
         }
 
-        return dg::network_postgres_db::commit({std::move(user_commit_wo.value()), std::move(auth_commit_wo.value())});
+        return dg::network_postgres_db::commit({std::move(user_commit_wo.value())});
     }
 
     auto user_deregister(const dg::string& user_id) noexcept -> exception_t{
 
-        auto usrdel_commit_wo = dg::network_postgres_db::make_commitable_delete_user_by_id(user_id); //this semantically does not imply that delete the authentication registered with the user - this of course could be enforced at the model design yet it's semantically incorrect 
+        auto usrdel_commit_wo = dg::network_postgres_db::make_commitable_delete_user_by_id(user_id);
 
         if (!usrdel_commit_wo.has_value()){
             return usrdel_commit_wo.error();
@@ -432,20 +417,20 @@ namespace dg::network_user{
 
     auto user_login(const dg::string& user_id, const dg::string& pwd) noexcept -> std::expected<bool, exception_t>{
         
-        std::expected<dg::network_postgres_db::model::LegacyAuthEntry, exception_t> auth = dg::network_postgres_db::get_legacyauth_by_userid(user_id);
+        std::expected<dg::network_postgres_db::model::UserEntry, exception_t> user = dg::network_postgres_db::get_user_by_id(user_id);
 
-        if (!auth.has_value()){
-            return std::unexpected(auth.error());
+        if (!user.has_value()){
+            return std::unexpected(user.error());
         }
         
-        dg::string xpwd = pwd + auth->salt;
-        std::expected<dg::string, exception_t> verifiable = resource.pw_encoder->encode(xpwd);
+        dg::string xpwd = pwd + user->salt;
+        std::expected<dg::string, exception_t> verifiable = resource->pw_encoder->encode(xpwd);
 
         if (!verifiable.has_value()){
             return std::unexpected(verifiable.error());
         }
 
-        return verifiable.value() == auth->verifiable;
+        return verifiable.value() == user->verifiable;
     }
 
     auto user_get_clearance(const dg::string& user_id) noexcept -> std::expected<dg::string, exception_t>{
@@ -480,12 +465,12 @@ namespace dg::network_user{
         auto bstream        = dg::string(dg::network_compact_serializer::size(idpwd_msg), ' ');
         dg::network_compact_serializer::serialize_into(bstream.data(), idpwd_msg);
 
-        return resource.auth_shared_encoder->encode(bstream);
+        return resource->auth_shared_encoder->encode(bstream);
     }
 
     auto auth_deserialize(const dg::string& payload) noexcept -> std::expected<std::pair<dg::string, dg::string>, exception_t>{
 
-        std::expected<dg::string, exception_t> decoded = resource.auth_shared_encoder->decode(payload);
+        std::expected<dg::string, exception_t> decoded = resource->auth_shared_encoder->decode(payload);
 
         if (!decoded.has_value()){
             return std::unexpected(decoded.error());
@@ -520,17 +505,12 @@ namespace dg::network_user{
             return std::unexpected(dg::network_exception::BAD_AUTHENTICATION);
         }
 
-        return resource.token_controller->tokenize(id);
-    }
-
-    auto token_refresh(const dg::string& token) noexcept -> std::expected<dg::string, exception_t>{
-
-        return resource.token_controller->renew_token(token);
+        return resource->token_controller->tokenize(id, resource->token_expiry);
     }
 
     auto token_extract_userid(const dg::string& token) noexcept -> std::expected<dg::string, exception_t>{
 
-        return resource.token_controller->detokenize(token);
+        return resource->token_controller->detokenize(token);
     }
 }
 

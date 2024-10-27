@@ -4,12 +4,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <utility>
-#include "network_memory_utility.h"
 #include "network_concurrency.h" 
 #include <limits.h>
 #include <bit>
 #include <random>
 #include "stdx.h"
+#include <type_traits>
 
 namespace dg::network_randomizer{
 
@@ -43,19 +43,19 @@ namespace dg::network_randomizer{
 
         public: 
 
-            template <T RANGE_SZ>
+            template <size_t BIT_SIZE>
             static inline auto randomize_bit(const std::integral_constant<size_t, BIT_SIZE>) noexcept -> uint64_t{
 
                 static_assert(BIT_SIZE != 0);
                 static_assert(BIT_SIZE <= sizeof(uint64_t) * CHAR_BIT);
 
-                RandomizationUnit& unit = table[dg::network_concurrency::this_thread_id()];
+                RandomizationUnit& unit = table[dg::network_concurrency::this_thread_idx()];
 
                 if (unit.bit_precision < BIT_SIZE){
                     re_randomize(unit);
                 }
 
-                uint64_t ret_value  = unit.value & low<uint64_t>(std::integral_constant<size_t, BIT_SIZE>{});
+                uint64_t ret_value  = stdx::low_bit<BIT_SIZE>(ret_value);
                 unit.bit_precision  -= BIT_SIZE;
                 unit.value          >>= BIT_SIZE;;
 
@@ -68,10 +68,10 @@ namespace dg::network_randomizer{
 
         static_assert(RANGE_SZ != 0u);
 
-        constexpr size_t BIT_SIZE = to_bit_size(RANGE_SZ); 
+        constexpr size_t BIT_SIZE = stdx::ulog2(RANGE_SZ); 
         uint64_t rs = BitRandomizer::randomize_bit(std::integral_constant<size_t, BIT_SIZE>{});
 
-        if constexpr(is_pow2(RANGE_SZ)){
+        if constexpr(stdx::is_pow2(RANGE_SZ)){
             return rs;
         } else{
             return rs % RANGE_SZ;
@@ -84,21 +84,23 @@ namespace dg::network_randomizer{
         return static_cast<bool>(rs);
     }
 
+
     template <class T, std::enable_if_t<std::numeric_limits<T>::is_integer, bool> = true>
     auto randomize_int() noexcept -> T{
 
-        using unsigned_ver_t = std::conditional_t<sizeof(T) == sizeof(uint8_t), 
-                                                  uint8_t, 
-                                                  std::conditional_t<sizeof(T) == sizeof(uint16_t),
-                                                  uint16_t,
-                                                  std::conditional_t<sizeof(T) == sizeof(uint32_t)>,
-                                                                     uint32_t,
-                                                                     std::conditional_t<size_t(T) == sizeof(uint64_t),
-                                                                                        uint64_t,
-                                                                                        void>>>>;
-        
+        using unsigned_ver_t = network_type_traits_x::unsigned_of_byte_t<sizeof(T)>;
         unsigned_ver_t rs = BitRandomizer::randomize_bit(std::integral_constant<size_t, sizeof(unsigned_ver_t) * CHAR_BIT>{});
         return std::bit_cast<T>(rs);
+    }
+
+    template <class T = std::string, std::enable_if_t<network_type_traits_x::is_basic_string_v<T>, bool> = true>
+    auto randomize_string(size_t sz) -> T{
+
+        T rs{};
+        rs.resize(sz);
+        std::generate(rs.begin(), rs.end(), []{return randomize_int<char>();});
+
+        return rs;
     }
 } 
 

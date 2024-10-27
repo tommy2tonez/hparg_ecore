@@ -12,18 +12,18 @@
 #include <string_view>
 #include <mutex>
 #include "stdx.h"
+#include "network_postgres_db.h"
+#include <thread>
 
-// #include "network_postgres_db.h"
+// namespace dg::network_log::last_mohican{
 
-namespace dg::network_log::last_mohican{
-
-}
+// }
 
 namespace dg::network_log::implementation{
 
     struct LoggerInterface{
         virtual ~LoggerInterface() noexcept = default;
-        virtual void log(std::string_view content, std::string_view kind) = 0;
+        virtual void log(const char * content, const char * kind) = 0;
         virtual void flush() = 0;
     };
 
@@ -46,9 +46,9 @@ namespace dg::network_log::implementation{
 
         public:
 
-            void log(std::string_view content, std::string_view kind){
+            void log(const char * content, const char * kind){
                 
-                std::expected<dg::network_postgres_db::model::SystemLog, exception_t> syslog = dg::network_postgres_db::model_factory(content, kind, get_utc_timestamp());
+                std::expected<dg::network_postgres_db::model::SystemLog, exception_t> syslog = dg::network_postgres_db::model_factory::make_systemlog(content, kind, stdx::utc_timestamp());
 
                 if (!syslog.has_value()){
                     dg::network_exception::throw_exception(syslog.error());
@@ -69,7 +69,7 @@ namespace dg::network_log::implementation{
 
             void flush(){
 
-                (void) flush;
+                // (void) ; //TODOs:
             }
     };
 
@@ -95,15 +95,15 @@ namespace dg::network_log::implementation{
                 }
             }
 
-            void log(std::string_view content, std::string_view kind){
+            void log(const char * content, const char * kind){
 
-                auto lck_grd = stdx::lock_guard(this->lck); 
+                auto lck_grd = stdx::lock_guard(*this->lck); 
 
                 if (this->syslog_vec.size() == this->syslog_vec.capacity()){
                     this->flush();
                 }
 
-                std::expected<dg::network_postgres_db::model::SystemLog, exception_t> model = dg::network_postgres_db::model_factory::make_systemlog(content, kind, get_utc_timestamp());
+                std::expected<dg::network_postgres_db::model::SystemLog, exception_t> model = dg::network_postgres_db::model_factory::make_systemlog(content, kind, stdx::utc_timestamp());
                 
                 if (!model.has_value()){
                     dg::network_exception::throw_exception(model.error());
@@ -114,16 +114,16 @@ namespace dg::network_log::implementation{
 
             void flush(){
                 
-                auto lck_grd = stdx::lock_guard(this->lck); 
+                auto lck_grd = stdx::lock_guard(*this->lck); 
 
                 stdx::vector<std::unique_ptr<dg::network_postgres_db::CommitableInterface>> commitable_vec{};
 
                 for (auto& syslog: this->syslog_vec){
                     auto commitable = dg::network_postgres_db::make_commitable_create_systemlog(syslog);
                     if (!commitable.has_value()){
-                        throw dg::network_exception::throw_exception(commitable.error());
+                        dg::network_exception::throw_exception(commitable.error());
                     }
-                    commitable_vec.push_back(std::move(commitable.value()));
+                    commitable_vec.emplace_back(std::move(commitable.value()));
                 }
 
                 exception_t err = dg::network_postgres_db::commit(std::move(commitable_vec));
@@ -139,13 +139,14 @@ namespace dg::network_log::implementation{
 
             void force_flush() noexcept{
 
-                auto lck_grd = stdx::lock_guard(this->lck);
+                //TODOs:
+                // auto lck_grd = stdx::lock_guard(this->lck);
 
-                try{
-                    stdx::string bstream = dg::network_compact_serializer::serialize<stdx::string>(this->syslog_vec);
-                    dg::network_log::last_mohican::write(bstream, "syslog_vec_compact_serialization_format");
-                    this->syslog_vec.clear();
-                } catch (...){}
+                // try{
+                //     stdx::string bstream = dg::network_compact_serializer::serialize<stdx::string>(this->syslog_vec);
+                //     dg::network_log::last_mohican::write(bstream, "syslog_vec_compact_serialization_format");
+                //     this->syslog_vec.clear();
+                // } catch (...){}
             }
     };
 
@@ -161,11 +162,11 @@ namespace dg::network_log::implementation{
 
             ConcurrentLogger(stdx::vector<std::unique_ptr<LoggerInterface>> logger_vec) noexcept: logger_vec(std::move(logger_vec)){}
 
-            void log(std::string_view content, std::string_view kind){
+            void log(const char * content, const char * kind){
                 
                 size_t thr_id       = std::bit_cast<size_t>(std::this_thread::get_id());
                 size_t logger_sz    = this->logger_vec.size();
-                size_t idx          = stdx::unsigned_pow2_mod(thr_id, logger_sz);
+                size_t idx          = stdx::pow2mod_unsigned(thr_id, logger_sz);
 ;
                 this->logger_vec[idx]->log(content, kind);
             }
@@ -174,7 +175,7 @@ namespace dg::network_log::implementation{
                 
                 size_t thr_id       = std::bit_cast<size_t>(std::this_thread::get_id());
                 size_t logger_sz    = this->logger_vec.size();
-                size_t idx          = stdx::unsigned_pow2_mod(thr_id, logger_sz);
+                size_t idx          = stdx::pow2mod_unsigned(thr_id, logger_sz);
 
                 this->logger_vec[idx]->flush();
             }
@@ -267,7 +268,7 @@ namespace dg::network_log::implementation{
                     this->instant_logger->flush();
                     this->batch_logger->flush();
                 } catch (...){
-                    (void) flush;
+                    // (void) flush;
                 }
             }
     };
@@ -305,7 +306,7 @@ namespace dg::network_log::implementation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (!dg::memult::is_pow2(logger_vec.size())){
+            if (!stdx::is_pow2(logger_vec.size())){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -323,7 +324,7 @@ namespace dg::network_log::implementation{
             std::unique_ptr<LoggerInterface> concurrent_instant_logger  = spawn_instant_logger();
             std::unique_ptr<LoggerInterface> concurrent_batch_logger    = spawn_concurrent_logger(std::move(batch_logger_vec));
 
-            return std::make_unique<KindLoggerInterface>(std::move(concurrent_instant_logger), std::move(concurrent_batch_logger));
+            return std::make_unique<KindLogger>(std::move(concurrent_instant_logger), std::move(concurrent_batch_logger));
         }
     };
 }
@@ -405,11 +406,14 @@ namespace dg::network_log_stackdump{
 
     auto add_stack_trace(const char * what) -> stdx::string{
 
-        stdx::string fmt             = "<stackdump_begin>\n{}\n<stackdump_end>\n{}"; 
-        stdx::string stacktrace_str  = std::stacktrace::current().to_string();
-        stdx::string what_str        = stdx::string(what); 
+        // stdx::string stacktrace_str  = std::stacktrace::current().to_string(); //TODOs:
+        stdx::string stacktrace_str     = {};
+        stdx::string what_str           = stdx::string(what); 
+        stdx::string rs                 = {};
 
-        return std::format(fmt, stacktrace_str, what_str);
+        std::format_to(std::back_inserter(rs), "<stackdump_begin>\n{}\n<stackdump_end>\n{}", stacktrace_str, what_str);
+
+        return rs;
     } 
 
     void critical(const char * what) noexcept{
@@ -447,8 +451,8 @@ namespace dg::network_log_stackdump{
 
     void error_optional(const char * what) noexcept{
 
-        auto new_what = dg::functional::invoke_nothrow_or_empty(add_stack_trace, what);
-        network_log::error_optional(new_what);
+        auto new_what = add_stack_trace(what);
+        network_log::error_optional(new_what.c_str());
     }
 
     void error_optional() noexcept{
@@ -458,8 +462,8 @@ namespace dg::network_log_stackdump{
 
     void error_fast_optional(const char * what) noexcept{
 
-        auto new_what = dg::functional::invoke_nothrow_or_empty(add_stack_trace, what);
-        network_log::error_fast_optional(new_what);
+        auto new_what = add_stack_trace(what);
+        network_log::error_fast_optional(new_what.c_str());
     }
 
     void error_fast_optional() noexcept{
@@ -491,7 +495,7 @@ namespace dg::network_log_stackdump{
 
     void journal_optional(const char * what) noexcept{
 
-        auto new_what = dg::functional::invoke_nothrow_or_empty(add_stack_trace, what);
+        auto new_what = add_stack_trace(what);
         network_log::journal_optional(new_what.c_str());
     }
 
@@ -502,7 +506,7 @@ namespace dg::network_log_stackdump{
 
     void journal_fast_optional(const char * what) noexcept{
 
-        auto new_what = dg::functional::invoke_nothrow_or_empty(add_stack_trace, what);
+        auto new_what = add_stack_trace(what);
         network_log::journal_fast_optional(new_what.c_str());
     }
 

@@ -9,7 +9,9 @@
 #include <memory>
 #include "network_concurrency_impl1.h"
 #include <bit>
-#include "network_utility.h"
+#include "network_exception_handler.h"
+#include "network_raii_x.h"
+#include "dense_hash_map/dense_hash_map.hpp"
 
 namespace dg::network_concurrency{
 
@@ -18,8 +20,7 @@ namespace dg::network_concurrency{
     using affine_policy_option_t    = dg::network_concurrency_impl1_app::affine_policy_option_t; 
     using WorkerInterface           = dg::network_concurrency_impl1::WorkerInterface; 
 
-    //fine to not include these - or making these not part of the external interface - user need to rely on exception to spawn workers or abort system
-    static inline constexpr size_t THREAD_COUNT = 32; //this is - however - is necessary - 
+    static inline constexpr size_t THREAD_COUNT = 32;
 
     struct signature_dg_network_concurrency{}; 
 
@@ -32,16 +33,16 @@ namespace dg::network_concurrency{
 
     void init(){
 
-        auto config = dg::network_concurrency_impl1_app::Config{AFFINE_POLICY, 
-                                                                COMPUTING_DAEMON_NETWORK_THREAD_COUNT,
-                                                                IO_DAEMON_THREAD_COUNT,
-                                                                TRANSPORTATION_DAEMON_THREAD_COUNT,
-                                                                HEARTBEAT_DAEMON_THREAD_COUNT};
+        // auto config = dg::network_concurrency_impl1_app::Config{AFFINE_POLICY, 
+        //                                                         COMPUTING_DAEMON_NETWORK_THREAD_COUNT,
+        //                                                         IO_DAEMON_THREAD_COUNT,
+        //                                                         TRANSPORTATION_DAEMON_THREAD_COUNT,
+        //                                                         HEARTBEAT_DAEMON_THREAD_COUNT};
 
-        auto [controller, thr_vec]              = dg::network_concurrency_impl1_app::spawn(config); 
-        thr_vec                                 = dg::network_genult::enumerate(std::move(thr_vec));
-        concurrency_resource.daemon_controller  = std::move(controller);
-        concurrency_resource.thrid_to_idx_map   = jg::dense_hash_map<std::thread::id, size_t>(thr_vec.begin(), thr_vec.end(), thr_vec.size());
+        // auto [controller, thr_vec]              = dg::network_concurrency_impl1_app::spawn(config); 
+        // thr_vec                                 = dg::network_genult::enumerate(std::move(thr_vec));
+        // concurrency_resource.daemon_controller  = std::move(controller);
+        // concurrency_resource.thrid_to_idx_map   = jg::dense_hash_map<std::thread::id, size_t>(thr_vec.begin(), thr_vec.end(), thr_vec.size());
     }
 
     void deinit() noexcept{
@@ -89,9 +90,9 @@ namespace dg::network_concurrency{
         concurrency_resource.daemon_controller->deregister(id);
     }
 
-    using daemon_deregister_t = void (size_t) noexcept; 
+    using daemon_deregister_t = void (*)(size_t) noexcept; 
 
-    auto daemon_saferegister(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>, exception_t>{
+    auto daemon_saferegister(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>, exception_t>{
 
         std::expected<size_t, exception_t> handle = daemon_register(daemon_kind, std::move(worker));
         
@@ -99,10 +100,25 @@ namespace dg::network_concurrency{
             return std::unexpected(handle.error());
         }
 
-        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
+        return dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
     }
 
-    using daemon_raii_handle_t = dg::network_genult::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>;
+
+    auto daemon_saferegister_with_waittime(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker, std::chrono::nanoseconds waittime) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>, exception_t>{
+
+        //TODOs:
+        // std::expected<size_t, exception_t> handle = daemon_register(daemon_kind, std::move(worker));
+        
+        // if (!handle.has_value()){
+        //     return std::unexpected(handle.error());
+        // }
+
+        // return dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
+        return {};
+    }
+
+
+    using daemon_raii_handle_t = dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>;
 };
 
 #endif

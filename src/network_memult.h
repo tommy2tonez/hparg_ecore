@@ -123,37 +123,40 @@ namespace dg::memult{
         return simd_align_val<std::max_align_t>();
     }
 
-    template <class T>
-    auto badvance() noexcept -> T{
+    //TODOs: 
+    
+    // template <class T>
+    // auto badvance() noexcept -> T{
 
-    }
+    // }
 
-    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true> //
-    static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
+    // template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true> //
+    // static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
 
-        return static_cast<T>(static_cast<size_t>(ptr) + sz);
-    }
+    //     return static_cast<T>(static_cast<size_t>(ptr) + sz);
+    // }
 
-    template <class T, std::enable_if_t<std::is_pointer_v<T>, bool> = true> //
-    static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
+    // template <class T, std::enable_if_t<std::is_pointer_v<T>, bool> = true> //
+    // static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
 
-        return ptr + sz;
-    }
+    //     return ptr + sz;
+    // }
 
-    template <class PtrType, std::enable_if_t<dg::is_ptr_v<PtrType>, bool> = true>
-    static constexpr auto is_nullptr(PtrType ptr) noexcept -> bool{
+    // template <class PtrType, std::enable_if_t<dg::is_ptr_v<PtrType>, bool> = true>
+    // static constexpr auto is_nullptr(PtrType ptr) noexcept -> bool{
 
-        return ptr == dg::pointer_limits<PtrType>::null_value();
-    }
+    //     return ptr == dg::pointer_limits<PtrType>::null_value();
+    // }
 
-    template <class PtrType, std::enable_if_t<dg::is_ptr_v<PtrType>, bool> = true>
-    static constexpr auto is_validptr(PtrType ptr) noexcept -> bool{
+    // template <class PtrType, std::enable_if_t<dg::is_ptr_v<PtrType>, bool> = true>
+    // static constexpr auto is_validptr(PtrType ptr) noexcept -> bool{
 
-        return ptr != dg::pointer_limits<PtrType>::null_value();
-    }
+    //     return ptr != dg::pointer_limits<PtrType>::null_value();
+    // }
 
     static constexpr auto ptrcmp_aligned(...) noexcept -> int{
 
+        return {};
     }
 }
 

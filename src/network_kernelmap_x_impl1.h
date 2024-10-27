@@ -1,17 +1,19 @@
-#ifndef __NETWORK_CUDAFSMAP_X_IMPL1_H__
-#define __NETWORK_CUDAFSMAP_X_IMPL1_H__
+#ifndef __NETWORK_KERNELMAP_X_IMPL1_H__
+#define __NETWORK_KERNELMAP_X_IMPL1_H__
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <chrono>
 #include <optional>
-#include <nutex>
+#include <mutex>
 #include <atomic>
 #include "network_exception.h"
 #include "network_log.h"
-#include "network_allocation_clib.h"
 #include "network_std_container.h"
 #include "network_pointer.h"
+#include <memory>
+#include "network_fileio.h"
+#include "network_memult.h"
 
 namespace dg::network_kernelmap_x_impl1::model{
 
@@ -22,14 +24,12 @@ namespace dg::network_kernelmap_x_impl1::model{
                                              std::atomic_flag,
                                              std::mutex>;  
 
-    struct FSysPtrInfo{
-        fsys_ptr_t ptr;
-        size_t reference;
-    };
-    
+    static inline constexpr fsys_ptr_t NULL_FSYS_PTR = dg::network_pointer::NULL_FSYS_PTR; 
+
     struct MemoryNode{
         std::shared_ptr<char[]> cptr;
-        std::optional<FSysPtrInfo> fsys_ptr_info;
+        fsys_ptr_t fsys_ptr;
+        size_t reference;
         std::chrono::nanoseconds last_modified;
     };
 
@@ -44,7 +44,7 @@ namespace dg::network_kernelmap_x_impl1::model{
         auto ptr() const noexcept -> void *{
 
             using namespace dg::network_genult;
-            return dg::memult::badvance(safe_ptr_access(safe_ptr_access(this->node)->cptr.get()), this->off);
+            return stdx::advance(safe_ptr_access(safe_ptr_access(this->node)->cptr.get()), this->off);
         }
     };
 
@@ -91,39 +91,11 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
     using namespace network_kernelmap_x_impl1::interface;
 
-    //optimizables
-    struct HeapNodeCmp{
+    struct HeapNodeCmpLess{
 
-        constexpr auto operator()(const HeapNode& lhs, const HeapNode& rhs) const noexcept -> int{
+        constexpr auto operator()(const HeapNode& lhs, const HeapNode& rhs) const noexcept -> bool{
 
-            size_t lhs_reference = 0u;
-            size_t rhs_reference = 0u;
-
-            if (lhs.fsys_ptr_info.has_value()){
-                lhs_reference = lhs.fsys_ptr_info->reference;
-            } 
-
-            if (rhs.fsys_ptr_info.has_value()){
-                rhs_reference = rhs.fsys_ptr_info->reference;
-            }
-
-            if (lhs_reference < rhs_reference){
-                return -1;
-            }
-
-            if (lhs_reference > rhs_reference){
-                return 1;
-            }
-            
-            if (lhs.last_modified < rhs.last_modified){
-                return -1;
-            }
-
-            if (lhs.last_modified > rhs.last_modified){
-                return 1;
-            }
-
-            return 0;
+            return std::make_tuple(lhs.reference, static_cast<size_t>(lhs.last_modified.count())) < std::make_tuple(rhs.reference, static_cast<size_t>(rhs.last_modified.count())); 
         } 
     };
 
@@ -131,25 +103,29 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
         private:
 
-            dg::unordered_map<fsys_ptr_t, std::filesystem::path> alias_dict; //this is actually an easy fix - just have virtual filepath and rid of the pollution problem
+            dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path> alias_dict; //this is actually an easy fix - just have virtual filepath and rid of the pollution problem
             size_t memregion_sz;
 
         public:
 
-            FsysLoader(dg::unordered_map<fsys_ptr_t, std::filesystem::path> alias_dict,
+            FsysLoader(dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path> alias_dict,
                        size_t memregion_sz) noexcept: alias_dict(std::move(alias_dict)),
                                                       memregion_sz(memregion_sz){}
 
             auto load(MemoryNode& root, fsys_ptr_t region) noexcept -> exception_t{
                 
-                if (root.fsys_ptr_info.has_value()){
+                if (root.fsys_ptr != NULL_FSYS_PTR){
                     return dg::network_exception::INVALID_ARGUMENT; //fine - this is a subset of MemoryNode valid_states that does not meet the requirement of load - precond qualified
+                }
+
+                if (root.reference != 0u){
+                    return dg::network_exception::INVALID_ARGUMENT;
                 }
 
                 auto dict_ptr = this->alias_dict.find(region);
 
                 if (dict_ptr == this->alias_dict.end()){
-                    return network_exception::INVALID_DICTIONARY_KEY;
+                    return network_exception::INVALID_ARGUMENT;
                 }
 
                 const std::filesystem::path& inpath = dict_ptr->second;
@@ -161,8 +137,9 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return read_err;
                 }
 
-                root.fsys_ptr_info  = FSysPtrInfo{region, 0u};
-                root.last_modified  = dg::network_genult::unix_timestamp();
+                root.fsys_ptr       = region;
+                root.reference      = 0u;
+                root.last_modified  = stdx::unix_timestamp();
 
                 return dg::network_exception::SUCCESS;
             }
@@ -171,13 +148,18 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 
                 //force this to be an inverse operation of load - this of-course can treat !root.fys_ptr_info.has_value() as an no-op yet it's not a good practice
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (!root.fsys_ptr_info.has_value()){
-                        dg::network_log_stackdump::critical(network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                    if (root.fsys_ptr == NULL_FSYS_PTR){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+
+                    if (root.reference != 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
 
-                fsys_ptr_t host_region  = root.fsys_ptr_info->ptr;
+                fsys_ptr_t host_region  = root.fsys_ptr;
                 auto dict_ptr           = this->alias_dict.find(host_region);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -197,8 +179,9 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     std::abort();
                 }
 
-                root.fsys_ptr_info  = std::nullopt;
-                root.last_modified  = dg::network_genult::unix_timestamp();
+                root.fsys_ptr       = NULL_FSYS_PTR;
+                root.reference      = 0u;
+                root.last_modified  = stdx::unix_timestamp();
             }
     };
 
@@ -255,7 +238,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                 size_t c = (idx - 1) >> 1;
 
-                if (HeapNodeCmp{}(*this->priority_queue[c], *this->priority_queue[idx]) <= 0){
+                if (HeapNodeCmpLess{}(*this->priority_queue[c], *this->priority_queue[idx])){
                     return;
                 }
 
@@ -271,15 +254,15 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return;
                 }
 
-                if (c + 1 < this->priority_queue.size() && HeapNodeCmp{}(*this->priority_queue[c + 1], *this->priority_queue[c]) < 0){
+                if (c + 1 < this->priority_queue.size() && HeapNodeCmpLess{}(*this->priority_queue[c + 1], *this->priority_queue[c])){
                     c += 1;
                 }
 
-                if (HeapNodeCmp{}(*this->priority_queue[idx], *this->priority_queue[c]) <= 0){
+                if (HeapNodeCmpLess{}(*this->priority_queue[idx], *this->priority_queue[c])){
                     return;
                 }
 
-                this->heap_swap(this->priority_queue[idx], this->priority_queue[c]);
+                this->heap_swap(this->priority_queue[idx], this->priority_queue[c]); //its fine
                 this->heap_push_down_at(c);
             }
 
@@ -291,29 +274,29 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                 if (dict_ptr != this->allocation_dict.end()){
                     HeapNode * found_node = dict_ptr->second;
-                    found_node->fsys_ptr_info->reference += 1;
-                    found_node->last_modified = dg::network_genult::unix_timestamp();
+                    found_node->reference += 1;
+                    found_node->last_modified = stdx::unix_timestamp();
                     heap_push_down_at(found_node->idx);
                     return MapResource{found_node, ptr_offset};
                 }
 
                 HeapNode * cand = this->priority_queue[0].get();
 
-                if (cand->fsys_ptr_info.has_value()){
-                    if (cand->fsys_ptr_info->reference == 0u){
+                if (cand->fsys_ptr != NULL_FSYS_PTR){
+                    if (cand->reference == 0u){
                         exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region);
 
                         if (dg::network_exception::is_failed(err)){
                             return std::unexpected(err);
                         }
                         
-                        fsys_ptr_t removing_region = cand->fsys_ptr_info->ptr;
+                        fsys_ptr_t removing_region = cand->fsys_ptr;
                         this->fsys_loader->unload(*cand);
                         this->allocation_dict.erase(removing_region);
                         this->allocation_dict.insert(std::make_pair(ptr_region, cand));
                         std::swap(static_cast<MemoryNode&>(*cand), this->tmp_space);
-                        cand->fsys_ptr_info->reference += 1;
-                        cand->last_modified = dg::network_genult::unix_timestamp();
+                        cand->reference += 1;
+                        cand->last_modified = stdx::unix_timestamp();
                         this->heap_push_down_at(0u);
 
                         return MapResource{cand, ptr_offset};
@@ -329,8 +312,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 }
                 
                 this->allocation_dict.insert(std::make_pair(ptr_region, cand));
-                cand->fsys_ptr_info->reference += 1;
-                cand->last_modified = dg::network_genult::unix_timestamp();
+                cand->reference += 1;
+                cand->last_modified = stdx::unix_timestamp();
                 this->heap_push_down_at(0u);
 
                 return MapResource{cand, ptr_offset};
@@ -338,17 +321,17 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             void internal_unmap(MapResource map_resource) noexcept{
 
-                dg::network_genult::safe_optional_access(dg::network_genult::safe_ptr_access(map_resource.node)->fsys_ptr_info);
+                dg::network_genult::safe_ptr_access(map_resource.node);
 
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (map_resource.node->fsys_ptr_info->reference == 0u){
+                    if (map_resource.node->reference == 0u){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
 
-                map_resource.node->fsys_ptr_info->reference -= 1;
-                map_resource.node->last_modified = dg::network_genult::unix_timestamp();
+                map_resource.node->reference -= 1;
+                map_resource.node->last_modified = stdx::unix_timestamp();
                 heap_push_up_at(map_resource.node->idx);
             } 
     };
@@ -400,8 +383,13 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return std::unexpected(map_id.error());
                 }
 
-                MapResource resource = this->map_table[map_id.value()]->map(ptr);
-                return ConcurrentMapResource{resource, map_id.value()};
+                auto resource = this->map_table[map_id.value()]->map(ptr);
+                
+                if (!resource.has_value()){
+                    return std::unexpected(resource.error());
+                }
+
+                return ConcurrentMapResource{resource.value(), map_id.value()};
             }
             
             void unmap(ConcurrentMapResource map_resource) noexcept{
@@ -426,7 +414,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<FsysLoader>(alias_map, memregion_sz);
+            auto alias_fast_map = dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path>(alias_map.begin(), alias_map.end());
+            return std::make_unique<FsysLoader>(std::move(alias_fast_map), memregion_sz);
         }
 
         static auto spawn_map(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map, size_t memregion_sz, size_t memory_node_count) -> std::unique_ptr<MapInterface>{
@@ -443,23 +432,24 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             }
     
             auto priority_queue                 = dg::vector<std::unique_ptr<HeapNode>>{};
-            std::shared_ptr<char[]> memblk      = std::unique_ptr<char[], decltype(&dg::network_allocation_clib::c_free)>(static_cast<char *>(dg::network_allocation_clib::c_aligned_malloc(memregion_sz, memregion_sz * (memory_node_count + 1))), 
-                                                                                                                          dg::network_allocation_clib::c_free);
+            std::shared_ptr<char[]> memblk      = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(memregion_sz, memregion_sz * (memory_node_count + 1))), std::free);
 
             for (size_t i = 0u; i < memory_node_count; ++i){
                 HeapNode node{};
                 node.idx            = i;
                 node.cptr           = off_sptr(memblk, i * memregion_sz);
-                node.fsys_ptr_info  = std::nullopt;
-                node.last_modified  = dg::network_genult::unix_timestamp();
+                node.fsys_ptr       = NULL_FSYS_PTR;
+                node.reference      = 0u;
+                node.last_modified  = stdx::unix_timestamp();
                 priority_queue.push_back(std::make_unique<HeapNode>(std::move(node)));
             }
 
             dg::unordered_unstable_map<fsys_ptr_t, HeapNode *> allocation_dict{};
             MemoryNode tmp{};
             tmp.cptr            = off_sptr(memblk, memory_node_count * memregion_sz);
-            tmp.fsys_ptr_info   = std::nullopt;
-            tmp.last_modifed    = dg::network_genult::unix_timestamp(); 
+            tmp.fsys_ptr        = NULL_FSYS_PTR;
+            tmp.reference       = 0u;
+            tmp.last_modified   = stdx::unix_timestamp(); 
             auto lck            = std::make_unique<Lock>();
 
             return std::make_unique<Map>(std::move(priority_queue), std::move(allocation_dict), spawn_fsys_loader(alias_map, memregion_sz), std::move(tmp), std::move(lck), memregion_sz);
@@ -559,6 +549,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 }
 
 namespace dg::network_kernelmap_x_impl1{
+
+    using fsys_ptr_t = dg::network_pointer::fsys_ptr_t; 
 
     extern auto make(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, 
                      size_t memregion_sz, 

@@ -14,6 +14,8 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <filesystem>
+#include "network_raii_x.h"
+#include "stdx.h"
 
 namespace dg::network_fileio_linux{
 
@@ -33,7 +35,7 @@ namespace dg::network_fileio_linux{
 
     using kernel_fclose_t = void (*)(int) noexcept;
 
-    auto dg_open_file(const char * fp, int flag) noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>, exception_t>{
+    auto dg_open_file(const char * fp, int flag) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>, exception_t>{
 
         int fd = open(fp, flag, DG_FILEIO_MODE);
 
@@ -42,13 +44,13 @@ namespace dg::network_fileio_linux{
         }
 
         auto destructor = [](int fd_arg) noexcept{
-            if (close(fd_arg) == -1){
+            if (close(fd_arg) == -1){ //don't argue - if close returns an error - that's the close problem - that means close needs extension - if error still persists - better to terminate to avoid leakage - this is kernel corruption
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_exception(errno)));
                 std::abort();
             }
         };
 
-        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>{fd, destructor}; 
+        return dg::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>{fd, destructor}; 
     }
     
     auto dg_file_size(int fd) noexcept -> std::expected<size_t, exception_t>{
@@ -56,10 +58,10 @@ namespace dg::network_fileio_linux{
         auto rs = lseek64(fd, 0L, SEEK_END);
 
         if (rs == -1){
-            return std::unexpected(dg:network_exception::wrap_kernel_exception(errno)):
+            return std::unexpected(dg::network_exception::wrap_kernel_exception(errno));
         }
 
-        return dg::network_genult::safe_integer_cast<size_t>(rs);
+        return stdx::safe_integer_cast<size_t>(rs);
     }
 
     auto dg_file_size_nothrow(int fd) noexcept -> size_t{
@@ -153,7 +155,15 @@ namespace dg::network_fileio_linux{
     void dg_create_cbinary_nothrow(const char * fp, size_t fsz) noexcept{
 
     }
-    
+
+    auto dg_remove(const char * fp) noexcept -> exception_t{
+
+    }
+
+    void dg_remove_nothrow(const char * fp) noexcept{
+        
+    }
+
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
         auto raii_fd = dg_open_file(fp, O_RDONLY | O_DIRECT | O_TRUNC);

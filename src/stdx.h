@@ -46,7 +46,7 @@ namespace stdx{
 
         #endif
     #endif
-
+    
     template <class T>
     using vector            = std::vector<T, NoExceptAllocator<T>>;
 
@@ -135,12 +135,47 @@ namespace stdx{
         return std::unique_ptr<int, decltype(backout_ld)>(&i, std::move(backout_ld));
     }
 
-    template <class T, class T1, std::enable_if_t<std::numeric_limits<T>::is_integer && std::numeric_limits<T1>::is_integer, bool> = true>
+    template <class T, class T1>
     constexpr auto pow2mod_unsigned(T lhs, T1 rhs) noexcept -> std::conditional_t<(sizeof(T) > sizeof(T1)), T, T1>{
 
+        static_assert(std::is_unsigned_v<T>);
+        static_assert(std::is_unsigned_v<T1>);
+        
         using promoted_t = std::conditional_t<(sizeof(T) > sizeof(T1)), T, T1>;
         return static_cast<promoted_t>(lhs) & static_cast<promoted_t>(rhs - 1);
     }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto ulog2_aligned(T val) noexcept -> size_t{
+
+        return std::countr_zero(val);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto ulog2(T val) noexcept -> size_t{
+
+        return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto is_pow2(T val) noexcept -> bool{
+
+        return val != 0u && (val & (val - 1)) == 0u;
+    } 
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto least_pow2_greater_equal_than(T val) noexcept -> T{
+
+        if (val == 0u){ [[unlikely]]
+            return 1u;
+        }
+
+        size_t max_log2     = ulog2(val);
+        size_t min_log2     = std::countr_zero(val);
+        size_t cand_log2    = max_log2 + ((max_log2 ^ min_log2) != 0u);
+
+        return T{1u} << cand_log2; 
+    } 
 
     template <class T, class T1>
     constexpr auto safe_integer_cast(T1 value) noexcept -> T{
@@ -162,6 +197,20 @@ namespace stdx{
         return value;
     }
 
+    template <size_t BIT_SZ, class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto low_bit(T value) noexcept -> T{
+
+        constexpr size_t MAX_BIT_CAP = sizeof(T) * CHAR_BIT;
+        static_assert(BIT_SZ <= MAX_BIT_CAP);
+
+        if constexpr(BIT_SZ == MAX_BIT_CAP){
+            return std::numeric_limits<T>::max(); 
+        } else{
+            constexpr T low_mask = (T{1u} << BIT_SZ) - 1;
+            return value & low_mask;
+        }
+    }
+
     template <class T>
     struct safe_integer_cast_wrapper{
 
@@ -179,6 +228,21 @@ namespace stdx{
     constexpr auto wrap_safe_integer_cast(T value) noexcept{
 
         return safe_integer_cast_wrapper<T>{value};
+    }
+
+    template <class Iterator>
+    constexpr auto advance(Iterator it, intmax_t diff) noexcept -> Iterator{
+
+        std::advance(it, diff); //I never knew what drug was std on
+        return it;
+    }
+
+    auto utc_timestamp() noexcept -> std::chrono::nanoseconds{
+
+    }
+
+    auto unix_timestamp() noexcept -> std::chrono::nanoseconds{
+
     }
 }
 

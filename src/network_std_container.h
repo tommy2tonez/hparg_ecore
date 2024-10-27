@@ -9,6 +9,7 @@
 #include <string>
 #include "network_allocation.h"
 #include "network_hash.h"
+#include "dense_hash_map/dense_hash_map.hpp"
 
 namespace dg::network_std_container{
 
@@ -129,20 +130,22 @@ namespace dg::network_std_container{
 
 namespace dg{
 
-    template <class ...Args>
-    using unordered_set             = dg::network_std_container::unordered_set<Args...>;
+    //std is the mystery that nobody will ever comprehend all the decisions made by the programmers - bads and goods 
 
-    template <class ...Args>
-    using unordered_map             = dg::network_std_container::unordered_map<Args...>;
+    template <class Key>
+    using unordered_set             = dg::network_std_container::unordered_set<Key>;
 
-    template <class ...Args>
-    using unordered_unstable_map    = dg::network_std_container::unordered_unstable_map<Args...>;
+    template <class Key, class Value>
+    using unordered_map             = dg::network_std_container::unordered_map<Key, Value>;
 
-    template <class ...Args>
-    using vector                    = dg::network_std_container::vector<Args...>;
+    template <class Key, class Value>
+    using unordered_unstable_map    = dg::network_std_container::unordered_unstable_map<Key, Value>;
 
-    template <class ...Args>
-    using deque                     = dg::network_std_container::deque<Args...>;
+    template <class T>
+    using vector                    = dg::network_std_container::vector<T>;
+
+    template <class T>
+    using deque                     = dg::network_std_container::deque<T>;
 
     using string                    = dg::network_std_container::string;
 }

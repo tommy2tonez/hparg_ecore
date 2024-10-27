@@ -73,7 +73,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t PTHREAD_EINVAL                      = 0u;
     static inline constexpr exception_t PTHREAD_ESRCH                       = 0u;
     static inline constexpr exception_t PTHREAD_CAUSA_SUI                   = 0u;
-    static inline constexpr exception_t UNDEFINED_HARDWARE_CONCURRENCY      = 0u; 
+    static inline constexpr exception_t UNDEFINED_HARDWARE_CONCURRENCY      = 0u;
     static inline constexpr exception_t FILE_NOT_FOUND                      = 0u;
     static inline constexpr exception_t CORRUPTED_FILE                      = 0u;
     static inline constexpr exception_t BAD_CUDA_DEVICE_ACCESS              = 0u;
@@ -81,7 +81,11 @@ namespace dg::network_exception{
     static inline constexpr exception_t CUDA_EXECUTABLE_WAITING_DISPATCH    = 0u; 
     static inline constexpr exception_t CUDA_NOT_SUPPORTED                  = 0u;
     static inline constexpr exception_t UNMET_CLEARANCE                     = 0u;
-    
+    static inline constexpr exception_t POSTGRES_NOT_INITIALIZED            = 0u;
+    static inline constexpr exception_t BAD_ENCODING_FORMAT                 = 0u;
+    static inline constexpr exception_t POSTGRES_CORRUPTION                 = 0u;
+    static inline constexpr exception_t POSTGRES_EXCEED_QUERY_LENGTH_LIMIT  = 0u;
+
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
     static inline const char * INVALID_DICTIONARY_KEY_CSTR      = "invalid_dictionary_key";
@@ -102,7 +106,7 @@ namespace dg::network_exception{
 
     }
 
-    inline auto wrap_std_exception(std::exception_ptr){
+    inline auto wrap_std_exception(std::exception_ptr) -> exception_t{
 
     }
 

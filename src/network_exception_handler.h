@@ -1,4 +1,4 @@
-#ifndef __NETWORK_ERROR_HANLDER_H__
+#ifndef __NETWORK_ERROR_HANDLER_H__
 #define __NETWORK_ERROR_HANDLER_H__
 
 #include "network_log.h"
@@ -6,11 +6,7 @@
 #include "network_exception.h" 
 
 namespace dg::network_exception_handler{
-
-    //1hr
     
-    using exception_t = dg::network_exception::exception_t; 
-
     static inline void dispatch(exception_t err_code, bool is_throw, bool has_log_write_on_err){
 
         if (network_exception::is_success(err_code)){

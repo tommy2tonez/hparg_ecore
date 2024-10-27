@@ -2,6 +2,7 @@
 #define __DG_NETWORK_CONCURRENCY_IMPL1_H__
 
 #include "stdx.h"
+#include <optional>
 
 #ifdef __linux__
 #include "network_concurrency_impl1_linux.h"
@@ -41,9 +42,24 @@ namespace dg::network_concurrency_impl1_app{
 
     enum affine_policy_option: affine_policy_option_t{
         kernel_overwrite_affine_policy  = 0u, //this assumes that all cores are isolated for the application -  
-        kernel_decide_affine_policy     = 1u;
+        kernel_decide_affine_policy     = 1u
     };
-    
+
+    consteval auto max_parallel_performance_hyperthread_count_per_core() noexcept -> size_t{
+        
+        return 8;
+    }
+
+    consteval auto max_compute_performance_hyperthread_count_per_core() noexcept -> size_t{
+        
+        return 2;
+    }
+
+    consteval auto max_mixed_performance_hyperthread_count_per_core() noexcept -> size_t{
+
+        return 4;
+    }
+
     struct MonoAffineDaemonPlanMaker{
 
         private:
@@ -77,7 +93,7 @@ namespace dg::network_concurrency_impl1_app{
 
             auto set_core(int core_id, double speed) -> MonoAffineDaemonPlanMaker&{
 
-                if (speed <= 0){
+                if (speed <= 0.f){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -88,7 +104,7 @@ namespace dg::network_concurrency_impl1_app{
 
             auto set_cpu_usage(daemon_kind_t daemon_kind, double cpu_usage) -> MonoAffineDaemonPlanMaker&{
 
-                if (cpu_usage <= 0){
+                if (cpu_usage <= 0.f){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -111,9 +127,9 @@ namespace dg::network_concurrency_impl1_app{
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                stdx::unordered_map<int, double> normalized_core_speed_map                                   = this->normalize_core_speed(this->core_speed_map); 
-                stdx::unordered_map<daemon_kind_t, double> normalized_daemon_usage_map                       = this->normalize_daemon_usage(this->daemon_usage_map);
-                stdx::unordered_map<daemon_kind_t, stdx::unordered_map<int, double>> daemon_affineusage_map   = this->make_daemon_affineusage_map(normalized_core_speed_map, normalized_daemon_usage_map); 
+                stdx::unordered_map<int, double> normalized_core_speed_map                                      = this->normalize_core_speed(this->core_speed_map); 
+                stdx::unordered_map<daemon_kind_t, double> normalized_daemon_usage_map                          = this->normalize_daemon_usage(this->daemon_usage_map);
+                stdx::unordered_map<daemon_kind_t, stdx::unordered_map<int, double>> daemon_affineusage_map     = this->make_daemon_affineusage_map(normalized_core_speed_map, normalized_daemon_usage_map); 
 
                 return this->internal_make_plan(daemon_affineusage_map);
             }
@@ -124,12 +140,12 @@ namespace dg::network_concurrency_impl1_app{
 
                 double total = {};
 
-                for (const auto& pair_iter: core_speed_map){
-                    total += pair_iter->second;
+                for (const auto& map_pair: core_speed_map){
+                    total += map_pair.second;
                 }
 
-                for (auto& pair_iter: core_speed_map){
-                    pair_iter->second /= total;
+                for (auto& map_pair: core_speed_map){
+                    map_pair.second /= total;
                 }
 
                 return core_speed_map;
@@ -139,12 +155,12 @@ namespace dg::network_concurrency_impl1_app{
 
                 double total = {};
 
-                for (const auto& pair_iter: daemon_usage_map){
-                    total += pair_iter->second;
+                for (const auto& map_pair: daemon_usage_map){
+                    total += map_pair.second;
                 }
 
-                for (auto& pair_iter: daemon_usage_map){
-                    pair_iter->second /= total;
+                for (auto& map_pair: daemon_usage_map){
+                    map_pair.second /= total;
                 }
 
                 return daemon_usage_map;
@@ -162,7 +178,7 @@ namespace dg::network_concurrency_impl1_app{
 
                     while (true){
                         if (core_speed_vec.size() == 0u){ //
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                             std::abort();
                         }
 
@@ -201,9 +217,9 @@ namespace dg::network_concurrency_impl1_app{
                 stdx::unordered_map<daemon_kind_t, stdx::vector<stdx::vector<int>>> rs{};
 
                 for (const auto& outer_iter: daemon_affineusage_map){
-                    for (const auto& inner_iter: outer_iter->second){
-                        stdx::vector<stdx::vector<int>> thr_group_cpuset = to_thr_group_cpu_set(inner_iter->first, inner_iter->second); 
-                        rs[outer_iter->first].insert(rs[outer_iter->first].end(), thr_group_cpuset.begin(), thr_group_cpuset.end());
+                    for (const auto& inner_iter: outer_iter.second){
+                        stdx::vector<stdx::vector<int>> thr_group_cpuset = to_thr_group_cpu_set(inner_iter.first, inner_iter.second); 
+                        rs[outer_iter.first].insert(rs[outer_iter.first].end(), thr_group_cpuset.begin(), thr_group_cpuset.end());
                     }
                 }
 
@@ -253,7 +269,7 @@ namespace dg::network_concurrency_impl1_app{
 
             auto set_computing_cpu_usage(double cpu_usage) -> UniformDaemonPlanMaker&{
 
-                if (cpu_usage <= 0){
+                if (cpu_usage <= 0.f){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -263,7 +279,7 @@ namespace dg::network_concurrency_impl1_app{
 
             auto set_kernel_io_cpu_usage(double cpu_usage) -> UniformDaemonPlanMaker&{ //io is high_parallel - to consume kernel packet before it disappears (this is low_compute if use inplace_buffer + one time allocation from kernel) + block thread for network response - 
 
-                if (cpu_usage <= 0){
+                if (cpu_usage <= 0.f){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -273,7 +289,7 @@ namespace dg::network_concurrency_impl1_app{
 
             auto set_transportation_cpu_usage(double cpu_usage) -> UniformDaemonPlanMaker&{ //transporation == moving buffer from one place -> another - without actually directly copying the buffer
 
-                if (cpu_usage <= 0){
+                if (cpu_usage <= 0.f){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -283,7 +299,7 @@ namespace dg::network_concurrency_impl1_app{
 
             auto set_heartbeat_cpu_usage(double cpu_usage) -> UniformDaemonPlanMaker&{
 
-                if (cpu_usage <= 0){
+                if (cpu_usage <= 0.f){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -332,7 +348,7 @@ namespace dg::network_concurrency_impl1_app{
                     return this->internal_make_kerneldecide_affine_plan();
                 }
 
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
                 return {};
             }
@@ -370,7 +386,7 @@ namespace dg::network_concurrency_impl1_app{
                                        .set_cpu_usage(IO_DAEMON, this->kernel_io_cpu_usage.value());
                 
                 high_parallel_plan_maker.set_thread_per_core(this->high_parallel_low_compute_thr_per_core.value())
-                                        .set_cpu_usage(TRANSPORATION_DAEMON, this->transportation_cpu_usage.value())
+                                        .set_cpu_usage(TRANSPORTATION_DAEMON, this->transportation_cpu_usage.value())
                                         .set_cpu_usage(HEARTBEAT_DAEMON, this->heartbeat_cpu_usage.value());
                 
                 auto high_compute_plan  = high_compute_plan_maker.make_plan();
@@ -389,7 +405,7 @@ namespace dg::network_concurrency_impl1_app{
 
                 if (core_count == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::UNDEFINED_HARDWARE_CONCURRENCY); //better to throw exception here
-                }
+                } 
 
                 size_t thr_per_core             = max_mixed_performance_hyperthread_count_per_core(); 
                 size_t thr_count                = core_count * thr_per_core; 
@@ -397,7 +413,6 @@ namespace dg::network_concurrency_impl1_app{
                 size_t kernel_io_thr_count      = std::max(size_t{1}, static_cast<size_t>(thr_count * this->kernel_io_cpu_usage.value()));
                 size_t transporation_thr_count  = std::max(size_t{1}, static_cast<size_t>(thr_count * this->transportation_cpu_usage.value()));
                 size_t heartbeat_thr_count      = std::max(size_t{1}, static_cast<size_t>(thr_count * this->heartbeat_cpu_usage.value())); 
-
 
                 for (size_t i = 0u; i < computing_thr_count; ++i){
                     rs[COMPUTING_DAEMON].push_back(stdx::vector<int>{});
@@ -419,23 +434,17 @@ namespace dg::network_concurrency_impl1_app{
             }
     };
      
-    static auto vectorize_plan(stdx::unordered_map<daemon_kind_t, stdx::vector<stdx::vector<int>>> plan) -> stdx::vector<daemon_kind_t, stdx::vector<int>>{
+    static auto vectorize_plan(stdx::unordered_map<daemon_kind_t, stdx::vector<stdx::vector<int>>> plan) -> stdx::vector<std::pair<daemon_kind_t, stdx::vector<int>>>{
 
-        stdx::vector<daemon_kind_t, stdx::vector<int>> rs{};
+        stdx::vector<std::pair<daemon_kind_t, stdx::vector<int>>> rs{};
 
         for (const auto& pair_iter: plan){
-            for (stdx::vector<int>& cpuset: pair_iter->second){
-                rs.push_back(pair_iter->first, std::move(cpuset));
+            for (const stdx::vector<int>& cpuset: pair_iter.second){
+                rs.push_back(std::make_pair(pair_iter.first, cpuset));
             }
         }
 
         return rs;
-    }
-
-    static auto get_thread_id_numerical_representation(std::thread::id thr_id) noexcept -> size_t{ //usually std::thread::id is size_t - no idea if std will change this - I doubt that - yet move the maybe-obselete code -> one place for version control
-
-        static_assert(std::has_unique_object_representations_v<std::thread::id>);
-        return std::bit_cast<size_t>(thr_id);;
     }
 
     struct Config{
@@ -449,11 +458,10 @@ namespace dg::network_concurrency_impl1_app{
     auto spawn(Config config) -> std::pair<std::unique_ptr<dg::network_concurrency_impl1::DaemonControllerInterface>, stdx::vector<std::thread::id>>{
 
         auto thr_vec        = stdx::vector<std::thread::id>();
-        auto daemon_id_map  = stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>>{};
-        auto id_runner_map  = stdx::unordered_map<size_t, std::unique_ptr<dg::network_concurrency_impl1::DaemonRunnerInterface>>{};
+        auto daemon_vec     = stdx::vector<std::pair<std::unique_ptr<dg::network_concurrency_impl1::DaemonRunnerInterface>, daemon_kind_t>>{};
         auto plan           = UniformDaemonPlanMaker().set_affine_policy(config.policy)
                                                       .set_computing_cpu_usage(config.computing_cpu_usage)
-                                                      .set_io_cpu_usage(config.io_cpu_usage)
+                                                      .set_kernel_io_cpu_usage(config.io_cpu_usage)
                                                       .set_transportation_cpu_usage(config.transportation_cpu_usage)
                                                       .set_heartbeat_cpu_usage(config.heartbeat_cpu_usage)
                                                       .make_plan();
@@ -469,13 +477,11 @@ namespace dg::network_concurrency_impl1_app{
             }
 
             std::thread::id thr_id = runner->id();
-            size_t thr_numerical_rep = get_thread_id_numerical_representation(thr_id);
-            daemon_id_map[daemon_kind].push_back(thr_numerical_rep); 
-            id_runner_map[thr_numerical_rep] = std::move(runner);
             thr_vec.push_back(thr_id);
+            daemon_vec.push_back(std::make_pair(std::move(runner), daemon_kind));
         }
 
-        auto controller = dg::network_concurrency_impl1::ControllerFactory::spawn_daemon_controller(std::move(daemon_id_map), std::move(id_runner_map)); //
+        auto controller = dg::network_concurrency_impl1::ControllerFactory::spawn_daemon_controller(std::move(daemon_vec));
         return {std::move(controller), std::move(thr_vec)};
     }
 }

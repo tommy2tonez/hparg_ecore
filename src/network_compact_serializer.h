@@ -587,16 +587,16 @@ namespace dg::network_compact_serializer{
     template <class T>
     auto integrity_size(const T& obj) noexcept -> size_t{
 
-        return size(obj) + size(types::hash_type{});
+        return network_compact_serializer::size(obj) + network_compact_serializer::size(types::hash_type{});
     }
 
     template <class T>
     auto integrity_serialize_into(char * buf, const T& obj) noexcept -> char *{ 
         
         char * first                = buf;
-        char * last                 = serialize_into(first, obj);
+        char * last                 = dg::network_compact_serializer::serialize_into(first, obj);
         types::hash_type hashed     = utility::hash(first, std::distance(first, last));
-        char * llast                = serialize_into(last, hashed);
+        char * llast                = dg::network_compact_serializer::serialize_into(last, hashed);
 
         return llast;
     }
@@ -612,21 +612,21 @@ namespace dg::network_compact_serializer{
         const char * last           = first + (sz - size(types::hash_type{})); 
         types::hash_type expected   = {};
         types::hash_type reality    = utility::hash(first, std::distance(first, last));
-        deserialize_into(expected, last);
+        dg::network_compact_serializer::deserialize_into(expected, last);
 
         if (expected != reality){
             dg::network_exception::throw_exception(dg::network_exception::INVALID_SERIALIZATION_FORMAT);
         }
 
-        deserialize_into(obj, first);
+        dg::network_compact_serializer::deserialize_into(obj, first);
     }
 
     template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
     auto serialize(const T& obj) -> Stream{
         
         Stream stream{};
-        stream.resize(size(obj)); //this is precisely why I dont like the std container - 99% of problem that serialization programmers succum into could be solved with raw malloc + resize
-        serialize_into(stream.data(), obj);
+        stream.resize(dg::network_compact_serializer::size(obj)); //this is precisely why I dont like the std container - 99% of problem that serialization programmers succum into could be solved with raw malloc + resize
+        dg::network_compact_serializer::serialize_into(stream.data(), obj);
 
         return stream;
     }
@@ -635,8 +635,8 @@ namespace dg::network_compact_serializer{
     auto integrity_serialize(const T& obj) -> Stream{
 
         Stream stream{};
-        stream.resize(integrity_size(obj));
-        integrity_serialize_into(stream.data(), obj);
+        stream.resize(dg::network_compact_serializer::integrity_size(obj));
+        dg::network_compact_serializer::integrity_serialize_into(stream.data(), obj);
         
         return stream;
     }
@@ -645,7 +645,7 @@ namespace dg::network_compact_serializer{
     auto deserialize(const Stream& stream) -> T{
 
         T rs{};
-        deserialize_into(rs, stream.data());
+        dg::network_compact_serializer::deserialize_into(rs, stream.data());
 
         return rs;
     }
@@ -654,7 +654,7 @@ namespace dg::network_compact_serializer{
     auto integrity_deserialize(const Stream& stream) -> T{
 
         T rs{};
-        integrity_deserialize_into(rs, stream.data(), stream.size());
+        dg::network_compact_serializer::integrity_deserialize_into(rs, stream.data(), stream.size());
 
         return rs;
     }

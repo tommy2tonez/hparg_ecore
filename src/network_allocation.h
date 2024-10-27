@@ -9,25 +9,19 @@
 #include <thread>
 #include "assert.h"
 #include <bit>
-#include "network_utility.h"
 #include <vector>
 #include "stdx.h"
+#include "network_memult.h"
+#include "network_exception.h"
+#include "network_log.h"
+#include "network_exception_handler.h"
 
 namespace dg::network_allocation{
 
-    //fine - usable
-    //now stepping into cache efficiency territory - this is a hard task
-    //we need to group allocations by node_lifetime and node_sz
-    //each group of node_lifetime and node_sz has the optimal corresponding MANAGEMENT_SZ
-    //this is often called "pages" by other allocators
-    //yet the policy of reusing pages (FIFO) by other allocators often lead to serious fragmentation in a long run 
-    //when I explained to Mom that this is literally the polymorphic buffer problem
-    //user specify literally the allocation_trait, like dg::fast_string sth... dg::long_string, dg::long_fast_string, etc. 
-    //and appropriate allocation is used for that specific need of cache efficiency
-    //the thing when you tried to combine all allocation traits into one allocator is that it will fragment bad, and most people measure those things on the wrong scale anyway
+    using ptr_type              = uint64_t;
+    using alignment_type        = uint16_t;
+    using interval_type         = dg::heap::types::interval_type; 
 
-    using ptr_type                                              = uint64_t;
-    using alignment_type                                        = uint16_t;
     static inline constexpr size_t PTROFFS_BSPACE               = sizeof(uint32_t) * CHAR_BIT;
     static inline constexpr size_t PTRSZ_BSPACE                 = sizeof(uint16_t) * CHAR_BIT;
     static inline constexpr size_t ALLOCATOR_ID_BSPACE          = sizeof(uint8_t) * CHAR_BIT;
@@ -40,31 +34,6 @@ namespace dg::network_allocation{
     static_assert(PTROFFS_BSPACE + PTRSZ_BSPACE + ALLOCATOR_ID_BSPACE + ALIGNMENT_BSPACE <= sizeof(ptr_type) * CHAR_BIT);
     static_assert(-1 == ~0);
     static_assert(!NETALLOC_NULLPTR);
-    static_assert(std::add_pointer_t<void>(nullptr) == reinterpret_cast<void *>(0u));
-
-    template <class T, size_t SZ, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    constexpr auto low(const std::integral_constant<size_t, SZ>) noexcept -> T{
-        
-        static_assert(SZ <= sizeof(T) * CHAR_BIT);
-
-        if constexpr(SZ == sizeof(T) * CHAR_BIT){
-            return ~T{0u};
-        } else{
-            return (T{1u} << SZ) - 1; 
-        }
-    }
-
-    template <size_t BIT_SIZE>
-    constexpr auto bit_capacity(const std::integral_constant<size_t, BIT_SIZE>) noexcept -> size_t{
-
-        static_assert(BIT_SIZE <= sizeof(size_t) * CHAR_BIT);
-
-        if constexpr(BIT_SIZE == sizeof(size_t) * CHAR_BIT){
-            return std::numeric_limits<size_t>::max();
-        } else{
-            return (size_t{1} << BIT_SIZE) - 1;
-        }
-    }
 
     class GCInterface{
 
@@ -125,7 +94,7 @@ namespace dg::network_allocation{
                 try{
                     this->allocator = dg::heap::user_interface::get_allocator_x(this->management_buf.get());
                 } catch (...){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception_ptr(std::current_exception())));
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception(std::current_exception())));
                     std::abort();
                 }
              }
@@ -153,11 +122,12 @@ namespace dg::network_allocation{
                     return NETALLOC_NULLPTR;
                 }
 
-                auto [resp_offs, resp_sz] = resp.value();
+                auto [resp_off, resp_sz] = resp.value();
+                
                 static_assert(std::is_unsigned_v<decltype(resp_off)>);
                 static_assert(std::is_unsigned_v<decltype(resp_sz)>);
 
-                return encode_ptr(resp_offs, resp_sz); //use 16 bits encoding - 1 bit to denotes log2 roundup and 15 bits to denote the length
+                return this->encode_ptr(resp_off, resp_sz); //use 16 bits encoding - 1 bit to denotes log2 roundup and 15 bits to denote the length
             }
 
             void free(ptr_type ptr) noexcept{
@@ -166,8 +136,8 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                auto [offs, sz] = decode_ptr(ptr);
-                this->base_allocator->free({offs, sz});
+                auto [off, sz] = this->decode_ptr(ptr);
+                this->base_allocator->free({off, sz});
             }
 
             auto c_addr(ptr_type ptr) noexcept -> void *{
@@ -176,9 +146,9 @@ namespace dg::network_allocation{
                     return nullptr;
                 }
 
-                auto [offs, _] = decode_ptr(ptr);
+                auto [off, _] = this->decode_ptr(ptr);
                 char * rs = this->buf.get();
-                std::advance(rs, offs * LEAF_SZ);
+                std::advance(rs, off * LEAF_SZ);
 
                 return rs;
             }
@@ -198,7 +168,7 @@ namespace dg::network_allocation{
             auto decode_ptr(ptr_type ptr) const noexcept -> std::pair<uint64_t, uint64_t>{
 
                 ptr_type hi = ptr >> PTRSZ_BSPACE;
-                ptr_type lo = ptr & low<ptr_type>(std::integral_constant<size_t, PTRSZ_BSPACE>{});
+                ptr_type lo = stdx::low_bit<PTRSZ_BSPACE>(ptr);
 
                 return {static_cast<uint64_t>(hi), static_cast<uint64_t>(lo) - 1};
             }
@@ -216,14 +186,14 @@ namespace dg::network_allocation{
 
             auto malloc(size_t blk_sz) noexcept -> ptr_type{
 
-                size_t allocator_idx    = this->get_allocator_idx(); 
+                size_t allocator_idx    = stdx::pow2mod_unsigned(dg::network_concurrency::this_thread_idx(), this->allocator_vec.size());
                 ptr_type rs             = this->allocator_vec[allocator_idx]->malloc(blk_sz);
 
                 if (!rs){
                     return NETALLOC_NULLPTR;
                 }
 
-                return encode_ptr(rs, allocator_idx);
+                return this->encode_ptr(rs, allocator_idx);
             }
 
             void free(ptr_type ptr) noexcept{
@@ -232,7 +202,7 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                auto [pptr, allocator_idx] = decode_ptr(ptr);
+                auto [pptr, allocator_idx] = this->decode_ptr(ptr);
                 this->allocator_vec[allocator_idx]->free(pptr);
             }
 
@@ -242,7 +212,7 @@ namespace dg::network_allocation{
                     return nullptr;
                 }
 
-                auto [pptr, allocator_idx] = decode_ptr(ptr);
+                auto [pptr, allocator_idx] = this->decode_ptr(ptr);
                 return this->allocator_vec[allocator_idx]->c_addr(pptr);
             }
 
@@ -263,17 +233,9 @@ namespace dg::network_allocation{
             auto decode_ptr(ptr_type ptr) const noexcept -> std::pair<ptr_type, uint64_t>{
 
                 ptr_type hi = ptr >> ALLOCATOR_ID_BSPACE;
-                ptr_type lo = ptr & low<ptr_type>(std::integral_constant<size_t, ALLOCATOR_ID_BSPACE>{}); 
+                ptr_type lo = stdx::low_bit<ALLOCATOR_ID_BSPACE>(ptr);
 
                 return {hi, static_cast<uint64_t>(lo)};
-            }
-
-            auto get_allocator_idx() noexcept -> size_t{
-
-                size_t thr_idx  = dg::network_concurrency::this_thread_idx();
-                size_t vec_sz   = this->allocator_vec.size();
-
-                return stdx::pow2mod_unsigned(thr_idx % vec_sz);
             }
     };
 
@@ -287,7 +249,7 @@ namespace dg::network_allocation{
 
             GCWorker(std::shared_ptr<GCInterface> gc_able): gc_able(std::move(gc_able)){}
             
-            bool run_one_epoch() noexcept{
+            auto run_one_epoch() noexcept -> bool{
 
                 this->gc_able->gc();
                 return true;
@@ -309,7 +271,7 @@ namespace dg::network_allocation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            uint8_t tree_height = static_cast<uint8_t>(std::countr_zero(base_sz)) + 1u;
+            uint8_t tree_height = stdx::ulog2_aligned(base_sz) + 1u;
             size_t buf_sz       = dg::heap::user_interface::get_memory_usage(tree_height);
             auto buf            = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::malloc(buf_sz)), std::free);
 
@@ -319,7 +281,6 @@ namespace dg::network_allocation{
 
             auto allocator  = dg::heap::user_interface::get_allocator_x(buf.get());
             auto lck        = std::make_unique<std::atomic_flag>();
-            lck->clear();
             auto rs         = std::make_unique<GCHeapAllocator>(std::move(buf), std::move(allocator), std::move(lck));
 
             return rs;
@@ -334,7 +295,7 @@ namespace dg::network_allocation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t buf_sz   = dg::memult::least_pow2_greater_eq_than(std::max(least_buf_sz, LEAF_SZ));
+            size_t buf_sz   = stdx::least_pow2_greater_equal_than(std::max(least_buf_sz, LEAF_SZ));
             size_t base_sz  = buf_sz / LEAF_SZ;
             auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(LEAF_SZ, buf_sz)), std::free);  
 
@@ -379,7 +340,7 @@ namespace dg::network_allocation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return dg::network_exception::throw_nolog(dg::network_concurrency::daemon_saferegister_with_waittime(dg::network_concurrency::COMPUTE_DAEMON, std::make_unique<GCWorker>(std::move(gc_able)), gc_interval)); 
+            return dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister_with_waittime(dg::network_concurrency::COMPUTING_DAEMON, std::make_unique<GCWorker>(std::move(gc_able)), gc_interval)); 
         }
     };
 
@@ -390,7 +351,7 @@ namespace dg::network_allocation{
 
     inline AllocationResource allocation_resource;
 
-    void init(ize_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
+    void init(size_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
 
         stdx::vector<std::unique_ptr<Allocator>> allocator_vec{};
 
@@ -398,7 +359,7 @@ namespace dg::network_allocation{
             allocator_vec.push_back(Factory::spawn_allocator(least_buf_sz));
         }
 
-        std::shared_ptr<MultiThreadAllocator> allocator = Factory::spawn_concurrenct_allocator(std::move(allocator_vec));
+        std::shared_ptr<MultiThreadAllocator> allocator = Factory::spawn_concurrent_allocator(std::move(allocator_vec));
         dg::network_concurrency::daemon_raii_handle_t daemon_handle = Factory::spawn_gc_worker(gc_interval, allocator);
         allocation_resource = {std::move(allocator), std::move(daemon_handle)};
     }
@@ -424,8 +385,9 @@ namespace dg::network_allocation{
             return NETALLOC_NULLPTR;
         }
 
+        alignment_type alignment_log2 = stdx::ulog2_aligned(static_cast<alignment_type>(alignment));
         ptr <<= ALIGNMENT_BSPACE;
-        ptr |= static_cast<ptr_type>(static_cast<alignment_type>(std::countr_zero(static_cast<alignment_type>(alignment))));
+        ptr |= static_cast<ptr_type>(alignment_log2);
 
         return ptr;
     } 
@@ -438,10 +400,10 @@ namespace dg::network_allocation{
     auto c_addr(ptr_type ptr) noexcept -> void *{
         
         if (!ptr){
-            return NETALLOC_NULLPTR;
+            return nullptr;
         }
 
-        alignmen_type alignment_log2    = static_cast<alignment_type>(ptr & low<ptr_type>(std::integral_constant<size_t, ALIGNMENT_BSPACE>{})); 
+        alignment_type alignment_log2   = stdx::low_bit<ALIGNMENT_BSPACE>(ptr); 
         size_t alignment                = size_t{1} << alignment_log2;
         ptr_type pptr                   = ptr >> ALIGNMENT_BSPACE;
 
@@ -464,7 +426,7 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        constexpr size_t HEADER_SZ  = std::max(dg::memult::least_pow2_greater_eq_than(sizeof(ptr_type)), DEFLT_ALIGNMENT); 
+        constexpr size_t HEADER_SZ  = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
         size_t adj_blk_sz           = blk_sz + HEADER_SZ;
         ptr_type ptr                = malloc(adj_blk_sz);
 
@@ -474,19 +436,22 @@ namespace dg::network_allocation{
 
         void * cptr = c_addr(ptr);
         std::memcpy(cptr, &ptr, sizeof(ptr_type));
+        char * rs   = static_cast<char *>(cptr);
+        std::advance(rs, HEADER_SZ);
 
-        return dg::memult::badvance(cptr, HEADER_SZ);
+        return rs;
     }
 
     void cfree(void * cptr) noexcept{
         
-        constexpr size_t HEADER_SZ = std::max(dg::memult::least_pow2_greater_eq_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
+        constexpr size_t HEADER_SZ = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
         
         if (!cptr){
             return;
         }
 
-        void * org_cptr = dg::memult::badvance(cptr, -static_cast<intmax_t>(HEADER_SZ));
+        const char * org_cptr = static_cast<const char *>(cptr);
+        std::advance(org_cptr, -static_cast<intmax_t>(HEADER_SZ));
         ptr_type ptr    = {};
         std::memcpy(&ptr, org_cptr, sizeof(ptr_type));
 
