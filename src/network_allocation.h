@@ -13,11 +13,10 @@
 #include "stdx.h"
 #include "network_memult.h"
 #include "network_exception.h"
-#include "network_log.h"
-#include "network_exception_handler.h"
+#include "network_concurrency.h"
 
 namespace dg::network_allocation{
-
+    
     using ptr_type              = uint64_t;
     using alignment_type        = uint16_t;
     using interval_type         = dg::heap::types::interval_type; 
@@ -94,7 +93,6 @@ namespace dg::network_allocation{
                 try{
                     this->allocator = dg::heap::user_interface::get_allocator_x(this->management_buf.get());
                 } catch (...){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception(std::current_exception())));
                     std::abort();
                 }
              }
@@ -178,11 +176,11 @@ namespace dg::network_allocation{
 
         private:
 
-            stdx::vector<std::unique_ptr<Allocator>> allocator_vec;
+            std::vector<std::unique_ptr<Allocator>> allocator_vec;
 
         public:
 
-            MultiThreadAllocator(stdx::vector<std::unique_ptr<Allocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
+            MultiThreadAllocator(std::vector<std::unique_ptr<Allocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
 
             auto malloc(size_t blk_sz) noexcept -> ptr_type{
 
@@ -307,7 +305,7 @@ namespace dg::network_allocation{
             return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator));
         }
 
-        static auto spawn_concurrent_allocator(stdx::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
+        static auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
 
             const size_t MIN_ALLOCATOR_SZ   = 1u;
             const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 8;
@@ -340,7 +338,13 @@ namespace dg::network_allocation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister_with_waittime(dg::network_concurrency::COMPUTING_DAEMON, std::make_unique<GCWorker>(std::move(gc_able)), gc_interval)); 
+            auto rs = dg::network_concurrency::daemon_saferegister_with_waittime(dg::network_concurrency::COMPUTING_DAEMON, std::make_unique<GCWorker>(std::move(gc_able)), gc_interval);
+
+            if (!rs.has_value()){
+                dg::network_exception::throw_exception(rs.error());
+            } 
+
+            return std::move(rs.value());
         }
     };
 
@@ -353,7 +357,7 @@ namespace dg::network_allocation{
 
     void init(size_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
 
-        stdx::vector<std::unique_ptr<Allocator>> allocator_vec{};
+        std::vector<std::unique_ptr<Allocator>> allocator_vec{};
 
         for (size_t i = 0u; i < num_allocator; ++i){
             allocator_vec.push_back(Factory::spawn_allocator(least_buf_sz));
@@ -459,81 +463,84 @@ namespace dg::network_allocation{
     }
 
     template <class T>
-    struct NoExceptAllocator{
+    using NoExceptAllocator = std::allocator<T>;
+    
+    // template <class T>
+    // struct NoExceptAllocator: std::allocator<T>{
  
-        using value_type                                = T;
-        using pointer                                   = T *;
-        using const_pointer                             = const T *;
-        using reference                                 = T&;
-        using const_reference                           = const T&;
-        using size_type                                 = size_t;
-        using difference_type                           = intmax_t;
-        using is_always_equal                           = std::true_type;
-        using propagate_on_container_move_assignment    = std::true_type;
+    //     // using value_type                                = T;
+    //     // using pointer                                   = T *;
+    //     // using const_pointer                             = const T *;
+    //     // using reference                                 = T&;
+    //     // using const_reference                           = const T&;
+    //     // using size_type                                 = size_t;
+    //     // using difference_type                           = intmax_t;
+    //     // using is_always_equal                           = std::true_type;
+    //     // using propagate_on_container_move_assignment    = std::true_type;
         
-        template <class U>
-        struct rebind{
-            using other = NoExceptAllocator<U>;
-        };
+    //     // template <class U>
+    //     // struct rebind{
+    //     //     using other = NoExceptAllocator<U>;
+    //     // };
 
-        auto address(reference x) const noexcept -> pointer{
+    //     // auto address(reference x) const noexcept -> pointer{
 
-            return std::addressof(x);
-        }
+    //     //     return std::addressof(x);
+    //     // }
 
-        auto address(const_reference x) const noexcept -> const_pointer{
+    //     // auto address(const_reference x) const noexcept -> const_pointer{
 
-            return std::addressof(x);
-        }
+    //     //     return std::addressof(x);
+    //     // }
         
-        auto allocate(size_t n, const void * hint) -> pointer{ //noexcept is guaranteed internally - this is to comply with std
+    //     // constexpr auto allocate(size_t n, const void * hint) -> pointer{ //noexcept is guaranteed internally - this is to comply with std
 
-            if (n == 0u){
-                return nullptr;
-            }
+    //     //     if (n == 0u){
+    //     //         return nullptr;
+    //     //     }
 
-            void * buf = cmalloc(n * sizeof(T));
+    //     //     void * buf = cmalloc(n * sizeof(T));
 
-            if (!buf){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::OUT_OF_MEMORY));
-                std::abort();
-            }
+    //     //     if (!buf){
+    //     //         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::OUT_OF_MEMORY));
+    //     //         std::abort();
+    //     //     }
 
-            return dg::memult::start_lifetime_as_array<T>(buf, n); //this needs compiler magic to avoid undefined behaviors
-        }
+    //     //     return dg::memult::start_lifetime_as_array<T>(buf, n); //this needs compiler magic to avoid undefined behaviors
+    //     // }
 
-        auto allocate(size_t n) -> pointer{
+    //     // auto allocate(size_t n) -> pointer{
             
-            return allocate(n, std::add_pointer_t<const void>{});
-        }
+    //     //     return allocate(n, std::add_pointer_t<const void>{});
+    //     // }
         
-        //according to std - deallocate arg is valid ptr - such that allocate -> std::optional<ptr_type>, void deallocate(ptr_type)
-        void deallocate(pointer p, size_t n){ //noexcept is guaranteed internally - this is to comply with std
+    //     // //according to std - deallocate arg is valid ptr - such that allocate -> std::optional<ptr_type>, void deallocate(ptr_type)
+    //     // void deallocate(pointer p, size_t n){ //noexcept is guaranteed internally - this is to comply with std
 
-            if (n == 0u){
-                return;
-            }
+    //     //     if (n == 0u){
+    //     //         return;
+    //     //     }
 
-            cfree(static_cast<void *>(p)); //fine - a reverse operation of allocate
-        }
+    //     //     cfree(static_cast<void *>(p)); //fine - a reverse operation of allocate
+    //     // }
 
-        consteval auto max_size() const noexcept -> size_type{
+    //     // consteval auto max_size() const noexcept -> size_type{
 
-            return std::numeric_limits<size_type>::max();
-        }
+    //     //     return std::numeric_limits<size_type>::max();
+    //     // }
         
-        template <class U, class... Args>
-        void construct(U * p, Args&&... args) noexcept(std::is_nothrow_constructible_v<U, Args...>){
+    //     // template <class U, class... Args>
+    //     // void construct(U * p, Args&&... args) noexcept(std::is_nothrow_constructible_v<U, Args...>){
 
-            new (static_cast<void *>(p)) U(std::forward<Args>(args)...);
-        }
+    //     //     new (static_cast<void *>(p)) U(std::forward<Args>(args)...);
+    //     // }
 
-        template <class U>
-        void destroy(U * p) noexcept(std::is_nothrow_destructible_v<U>){
+    //     // template <class U>
+    //     // void destroy(U * p) noexcept(std::is_nothrow_destructible_v<U>){
 
-            std::destroy_at(p);
-        }
-    };
+    //     //     std::destroy_at(p);
+    //     // }
+    // };
 
     template <class T, class T1>
     constexpr auto operator==(const NoExceptAllocator<T>&, const NoExceptAllocator<T1>&) noexcept -> bool{

@@ -7,154 +7,51 @@
 #include "network_exception.h"
 #include "network_atomic_x.h"
 #include "stdx.h"
+#include <filesystem>
 
 namespace dg::network_persistent_unified_fileio{
 
-    class UnifiedFsysControllerInterface{
+    struct Metadata{
+        dg::vector<std::string> path_vec;
+        dg::vector<bool> path_status_vec;
 
-        public:
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(path_vec, path_status_vec);
+        }
 
-            virtual ~UnifiedFsysControllerInterface() noexcept = default;
-            virtual auto exists(const char * unified_fp) const noexcept -> bool = 0;
-            virtual auto replication_size(const char * unified_fp) const noexcept -> size_t = 0; 
-            virtual auto replication_fpath(const char * unified_fp, size_t idx) const noexcept -> const std::filesystem::path& = 0; //this is equivalent to (-> const char *) - in the sense of storing potential invalid ptr - yet better - force user to do const auto& to store const reference
-            virtual auto replication_is_valid(const char * unified_fp, size_t idx) const noexcept -> bool = 0;
-            virtual void replication_invalidate(const char * unified_fp, size_t idx) noexcept = 0; 
-            virtual void replication_validate(const char * unified_fp, size_t idx) noexcept = 0;
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(path_vec, path_status_vec);
+        }
     };
-
-    class UnifiedFsysController: public virtual UnifiedFsysControllerInterface{
-
-        private:
-
-            stdx::unordered_map<stdx::string, stdx::vector<std::filesystem::path>> unified_fsys_map;
-            stdx::unordered_map<stdx::string, stdx::vector<bool>> unified_fsys_flag_map;
-
-        public:
-
-            UnifiedFsysController(stdx::unordered_map<stdx::string, stdx::vector<std::filesystem::path>> unified_fsys_map,
-                                  stdx::unordered_map<stdx::string, stdx::vector<bool>> unified_fsys_flag_map) noexcept: unified_fsys_map(std::move(unified_fsys_map)),
-                                                                                                                      unified_fsys_flag_map(std::move(unified_fsys_flag_map)){}
-            
-            auto exists(const char * unified_fp) const noexcept -> bool{
-
-                return this->unified_fsys_map.find(unified_fp) != this->unified_fsys_map.end();
-            }
-            
-            auto replication_size(const char * unified_fp) const noexcept -> size_t{
-
-                auto map_ptr = this->unified_fsys_map.find(unified_fp);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (map_ptr == this->unified_fsys_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                return map_ptr->second.size();
-            }
-
-            auto replication_fpath(const char * unified_fp, size_t idx) const noexcept -> const std::filesystem::path&{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->replication_size(unified_fp)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                return this->unified_fsys_map.find(unified_fp)->second[idx];
-            }
-
-            auto replication_is_valid(const char * unified_fp, size_t idx) const noexcept -> bool{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->replication_size(unified_fp)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                return this->unified_fsys_flag_map.find(unified_fp)->second[idx];
-            }
-
-            void replication_invalidate(const char * unified_fp, size_t idx) noexcept{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->replication_size(unified_fp)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                this->unified_fsys_flag_map.find(unified_fp)->second[idx] = false;
-            }
-
-            void replication_validate(const char * unified_fp, size_t idx) noexcept{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->replication_size(unified_fp)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                this->unified_fsys_flag_map.find(unified_fp)->second[idx] = true;
-            }
-    };
-
-    inline std::unique_ptr<UnifiedFsysControllerInterface> controller{};
-
-    //WLOG
-    //100GB for each f(x) -> x neural network 
-    //estimated compression rate = 1% on all dataset
-    //does a 10^4 networks like that
-
-    //let's build a filesystem
-    //precisely this
-    //the largest distributed filesystem the world has ever seen by using the new compression tech
-    //the idea is simple
-    //dictionary - middle layers - return true | false for compressible status - if true, route to compressed storage - if false - route to stable storage
-
-    //interface:
-
-    //unstable interface
-    //read() - return true if the operation is completed, does not guarantee the integrity of the underlying content
-    //write() - return true if the operation is completed, does not guarantee the integrity of the underlying content
     
-    //stable interface - inherit from unstable interface
-    //read() - return true if the operation is a true reverse operation of the last write push such that g(f(x)) = x - where x is the write's buffer arg
-    //write() - return true if the operation is completed, does not guarantee the integrity of the underlying content
-    //implementation - use checksum + runlength + timestamp and friends
+    auto dg_internal_metadata_filename(const char * fp) noexcept -> std::filesystem::path{
 
-    //stable noexcept interface - this 
-    //ETA: 1 month - sharp
-    
-    //what does that mean for the future of data-warehousing (the very base of database)?
-    //what does that mean for the future of intra-planet communication? 
-    //what does that mean for the future of cloud computing (do you actually need that many physical idling servers? - or only a certain uptime servers - or if techno is advanced enough - can users actually work on the virtual buffer without any drawbacks?) 
+    }
 
-    //all datalake is stored in the DogeGraph filesystem
-    //each transaction is at least 10GB/ operation
-    //each transaction invokes an ingestion request from the actual database - if the data is not already in the processing system (this)
+    auto dg_internal_read_metadata(const char * fp) noexcept -> std::expected<Metadata, exception_t>{
 
-    //imagine a system consists of:
-    //atomic_buffers + storage engines
-    //ingestion accelerators | ingestion gate (guarantee that transaction - one or many commits - is atomic - this is the sole interface to interact with atomic_buffers + storage engines)
-    //core - this
-    //allocators + decompression plan maker (provide a high level decompression plan + lifetime of decompression (to avoid overhead of moving data from/to storage engine + decompression time - this oversteps into the responsibility of cache))
-    //user_cache_system
-    //enduser
+    }
 
+    auto dg_file_create(const char * fp, const dg::vector<const char *>& replica_path_vec) noexcept -> exception_t{
 
-    void init(std::filesystem::path * main_filepath, std::filesystem::path * replica_filepath, size_t * n, size_t replication_sz){
+    }
+
+    auto dg_file_remove(const char * fp) noexcept -> exception_t{
 
     }
 
     auto dg_file_exists(const char * unified_fp) noexcept -> std::expected<bool, exception_t>{
 
-        return controller->exists(unified_fp);
+        std::filesystem::path metadata_fp       = dg_internal_metadata_filename(unified_fp); 
+        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists();
+
+        if (!status.has_value()){
+            return std::unexpected(status.error());
+        }
+
+        return status.value(); 
     }
 
     auto dg_file_exists_nothrow(const char * unified_fp) noexcept -> bool{
@@ -164,15 +61,17 @@ namespace dg::network_persistent_unified_fileio{
 
     auto dg_file_size(const char * unified_fp) noexcept -> std::expected<size_t, exception_t>{
         
-        if (!controller->exists(unified_fp)){
-            return std::unexpected(dg::network_exception::FILE_NOT_FOUND);
+        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(unified_fp); 
+
+        if (!metadata.has_value()){
+            return std::unexpected(metadata.error());
         }
-        
-        size_t replication_sz = controller->replication_size(unified_fp);
+
+        size_t replication_sz = metadata->path_vec.size();
 
         for (size_t i = 0u; i < replication_sz; ++i){
-            if (controller->replication_is_valid(unified_fp, i)){
-                const char * fp = controller->replication_fpath(unified_fp, i).c_str();
+            if (metadata->path_status_vec[i]){
+                const char * fp = metadata->path_vec[i].c_str();
                 std::expected<size_t, exception_t> fsz = dg::network_fileio::dg_file_size(fp);
                 if (fsz.has_value()){
                     return fsz.value();
@@ -190,15 +89,17 @@ namespace dg::network_persistent_unified_fileio{
 
     auto dg_read_binary_direct(const char * unified_fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
-        if (!controller->exists(unified_fp)){
-            return dg::network_exception::FILE_NOT_FOUND;
-        }
+        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(unified_fp);
 
-        size_t replication_sz = controller->replication_size(unified_fp); 
+        if (!metadata.has_value()){
+            return metadata.error();
+        } 
+
+        size_t replication_sz = metadata->path_vec.size();
 
         for (size_t i = 0u; i < replication_sz; ++i){
-            if (controller->replication_is_valid(unified_fp, i)){
-                const char * fp = controller->replication_fpath(unified_fp, i).c_str();
+            if (metadata->path_status_vec[i]){
+                const char * fp = metadata->path_vec[i].c_str();
                 exception_t err = dg::network_fileio::dg_read_binary_direct(fp, dst, dst_cap);
 
                 if (err == dg::network_exception::SUCCESS){
@@ -227,15 +128,17 @@ namespace dg::network_persistent_unified_fileio{
 
     auto dg_read_binary_indirect(const char * unified_fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
-        if (!controller->exists(unified_fp)){
-            return dg::network_exception::FILE_NOT_FOUND;
+        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(unified_fp);
+
+        if (!metadata.has_value()){
+            return metadata.error();
         }
 
-        size_t replication_sz = controller->replication_size(unified_fp);
+        size_t replication_sz = metadata->path_vec.size();
 
         for (size_t i = 0u; i < replication_sz; ++i){
-            if (controller->replication_is_valid(unified_fp, i)){
-                const char * fp = controller->replication_fpath(unified_fp, i).c_str();
+            if (metadata->path_status_vec[i]){
+                const char * fp = metadata->path_vec[i].c_str();
                 exception_t err = dg::network_fileio::dg_read_binary_indirect(fp, dst, dst_cap);
 
                 if (err == dg::network_exception::SUCCESS){
@@ -272,20 +175,19 @@ namespace dg::network_persistent_unified_fileio{
         dg::network_exception_handler::nothrow_log(dg_read_binary(unified_fp, dst, dst_cap));
     }
 
-    //this function - if returns error - leaves the underlying content in an undefined state and set all valid_flags -> false
-    //              - if returns SUCCESS - at least one of the replications is written - set valid_flags accordingly 
-
     auto dg_write_binary_direct(const char * unified_fp, const void * src, size_t src_sz) noexcept -> exception_t{
         
-        if (!controller->exists(unified_fp)){
-            return dg::network_exception::FILE_NOT_FOUND;
+        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(unified_fp); 
+
+        if (!metadata.has_value()){
+            return metadata.error();
         }
 
-        size_t replication_sz   = controller->replication_size(unified_fp);
-        auto exception_vec      = stdx::vector<exception_t>(); 
+        size_t replication_sz   = metadata->path_vec.size();
+        auto exception_vec      = dg::vector<exception_t>(); 
 
         for (size_t i = 0u; i < replication_sz; ++i){
-            const char * fp = controller->replication_fpath(unified_fp, i).c_str();
+            const char * fp = metadata->path_vec[i].c_str();
             exception_t err = dg::network_fileio::dg_write_binary_direct(fp, src, src_sz);
             exception_vec.push_back(err);
         }
@@ -293,19 +195,21 @@ namespace dg::network_persistent_unified_fileio{
         if (std::find(exception_vec.begin(), exception_vec.end(), dg::network_exception::SUCCESS) != exception_vec.end()){
             for (size_t i = 0u; i < replication_sz; ++i){
                 if (exception_vec[i] == dg::network_exception::SUCCESS){
-                    controller->replication_validate(unified_fp, i);
+                    metadata->path_status_vec[i] = true;
                 } else{
-                    controller->replication_invalidate(unified_fp, i);
+                    metadata->path_status_vec[i] = false;
                 }
             }
-
+            
+            dg_internal_write_metadata_nothrow(unified_fp, metadata.value()); //fix later
             return dg::network_exception::SUCCESS;
         }
 
         for (size_t i = 0u; i < replication_sz; ++i){
-            controller->replication_invalidate(unified_fp, i);
+            metadata->path_status_vec[i] = false;
         }
 
+        dg_internal_write_metadata_nothrow(unified_fp, metadata.value());
         return dg::network_exception::RUNTIME_FILEIO_ERROR; //promote error code - runtime_fileio_error
     }
 
@@ -316,15 +220,17 @@ namespace dg::network_persistent_unified_fileio{
 
     auto dg_write_binary_indirect(const char * unified_fp, const void * src, size_t src_sz) noexcept -> exception_t{
 
-        if (!controller->exists(unified_fp)){
-            return dg::network_exception::FILE_NOT_FOUND;
+        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(unified_fp);
+
+        if (!metadata.has_value()){
+            return metadata.error();
         }
 
-        size_t replication_sz   = controller->replication_size(unified_fp);
-        auto exception_vec      = stdx::vector<exception_t>();
+        size_t replication_sz   = metadata->path_vec.size();
+        auto exception_vec      = dg::vector<exception_t>();
 
         for (size_t i = 0u; i < replication_sz; ++i){
-            const char * fp = controller->replication_fpath(unified_fp, i).c_str();
+            const char * fp = metadata->path_vec[i].c_str();
             exception_t err = dg::network_fileio::dg_write_binary_indirect(fp, src, sz);
             exception_vec.push_back(err);
         }
@@ -332,19 +238,21 @@ namespace dg::network_persistent_unified_fileio{
         if (std::find(exception_vec.begin(), exception_vec.end(), dg::network_exception::SUCCESS) != exception_vec.end()){
             for (size_t i = 0u; i < replication_sz; ++i){
                 if (exception_vec[i] == dg::network_exception::SUCCESS){
-                    controller->replication_validate(unified_fp, i);
+                    metadata->path_status_vec[i] = true;
                 } else{
-                    controller->replication_invalidate(unified_fp, i);
+                    metadata->path_stauts_vec[i] = false;
                 }
             }
 
+            dg_internal_write_metadata_nothrow(unified_fp, metadata.value()); //fix later
             return dg::network_exception::SUCCESS;
         }
         
         for (size_t i = 0u; i < replication_sz; ++i){
-            controller->replication_invalidate(unified_fp, i);
+            metadata->path_status_vec[i] = false;
         }
 
+        dg_internal_write_metadata_nothrow(unified_fp, metadata.value()); //fix later
         return dg::network_exception::RUNTIME_FILEIO_ERROR; //promote error_code -> runtime fileio_error
     }
 

@@ -69,6 +69,10 @@ namespace dg::network_exception_handler{
     inline auto throw_log(std::expected<T, exception_t>) -> T{
 
     }
+
+    inline void dg_assert(bool){
+
+    }
 } 
 
 #endif

@@ -85,6 +85,9 @@ namespace dg::network_exception{
     static inline constexpr exception_t BAD_ENCODING_FORMAT                 = 0u;
     static inline constexpr exception_t POSTGRES_CORRUPTION                 = 0u;
     static inline constexpr exception_t POSTGRES_EXCEED_QUERY_LENGTH_LIMIT  = 0u;
+    static inline constexpr exception_t EXPIRED_TOKEN                       = 0u;
+    static inline constexpr exception_t BAD_AUTHENTICATION                  = 0u;
+    static inline constexpr exception_t ENTRY_NOT_FOUND                     = 0u;
 
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 
@@ -94,7 +97,7 @@ namespace dg::network_exception{
 
     }
 
-    inline auto wrap_kernel_exception(kernel_exception_t) noexcept -> exception_t{
+    inline auto wrap_kernel_error(kernel_exception_t) noexcept -> exception_t{
 
     }
 

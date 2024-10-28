@@ -338,7 +338,7 @@ namespace dg::network_cuda_kernel_par_launcher{
                 this->work_order_vec.push_back(std::move(wo));
             }
 
-            auto pop() noexcept -> dg::vector<WorkOrder>{ //even though I think std::optional<stdx::vector<WorkOrder>> is way more performant than this - I think that's the vector container's responsibility than an optimization to make
+            auto pop() noexcept -> dg::vector<WorkOrder>{ //even though I think std::optional<dg::vector<WorkOrder>> is way more performant than this - I think that's the vector container's responsibility than an optimization to make
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
 
@@ -399,13 +399,13 @@ namespace dg::network_cuda_kernel_par_launcher{
         private:
 
             size_t wo_sz;
-            stdx::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map;
+            dg::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map;
             std::unique_ptr<std::mutex> mtx;
 
         public:
             
             WorkTicketController(size_t wo_sz, 
-                                 stdx::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map,
+                                 dg::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map,
                                  std::unique_ptr<std::mutex> mtx) noexcept: wo_sz(wo_sz),
                                                                             wo_status_map(std::move(wo_status_map)),
                                                                             mtx(std::move(mtx)){}

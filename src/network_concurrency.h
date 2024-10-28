@@ -9,7 +9,6 @@
 #include <memory>
 #include "network_concurrency_impl1.h"
 #include <bit>
-#include "network_exception_handler.h"
 #include "network_raii_x.h"
 #include "dense_hash_map/dense_hash_map.hpp"
 
@@ -56,7 +55,6 @@ namespace dg::network_concurrency{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (ptr == concurrency_resource.thrid_to_idx_map.end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -66,12 +64,10 @@ namespace dg::network_concurrency{
 
     auto daemon_register(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
 
-        if constexpr(DEBUG_MODE_FLAG){
-            auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
-            if (ptr != concurrency_resource.thrid_to_idx_map.end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::PTHREAD_CAUSA_SUI));
-                std::abort();
-            }
+        auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
+        
+        if (ptr != concurrency_resource.thrid_to_idx_map.end()){
+            return std::unexpected(dg::network_exception::PTHREAD_CAUSA_SUI);
         }
 
         concurrency_resource.daemon_controller->_register(daemon_kind, std::move(worker));
@@ -82,7 +78,6 @@ namespace dg::network_concurrency{
         if constexpr(DEBUG_MODE_FLAG){
             auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
             if (ptr != concurrency_resource.thrid_to_idx_map.end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::PTHREAD_CAUSA_SUI));
                 std::abort();
             }
         }
@@ -102,7 +97,6 @@ namespace dg::network_concurrency{
 
         return dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
     }
-
 
     auto daemon_saferegister_with_waittime(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker, std::chrono::nanoseconds waittime) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>, exception_t>{
 

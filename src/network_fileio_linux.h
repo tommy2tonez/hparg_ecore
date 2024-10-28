@@ -16,6 +16,7 @@
 #include <filesystem>
 #include "network_raii_x.h"
 #include "stdx.h"
+#include "network_exception_handler.h"
 
 namespace dg::network_fileio_linux{
 
@@ -40,12 +41,12 @@ namespace dg::network_fileio_linux{
         int fd = open(fp, flag, DG_FILEIO_MODE);
 
         if (fd == -1){
-            return std::unexpected(dg::network_exception::wrap_kernel_exception(errno));
+            return std::unexpected(dg::network_exception::wrap_kernel_error(errno));
         }
 
         auto destructor = [](int fd_arg) noexcept{
             if (close(fd_arg) == -1){ //don't argue - if close returns an error - that's the close problem - that means close needs extension - if error still persists - better to terminate to avoid leakage - this is kernel corruption
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_exception(errno)));
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(errno)));
                 std::abort();
             }
         };
@@ -58,7 +59,7 @@ namespace dg::network_fileio_linux{
         auto rs = lseek64(fd, 0L, SEEK_END);
 
         if (rs == -1){
-            return std::unexpected(dg::network_exception::wrap_kernel_exception(errno));
+            return std::unexpected(dg::network_exception::wrap_kernel_error(errno));
         }
 
         return stdx::safe_integer_cast<size_t>(rs);
@@ -80,7 +81,7 @@ namespace dg::network_fileio_linux{
         auto rs = posix_fadvise64(fd, 0u, efsz.value(), POSIX_FADV_NOREUSE);
 
         if (rs != 0){
-            return dg::network_exception::wrap_kernel_exception(errno);
+            return dg::network_exception::wrap_kernel_error(errno);
         }
 
         return dg::network_exception::SUCCESS;
@@ -120,7 +121,13 @@ namespace dg::network_fileio_linux{
             return std::unexpected(raii_fd.error());
         }
 
-        return dg_file_size_nothrow(raii_fd.value());
+        std::expected<size_t, exception_t> rs = dg_file_size(raii_fd.value());
+
+        if (!rs.has_value()){
+            return std::unexpected(rs.error());
+        }
+
+        return rs.value();
     } 
 
     auto dg_file_size_nothrow(const char * fp) noexcept -> size_t{
@@ -130,6 +137,16 @@ namespace dg::network_fileio_linux{
 
     auto dg_create_binary(const char * fp, size_t fsz) noexcept -> exception_t{
 
+        std::expected<bool, exception_t> status = dg_file_exists(fp);
+
+        if (!status.has_value()){
+            return status.error();
+        }
+
+        if (status.value()){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
+
         auto raii_fd = dg_open_file(fp, O_WRONLY | O_CREAT | O_TRUNC);
 
         if (!raii_fd.has_value()){
@@ -137,7 +154,7 @@ namespace dg::network_fileio_linux{
         }
 
         if (ftruncate64(raii_fd.value(), fsz) == -1){
-            return dg::network_exception::wrap_kernel_exception(errno);
+            return dg::network_exception::wrap_kernel_error(errno);
         }
 
         return dg::network_exception::SUCCESS;
@@ -172,11 +189,17 @@ namespace dg::network_fileio_linux{
             return raii_fd.error();
         }
 
-        int fd      = raii_fd.value();
-        size_t fsz  = dg_file_size_nothrow(fd); //this is an error that user should not know of - internal corruption if failed (think of a successful file open guarantees a successful read of metadata)
+        int fd = raii_fd.value();
+        std::expected<size_t, exception_t> efsz = dg_file_size(fd);
+        
+        if (!efsz.has_value()){
+            return efsz.error();
+        }
+
+        size_t fsz = efsz.value();
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            exception_t err = dg_fadvise_nocache(fd); //this is an error that user should not know of - internal corruption if failed
+            exception_t err = dg_fadvise_nocache(fd);
 
             if (dg::network_exception::is_failed(err)){
                 return err;
@@ -198,11 +221,11 @@ namespace dg::network_fileio_linux{
         auto read_err = read(fd, dst, fsz);
 
         if (read_err < 0){
-            return dg::network_exception::wrap_kernel_exception(errno);
+            return dg::network_exception::wrap_kernel_error(errno);
         } 
 
         if (fsz != read_err){
-            return dg::network_exception::RUNTIME_FILEIO_ERROR; //this is where the exception + abort line is blurred - yet i think this should be abort (open_file guarantees successful immutable operations - if not then its the open_file problem) - global-mtx-lockguard is required internally - external modification is UB 
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         return dg::network_exception::SUCCESS;
@@ -221,8 +244,14 @@ namespace dg::network_fileio_linux{
             return raii_fd.error();
         }        
 
-        int fd      = raii_fd.value();
-        size_t fsz  = dg_file_size_nothrow(fd);
+        int fd = raii_fd.value();
+        std::expected<size_t, exception_t> efsz = dg_file_size(fd);
+        
+        if (!efsz.has_value()){
+            return efsz.error();
+        }
+
+        size_t fsz = efsz.value();
 
         if (dst_cap < fsz){
             return dg::network_exception::BUFFER_OVERFLOW;
@@ -239,11 +268,11 @@ namespace dg::network_fileio_linux{
         auto read_err = read(fd, dst, fsz);
 
         if (read_err < 0){
-            return dg::network_exception::wrap_kernel_exception(errno);
+            return dg::network_exception::wrap_kernel_error(errno);
         } 
 
         if (fsz != read_err){
-            return dg::network_exception::RUNTIME_FILEIO_ERROR; //this is a very blurred line between exception + abort | yet I choose to not trust sys for now - propagate error to make some root function noexceptable
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         return dg::network_exception::SUCCESS;
@@ -297,7 +326,7 @@ namespace dg::network_fileio_linux{
         auto write_err = write(raii_fd.value(), src, src_sz);
 
         if (write_err < 0){
-            return dg::network_exception::wrap_kernel_exception(errno);
+            return dg::network_exception::wrap_kernel_error(errno);
         } 
 
         if (write_err != src_sz){
@@ -331,7 +360,7 @@ namespace dg::network_fileio_linux{
         auto write_err = write(raii_fd.value(), src, src_sz);
 
         if (write_err < 0){
-            return dg::network_exception::wrap_kernel_exception(errno);
+            return dg::network_exception::wrap_kernel_error(errno);
         } 
 
         if (write_err != src_sz){

@@ -14,13 +14,15 @@
 #include <memory>
 #include "network_fileio.h"
 #include "network_memult.h"
+#include <random>
+#include "network_std_container.h"
 
 namespace dg::network_kernelmap_x_impl1::model{
 
-    static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true;
+    static inline constexpr bool IS_SPINLOCK_PREFERRED = true;
 
     using fsys_ptr_t    = dg::network_pointer::fsys_ptr_t;
-    using Lock          = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED,
+    using Lock          = std::conditional_t<IS_SPINLOCK_PREFERRED,
                                              std::atomic_flag,
                                              std::mutex>;  
 
@@ -43,8 +45,7 @@ namespace dg::network_kernelmap_x_impl1::model{
     
         auto ptr() const noexcept -> void *{
 
-            using namespace dg::network_genult;
-            return stdx::advance(safe_ptr_access(safe_ptr_access(this->node)->cptr.get()), this->off);
+            return stdx::advance(this->node->cptr.get(), this->off);
         }
     };
 
@@ -175,7 +176,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 exception_t err                     = dg::network_fileio::dg_write_binary(cstr_path, src, this->memregion_sz); //this has to be a nothrow-ops - I don't like inverse operation to be throw-able - recoverability is unified-fsys's responsibility
 
                 if (dg::network_exception::is_failed(err)){
-                    dg::network_log_stackdump::critical(dg::network_exception::UNRECOVERABLE);
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                     std::abort();
                 }
 
@@ -212,13 +213,13 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             auto map(fsys_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
-                auto lck_grd = dg::genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
                 return this->internal_map(ptr);
             }
 
             void unmap(MapResource map_resource) noexcept{
 
-                auto lck_grd = dg::genult::lock_guard(*this->lck);
+                auto lck_grd = stdx::lock_guard(*this->lck);
                 this->internal_unmap(map_resource);
             }
 
@@ -321,15 +322,6 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             void internal_unmap(MapResource map_resource) noexcept{
 
-                dg::network_genult::safe_ptr_access(map_resource.node);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (map_resource.node->reference == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
                 map_resource.node->reference -= 1;
                 map_resource.node->last_modified = stdx::unix_timestamp();
                 heap_push_up_at(map_resource.node->idx);
@@ -403,12 +395,12 @@ namespace dg::network_kernelmap_x_impl1::implementation{
         static auto off_sptr(std::shared_ptr<char[]> sptr, size_t off) -> std::shared_ptr<char[]>{
 
             auto destructor = [sptr](char *) noexcept{};
-            char * new_ptr  = dg::memult::badvance(sptr.get(), off);
+            char * new_ptr  = stdx::advance(sptr.get(), off);
             
             return std::unique_ptr<char[], decltype(destructor)>(new_ptr, destructor);
         }
 
-        static auto spawn_fsys_loader(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map, size_t memregion_sz) -> std::unique_ptr<CuFSLoaderInterface>{
+        static auto spawn_fsys_loader(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map, size_t memregion_sz) -> std::unique_ptr<FsysLoaderInterface>{
             
             if (!dg::memult::is_pow2(memregion_sz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -497,9 +489,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             auto rs             = dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>{};
             auto map_vec        = dg::vector<std::pair<fsys_ptr_t, std::filesystem::path>>(alias_map.begin(), alias_map.end());
             size_t segment_sz   = map_vec.size() / distribution_factor;
-            auto rand_dev       = std::bind(std::uniform_int_distribution<size_t>{}, std::mt19937{}); 
 
-            std::shuffle(map_vec.begin(), map_vec.end(), rand_dev);
+            std::shuffle(map_vec.begin(), map_vec.end(), std::mt19937{});
 
             for (size_t i = 0u; i < distribution_factor; ++i){
                 size_t first    = segment_sz * i;
@@ -534,7 +525,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
             for (const auto& raw_map: distributed_map){
                 size_t memory_node_count = raw_map.size() * ram_to_disk_ratio; //this is prolly the most problematic line
-                std::unique_ptr<MapInterface> map = Factory::spawn_map(raw_map, memregion_sz, std::get<0>(devicemap_pair), memory_node_count);
+                std::unique_ptr<MapInterface> map = Factory::spawn_map(raw_map, memregion_sz, memory_node_count);
                 map_table.push_back(std::move(map));
 
                 for (const auto& map_pair: raw_map){

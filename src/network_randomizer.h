@@ -64,7 +64,7 @@ namespace dg::network_randomizer{
     };
 
     template <size_t RANGE_SZ>
-    auto randomize_range(const std::integral_constant<size_t, RANGE_SZ>) noexcept -> size_t{
+    auto randomize_xrange(const std::integral_constant<size_t, RANGE_SZ>) noexcept -> size_t{
 
         static_assert(RANGE_SZ != 0u);
 
@@ -76,6 +76,13 @@ namespace dg::network_randomizer{
         } else{
             return rs % RANGE_SZ;
         }
+    }
+
+    template <size_t FIRST, size_t LAST>
+    auto randomize_range(const std::integral_constant<size_t, FIRST>, const std::integral_constant<size_t, LAST>) -> size_t{
+
+        static_assert(LAST > FIRST);
+        return FIRST + randomize_xrange(std::integral_constant<size_t, LAST - FIRST>{});
     }
 
     auto randomize_bool() noexcept -> bool{

@@ -42,7 +42,7 @@ namespace dg::network_fileio_chksum_x{
         }
     };
 
-    static inline stdx::string METADATA_SUFFIX = "DG_NETWORK_CHKSUM_X_METADATA"; 
+    static inline dg::string METADATA_SUFFIX = "DG_NETWORK_CHKSUM_X_METADATA"; 
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 
@@ -195,12 +195,13 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        auto header = FileHeader{dg::network_hash::cmurmur_hash(fsz), fsz};  //
-        err         = dg_internal_write_metadata(fp, header);
+        //TODOs:
+        // auto header = FileHeader{dg::network_hash::cmurmur_hash(fsz), fsz};  //
+        // err         = dg_internal_write_metadata(fp, header);
 
-        if (dg::network_exception::is_failed(err)){
-            return err;
-        }
+        // if (dg::network_exception::is_failed(err)){
+        //     return err;
+        // }
 
         backout_guard.release();
         return dg::network_exception::SUCCESS;

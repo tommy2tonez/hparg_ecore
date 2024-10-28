@@ -48,14 +48,14 @@ namespace dg::network_producer_consumer{
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
 
         public:
-
+            
             LimitConsumerToConsumerWrapper(std::shared_ptr<LimitConsumerInterface<EventType>> base,
                                            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
                                                                                                                                       executor(std::move(executor)){}
 
-            void push(event_t * events, size_t event_sz) noexcept{
+            void push(EventType * events, size_t event_sz) noexcept{
                 
-                event_t * cur   = events;
+                EventType * cur   = events;
                 size_t rem_sz   = event_sz; 
 
                 while (rem_sz != 0u){
@@ -376,7 +376,7 @@ namespace dg::network_raii_producer_consumer{
                 return {};
             }
 
-            auto get(size_t cap) noexcept -> dg::vector<event_t>{
+            auto get(size_t cap) noexcept -> dg::vector<EventType>{
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
                 dg::vector<EventType> rs{};
@@ -400,7 +400,7 @@ namespace dg::network_raii_producer_consumer{
     };
 
     template <size_t CONCURRENCY_SZ, class EventType> //deprecate next iteration
-    class ConcurrentWarehouse: public virtual DropBoxInterface{
+    class ConcurrentWarehouse: public virtual WareHouseInterface<EventType>{
 
         private:
 
@@ -417,7 +417,7 @@ namespace dg::network_raii_producer_consumer{
             auto push(dg::vector<EventType> vec) noexcept -> std::optional<dg::vector<EventType>>{
 
                 size_t thr_idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{});
-                return this->warehouse_vec[thr_id]->push(std::move(vec));
+                return this->warehouse_vec[thr_idx]->push(std::move(vec));
             }
 
             auto capacity() const noexcept -> size_t{

@@ -22,7 +22,7 @@ namespace dg::network_auth_utility{
 
     struct TokenControllerInterface{
         virtual ~TokenControllerInterface() noexcept = default;
-        virtual auto tokenize(const dg::string&, std::chrono::nanoseconds)  noexcept -> std::expected<dg::string, exception_t> = 0; //its look weird that encoder and tokenizer have the same interface
+        virtual auto tokenize(const dg::string&, std::chrono::nanoseconds)  noexcept -> std::expected<dg::string, exception_t> = 0;
         virtual auto detokenize(const dg::string&) noexcept -> std::expected<dg::string, exception_t> = 0;
     };
 
@@ -310,7 +310,7 @@ namespace dg::network_auth_utility{
             auto token_deserialize(const dg::string& bstream) noexcept -> std::expected<Token, exception_t>{
 
                 auto inter_rep  = std::tuple<uint64_t, dg::string>{};
-                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::deserialize_into<std::tuple<uint64_t, dg::string>>)(inter_rep, bstream.data(), bstream.size());
+                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<std::tuple<uint64_t, dg::string>>)(inter_rep, bstream.data(), bstream.size());
 
                 if (dg::network_exception::is_failed(err)){
                     return std::unexpected(err);
@@ -328,10 +328,10 @@ namespace dg::network_auth_utility{
             const size_t MAX_SECRET_SIZE    = size_t{1} << 20;
 
             if (std::clamp(static_cast<size_t>(secret.size()), MIN_SECRET_SIZE, MAX_SECRET_SIZE) != secret.size()){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMNET);
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            uint64_t numerical_secert                           = dg::network_hash::hash_bytes(secret.data(), secret.size());
+            uint64_t numerical_secret                           = dg::network_hash::hash_bytes(secret.data(), secret.size());
             std::unique_ptr<EncoderInterface> base_encoder      = std::make_unique<MurMurEncoder>(numerical_secret);
             mt19937 rand_gen                                    = {};
             std::unique_ptr<EncoderInterface> mt_encoder        = std::make_unique<Mt19937Encoder>(secret, std::move(rand_gen));
@@ -352,8 +352,6 @@ namespace dg::network_auth_utility{
 
 namespace dg::network_user{
 
-    //precond validations are this component responsibility - give an overview of validations if model is unique_reference by the component
-
     struct Resource{
         std::unique_ptr<network_auth_utility::TokenControllerInterface> token_controller;
         std::unique_ptr<network_auth_utility::EncoderInterface> pw_encoder;
@@ -363,11 +361,11 @@ namespace dg::network_user{
 
     inline std::unique_ptr<Resource> resource{};
 
-    void init(const dg::string& private_database_secret, const dg::string& shared_secret, std::chrono::nanoseconds token_expiry){ //these are disk-presistent
+    void init(const dg::string& private_secret, const dg::string& shared_secret, std::chrono::nanoseconds token_expiry){ //these are disk-presistent
 
         resource                        = std::make_unique<Resource>();
         resource->token_controller      = network_auth_utility::Factory::spawn_token_controller(shared_secret);
-        resource->pw_encoder            = network_auth_utility::Factory::spawn_encoder(private_database_secret);
+        resource->pw_encoder            = network_auth_utility::Factory::spawn_encoder(private_secret);
         resource->auth_shared_encoder   = network_auth_utility::Factory::spawn_encoder(shared_secret);
         resource->token_expiry          = token_expiry;
     }
@@ -379,8 +377,9 @@ namespace dg::network_user{
 
     auto user_register(const dg::string& user_id, const dg::string& pwd, const dg::string& clearance) noexcept -> exception_t{
 
-        constexpr size_t SALT_FLEX_SZ                   = dg::network_postgres_db::model::LEGACYAUTH_SALT_MAX_LENGTH - dg::network_postgres_db_model::LEGACYAUTH_SALT_MIN_LENGTH;
-        size_t salt_length                              = dg::network_postgres_db::model::LEGACYAUTH_SALT_MIN_LENGTH + dg::network_randomizer::randomize_range(SALT_FLEX_SZ);
+        size_t salt_length                              = dg::network_randomizer::randomize_range(std::integral_constant<size_t, dg::network_postgres_db::model::USER_SALT_MIN_LENGTH>{},
+                                                                                                  std::integral_constant<size_t, dg::network_postgres_db::model::USER_SALT_MAX_LENGTH>{});
+
         dg::string salt                                 = dg::network_randomizer::randomize_string<dg::string>(salt_length);
         dg::string xpwd                                 = pwd + salt;
         std::expected<dg::string, exception_t> encoded  = resource->pw_encoder->encode(xpwd);
@@ -401,7 +400,7 @@ namespace dg::network_user{
             return user_commit_wo.error();
         }
 
-        return dg::network_postgres_db::commit({std::move(user_commit_wo.value())});
+        return dg::network_postgres_db::commit(stdx::make_vector_convertible(std::move(user_commit_wo.value())));
     }
 
     auto user_deregister(const dg::string& user_id) noexcept -> exception_t{
@@ -412,7 +411,7 @@ namespace dg::network_user{
             return usrdel_commit_wo.error();
         }
 
-        return dg::network_postgres_db::commit({std::move(usrdel_commit_wo.value())});
+        return dg::network_postgres_db::commit(stdx::make_vector_convertible(std::move(usrdel_commit_wo.value())));
     }
 
     auto user_login(const dg::string& user_id, const dg::string& pwd) noexcept -> std::expected<bool, exception_t>{
@@ -422,7 +421,7 @@ namespace dg::network_user{
         if (!user.has_value()){
             return std::unexpected(user.error());
         }
-        
+   
         dg::string xpwd = pwd + user->salt;
         std::expected<dg::string, exception_t> verifiable = resource->pw_encoder->encode(xpwd);
 
@@ -430,7 +429,7 @@ namespace dg::network_user{
             return std::unexpected(verifiable.error());
         }
 
-        return verifiable.value() == user->verifiable;
+        return verifiable.value() == user->verifiable; 
     }
 
     auto user_get_clearance(const dg::string& user_id) noexcept -> std::expected<dg::string, exception_t>{
@@ -449,11 +448,11 @@ namespace dg::network_user{
         std::expected<dg::network_postgres_db::model::UserEntry, exception_t> user = dg::network_postgres_db::get_user_by_id(user_id);
 
         if (!user.has_value()){
-            if (user.error() == dg::network_exception::RECORD_NOT_FOUND){
+            if (user.error() == dg::network_exception::ENTRY_NOT_FOUND){
                 return false;
             }
 
-            return user.error();
+            return std::unexpected(user.error());
         }
 
         return true;
@@ -462,8 +461,8 @@ namespace dg::network_user{
     auto auth_serialize(const dg::string& id, const dg::string& pwd) noexcept -> std::expected<dg::string, exception_t>{
 
         auto idpwd_msg      = std::make_pair(id, pwd);
-        auto bstream        = dg::string(dg::network_compact_serializer::size(idpwd_msg), ' ');
-        dg::network_compact_serializer::serialize_into(bstream.data(), idpwd_msg);
+        auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(idpwd_msg), ' ');
+        dg::network_compact_serializer::integrity_serialize_into(bstream.data(), idpwd_msg);
 
         return resource->auth_shared_encoder->encode(bstream);
     }
@@ -477,7 +476,7 @@ namespace dg::network_user{
         }
 
         auto idpwd_pair     = std::pair<dg::string, dg::string>();
-        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::deserialize_into<decltype(idpwd_pair)>)(idpwd_pair, decoded->data());
+        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<decltype(idpwd_pair)>)(idpwd_pair, decoded->data(), decoded->size());
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);

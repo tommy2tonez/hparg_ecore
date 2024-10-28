@@ -11,6 +11,7 @@
 #include <vector>
 #include "network_exception.h"
 #include "stdx.h"
+#include "network_std_container.h"
 
 namespace dg::network_concurrency_impl1_linux::daemon_option_ns{
 
@@ -111,11 +112,6 @@ namespace dg::network_concurrency_impl1_linux{
             }
     };
 
-    //the problem with memory is precisely that 
-    //the variable that is responsible for concurrent access is post-released and post-acquired
-    //to create that synchronous flow
-    //and don't mess with memory ordering - use std::atomic_flag and std::mutex to access - 
-
     class StdDaemonRunner: public virtual DaemonRunnerInterface,
                            public virtual StdDaemonRunnableInterface{
 
@@ -138,14 +134,18 @@ namespace dg::network_concurrency_impl1_linux{
 
             void set_worker(std::unique_ptr<WorkerInterface> worker) noexcept{
 
+                if (worker == nullptr){
+                    std::abort();
+                }
+
                 this->internal_set_worker(std::move(worker));
             }
 
             void infloop() noexcept{
 
-                this->poison_pill->exchange(false, std::memory_order_acq_rel);
+                this->poison_pill->exchange(false, std::memory_order_relaxed); //relaxed qualified because these aren't used for mutating concurrent variables - only to exit the infloop which is used for joining threads
 
-                while (!this->poison_pill->load(std::memory_order_acquire)){
+                while (!this->poison_pill->load(std::memory_order_relaxed)){
                     bool run_flag = this->internal_get_worker()->run_one_epoch();
 
                     if (!run_flag){
@@ -156,7 +156,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             void signal_abort() noexcept{
 
-                this->poison_pill->exchange(true, std::memory_order_acq_rel);
+                this->poison_pill->exchange(true, std::memory_order_relaxed);
             }
         
         private:
@@ -185,7 +185,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             StdRaiiDaemonRunner(std::shared_ptr<DaemonRunnerInterface> daemon_runner, 
                                 std::shared_ptr<std::thread> thread) noexcept: daemon_runner(std::move(daemon_runner)),
-                                                                                            thread(std::move(thread)){}
+                                                                               thread(std::move(thread)){}
 
 
             void set_worker(std::unique_ptr<WorkerInterface> worker) noexcept{
@@ -203,14 +203,14 @@ namespace dg::network_concurrency_impl1_linux{
 
         private:
 
-            stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>> daemon_id_map;
-            stdx::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map;
+            std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map;
+            std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            DaemonController(stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>> daemon_id_map,
-                             stdx::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map,
+            DaemonController(std::unordered_map<daemon_kind_t, std::vector<size_t>> daemon_id_map,
+                             std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map,
                              std::unique_ptr<std::mutex> mtx) noexcept: daemon_id_map(std::move(daemon_id_map)),
                                                                         id_runner_map(std::move(id_runner_map)),
                                                                         mtx(std::move(mtx)){}
@@ -339,10 +339,14 @@ namespace dg::network_concurrency_impl1_linux{
             }
         }
 
-        static auto spawn_thread(std::shared_ptr<StdDaemonRunnableInterface> runnable, stdx::vector<int> cpu_vec) -> std::shared_ptr<std::thread>{
+        static auto spawn_thread(std::shared_ptr<StdDaemonRunnableInterface> runnable, std::vector<int> cpu_vec) -> std::shared_ptr<std::thread>{
 
             if (runnable == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (cpu_vec.empty()){
+                dg::network_exception::throw_exception(Dg::network_exception::INVALID_ARGUMENT);
             }
 
             auto executable = [=]() noexcept{
@@ -388,7 +392,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonRunnerFactory{
 
-        static auto spawn_std_daemon_affine_runner(stdx::vector<int> cpu_set) -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
+        static auto spawn_std_daemon_affine_runner(std::vector<int> cpu_set) -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
 
             using namespace std::chrono_literals;
              
@@ -421,10 +425,10 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct ControllerFactory{
 
-        static auto spawn_daemon_controller(stdx::vector<std::pair<std::unique_ptr<DaemonRunnerInterface>, daemon_kind_t>> runner_kind_vec) -> std::unique_ptr<DaemonControllerInterface>{
+        static auto spawn_daemon_controller(std::vector<std::pair<std::unique_ptr<DaemonRunnerInterface>, daemon_kind_t>> runner_kind_vec) -> std::unique_ptr<DaemonControllerInterface>{
 
-            stdx::unordered_map<daemon_kind_t, stdx::vector<size_t>> kind_id_map{};
-            stdx::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map{};
+            std::unordered_map<daemon_kind_t, std::vector<size_t>> kind_id_map{};
+            std::unordered_map<size_t, std::unique_ptr<DaemonRunnerInterface>> id_runner_map{};
             size_t id_sz{}; 
 
             for (auto& vec_pair: runner_kind_vec){                

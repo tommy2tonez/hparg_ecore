@@ -3,6 +3,7 @@
 
 #include "network_cudafsmap_x_impl1.h"
 #include "network_exception_handler.h"
+#include "network_std_container.h"
 
 namespace dg::network_cudafsmap_x{
 

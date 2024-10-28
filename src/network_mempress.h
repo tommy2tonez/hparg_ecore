@@ -39,7 +39,7 @@ namespace dg::network_mempress{
     };
 
     struct RegionBucket{
-        stdx::vector<event_t> event_container;
+        dg::vector<event_t> event_container;
         std::unique_ptr<Lock> lck; //unique_ptr here is automatic HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE
     };
 

@@ -117,7 +117,7 @@ namespace dg::network_std_container{
     using unordered_map             = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class Key, class Value>
-    using unordered_unstable_map    = jg::dense_hash_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
+    using unordered_unstable_map    = jg::dense_hash_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>, jg::details::power_of_two_growth_policy>;
 
     template <class T>
     using vector                    = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
@@ -129,8 +129,6 @@ namespace dg::network_std_container{
 }
 
 namespace dg{
-
-    //std is the mystery that nobody will ever comprehend all the decisions made by the programmers - bads and goods 
 
     template <class Key>
     using unordered_set             = dg::network_std_container::unordered_set<Key>;

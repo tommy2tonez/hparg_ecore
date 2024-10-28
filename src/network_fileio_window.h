@@ -22,12 +22,12 @@ namespace dg::network_fileio_window{
         HANDLE handle = CreateFileA(fp, flag, DGIO_SHARED_MODE, DGIO_SECURITY_ATTRIBUTE, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, DGIO_FILE_ADVISE); 
 
         if (handle == INVALID_HANDLE_VALUE){
-            return std::unexpected(dg::network_exception::wrap_kernel_exception(GetLastError()));
+            return std::unexpected(dg::network_exception::wrap_kernel_error(GetLastError()));
         }
 
         auto destructor = [](HANDLE * arg) noexcept{
             if (!CloseHandle(*arg)){
-                std::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_exception(GetLastError())));
+                std::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(GetLastError())));
                 std::abort();
             }
 
@@ -42,7 +42,7 @@ namespace dg::network_fileio_window{
         LARGE_INTERGER fsz = {}; 
 
         if (!GetFileSizeEx(fhandle, &fsz)){
-            return std::unexpected(dg::network_exception::wrap_kernel_exception(GetLastError()));
+            return std::unexpected(dg::network_exception::wrap_kernel_error(GetLastError()));
         }
 
         return dg::network_genult::safe_integer_cast<size_t>(fsz);
@@ -106,12 +106,12 @@ namespace dg::network_fileio_window{
         //this is an immutable operation - a successful file open must guarantee a successful read operation
 
         if (!ReadFile(fhandle, dst, dg::network_genult::safe_integer_cast<int>(fsz), &read_bytes, NULL)){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_exception(GetLastError())));
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(GetLastError())));
             std::abort();
         }
 
         if (dg::network_genult::safe_integer_cast<size_t>(read_bytes) != fsz){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_exception(GetLastError())));
+            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(GetLastError())));
             std::abort();
         }
 

@@ -3,7 +3,6 @@
 
 #include <type_traits> 
 #include "network_type_traits_x.h"
-#include "network_log.h"
 
 namespace dg{
 
@@ -71,7 +70,6 @@ namespace dg{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (!this->responsibility_flag){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::BAD_RAII_ACCESS));
                         std::abort();
                     }
                 }
@@ -158,7 +156,7 @@ namespace dg{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (!this->responsibility_flag){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
                     }
                 }
 
@@ -169,7 +167,7 @@ namespace dg{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (!this->responsibility_flag){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
                     }
                 }
 
