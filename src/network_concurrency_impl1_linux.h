@@ -143,7 +143,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             void infloop() noexcept{
 
-                this->poison_pill->exchange(false, std::memory_order_relaxed); //relaxed qualified because these aren't used for mutating concurrent variables - only to exit the infloop which is used for joining threads
+                this->poison_pill->exchange(false, std::memory_order_relaxed); //relaxed qualified because these aren't used for mutating concurrent variables - only to exit the infloop which is used for joining threads - when in doubt - think of relaxed as a randomization problem - if bool randomization works for poison pill - then poison pill is relaxed qualified
 
                 while (!this->poison_pill->load(std::memory_order_relaxed)){
                     bool run_flag = this->internal_get_worker()->run_one_epoch();
