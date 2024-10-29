@@ -234,7 +234,7 @@ namespace dg::network_uma_tlb::wrapper{
                 if constexpr(IS_SAFE_ACCESS_ENABLED){
                     dg::network_exception_handler::nothrow_log(safecthrow_access(id, ptr));
                 } else{
-                    (void) static_cast<void (*)(device_id_t, uma_ptr_t)>(safe_access);
+                    (void) id;
                 }
             }
 
@@ -243,7 +243,7 @@ namespace dg::network_uma_tlb::wrapper{
                 if constexpr(IS_SAFE_ACCESS_ENABLED){
                     dg::network_exception_handler::nothrow_log(safecthrow_access(ptr));
                 } else{
-                    (void) static_cast<void (*)(uma_ptr_t)>(safe_access);
+                    (void) ptr;
                 }
             }
     };
