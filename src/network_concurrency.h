@@ -14,12 +14,10 @@
 
 namespace dg::network_concurrency{
 
+    static inline constexpr size_t THREAD_COUNT = 32u;
+
     using namespace dg::network_concurrency_impl1::daemon_option_ns;
-
-    using affine_policy_option_t    = dg::network_concurrency_impl1_app::affine_policy_option_t; 
-    using WorkerInterface           = dg::network_concurrency_impl1::WorkerInterface; 
-
-    static inline constexpr size_t THREAD_COUNT = 32;
+    using WorkerInterface = dg::network_concurrency_impl1::WorkerInterface; 
 
     struct signature_dg_network_concurrency{}; 
 
@@ -97,20 +95,6 @@ namespace dg::network_concurrency{
 
         return dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
     }
-
-    auto daemon_saferegister_with_waittime(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker, std::chrono::nanoseconds waittime) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>, exception_t>{
-
-        //TODOs:
-        // std::expected<size_t, exception_t> handle = daemon_register(daemon_kind, std::move(worker));
-        
-        // if (!handle.has_value()){
-        //     return std::unexpected(handle.error());
-        // }
-
-        // return dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
-        return {};
-    }
-
 
     using daemon_raii_handle_t = dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>;
 };

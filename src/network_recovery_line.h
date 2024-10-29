@@ -4,35 +4,38 @@
 #include "network_exception.h"
 #include <memory>
 #include <optional>
-#include <network_concurrency.h>
+#include "network_concurrency.h"
 #include "network_std_container.h"
 #include <optional>
 #include "stdx.h"
+#include "network_raii_x.h" 
 
 namespace dg::network_recovery_line{
 
-    struct RecoveryExecutableInterface{
-        virtual ~RecoveryExecutableInterface() noexcept = default;
+    struct RecoverableInterface{
+        virtual ~RecoverableInterface() noexcept = default;
         virtual void recover() noexcept = 0;
     };
 
-    struct RecoveryLineResourceContainerInterface{
+    struct RecoveryLineInterface{
         virtual ~RecoveryLineInterface() noexcept = default;
-        virtual void set_recovery_line_resource(size_t, std::shared_ptr<RecoveryExecutableInterface>) noexcept = 0; 
-        virtual void get_recovery_line_resource(size_t) noexcept -> std::shared_ptr<RecoveryExecutableInterface> = 0; //even though i'm tempted to do std::optional here - because the program rule is all std::<>_ptr are valid_ptr 
+        virtual auto get_recovery_line() noexcept -> std::expected<size_t, exception_t> = 0;
+        virtual auto set_resource(size_t, std::shared_ptr<RecoverableInterface>) noexcept -> exception_t = 0;
+        virtual auto get_resource(size_t) noexcept -> std::expected<std::shared_ptr<RecoverableInterface>, exception_t> = 0;
+        virtual void close_recovery_line(size_t) noexcept = 0;
     };
 
-    struct RecoveryLineContainerInterface{
-        virtual ~RecoveryLineContainerInterface() noexcept = default;
-        virtual void push(size_t) noexcept = 0;
+    struct DispatchingLineContainerInterface{
+        virtual ~DispatchingLineContainerInterface() noexcept = default;
+        virtual auto push(size_t) noexcept -> exception_t = 0;
         virtual auto pop() noexcept -> std::optional<size_t> = 0;
     };
 
     struct RecoveryControllerInterface{
         virtual ~RecoveryControllerInterface() noexcept = default;
-        virtual auto get_recovery_line(std::shared_ptr<RecoveryExecutableInterface>) noexcept -> std::expected<size_t, exception_t> = 0;  
-        virtual void notify(size_t) noexcept = 0;
-        virtual void close(size_t) noexcept = 0;
+        virtual auto get_recovery_line(std::unique_ptr<RecoverableInterface>) noexcept -> std::expected<size_t, exception_t> = 0;  
+        virtual auto notify(size_t) noexcept -> exception_t = 0;
+        virtual void close_recovery_line(size_t) noexcept = 0;
     };
 
     class RecoveryWorker: public virtual dg::network_concurrency::WorkerInterface{
@@ -40,108 +43,155 @@ namespace dg::network_recovery_line{
         private:
 
             std::shared_ptr<RecoveryLineInterface> recovery_line;
-            std::shared_ptr<RecoveryLineContainerInterface> recovery_ticket_container;
+            std::shared_ptr<DispatchingLineContainerInterface> dispatching_ticket_container;
         
         public:
 
             RecoveryWorker(std::shared_ptr<RecoveryLineInterface> recovery_line,
-                           std::shared_ptr<RecoveryLineContainerInterface> recovery_ticket_container) noexcept: recovery_line(std::move(recovery_line)),
-                                                                                                                recovery_ticket_container(std::move(recovery_ticket_container)){}
+                           std::shared_ptr<DispatchingLineContainerInterface> dispatching_ticket_container) noexcept: recovery_line(std::move(recovery_line)),
+                                                                                                                      dispatching_ticket_container(std::move(dispatching_ticket_container)){}
             
             bool run_one_epoch() noexcept{
 
-                std::optional<size_t> ticket_id = this->recovery_ticket_container->pop();
+                std::optional<size_t> ticket_id = this->dispatching_ticket_container->pop();
 
-                if (!static_cast<bool>(ticket_id)){
+                if (!ticket_id.has_value()){
                     return false;
                 }
 
-                std::shared_ptr<RecoveryExecutableInterface> executable = this->recovery_line->get_recovery_line(ticket_id.value());
-
-                if (!static_cast<bool>(executable)){
-                    return false;
+                std::expected<std::shared_ptr<RecoverableInterface>, exception_t> recoverable = this->recovery_line->get_resource(ticket_id.value());
+                
+                if (!recoverable.has_value()){
+                    return true;
                 }
 
-                executable->recover();
+                if (recoverable.value() == nullptr){
+                    return true;
+                }
+
+                recoverable.value()->recover();
                 return true;
             }
     };
 
-    class TicketContainer: public virtual RecoveryLineContainerInterface{
+    class DispatchingLineContainer: public virtual DispatchingLineContainerInterface{
 
         private:
 
-            dg::vector<size_t> tickets;
+            dg::deque<size_t> ticket_vec;
+            size_t capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            TicketContainer(dg::vector<size_t> tickets,
-                            std::unique_ptr<std::mutex> mtx) noexcept: tickets(std::move(tickets)),
-                                                                       mtx(std::move(mtx)){}
+            DispatchingLineContainer(dg::deque<size_t> ticket_vec,
+                                     size_t capacity,
+                                     std::unique_ptr<std::mutex> mtx) noexcept: ticket_vec(std::move(ticket_vec)),
+                                                                                capacity(capacity),
+                                                                                mtx(std::move(mtx)){}
 
-            void push(size_t ticket_id) noexcept{
+            auto push(size_t ticket_id) noexcept -> exception_t{
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
-                this->tickets.push_back(ticket_id); 
+
+                if (this->ticket_vec.size() == this->capacity){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                this->ticket_vec.push_back(ticket_id);
+                return dg::network_exception::SUCCESS;
             }
 
             auto pop() noexcept -> std::optional<size_t>{
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
 
-                if (this->tickets.empty()){
+                if (this->ticket_vec.empty()){
                     return std::nullopt;
                 }
 
-                size_t rs = this->tickets.back();
-                this->tickets.pop_back();
+                size_t rs = this->ticket_vec.front();
+                this->ticket_vec.pop_front();
 
                 return rs;
             }
     };
 
-    class RecoveryLineResourceContainer: public virtual RecoveryLineResourceContainerInterface{
+    class RecoveryLine: public virtual RecoveryLineInterface{
 
         private:
 
-            dg::unordered_map<size_t, std::shared_ptr<RecoveryExecutableInterface>> resource_map;
+            dg::deque<size_t> line_vec;
+            dg::unordered_map<size_t, std::shared_ptr<RecoverableInterface>> line_resource_map;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
-            RecoveryLineResourceContainer(dg::unordered_map<size_t, std::shared_ptr<RecoveryExecutableInterface>> resource_map,
-                                          std::unique_ptr<std::mutex> mtx) noexcept: resource_map(std::move(resource_map)),
-                                                                                     mtx(std::move(mtx)){}
+            RecoveryLine(dg::deque<size_t> line_vec,
+                         dg::unordered_map<size_t, std::shared_ptr<RecoverableInterface>> line_resource_map,
+                         std::unique_ptr<std::mutex> mtx) noexcept: line_vec(std::move(line_vec)),
+                                                                    line_resource_map(std::move(line_resource_map)),
+                                                                    mtx(std::move(mtx)){}
 
-            void set_recovery_line_resource(size_t line_id, std::shared_ptr<RecoveryExecutableInterface> resource) noexcept{
+            auto get_recovery_line() noexcept -> std::expected<size_t, exception_t>{
 
                 auto lck_grd    = stdx::lock_guard(*this->mtx);
-                auto map_ptr    = this->resource_map.find(line_id);
+                
+                if (this->line_vec.empty()){
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
+
+                size_t nxt_id   = this->line_vec.front();
+                this->line_vec.pop_front();
+                auto [map_ptr, status] = this->line_resource_map.emplace(std::make_pair(nxt_id, nullptr));
 
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (map_ptr == this-.resource_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    if (!status){
                         std::abort();
                     }
                 }
 
-                map_ptr->second = std::move(resource);
+                return nxt_id;
             }
 
-            auto get_recovery_line_resource(size_t line_id) noexcept -> std::shared_ptr<RecoveryExecutableInterface>{
+            auto set_resource(size_t line_id, std::shared_ptr<RecoverableInterface> recoverable) noexcept -> exception_t{
 
                 auto lck_grd    = stdx::lock_guard(*this->mtx);
-                auto map_ptr    = this->resource_map.find(line_id);
+                auto map_ptr    = this->line_resource_map.find(line_id);
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (map_ptr == this->resource_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
+                if (map_ptr == this->line_resource_map.end()){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                map_ptr->second = std::move(recoverable);
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto get_resource(size_t line_id) noexcept -> std::expected<std::shared_ptr<RecoverableInterface>, exception_t>{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto map_ptr    = this->line_resource_map.find(line_id);
+
+                if (map_ptr == this->line_resource_map.end()){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
 
                 return map_ptr->second;
+            }
+
+            void close_recovery_line(size_t line_id) noexcept{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto map_ptr    = this->line_resource_map.find(line_id);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == this->line_resource_map.end()){
+                        std::abort();
+                    }
+                }
+
+                this->line_resource_map.erase(map_ptr);
+                this->line_vec.push_back(line_id);
             }
     };
 
@@ -149,39 +199,48 @@ namespace dg::network_recovery_line{
 
         private:
 
-            std::unique_ptr<RecoveryLineContainerInterface> token_container;
-            std::shared_ptr<RecoveryLineContainerInterface> dispatch_ticket_container;
-            std::shared_ptr<RecoveryLineResourceContainerInterface> recovery_line_resource;
+            std::vector<std::shared_ptr<std::thread>> worker_vec;      
+            std::shared_ptr<DispatchingLineContainerInterface> dispatch_ticket_container;
+            std::shared_ptr<RecoveryLineInterface> recovery_line;
         
         public:
 
-            RecoveryController(std::unique_ptr<RecoveryLineContainerInterface> token_container,
-                               std::shared_ptr<RecoveryLineContainerInterface> dispatch_ticket_container,
-                               std::shared_ptr<RecoveryLineResourceContainerInterface> recovery_line_resource) noexcept: token_container(std::move(token_container)),
-                                                                                                                         dispatch_ticket_container(std::move(dispatch_ticket_container)),
-                                                                                                                         recovery_line_resource(std::move(recovery_line_resource)){}
+            RecoveryController(std::vector<std::shared_ptr<std::thread>> worker_vec,
+                               std::shared_ptr<DispatchingLineContainerInterface> dispatch_ticket_container,
+                               std::shared_ptr<RecoveryLineInterface> recovery_line) noexcept: worker_vec(std::move(worker_vec)),
+                                                                                               dispatch_ticket_container(std::move(dispatch_ticket_container)),
+                                                                                               recovery_line(std::move(recovery_line)){}
             
-            auto get_recovery_line(std::shared_ptr<RecoveryExecutableInterface> recover_runnable) noexcept -> std::expected<size_t, exception_t>{
+            auto get_recovery_line(std::unique_ptr<RecoverableInterface> recover_runnable) noexcept -> std::expected<size_t, exception_t>{
                 
-                std::optional<size_t> line_id = this->token_container->pop();
-
-                if (!static_cast<bool>(line_id)){
-                    return std::unexpected(dg::network_exception::EXHAUSTED_RECOVERY_LINE);
+                if (!recover_runnable){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                this->recovery_line_resource->set_recovery_line_resource(line_id.value(), std::move(recover_runnable));
+                std::expected<size_t, exception_t> line_id = this->recovery_line->get_recovery_line();
+
+                if (!line_id.has_value()){
+                    return std::unexpected(line_id.error());
+                }
+
+                exception_t err = this->recovery_line->set_resource(line_id.value(), std::move(recover_runnable));
+
+                if (dg::network_exception::is_failed(err)){
+                    this->recovery_line->close_recovery_line(line_id.value());
+                    return std::unexpected(err);
+                }
+
                 return line_id.value();
             }
 
-            void notify(size_t line_id) noexcept{
+            auto notify(size_t line_id) noexcept -> exception_t{
 
-                this->dispatch_ticket_container->push(line_id); //this will call recovery for the wrong component - yet it's expected - all recovery operation should not alter the program state - even if the component is not corrupted
+                return this->dispatch_ticket_container->push(line_id);
             }
 
-            void close(size_t line_id) noexcept{
-
-                this->recovery_line_resource->set_recovery_line_resource(line_id, nullptr);
-                this->token_container->push(line_id);
+            void close_recovery_line(size_t line_id) noexcept{
+                
+                this->recovery_line->close_recovery_line(line_id);
             }
     };
 
@@ -191,41 +250,36 @@ namespace dg::network_recovery_line{
 
     }
 
-    //recovery_executable_interface is a defined-invokable-in-all-scenerios, exitable-in-all-scenerios component (even if the component does not invoke notify - this is strange - maybe there's a fix - yet it's a stricter req)
-    auto get_recovery_line(std::shared_ptr<RecoveryExecutableInterface> recover_runnable) noexcept -> std::expected<size_t, exception_t>{
+    void deinit() noexcept{
 
-        return recovery_controller->get_recovery_line(std::move(recover_runnable));
+        recovery_controller = nullptr;
     }
 
-    //notify the dispatcher to recover the component - dispatcher might or might not arrive - it's the caller and friends responsibility to compromise the component + abort the program after a certain threshold  
-    void notify(size_t line_id) noexcept{
+    auto get_recovery_line(std::unique_ptr<RecoverableInterface> recoverable) noexcept -> std::expected<size_t, exception_t>{
 
-        recovery_controller->notify(line_id);
+        return recovery_controller->get_recovery_line(std::move(recoverable));
     }
 
-    //this will shadow legacy file close - important to not <use namespace> here
-    void close(size_t line_id) noexcept{
+    auto notify(size_t line_id) noexcept -> exception_t{
+
+        return recovery_controller->notify(line_id);
+    }
+
+    void close_recovery_line(size_t line_id) noexcept{
         
-        recovery_controller->close(line_id);
+        recovery_controller->close_recovery_line(line_id);
     }
 
-    using recovery_line_dclose_t = void (*)(size_t *) noexcept; 
+    auto get_raii_recovery_line(std::unique_ptr<RecoverableInterface> recoverable) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, decltype(&network_recovery_line::close_recovery_line)>, exception_t>{
 
-    auto safeget_recovery_line(std::shared_ptr<RecoveryExecutableInterface> recover_runnable) noexcept -> std::expected<std::unique_ptr<size_t, recovery_line_dclose_t>, exception_t>{
+        std::expected<size_t, exception_t> line_id = network_recovery_line::get_recovery_line(std::move(recoverable));
 
-        auto destructor = [](size_t * line_id) noexcept{
-            close(*line_id);
-            delete line_id;
+        if (!line_id.has_value()){
+            return std::unexpected(line_id.error());
         }
 
-        std::expected<size_t, exception_t> line = get_recovery_line(std::move(recover_runnable));
-
-        if (dg::network_exception::is_failed(line)){
-            return std::unexpected(line.error());
-        }
-
-        return std::unique_ptr<size_t, recovery_line_dclose_t>(new size_t{line.value()}, destructor);
-    } 
+        return dg::nothrow_immutable_unique_raii_wrapper<size_t, decltype(&network_recovery_line::close_recovery_line)>(line_id.value(), network_recovery_line::close_recovery_line);
+    }
 }
 
 #endif

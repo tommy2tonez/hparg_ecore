@@ -250,7 +250,7 @@ namespace dg::network_allocation{
             auto run_one_epoch() noexcept -> bool{
 
                 this->gc_able->gc();
-                return true;
+                return false;
             }
     };
 
@@ -325,20 +325,14 @@ namespace dg::network_allocation{
             return std::make_unique<MultiThreadAllocator>(std::move(allocator));
         }
 
-        static auto spawn_gc_worker(std::chrono::nanoseconds gc_interval, std::shared_ptr<GCInterface> gc_able) -> dg::network_concurrency::daemon_raii_handle_t{ //this is strange - this overstep into the responsibility - decouple the component
-
-            std::chrono::nanoseconds MIN_GC_INTERVAL    = std::chrono::milliseconds(1);
-            std::chrono::nanoseconds MAX_GC_INTERVAL    = std::chrono::seconds(1);
-
-            if (std::clamp(gc_interval.count(), MIN_GC_INTERVAL.count(), MAX_GC_INTERVAL.count()) != gc_interval.count()){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+        static auto spawn_gc_worker(std::shared_ptr<GCInterface> gc_able) -> dg::network_concurrency::daemon_raii_handle_t{ //this is strange - this overstep into the responsibility - decouple the component
 
             if (gc_able == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            auto rs = dg::network_concurrency::daemon_saferegister_with_waittime(dg::network_concurrency::COMPUTING_DAEMON, std::make_unique<GCWorker>(std::move(gc_able)), gc_interval);
+            auto worker = std::make_unique<GCWorker>(std::move(gc_able));
+            auto rs     = dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(worker));
 
             if (!rs.has_value()){
                 dg::network_exception::throw_exception(rs.error());
@@ -355,7 +349,7 @@ namespace dg::network_allocation{
 
     inline AllocationResource allocation_resource;
 
-    void init(size_t least_buf_sz, size_t num_allocator, std::chrono::nanoseconds gc_interval){
+    void init(size_t least_buf_sz, size_t num_allocator){
 
         std::vector<std::unique_ptr<Allocator>> allocator_vec{};
 
@@ -364,7 +358,7 @@ namespace dg::network_allocation{
         }
 
         std::shared_ptr<MultiThreadAllocator> allocator = Factory::spawn_concurrent_allocator(std::move(allocator_vec));
-        dg::network_concurrency::daemon_raii_handle_t daemon_handle = Factory::spawn_gc_worker(gc_interval, allocator);
+        dg::network_concurrency::daemon_raii_handle_t daemon_handle = Factory::spawn_gc_worker(allocator);
         allocation_resource = {std::move(allocator), std::move(daemon_handle)};
     }
 

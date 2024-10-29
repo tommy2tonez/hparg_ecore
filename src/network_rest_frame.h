@@ -11,8 +11,9 @@
 
 namespace dg::network_post_rest_frame::model{
 
-    using ticket_id_t = uint64_t;
-
+    using ticket_id_t   = uint64_t;
+    using clock_id_t    = uint64_t;
+    
     struct Request{
         dg::string uri;
         dg::string requestor;
@@ -91,7 +92,7 @@ namespace dg::network_post_rest_frame::client{
 
     struct RequestContainerInterface{
         virtual ~RequestContainerInterface() noexcept = default;
-        virtual void push(model::InternalRequest) noexcept = 0;
+        virtual auto push(model::InternalRequest) noexcept -> exception_t = 0;
         virtual auto pop() noexcept -> std::optional<model::InternalRequest> = 0;
     };
 
@@ -106,9 +107,9 @@ namespace dg::network_post_rest_frame::client{
     
     struct ClockControllerInterface{
         virtual ~ClockControllerInterface() noexcept = default;
-        virtual auto register_clock(std::chrono::nanoseconds) noexcept -> std::expected<size_t, exception_t> = 0;
-        virtual auto is_timeout(size_t) noexcept -> std::expected<bool, exception_t> = 0;
-        virtual void deregister_clock(size_t) noexcept = 0;
+        virtual auto register_clock(std::chrono::nanoseconds) noexcept -> std::expected<model::clock_id_t, exception_t> = 0;
+        virtual auto is_timeout(model::clock_id_t) noexcept -> std::expected<bool, exception_t> = 0;
+        virtual void deregister_clock(model::clock_id_t) noexcept = 0;
     };
 
     struct RestControllerInterface{
@@ -119,7 +120,14 @@ namespace dg::network_post_rest_frame::client{
         virtual void close(model::ticket_id_t) noexcept = 0;
     };
 
-    auto request(RestControllerInterface& controller, model::Request payload) noexcept -> std::expected<model::Response, exception_t>{
+    struct TicketClockMapInterface{
+        virtual ~TicketClockMapInterface() noexcept = default;
+        virtual auto insert(model::ticket_id_t, model::clock_id_t) noexcept -> exception_t = 0;
+        virtual auto map(model::ticket_id_t) noexcept -> std::expected<model::clock_id_t, exception_t> = 0; 
+        virtual void erase(model::ticket_id_t) noexcept = 0;
+    };
+
+    auto async_request(RestControllerInterface& controller, model::Request payload) noexcept -> std::expected<model::Response, exception_t>{
 
         std::expected<model::ticket_id_t, exception_t> ticket_id = controller.request(std::move(payload));
 
@@ -140,19 +148,13 @@ namespace dg::network_post_rest_frame::client{
         };
 
         dg::network_asynchronous::wait(synchronizable);
-
-        if (!status.has_value()){
-            controller.close(ticket_id.value());
-            return std::unexpected(status.error());
-        }
-
         std::expected<model::Response, exception_t> resp = controller.response(ticket_id.value());
         controller.close(ticket_id.value());
 
         return resp;
     }
 
-    auto request_many(RestControllerInterface& controller, dg::vector<model::Request> payload_vec) noexcept -> dg::vector<std::expected<model::Response, exception_t>>{
+    auto async_request_many(RestControllerInterface& controller, dg::vector<model::Request> payload_vec) noexcept -> dg::vector<std::expected<model::Response, exception_t>>{
         
         auto ticket_vec = dg::vector<std::expected<model::ticket_id_t, exception_t>>{};
         auto rs_vec     = dg::vector<std::expected<model::Response, exception_t>>{};
@@ -261,23 +263,33 @@ namespace dg::network_post_rest_frame::client_impl1{
 
     using namespace dg::network_post_rest_frame::client; 
 
+    //its better to do exhaustion control + load balancing at a different site - this is a fast thru operation
     class RequestContainer: public virtual RequestContainerInterface{
 
         private:
 
             dg::deque<model::InternalRequest> container;
+            size_t capacity;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
             RequestContainer(dg::deque<model::InternalRequest> container,
+                             size_t capacity,
                              std::unique_ptr<std::mutex> mtx) noexcept: container(std::move(container)),
+                                                                        capacity(capacity),
                                                                         mtx(std::move(mtx)){}
 
-            void push(model::InternalRequest request) noexcept{
+            auto push(model::InternalRequest request) noexcept -> exception_t{
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
+
+                if (this->container.size() == this->capacity){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
                 this->container.push_back(std::move(request));
+                return dg::network_exception::SUCCESS;
             }
 
             auto pop() noexcept -> std::optional<model::InternalRequest>{
@@ -295,73 +307,11 @@ namespace dg::network_post_rest_frame::client_impl1{
             }
     };
 
-    class ExhaustionControlledRequestContainer: public virtual RequestContainerInterface{
-
-        private:
-
-            std::unique_ptr<RequestContainerInterface> base;
-            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-            size_t cur_sz;
-            size_t capacity;
-            std::unique_ptr<std::mutex> mtx;
-
-        public:
-
-            ExhaustionControlledRequestContainer(std::unique_ptr<RequestContainerInterface> base,
-                                                 std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
-                                                 size_t cur_sz,
-                                                 size_t capacity,
-                                                 std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
-                                                                                            executor(std::move(executor)),
-                                                                                            cur_sz(cur_sz),
-                                                                                            capacity(capacity),
-                                                                                            mtx(std::move(mtx)){}
-
-            void push(model::InternalRequest request) noexcept{
-
-                dg::network_concurrency_infretry_x::ExecutableWrapper exe([&]() noexcept{return this->internal_push(request);});
-                this->executor->exec(exe);
-            }
-
-            auto pop() noexcept -> std::optional<model::InternalRequest>{
-
-                return this->internal_pop();
-            }
-        
-        private:
-
-            auto internal_push(model::InternalRequest& request) noexcept -> bool{
-                
-                auto lck_grd = stdx::lock_guard(*this->mtx);
-
-                if (this->cur_sz == this->capacity){
-                    return false;
-                }
-
-                this->base->push(std::move(request));
-                this->cur_sz += 1;
-                
-                return true;
-            }
-
-            auto internal_pop() noexcept -> std::optional<model::InternalRequest>{
-                
-                auto lck_grd = stdx::lock_guard(*this->mtx);
-                std::optional<model::InternalRequest> rs = this->base->pop();
-
-                if (rs.has_value()){
-                    this->cur_sz -= 1;
-                }
-
-                return rs;
-            }
-    };
-
     class ClockController: public virtual ClockControllerInterface{
 
         private:
 
-            dg::unordered_map<size_t, std::chrono::nanoseconds> expiry_map;
+            dg::unordered_map<clock_id_t, std::chrono::nanoseconds> expiry_map;
             size_t ticket_sz;
             std::chrono::nanoseconds min_dur;
             std::chrono::nanoseconds max_dur;
@@ -369,7 +319,7 @@ namespace dg::network_post_rest_frame::client_impl1{
         
         public:
 
-            ClockController(dg::unordered_map<size_t, std::chrono::nanoseconds> expiry_map,
+            ClockController(dg::unordered_map<clock_id_t, std::chrono::nanoseconds> expiry_map,
                             size_t ticket_sz,
                             std::chrono::nanoseconds min_dur,
                             std::chrono::nanoseconds max_dur,
@@ -379,7 +329,7 @@ namespace dg::network_post_rest_frame::client_impl1{
                                                                        max_dur(max_dur),
                                                                        mtx(std::move(mtx)){}
             
-            auto register_clock(std::chrono::nanoseconds dur) noexcept -> std::expected<size_t, exception_t>{
+            auto register_clock(std::chrono::nanoseconds dur) noexcept -> std::expected<clock_id_t, exception_t>{
                 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
                 
@@ -387,9 +337,9 @@ namespace dg::network_post_rest_frame::client_impl1{
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
                 
-                size_t nxt_ticket_id    = this->ticket_sz;
-                auto then               = static_cast<std::chrono::nanoseconds>(dg::network_genult::unix_timestamp()) + dur;
-                auto [map_ptr, status]  = this->expiry_map.emplace(std::make_pair(nxt_ticket_id, then)); 
+                clock_id_t nxt_ticket_id    = this->ticket_sz;
+                auto then                   = static_cast<std::chrono::nanoseconds>(dg::network_genult::unix_timestamp()) + dur;
+                auto [map_ptr, status]      = this->expiry_map.emplace(std::make_pair(nxt_ticket_id, then)); 
                 
                 if (!status){
                     return std::unexpected(dg::network_exception::BAD_INSERT);
@@ -399,7 +349,7 @@ namespace dg::network_post_rest_frame::client_impl1{
                 return nxt_ticket_id;
             }
 
-            auto is_timeout(size_t id) noexcept -> std::expected<bool, exception_t>{
+            auto is_timeout(clock_id_t id) noexcept -> std::expected<bool, exception_t>{
 
                 auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->expiry_map.find(id);
@@ -414,7 +364,7 @@ namespace dg::network_post_rest_frame::client_impl1{
                 return is_expired;
             }
 
-            void deregister_clock(size_t id) noexcept{
+            void deregister_clock(clock_id_t id) noexcept{
 
                 auto lck_grd    = stdx::lock_guard(*this->mtx);
                 auto map_ptr    = this->expiry_map.find(id);
@@ -591,6 +541,59 @@ namespace dg::network_post_rest_frame::client_impl1{
             }
     };
 
+    class TicketClockMap: public virtual TicketClockMapInterface{
+
+        private:
+
+            dg::unordered_map<model::ticket_id_t, model::clock_id_t> ticket_clock_map;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            TicketClockMap(dg::unordered_map<model::ticket_id_t, model::clock_id_t> ticket_clock_map,
+                           std::unique_ptr<std::mutex> mtx) noexcept: ticket_clock_map(std::move(ticket_clock_map)),
+                                                                      mtx(std::move(mtx)){}
+            
+            auto insert(model::ticket_id_t ticket_id, model::clock_id_t clock_id) noexcept -> exception_t{
+
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+                auto [map_ptr, status] = this->ticket_clock_map.insert(std::make_pair(ticket_id, clock_id));
+
+                if (!status){
+                    return dg::network_exception::BAD_INSERT;
+                }
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto map(model::ticket_id_t ticket_id) noexcept -> std::expected<model::clock_id_t, exception_t>{
+
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+                auto map_ptr = this->ticket_clock_map.find(ticket_id);
+
+                if (map_ptr == this->ticket_clock_map.end()){
+                    return std::unexpected(dg::network_exception::BAD_ENTRY);
+                }
+
+                return map_ptr->second;
+            }
+
+            void erase(model::ticket_id_t ticket_id) noexcept{
+
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+                auto map_ptr = this->ticket_clock_map.find(ticket_id);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == this->ticket_clock_map.end()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                this->ticket_clock_map.erase(map_ptr);
+            }
+    };
+
     class RestController: public virtual RestControllerInterface{
 
         private:
@@ -599,8 +602,7 @@ namespace dg::network_post_rest_frame::client_impl1{
             std::unique_ptr<TicketControllerInterface> ticket_controller;
             std::unique_ptr<ClockControllerInterface> clock_controller;
             std::unique_ptr<RequestContainerInterface> request_container;
-            dg::unordered_map<model::ticket_id_t, size_t> ticket_clockid_map; 
-            std::unique_ptr<std::mutex> map_mtx;
+            std::unique_ptr<TicketClockMapInterface> ticket_clock_map; 
 
         public:
 
@@ -608,13 +610,11 @@ namespace dg::network_post_rest_frame::client_impl1{
                            std::unique_ptr<TicketControllerInterface> ticket_controller,
                            std::unique_ptr<ClockControllerInterface> clock_controller,
                            std::unique_ptr<RequestContainerInterface> request_container,
-                           dg::unordered_map<model::ticket_id_t, size_t> ticket_clockid_map,
-                           std::unique_ptr<std::mutex> map_mtx) noexcept: daemon_vec(std::move(daemon_vec)),
-                                                                          ticket_controller(std::move(ticket_controller)),
-                                                                          clock_controller(std::move(clock_controller)),
-                                                                          request_container(std::move(request_container)),
-                                                                          ticket_clockid_map(std::move(ticket_clockid_map)),
-                                                                          map_mtx(std::move(map_mtx)){}
+                           std::unique_ptr<TicketClockMapInterface> ticket_clock_map) noexcept: daemon_vec(std::move(daemon_vec)),
+                                                                                                ticket_controller(std::move(ticket_controller)),
+                                                                                                clock_controller(std::move(clock_controller)),
+                                                                                                request_container(std::move(request_container)),
+                                                                                                ticket_clock_map(std::move(ticket_clock_map)){}
             
             auto request(model::Request request) noexcept -> std::expected<model::ticket_id_t, exception_t>{
                 
@@ -624,44 +624,42 @@ namespace dg::network_post_rest_frame::client_impl1{
                     return std::unexpected(ticket_id.error());
                 }
 
-                std::expected<size_t, exception_t> clock_id = this->clock_controller->register_clock(request.timeout);
+                std::expected<model::clock_id_t, exception_t> clock_id = this->clock_controller->register_clock(request.timeout);
 
                 if (!clock_id.has_value()){
                     this->ticket_controller->close_ticket(ticket_id.value());
                     return std::unexpected(clock_id.error());
                 }
 
-                {
-                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
-                    auto [map_ptr, status] = this->ticket_clockid_map.emplace(std::make_pair(ticket_id.value(), clock_id.value()));
+                exception_t map_err = this->ticket_clock_map->insert(ticket_id.value(), clock_id.value()); 
 
-                    if (!status){
-                        this->clock_controller->deregister_clock(clock_id.value());
-                        this->ticket_controller->close_ticket(ticket_id.value());
-                        return std::unexpected(dg::network_exception::BAD_INSERT);
-                    }
+                if (dg::network_exception::is_failed(map_err)){
+                    this->clock_controller->deregister_clock(clock_id.value());
+                    this->ticket_controller->close_ticket(ticket_id.value());
+                    return std::unexpected(map_err);
                 }
 
-                this->request_container->push(model::InternalRequest{std::move(request), ticket_id.value()});
+                exception_t ins_err = this->request_container->push(model::InternalRequest{std::move(request), ticket_id.value()}); 
+
+                if (dg::network_exception::is_failed(ins_err)){
+                    this->ticket_clock_map->erase(ticket_id.value());
+                    this->clock_controller->deregister_clock(clock_id.value());
+                    this->ticket_controller->close_ticket(ticket_id.value());
+                    return std::unexpected(ins_err);
+                }
+
                 return ticket_id.value();
             }
 
             auto is_ready(model::ticket_id_t ticket_id) noexcept -> std::expected<bool, exception_t>{
                 
-                size_t clock_id = {};
+                std::expected<model::clock_id_t, exception_t> clock_id = this->ticket_clock_map->map(ticket_id);
 
-                {
-                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
-                    auto map_ptr = this->ticket_clockid_map.find(ticket_id);
-
-                    if (map_ptr == this->ticket_clockid_map.end()){
-                        return std::unexpected(dg::network_exception::BAD_ENTRY);
-                    }
-
-                    clock_id = map_ptr->second;
+                if (!clock_id.has_value()){
+                    return std::unexpected(clock_id.error());
                 }
 
-                std::expected<bool, exception_t> timeout_status = this->clock_controller->is_timeout(clock_id);
+                std::expected<bool, exception_t> timeout_status = this->clock_controller->is_timeout(clock_id.value());
 
                 if (!timeout_status.has_value()){
                     return std::unexpected(timeout_status.error());
@@ -682,52 +680,36 @@ namespace dg::network_post_rest_frame::client_impl1{
 
             auto response(model::ticket_id_t ticket_id) noexcept -> std::expected<Response, exception_t>{
 
-                size_t clock_id = {};
+                std::expected<model::clock_id_t, exception_t> clock_id = this->ticket_clock_map->map(ticket_id);
 
-                {
-                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
-                    auto map_ptr = this->ticket_clockid_map.find(ticket_id);
-
-                    if (map_ptr == this->ticket_clockid_map.end()){
-                        return std::unexpected(dg::network_exception::BAD_ENTRY);
-                    }
-
-                    clock_id = map_ptr->second;
+                if (!clock_id.has_value()){
+                    return std::unexpected(clock_id.error());
                 }
 
-                std::expected<bool, exception_t> timeout_status = this->clock_controller->is_timeout(clock_id);
+                std::expected<bool, exception_t> timeout_status = this->clock_controller->is_timeout(clock_id.value());
 
                 if (!timeout_status.has_value()){
                     return std::unexpected(timeout_status.error());
                 }
 
                 if (timeout_status.value()){
-                    return std::unexpected(dg::network_exception::REQUEST_TIMEOUT);
+                    return std::unexpected(dg::network_exception::TIMEOUT);
                 }
 
                 return this->ticket_controller->get_ticket_resource(ticket_id);
             }
 
             void close(model::ticket_id_t ticket_id) noexcept{
+                
+                std::expected<model::clock_id_t, exception_t> clock_id = this->ticket_clock_map->map(ticket_id);
 
-                size_t clock_id = {};
+                if (!clock_id.has_value()){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(clock_id.error()));
+                    std::abort();
+                } 
 
-                {
-                    auto lck_grd = stdx::lock_guard(*this->map_mtx);
-                    auto map_ptr = this->ticket_clockid_map.find(ticket_id);
-
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (map_ptr == this->ticket_clockid_map.end()){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
-                    }
-
-                    clock_id = map_ptr->second;
-                    this->ticket_clockid_map.erase(map_ptr);
-                }
-
-                this->clock_controller->deregister_clock(clock_id);
+                this->ticket_clock_map->erase(ticket_id);
+                this->clock_controller->deregister_clock(clock_id.value());
                 this->ticket_controller->close_ticket(ticket_id);
             }
     };

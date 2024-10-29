@@ -88,6 +88,8 @@ namespace dg::network_exception{
     static inline constexpr exception_t EXPIRED_TOKEN                       = 0u;
     static inline constexpr exception_t BAD_AUTHENTICATION                  = 0u;
     static inline constexpr exception_t ENTRY_NOT_FOUND                     = 0u;
+    static inline constexpr exception_t RESOURCE_EXHAUSTION                 = 0u;
+    static inline constexpr exception_t TIMEOUT                             = 0u;
 
     static inline const char * SEGFAULT_CSTR                    = "segmentation_fault";
     static inline const char * UNREACHABLE_CSTR                 = "unreachable_fault"; 

@@ -14,8 +14,6 @@
 
 namespace stdx{
     
-    using max_signed_t = __int128_t; //macro
-
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
@@ -111,24 +109,53 @@ namespace stdx{
         return T{1u} << cand_log2; 
     } 
 
-    template <class T, class T1>
-    constexpr auto safe_integer_cast(T1 value) noexcept -> T{
+    template <class T1, class T>
+    constexpr auto safe_integer_cast(T value) noexcept -> T1{
 
         static_assert(std::numeric_limits<T>::is_integer);
         static_assert(std::numeric_limits<T1>::is_integer);
 
         if constexpr(IS_SAFE_INTEGER_CONVERSION_ENABLED){
-            using promoted_t = stdx::max_signed_t; 
+            if constexpr(std::is_unsigned_v<T> && std::is_unsigned_v<T1>){
+                (void) value;
+            } else if constexpr(std::is_signed_v<T> && std::is_signed_v<T1>){
+                (void) value;
+            } else{
+                if constexpr(std::is_signed_v<T>){
+                    if constexpr(sizeof(T) > sizeof(T1)){
+                        (void) value;
+                    } else{
+                        if (value < 0){
+                            std::abort();
+                        } else{
+                            return value; //sizeof(signed) <= sizeof(unsigned)
+                        }
+                    }
+                } else{
+                    if constexpr(sizeof(T1) > sizeof(T)){
+                        (void) value;
+                    } else{
+                        if (value > std::numeric_limits<T1>::max()){
+                            std::abort();
+                        } else{
+                            return value; //sizeof(unsigned) >= sizeof(signed)
+                        }
+                    }
+                }
+            }
 
-            static_assert(sizeof(promoted_t) > sizeof(T));
-            static_assert(sizeof(promoted_t) > sizeof(T1));
-
-            if (std::clamp(static_cast<promoted_t>(value), static_cast<promoted_t>(std::numeric_limits<T>::min()), static_cast<promoted_t>(std::numeric_limits<T>::max())) != static_cast<promoted_t>(value)){
+            if (value > std::numeric_limits<T1>::max()){
                 std::abort();
             }
-        }
 
-        return value;
+            if (value < std::numeric_limtis<T1>::min()){
+                std::abort();
+            }
+
+            return value;
+        } else{
+            return value;
+        }
     }
 
     template <size_t BIT_SZ, class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
@@ -165,8 +192,9 @@ namespace stdx{
     }
 
     template <class Iterator>
-    constexpr auto advance(Iterator it, intmax_t diff) noexcept -> Iterator{
+    constexpr auto advance(Iterator it, intmax_t diff) noexcept(noexcept(std::advance(it, diff))) -> Iterator{
 
+        static_assert(std::is_nothrow_move_constructible_v<Iterator>);
         std::advance(it, diff); //I never knew what drug std was on
         return it;
     }

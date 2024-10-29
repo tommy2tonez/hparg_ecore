@@ -11,7 +11,6 @@
 #include <vector>
 #include "network_exception.h"
 #include "stdx.h"
-#include "network_std_container.h"
 
 namespace dg::network_concurrency_impl1_linux::daemon_option_ns{
 
@@ -143,7 +142,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             void infloop() noexcept{
 
-                this->poison_pill->exchange(false, std::memory_order_relaxed); //relaxed qualified because these aren't used for mutating concurrent variables - only to exit the infloop which is used for joining threads - when in doubt - think of relaxed as a randomization problem - if bool randomization works for poison pill - then poison pill is relaxed qualified
+                this->poison_pill->exchange(false, std::memory_order_relaxed);
 
                 while (!this->poison_pill->load(std::memory_order_relaxed)){
                     bool run_flag = this->internal_get_worker()->run_one_epoch();
@@ -346,7 +345,7 @@ namespace dg::network_concurrency_impl1_linux{
             }
 
             if (cpu_vec.empty()){
-                dg::network_exception::throw_exception(Dg::network_exception::INVALID_ARGUMENT);
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             auto executable = [=]() noexcept{

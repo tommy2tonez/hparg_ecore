@@ -107,11 +107,12 @@ namespace dg::network_concurrency_infretry_x{
             }
     };
 
-    auto get_std_exec_machine() -> std::pair<std::unique_ptr<ExecutorInterface>, std::unique_ptr<ExecutorDestructorInterface>>{
+    auto get_infretry_machine(std::chrono::nanoseconds wait_dur) -> std::pair<std::unique_ptr<ExecutorInterface>, std::unique_ptr<ExecutorDestructorInterface>>{
 
-        constexpr size_t DICE_SZ = 128;
+        constexpr size_t DICE_SZ = size_t{1} << 8;
+        
         std::shared_ptr<std::atomic<bool>> interceptor          = std::make_shared<std::atomic<bool>>(bool{false});
-        std::unique_ptr<ExecutorInterface> executor             = std::make_unique<StdExecutor<DICE_SZ>>(interceptor, std::chrono::microseconds(5));
+        std::unique_ptr<ExecutorInterface> executor             = std::make_unique<StdExecutor<DICE_SZ>>(interceptor, wait_dur);
         std::unique_ptr<ExecutorDestructorInterface> destructor = std::make_unique<StdExecutorDestructor>(interceptor);
 
         return std::make_pair(std::move(executor), std::move(destructor));   
