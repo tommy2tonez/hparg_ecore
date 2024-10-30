@@ -10,6 +10,7 @@
 #include "network_allocation.h"
 #include "network_hash.h"
 #include "dense_hash_map/dense_hash_map.hpp"
+#include "robin_set/robin_set.h"
 
 namespace dg::network_std_container{
 
@@ -112,6 +113,9 @@ namespace dg::network_std_container{
 
     template <class T>
     using unordered_set             = std::unordered_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>>;
+
+    template <class T>
+    using unordered_unstable_set    = tsl::robin_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>, tsl::rh::power_of_two_growth_policy<2>>;
 
     template <class Key, class Value>
     using unordered_map             = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;

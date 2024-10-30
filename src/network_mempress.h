@@ -144,7 +144,7 @@ namespace dg::network_mempress{
             const size_t MAX_REGION_CAP = size_t{1} << 30;
             const double SUBMIT_RATIO   = double{0.1f};
 
-            using uptr_t    = dg::ptr_info<>::max_unsigned_t;
+            using uptr_t    = typename dg::ptr_info<>::max_unsigned_t;
             uptr_t ufirst   = pointer_cast<uptr_t>(first);
             uptr_t ulast    = pointer_cast<uptr_t>(last);
 

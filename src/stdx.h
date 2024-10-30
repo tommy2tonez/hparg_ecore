@@ -17,7 +17,7 @@ namespace stdx{
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
-    auto lock_guard(std::atomic_flag& lck) noexcept{
+    inline auto lock_guard(std::atomic_flag& lck) noexcept{
 
         static int i    = 0;
         auto destructor = [&](int *) noexcept{
@@ -35,7 +35,7 @@ namespace stdx{
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
     }
 
-    auto lock_guard(std::mutex& lck) noexcept{
+    inline auto lock_guard(std::mutex& lck) noexcept{
 
         static int i    = 0;
         auto destructor = [&](int *) noexcept{
@@ -53,8 +53,15 @@ namespace stdx{
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
     }
 
+    inline void atomic_optional_thread_fence() noexcept{
+
+        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        }
+    }
+
     template <class Destructor>
-    auto resource_guard(Destructor destructor) noexcept{
+    inline auto resource_guard(Destructor destructor) noexcept{
         
         static_assert(std::is_nothrow_move_constructible_v<Destructor>);
         static_assert(std::is_nothrow_invocable_v<Destructor>);
@@ -237,7 +244,7 @@ namespace stdx{
     };
 
     template <class ...Args>
-    auto make_vector_convertible(Args ...args) noexcept{
+    inline auto make_vector_convertible(Args ...args) noexcept -> vector_convertible<Args...>{
         
         static_assert(std::conjunction_v<std::is_nothrow_move_constructible<Args>...>);
 
@@ -267,11 +274,10 @@ namespace stdx{
             }
     };
 
-    auto to_basicstr_convertible(std::string_view view) noexcept -> basicstr_converitble{
+    inline auto to_basicstr_convertible(std::string_view view) noexcept -> basicstr_converitble{
 
         return basicstr_converitble(view);
     }
-
 
     template <class ...Args>
     auto backsplit_str(std::basic_string<Args...> s, size_t sz) -> std::pair<std::basic_string<Args...>, std::basic_string<Args...>>{
@@ -286,6 +292,21 @@ namespace stdx{
 
         return std::make_pair(std::move(s), std::move(rhs));
     }
+
+    template <class ID, class T>
+    class singleton{
+
+        private:
+
+            static inline T obj{};
+        
+        public:
+
+            static inline auto get() noexcept -> T&{
+
+                return obj;
+            }
+    };
 }
 
 #endif
