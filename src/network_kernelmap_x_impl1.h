@@ -263,7 +263,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return;
                 }
 
-                this->heap_swap(this->priority_queue[idx], this->priority_queue[c]); //its fine
+                this->heap_swap(this->priority_queue[idx], this->priority_queue[c]);
                 this->heap_push_down_at(c);
             }
 

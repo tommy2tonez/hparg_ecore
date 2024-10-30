@@ -46,7 +46,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonRunnerInterface{
         virtual ~DaemonRunnerInterface() noexcept = default;
-        virtual void set_worker(std::unique_ptr<WorkerInterface>) noexcept = 0; //precond - valid_unique_ptr<> - need to enforce this by using function signature
+        virtual void set_worker(std::unique_ptr<WorkerInterface>) noexcept = 0;
     };
 
     struct DaemonDedicatedRunnerInterface: DaemonRunnerInterface{
@@ -56,7 +56,7 @@ namespace dg::network_concurrency_impl1_linux{
 
     struct DaemonControllerInterface{
         virtual ~DaemonControllerInterface() noexcept = default;
-        virtual auto _register(daemon_kind_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0; //precond - valid_unique_ptr<> - need to enforce this by using function signature
+        virtual auto _register(daemon_kind_t, std::unique_ptr<WorkerInterface>) noexcept -> std::expected<size_t, exception_t> = 0;
         virtual void deregister(size_t) noexcept = 0;
     };
 
@@ -118,7 +118,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             std::unique_ptr<std::atomic<bool>> poison_pill;
             std::unique_ptr<std::atomic_flag> mtx;
-            std::shared_ptr<WorkerInterface> worker;
+            std::unique_ptr<WorkerInterface> worker;
             std::unique_ptr<ReschedulerInterface> rescheduler; 
 
         public:
@@ -133,11 +133,13 @@ namespace dg::network_concurrency_impl1_linux{
 
             void set_worker(std::unique_ptr<WorkerInterface> worker) noexcept{
 
-                if (worker == nullptr){
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+
+                if (!worker){
                     std::abort();
                 }
 
-                this->internal_set_worker(std::move(worker));
+                this->worker = std::move(worker);
             }
 
             void infloop() noexcept{
@@ -145,7 +147,8 @@ namespace dg::network_concurrency_impl1_linux{
                 this->poison_pill->exchange(false, std::memory_order_relaxed);
 
                 while (!this->poison_pill->load(std::memory_order_relaxed)){
-                    bool run_flag = this->internal_get_worker()->run_one_epoch();
+                    auto lck_grd    = stdx::lock_guard(*this->mtx);
+                    bool run_flag   = this->worker->run_one_epoch();
 
                     if (!run_flag){
                         this->rescheduler->reschedule();
@@ -156,20 +159,6 @@ namespace dg::network_concurrency_impl1_linux{
             void signal_abort() noexcept{
 
                 this->poison_pill->exchange(true, std::memory_order_relaxed);
-            }
-        
-        private:
-
-            void internal_set_worker(std::shared_ptr<WorkerInterface> worker) noexcept{
-
-                auto lck_grd = stdx::lock_guard(*this->mtx);
-                this->worker = std::move(worker);
-            }
-
-            auto internal_get_worker() noexcept -> std::shared_ptr<WorkerInterface>{
-
-                auto lck_grd = stdx::lock_guard(*this->mtx);
-                return this->worker;
             }
     };
 

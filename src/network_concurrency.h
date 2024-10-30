@@ -73,11 +73,10 @@ namespace dg::network_concurrency{
 
     void daemon_deregister(size_t id) noexcept{
 
-        if constexpr(DEBUG_MODE_FLAG){
-            auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
-            if (ptr != concurrency_resource.thrid_to_idx_map.end()){
-                std::abort();
-            }
+        auto ptr = concurrency_resource.thrid_to_idx_map.find(std::this_thread::get_id());
+    
+        if (ptr != concurrency_resource.thrid_to_idx_map.end()){
+            std::abort();
         }
 
         concurrency_resource.daemon_controller->deregister(id);

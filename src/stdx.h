@@ -22,14 +22,14 @@ namespace stdx{
         static int i    = 0;
         auto destructor = [&](int *) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-                std::atomic_thread_fence(std::memory_order_acq_rel);
+                std::atomic_thread_fence(std::memory_order_seq_cst);
             }
             lck.clear(std::memory_order_release);
         };
 
         while (!lck.test_and_set(std::memory_order_acquire)){}
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_thread_fence(std::memory_order_acq_rel);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
         }  
 
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
@@ -40,14 +40,14 @@ namespace stdx{
         static int i    = 0;
         auto destructor = [&](int *) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-                std::atomic_thread_fence(std::memory_order_acq_rel);
+                std::atomic_thread_fence(std::memory_order_seq_cst);
             }
             lck.unlock();
         };
 
         lck.lock();
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_thread_fence(std::memory_order_acq_rel);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
         }
 
         return std::unique_ptr<int, decltype(destructor)>(&i, destructor);

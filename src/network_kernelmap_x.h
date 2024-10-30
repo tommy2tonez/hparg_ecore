@@ -12,13 +12,6 @@
 
 namespace dg::network_kernelmap_x{
     
-    //I've been thinking - long and hard - about kernelmap
-    //the kernel does its memmap very differently - such that the contiguous virtual memory maps (malloc) to parts of different contiguous physical memory (kmalloc) - requires a different technique of mapping and takes in void * and len as arguments
-    //but this is actually an allocation problem - if your allocator enforces the allocation to be within the memregion (which is map implementation's limitations) - then the argument map(...) always returns a valid device pointer to the requesting memregion (such that it never exceeds the callee pointer's reachability)
-    //write-through, write-back, etc write, cache and friends are actually very time-consuming
-    //the best way is to give the user an option to trade off map speed and RAM (device) memory + and keep a priority queue of reference + last_modified
-    //this is actually arguable - because modern SSD loads contiguous data really fast (yeah - they have internal RAM) - and you want the RAM (device) memory is be as compact as possible to leverage that cache hit - now I'm explaining how cache L1, L2, L3 and RAM work - which is all there is to computer science  
-
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 
