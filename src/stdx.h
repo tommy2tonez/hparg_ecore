@@ -155,7 +155,7 @@ namespace stdx{
                 std::abort();
             }
 
-            if (value < std::numeric_limtis<T1>::min()){
+            if (value < std::numeric_limits<T1>::min()){
                 std::abort();
             }
 

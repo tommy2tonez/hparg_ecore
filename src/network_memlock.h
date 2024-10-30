@@ -22,30 +22,36 @@ namespace dg::network_memlock{
     struct MemoryLockInterface{
 
         using interface_t   = MemoryLockInterface<T>;
-        using ptr_t         = typename T::ptr_t;
-        static_assert(dg::is_ptr_v<ptr_t>); 
-
-        static auto acquire_try(ptr_t ptr) noexcept -> bool{
+        
+        template <class T1 = T, std::enable_if_t<dg::is_ptr_v<typename T1::ptr_t>, bool> = true>
+        using ptr_t         = typename T1::ptr_t;
+        
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto acquire_try(typename T1::ptr_t ptr) noexcept -> bool{
 
             return T::acquire_try(ptr);
         }
 
-        static auto acquire_wait(ptr_t ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto acquire_wait(typename T1::ptr_t ptr) noexcept{
 
             T::acquire_wait(ptr);
         } 
 
-        static void acquire_release(ptr_t ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_release(typename T1::ptr_t ptr) noexcept{
 
             T::acquire_release(ptr);
         }
 
-        static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto acquire_transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
 
             return T::transfer_try(new_ptr, old_ptr);
         }
 
-        static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_transfer_wait(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept{
 
             T::acquire_transfer_wait(new_ptr, old_ptr);
         }
@@ -53,6 +59,8 @@ namespace dg::network_memlock{
 
     template <class T>
     struct MemoryRegionLockInterface: MemoryLockInterface<T>{
+
+        using interface_t = MemoryRegionLockInterface<T>; 
 
         static auto memregion_size() noexcept -> size_t{
 
@@ -64,34 +72,42 @@ namespace dg::network_memlock{
     struct MemoryReferenceLockInterface: MemoryLockInterface<T>{
         
         using interface_t   = MemoryReferenceLockInterface<T>;
-        using ptr_t         = typename T::ptr_t;
 
-        static auto reference_try(ptr_t ptr) noexcept -> bool{
+        template <class T1 = T, std::enable_if_t<dg::is_ptr_v<typename T1::ptr_t>, bool> = true>
+        using ptr_t         = typename T1::ptr_t;
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto reference_try(typename T1::ptr_t ptr) noexcept -> bool{
 
             return T::reference_try(ptr);
         }
 
-        static void reference_wait(ptr_t ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void reference_wait(typename T1::ptr_t ptr) noexcept{
 
             T::reference_wait(ptr);
         } 
 
-        static void reference_release(ptr_t ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void reference_release(typename T1::ptr_t ptr) noexcept{
 
             T::reference_release(ptr);
         }
 
-        static auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto reference_transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
 
             return T::reference_transfer_try(new_ptr, old_ptr);
         } 
 
-        static void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void reference_transfer_wait(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept{
 
             T::reference_transfer_wait(new_ptr, old_ptr);
         }
 
-        static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
             
             return T::transfer_try(new_ptr, old_ptr);
         }
@@ -123,7 +139,7 @@ namespace dg::network_memlock{
 
             using self                  = RecursiveLockResource; 
             using id                    = self;
-            using ptr_t                 = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t;
+            using ptr_t                 = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
             using resource_t            = dg::unordered_unstable_set<ptr_t>;
             using singleton_obj_t       = std::array<resource_t, dg::network_concurrency::THREAD_COUNT>;
             using singleton_container   = stdx::singleton<id, singleton_obj_t>;
@@ -140,7 +156,7 @@ namespace dg::network_memlock{
     auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, ptr_t ptr) noexcept{
         
         using memlock_ins   = dg::network_memlock::MemoryRegionLockInterface<T>;
-        using lock_ptr_t    = typename memlock_ins::ptr_t;
+        using lock_ptr_t    = typename memlock_ins::ptr_t<>;
         using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
         static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
 
@@ -153,7 +169,7 @@ namespace dg::network_memlock{
             if (memlock_ins::acquire_try(ptr_region)){
                 responsibility_flag = true;
                 try_success_flag    = true;
-                ptr_set->add(ptr_region);
+                ptr_set->insert(ptr_region);
             } else{
                 responsibility_flag = false;
                 try_success_flag    = false;
@@ -196,17 +212,18 @@ namespace dg::network_memlock{
             if constexpr(IDX == sizeof...(Args)){
                 return bool{true};
             } else{                
+                auto cur_lck            = recursive_trylock_guard(lock_ins, std::get<IDX>(args_tup));
                 using successor_ret_t   = decltype(self(self, std::integral_constant<size_t, IDX + 1>{}));
-                using lck_t             = decltype(recursive_trylock_guard(lock_ins, std::get<IDX>(args_tup)));
+                using lck_t             = decltype(cur_lck);
                 using ret_t             = std::pair<lck_t, successor_ret_t>;
                 using opt_ret_t         = std::optional<ret_t>;
-                auto successor_rs       = self(self, std::integral_constant<size_t, IDX + 1>{});
 
-                if (!static_cast<bool>(successor_rs)){
+                if (!static_cast<bool>(cur_lck)){
                     return opt_ret_t{std::nullopt};
                 } else{
-                    auto cur_lck = recursive_trylock_guard(lock_ins, std::get<IDX>(args_tup));
-                    if (!static_cast<bool>(cur_lck)){
+                    auto successor_rs = self(self, std::integral_constant<size_t, IDX + 1>{});
+                    
+                    if (!static_cast<bool>(successor_rs)){
                         return opt_ret_t{std::nullopt};
                     } else{
                         return opt_ret_t{ret_t{std::move(cur_lck), std::move(successor_rs)}};
@@ -234,7 +251,7 @@ namespace dg::network_memlock_impl1{
     struct AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
         
         public:
-
+            
             using ptr_t = PtrT; 
 
         private:
@@ -291,7 +308,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table           = std::make_unique<std::atomic_flag[]>[lck_table_sz];
+                lck_table           = std::make_unique<std::atomic_flag[]>(lck_table_sz);
                 region_first        = first;
                 segcheck_ins::init(first, last);
             }
@@ -446,7 +463,7 @@ namespace dg::network_memlock_impl1{
             using atomic_lock_t = uint64_t; 
             using self          = AtomicReferenceLock;
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>; 
-            using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsinged_t;
+            using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
 
             static inline constexpr atomic_lock_t MEMREGION_EMP_STATE = 0u;
             static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE = std::numeric_limits<atomic_lock_t>::max();
@@ -460,8 +477,9 @@ namespace dg::network_memlock_impl1{
             }
 
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
-
-                bool rs = lck_table[table_idx].compare_exchange_weak(MEMREGION_EMP_STATE, MEMREGION_ACQ_STATE, std::memory_order_acq_rel);
+                
+                atomic_lock_t expected = MEMREGION_EMP_STATE;
+                bool rs = lck_table[table_idx].compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_acq_rel);
                 stdx::atomic_optional_thread_fence();
                 
                 return rs;
@@ -538,7 +556,7 @@ namespace dg::network_memlock_impl1{
 
             static void deinit() noexcept{
 
-                this->lck_table = nullptr;    
+                lck_table = nullptr;    
             }
 
             static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
@@ -611,7 +629,7 @@ namespace dg::network_memlock_impl1{
     struct MtxReferenceLock{};    
 
     template <class ID, size_t MEMREGION_SZ, class MutexT, class PtrT>
-    struct MtxReferenceLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, MutexT, PtrT>: MemoryReferenceLockInterface<MtxReferenceLocK<ID, std::integral_constant<size_t, MEMREGION_SZ>, MutexT, PtrT>>{
+    struct MtxReferenceLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, MutexT, PtrT>: MemoryReferenceLockInterface<MtxReferenceLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, MutexT, PtrT>>{
 
         public:
 
@@ -642,7 +660,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard{lck_table[table_idx].lck};
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 
                 if (lck_table[table_idx].refcount != REFERENCE_EMPTY_STATE){
                     return false;
@@ -659,13 +677,13 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_release(size_t table_idx) noexcept{
 
-                auto lck_grd = stdx::lock_guard{lck_table[table_idx].lck};
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_STATE;
             }
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard{lck_table[table_idx].lck};
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 
                 if (lck_table[table_idx].refcount == REFERENCE_ACQUIRED_STATE){
                     return false;
@@ -682,7 +700,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_reference_release(size_t table_idx) noexcept{
 
-                auto lck_grd = stdx::lock_guard{lck_table[table_idx].lck};
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 --lck_table[table_idx].refcount;
             }
 

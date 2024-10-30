@@ -8,46 +8,51 @@
 #include <limits.h>
 #include "network_log.h" 
 #include "network_segcheck_bound.h"
-#include "network_lang_x.h"
 #include "network_exception.h"
 #include <mutex>
 #include <optional>
 #include "stdx.h"
+#include "network_pointer.h"
 
 namespace dg::network_memlock_proxyspin{
 
-    static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true;
+    static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = false;
 
     template <class T>
     struct ReferenceLockInterface{
 
-        using proxy_id_t    = typename T::proxy_id_t; 
-        using ptr_t         = typename T::ptr_t;
+        template <class T1 = T> 
+        using proxy_id_t    = typename T1::proxy_id_t; 
+        
+        template <class T1 = T>
+        using ptr_t         = typename T1::ptr_t;
 
-        static_assert(std::is_unsigned_v<proxy_id_t>);
-        static_assert(dg::is_ptr_v<ptr_t>);
-
-        static auto acquire_try(ptr_t ptr) noexcept -> std::optional<proxy_id_t>{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto acquire_try(typename T1::ptr_t ptr) noexcept -> std::optional<typename T1::proxy_id_t>{
 
             return T::acquire_try(ptr);
         }
 
-        static auto acquire_wait(ptr_t ptr) noexcept -> proxy_id_t{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto acquire_wait(typename T1::ptr_t ptr) noexcept -> typename T1::proxy_id_t{
 
             return T::acquire_wait(ptr);
         }
 
-        static void acquire_release(proxy_id_t new_proxy_id, ptr_t ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_release(typename T1::proxy_id_t new_proxy_id, typename T1::ptr_t ptr) noexcept{
 
             T::acquire_release(new_proxy_id, ptr);
         } 
 
-        static auto reference_try(proxy_id_t expected_proxy_id, ptr_t ptr) noexcept -> bool{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto reference_try(typename T1::proxy_id_t expected_proxy_id, typename T1::ptr_t ptr) noexcept -> bool{
 
             return T::reference_try(expected_proxy_id, ptr);
         } 
 
-        static void reference_release(ptr_t ptr) noexcept{
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void reference_release(typename T1::ptr_t ptr) noexcept{
 
             T::reference_release(ptr);
         }
@@ -130,7 +135,7 @@ namespace dg::network_memlock_proxyspin{
                 return cur_proxy;
             }
 
-            static void internal_acquire_wait(size_t table_idx) noexcept -> proxy_id_t{
+            static auto internal_acquire_wait(size_t table_idx) noexcept -> proxy_id_t{
 
                 while (true){
                     if (auto rs = internal_acquire_try(table_idx); rs.has_value()){
@@ -159,7 +164,7 @@ namespace dg::network_memlock_proxyspin{
 
                 lock_state_t nxt    = controller::make(expected_proxy_id, controller::refcount(cur) + 1);
                 bool rs             = lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_acq_rel);
-                std::atomic_optional_thread_fence();
+                stdx::atomic_optional_thread_fence();
 
                 return rs;
             }
@@ -249,6 +254,7 @@ namespace dg::network_memlock_proxyspin{
         
         private:
 
+            using self          = MtxReferenceLock;
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
             using refcount_t    = RefCountType; 
             using mutex_t       = MutexT;
@@ -338,7 +344,7 @@ namespace dg::network_memlock_proxyspin{
                 }
 
                 for (size_t i = 0u; i < n; ++i){
-                    uptr_t uregion = region_arr[i];
+                    uptr_t uregion = pointer_cast<uptr_t>(region_arr[i]);
 
                     if (uregion % MEMREGION_SZ != 0u){
                         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);

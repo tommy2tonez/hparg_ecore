@@ -11,11 +11,12 @@ namespace dg::network_segcheck_bound{
     struct SafeAccessInterface{
 
         using interface_t   = SafeAccessInterface<T>; 
-        using ptr_t         = typename T::ptr_t;
-        
-        static_assert(dg::is_ptr_v<ptr_t>);
 
-        static inline auto access(ptr_t ptr) noexcept -> ptr_t{
+        template <class T1 = T, std::enable_if_t<dg::is_ptr_v<typename T1::ptr_t>, bool> = true>
+        using ptr_t         = typename T1::ptr_t;
+        
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static inline auto access(typename T1::ptr_t ptr) noexcept{
 
             return T::access(ptr);
         }
@@ -57,7 +58,7 @@ namespace dg::network_segcheck_bound{
             static inline auto access(ptr_t ptr) noexcept -> ptr_t{
                 
                 if (memult::ptrcmp_aligned(ptr, first) < 0 || memult::ptrcmp_aligned(ptr, last) >= 0){
-                    dg::network_log_stackdump::critical_error(dg::network_exception::SEGFAULT_CSTR);
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::SEGFAULT));
                     std::abort();
                 }
 
@@ -70,7 +71,7 @@ namespace dg::network_segcheck_bound{
     template <class ID, class ptr_t>
     using StdAccess = std::conditional_t<IS_SAFE_ACCESS_ENABLED, 
                                          SafeAlignedAccess<ID, ptr_t>,
-                                         UnSafeAccess<IO, ptr_t>>;
+                                         UnSafeAccess<ID, ptr_t>>;
 
 }
 

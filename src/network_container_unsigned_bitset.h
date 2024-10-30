@@ -16,7 +16,7 @@ namespace dg::network_container::unsigned_bitset{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr auto false_mask(size_t idx) noexcept -> T{
 
-        return ~T{} ^ true_toggle(idx);
+        return std::numeric_limits<T>::max() ^ true_toggle(idx);
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
@@ -54,14 +54,14 @@ namespace dg::network_container::unsigned_bitset{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr void pop(T& data, size_t& rs) noexcept{
         
-        rs      = std::countr_zero(data);
-        data    &= data - 1;
+        rs = std::countr_zero(data);
+        data &= static_cast<T>(data - 1);
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr auto empty(T data) noexcept -> bool{
 
-        return data == T{};
+        return data == T{0u};
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>

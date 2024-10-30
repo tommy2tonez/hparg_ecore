@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <memory>
 #include <limits.h>
+#include "network_pointer.h"
 
 namespace dg::memult{
 
@@ -27,14 +28,20 @@ namespace dg::memult{
         return size_t{1} << bit_offset;
     }
 
-    template <class PtrType>
-    constexpr auto region(PtrType ptr, size_t memregion_sz) noexcept -> PtrType{
+    template <class ptr_t>
+    constexpr auto region(ptr_t ptr, size_t memregion_sz) noexcept -> ptr_t{
 
         return {}; //TODOs:
     }
 
-    template <class PtrType>
-    constexpr auto region_offset(PtrType ptr, size_t memregion_sz) noexcept -> size_t{
+    template <class ptr_t>
+    constexpr auto region_offset(ptr_t ptr, size_t memregion_sz) noexcept -> size_t{
+
+        return {}; //TODOs:
+    }
+
+    template <class ptr_t>
+    constexpr auto distance(ptr_t first, ptr_t last) noexcept -> intmax_t{
 
         return {}; //TODOs:
     }

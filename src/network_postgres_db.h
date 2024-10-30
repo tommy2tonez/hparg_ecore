@@ -21,6 +21,7 @@
 #include <format>
 #include <random>
 #include <string_view>
+#include "network_std_container.h"
 
 namespace dg::network_postgres_db::model{
 
