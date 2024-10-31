@@ -53,10 +53,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t INVALID_DICTIONARY_KEY              = 0u;
     static inline constexpr exception_t INVALID_TABLE_DISPATCH_CODE         = 0u;
     static inline constexpr exception_t INCOMPATIBLE_OPERATABLE_ID          = 0u;
-    static inline constexpr exception_t BAD_TILE_MEMBER_ACCESS              = 0u; 
-    static inline constexpr exception_t BAD_PTR_ACCESS                      = 0u;
-    static inline constexpr exception_t BAD_OPTIONAL_ACCESS                 = 0u; 
-    static inline constexpr exception_t BAD_RAII_ACCESS                     = 0u;
+    static inline constexpr exception_t BAD_ACCESS                          = 0u; 
     static inline constexpr exception_t BAD_ALIGNMENT                       = 0u;
     static inline constexpr exception_t UNREGISTERED_CUFILE_PTR             = 0u;
     static inline constexpr exception_t RUNTIME_SOCKETIO_ERROR              = 0u;

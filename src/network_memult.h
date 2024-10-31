@@ -46,6 +46,11 @@ namespace dg::memult{
         return {}; //TODOs:
     }
 
+    template <class ptr_t>
+    constexpr auto advance(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{
+
+    }
+    
     template <class T, std::enable_if_t<std::is_trivial_v<T>, bool> = true>
     inline auto start_lifetime_as(void * buf) noexcept -> T{
 

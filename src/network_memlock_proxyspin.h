@@ -21,10 +21,10 @@ namespace dg::network_memlock_proxyspin{
     template <class T>
     struct ReferenceLockInterface{
 
-        template <class T1 = T> 
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         using proxy_id_t    = typename T1::proxy_id_t; 
         
-        template <class T1 = T>
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         using ptr_t         = typename T1::ptr_t;
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>

@@ -16,7 +16,7 @@ namespace dg::network_pointer{
 
 namespace dg{
 
-    template <class T>
+    template <class T = void>
     struct ptr_info{
         using max_unsigned_t = uintptr_t;
     };
@@ -28,5 +28,11 @@ namespace dg{
     auto pointer_cast(T) noexcept -> T1{
 
     }
+
+    template <class T>
+    struct ptr_limits{
+        static inline constexpr T null_value = T{};
+    };
+
 }
 #endif

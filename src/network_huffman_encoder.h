@@ -16,6 +16,7 @@
 #include <deque>
 #include "stdx.h"
 #include "network_std_container.h"
+#include <bit>
 
 namespace dg::network_huffman_encoder::constants{
 
@@ -43,6 +44,7 @@ namespace dg::network_huffman_encoder::types{
 
 namespace dg::network_huffman_encoder::precond{
 
+    static_assert(sizeof(uint8_t) == sizeof(char));
     static_assert(dg::network_compact_serializer::constants::endianness == std::endian::little);
     static_assert(std::is_unsigned_v<types::bit_container_type>);
     static_assert(-1 == ~0);
@@ -126,41 +128,45 @@ namespace dg::network_huffman_encoder::byte_array{
         return (bit_sz == 0u) ? 0u : slot(bit_sz - 1) + 1;
     }
 
-    constexpr auto true_toggle(size_t offs) -> char{
+    constexpr auto true_toggle(size_t offs) -> uint8_t{
 
-        return char{1} << offs;
+        return uint8_t{1u} << offs;
     } 
 
-    constexpr auto max_bitmask() -> char{
+    constexpr auto max_bitmask() -> uint8_t{
 
-        return ~char{0u};
+        return std::numeric_limits<uint8_t>::max();
     } 
 
-    constexpr auto false_toggle(size_t offs) -> char{
+    constexpr auto false_toggle(size_t offs) -> uint8_t{
 
         return max_bitmask() ^ true_toggle(offs);
     }
 
-    constexpr auto read(const char * op, size_t idx) -> bool{
+    constexpr auto read(const char * op, size_t idx) -> uint8_t{
 
-        return (op[slot(idx)] & true_toggle(offs(idx))) != 0;
+        return (std::bit_cast<uint8_t>(op[slot(idx)]) & true_toggle(offs(idx))) != 0u;
     }
 
-    constexpr auto read_byte(const char * op, size_t idx) -> char{
+    constexpr auto read_ubyte(const char * op, size_t idx) -> uint8_t{
         
-        auto rs         = char{0u};
+        auto rs         = size_t{0u};
         auto idx_seq    = std::make_index_sequence<CHAR_BIT>{};
 
         [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
             ([&]{
-                (void) IDX;
                 rs <<= 1;
-                rs |= static_cast<char>(read(op, idx + (CHAR_BIT - IDX - 1)));    
+                rs |= static_cast<size_t>(read(op, idx + (CHAR_BIT - IDX - 1)));    
             }(), ...);
         }(idx_seq);
 
         return rs;
-    } 
+    }
+
+    constexpr auto read_byte(const char * op, size_t idx) -> char{
+
+        return std::bit_cast<char>(read_ubyte(op, idx));
+    }
 }
 
 namespace dg::network_huffman_encoder::bit_array{

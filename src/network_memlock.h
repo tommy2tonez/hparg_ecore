@@ -23,7 +23,7 @@ namespace dg::network_memlock{
 
         using interface_t   = MemoryLockInterface<T>;
         
-        template <class T1 = T, std::enable_if_t<dg::is_ptr_v<typename T1::ptr_t>, bool> = true>
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         using ptr_t         = typename T1::ptr_t;
         
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
@@ -73,7 +73,7 @@ namespace dg::network_memlock{
         
         using interface_t   = MemoryReferenceLockInterface<T>;
 
-        template <class T1 = T, std::enable_if_t<dg::is_ptr_v<typename T1::ptr_t>, bool> = true>
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         using ptr_t         = typename T1::ptr_t;
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
