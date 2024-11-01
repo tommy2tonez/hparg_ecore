@@ -15,13 +15,15 @@
 #include <stdio.h>
 #include <filesystem>
 #include "network_raii_x.h"
-#include "stdx.h"
+#include "stdx.h" 
 
-namespace dg::network_fileio_linux{
+namespace dg::network_fileio{
+
+    //alright - one more review
 
     static constexpr inline auto DG_FILEIO_MODE                 = S_IRWXU; //user-configurable - compile-payload
     static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ     = size_t{1} << 20; //user-configurable - compile-payload
-    static constexpr inline bool NO_KERNEL_FSYS_CACHE_FLAG      = false;
+    static constexpr inline bool NO_KERNEL_FSYS_CACHE_FLAG      = true;
 
     constexpr auto is_met_direct_dgio_blksz_requirement(size_t blk_sz) noexcept -> bool{
 
@@ -50,7 +52,7 @@ namespace dg::network_fileio_linux{
             }
         };
 
-        return dg::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>{fd, destructor}; 
+        return dg::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>{fd, std::move(destructor)}; 
     }
     
     auto dg_file_size(int fd) noexcept -> std::expected<size_t, exception_t>{
@@ -75,7 +77,7 @@ namespace dg::network_fileio_linux{
         auto rs = posix_fadvise64(fd, 0u, efsz.value(), POSIX_FADV_NOREUSE);
 
         if (rs != 0){
-            return dg::network_exception::wrap_kernel_error(errno);
+            return dg::network_exception::UNIDENTIFIED_EXCEPTION;
         }
 
         return dg::network_exception::SUCCESS;
@@ -122,30 +124,48 @@ namespace dg::network_fileio_linux{
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
-        auto raii_fd = dg_open_file(fp, O_WRONLY | O_CREAT | O_TRUNC);
+        exception_t ret_code{};
+        bool remove_responsibility{};
 
-        if (!raii_fd.has_value()){
-            return raii_fd.error();
+        {
+            auto raii_fd = dg_open_file(fp, O_WRONLY | O_CREAT | O_TRUNC);
+
+            if (!raii_fd.has_value()){
+                remove_responsibility = false;
+                ret_code = raii_fd.error();
+            } else{
+                if (ftruncate64(raii_fd.value(), fsz) == -1){
+                    remove_responsibility = true;
+                    ret_code = dg::network_exception::wrap_kernel_error(errno);
+                } else{
+                    remove_responsibility = false;
+                    ret_code = dg::network_exception::SUCCESS;
+                }
+            }
         }
 
-        if (ftruncate64(raii_fd.value(), fsz) == -1){
+        if (remove_responsibility){
+            if (remove(fp) == -1){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(errno)));
+                std::abort();
+            }
+        }
+
+        return ret_code;
+    }
+
+    auto dg_remove(const char * fp) noexcept -> exception_t{
+
+        if (remove(fp) == -1){
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
         return dg::network_exception::SUCCESS;
     }
 
-    auto dg_create_cbinary(const char * fp, size_t fsz) noexcept -> exception_t{
-
-    }
-
-    auto dg_remove(const char * fp) noexcept -> exception_t{
-
-    }
-
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
-        auto raii_fd = dg_open_file(fp, O_RDONLY | O_DIRECT | O_TRUNC);
+        auto raii_fd = dg_open_file(fp, O_RDONLY | O_DIRECT);
 
         if (!raii_fd.has_value()){
             return raii_fd.error();
@@ -175,12 +195,16 @@ namespace dg::network_fileio_linux{
         if (!is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(dst))){
             return dg::network_exception::BAD_ALIGNMENT;
         }
-
+        
         if (dst_cap < fsz){
             return dg::network_exception::BUFFER_OVERFLOW;
         }
 
-        auto read_err = read(fd, dst, fsz);
+        if (lseek64(fd, 0L, SEEK_SET) == -1){
+            return dg::network_exception::wrap_kernel_error(errno);
+        }
+
+        auto read_err = read(fd, dst, fsz); 
 
         if (read_err < 0){
             return dg::network_exception::wrap_kernel_error(errno);
@@ -195,7 +219,7 @@ namespace dg::network_fileio_linux{
 
     auto dg_read_binary_indirect(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
-        auto raii_fd = dg_open_file(fp, O_RDONLY | O_TRUNC);
+        auto raii_fd = dg_open_file(fp, O_RDONLY);
 
         if (!raii_fd.has_value()){
             return raii_fd.error();
@@ -221,6 +245,10 @@ namespace dg::network_fileio_linux{
                 return err;
             }
         }
+
+        if (lseek64(fd, 0L, SEEK_SET) == -1){
+            return dg::network_exception::wrap_kernel_error(errno);
+        } 
 
         auto read_err = read(fd, dst, fsz);
 
@@ -277,7 +305,7 @@ namespace dg::network_fileio_linux{
         } 
 
         if (write_err != src_sz){
-            return dg::network_exception::RUNTIME_FILEIO_ERROR; //need to be more descriptive
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         return dg::network_exception::SUCCESS;
@@ -321,6 +349,31 @@ namespace dg::network_fileio_linux{
         }
 
         return dg_write_binary_indirect(fp, src, src_sz);
+    }
+
+    auto dg_create_cbinary(const char * fp, size_t fsz) noexcept -> exception_t{
+
+        exception_t create_err  = dg_create_binary(fp, fsz);
+
+        if (dg::network_exception::is_failed(create_err)){
+            return create_err;
+        }
+
+        auto buf                = std::make_unique<char[]>(fsz);
+        exception_t write_err   = dg_write_binary(fp, buf.get(), fsz);
+
+        if (dg::network_exception::is_failed(write_err)){
+            exception_t rm_err  = dg_remove(fp);
+
+            if (dg::network_exception::is_failed(rm_err)){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(rm_err));
+                std::abort();
+            }
+
+            return write_err;
+        }
+
+        return dg::network_exception::SUCCESS;
     }
 }
 

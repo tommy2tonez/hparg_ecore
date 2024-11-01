@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "network_uma_definition.h"
 #include "network_uma_tlb.h"
 #include "network_exception.h"
 #include "network_exception_handler.h"
@@ -31,7 +30,6 @@ namespace dg::network_uma{
     using map_resource_handle_t         = typename tlb_factory::map_resource_handle_t; 
 
     static_assert(std::is_trivial_v<map_resource_handle_t>);
-    static_assert(dg::is_immutable_resource_handle_v<map_resource_handle_t>);
 
     void init(uma_ptr_t * host_region, vma_ptr_t * device_region, device_id_t * device_id, size_t n){
 
