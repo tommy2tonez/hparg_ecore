@@ -56,8 +56,13 @@ namespace dg::network_exception_handler{
     }
 
     template <class T, std::enable_if_t<std::is_nothrow_move_constructible_v<T>, bool> = true>
-    inline auto nothrow_log(std::expected<T, exception_t>) noexcept -> T{
+    inline auto nothrow_log(std::expected<T, exception_t> arg) noexcept -> T{
 
+        if (!arg.has_value()){
+            nothrow_log(arg.error());
+        }
+
+        return std::move(arg.value());
     }
 
     template <class T, std::enable_if_t<std::is_nothrow_move_constructible_v<T>, bool> = true>

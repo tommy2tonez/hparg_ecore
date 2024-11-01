@@ -9,6 +9,16 @@
 
 namespace dg::network_fileio_chksum_x{
 
+    //when I said filesystem is harder than people think - I really meant it - even if you just call the legacy library
+    //it's extremely hard to write correct fsys for database
+    //silent corrupted filesystem (hardware corruption)
+    //silent corrupted chksum_header
+    //concurrency support (different filepaths - guarantee concurrency support - pollute the folders - it's hardly an issue in this field - comparing to other bugs)
+    //direct_io support (alignment + friends)
+    //recovery (replicas)
+    //leaks - close file inappropriately - or not delete the files + dependencies correctly (major source of bug)
+    //internal cache (app) or external cache (kernel)
+
     struct FileHeader{
         uint64_t chksum;
         uint64_t content_size;
@@ -26,7 +36,7 @@ namespace dg::network_fileio_chksum_x{
         }
     };
 
-    static inline dg::string METADATA_SUFFIX = "DGFSYS_CHKSUM_X_METADATA"; 
+    static inline std::string METADATA_SUFFIX = "DGFSYS_CHKSUM_X_METADATA"; 
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 
@@ -185,10 +195,12 @@ namespace dg::network_fileio_chksum_x{
         return dg::network_exception::SUCCESS;
     }
 
-    void dg_remove(const char * fp) noexcept{
+    auto dg_remove(const char * fp) noexcept -> exception_t{
 
         dg::network_exception_handler::nothrow_log(dg::network_fileio::dg_remove(fp));
         dg::network_exception_handler::nothrow_log(dg_internal_remove_metadata(fp));
+
+        return dg::network_exception::SUCCESS;
     }
 
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
@@ -210,7 +222,7 @@ namespace dg::network_fileio_chksum_x{
         }
         
         if (header->content_size > dst_cap){
-            return dg::network_exception::BUFFER_OVERFLOW;
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         exception_t err = dg::network_fileio::dg_read_binary_direct(fp, dst, dst_cap);
@@ -247,7 +259,7 @@ namespace dg::network_fileio_chksum_x{
         }
 
         if (header->content_size > dst_cap){
-            return dg::network_exception::BUFFER_OVERFLOW;
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         exception_t err = dg::network_fileio::dg_read_binary_indirect(fp, dst, dst_cap);

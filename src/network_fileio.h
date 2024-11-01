@@ -33,7 +33,7 @@ namespace dg::network_fileio{
     constexpr auto is_met_direct_dgio_ptralignment_requirement(uintptr_t ptr) noexcept -> bool{
 
         return ptr % DG_LEAST_DIRECTIO_BLK_SZ == 0u;
-    }  
+    }
 
     using kernel_fclose_t = void (*)(int) noexcept;
 
@@ -233,7 +233,9 @@ namespace dg::network_fileio{
         }
 
         size_t fsz = efsz.value();
-
+        
+        std::cout << dst_cap << "<>" << fsz << std::endl;
+        
         if (dst_cap < fsz){
             return dg::network_exception::BUFFER_OVERFLOW;
         }
