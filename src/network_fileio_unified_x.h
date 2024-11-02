@@ -13,7 +13,14 @@
 namespace dg::network_fileio_unified_x{
     
     //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
+    //the only vulnerability to this is the metadata - this could be solved by using atomic write - shadow + atomic rename (this is arguable - the kernel did not implement this correctly - precisely the link and unlink can be corrupted if the timing is bad) - so that's the only variable in this implementation
     
+    //the thing with filesystem is that most non-kernel engineers would attempt to reinvent the wheel by having everything in a massive file (they manage offset | directio | concurrency | load_balancing | lock | corruption_recovery | everything)
+    //they don't know that the kernel developers have been twisting and working on file system for 30 YEARS - to have that separate files for them to solve that very specific problem (don't try to outsmart them - yeah - you don't have that 30 YEARS of bug reports to solve)
+    //so don't be surpised when you use MySQL, SQL, PostGRES or friends - and have a sudden non-recoverable file corruption - these systems depend heavily on cloud uptime - did not implement any of the fail-safes  
+    //the only thing the kernel did not provide, which I think is a mistake, is a virtual file_path - such that the file_path is not a real filepath - but a parasite to another filepath - to prevent folder pollution
+    //I mean, containerization and friends are there for a reason - to containerize your application - run on a complete different OS environment - who cares aobut the namespace and stuffs anyway - if that does not impose performance constraints?
+
     struct Metadata{
         std::vector<std::string> datapath_vec;
         std::vector<bool> path_status_vec;
@@ -30,16 +37,17 @@ namespace dg::network_fileio_unified_x{
         }
     };
 
-    static inline std::string METADATA_SUFFIX           = "DGFSYS_UNIFIED_X_METADATA";
-    static inline constexpr size_t MAX_METADATA_SIZE    = size_t{1} << 10; 
+    static inline std::string METADATA_SUFFIX               = "DGFSYS_UNIFIED_X_METADATA";
+    static inline std::string METADATA_EXT                  = "bin";
+    static inline constexpr size_t MIN_DATAPATH_SIZE        = 2;
+    static inline constexpr size_t MAX_METADATA_SIZE        = size_t{1} << 10;
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 
         try{
-            auto ext            = std::filesystem::path(fp).extension();
             auto rawname        = std::filesystem::path(fp).replace_extension("").filename();
             auto new_rawname    = std::format("{}_{}", rawname.native(), METADATA_SUFFIX); 
-            auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(ext);
+            auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(METADATA_EXT);
 
             return new_fp;
         } catch (...){
@@ -114,6 +122,10 @@ namespace dg::network_fileio_unified_x{
     }
 
     auto dg_create_cbinary(const char * fp, const std::vector<std::string>& datapath_vec, size_t file_sz) noexcept -> exception_t{
+
+        if (datapath_vec.size() < MIN_DATAPATH_SIZE){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
 
         auto resource_guard_vec = std::vector<std::unique_ptr<stdx::VirtualResourceGuard>>{};
         auto metadata           = Metadata{datapath_vec, std::vector<bool>(datapath_vec.size(), true), file_sz};
@@ -281,36 +293,54 @@ namespace dg::network_fileio_unified_x{
         if (!status.value()){
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
-
-        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(fp); 
+        
+        std::expected<Metadata, exception_t> metadata = dg_internal_read_metadata(fp);
 
         if (!metadata.has_value()){
             return metadata.error();
         }
-        
-        auto exception_vec = std::vector<exception_t>{}; 
+
+        Metadata new_metadata           = metadata.value();
+        new_metadata.file_sz            = src_sz;
+        new_metadata.path_status_vec    = std::vector<bool>(metadata->datapath_vec.size(), false);
+        bool updated_flag               = false; 
 
         for (size_t i = 0u; i < metadata->datapath_vec.size(); ++i){
             metadata->path_status_vec[i] = false;
-            exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value()); 
 
-            if (dg::network_exception::is_failed(metadata_write_err)){
-                return metadata_write_err;
+            if (!updated_flag){
+                if (i + 1 == metadata->datapath_vec.size()){
+                    break;
+                }
+                exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value());
+
+                if (dg::network_exception::is_failed(metadata_write_err)){
+                    return metadata_write_err;
+                }
             }
 
-            const char * fp = metadata->datapath_vec[i].c_str();
-            exception_t err = dg::network_fileio_chksum_x::dg_write_binary_direct(fp, src, src_sz);
-            exception_vec.push_back(err);
+            const char * ffp    = metadata->datapath_vec[i].c_str();
+            exception_t err     = dg::network_fileio_chksum_x::dg_write_binary_direct(ffp, src, src_sz);
+
+            if (dg::network_exception::is_success(err)){
+                new_metadata.path_status_vec[i] = true;
+                std::vector<bool>::swap(new_metadata.path_status_vec[i], new_metadata.path_status_vec.back());
+                std::swap(new_metadata.datapath_vec[i], new_metadata.datapath_vec.back());
+                exception_t metadata_write_err  = dg_internal_write_metadata(fp, new_metadata);
+
+                if (dg::network_exception::is_failed(metadata_write_err)){
+                    return metadata_write_err;
+                }
+
+                updated_flag = true;
+            }
         }
 
-        if (std::find(exception_vec.begin(), exception_vec.end(), dg::network_exception::SUCCESS) == exception_vec.end()){
-            return dg::network_exception::RUNTIME_FILEIO_ERROR; //promote error code - runtime_fileio_error
+        if (updated_flag){
+            return dg::network_exception::SUCCESS;
         }
 
-        std::transform(exception_vec.begin(), exception_vec.end(), metadata->path_status_vec.begin(), dg::network_exception::is_success);
-        metadata->file_sz = src_sz;
-        
-        return dg_internal_write_metadata(fp, metadata.value());
+        return dg::network_exception::RUNTIME_FILEIO_ERROR;
     }
 
     auto dg_write_binary_indirect(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
@@ -331,29 +361,47 @@ namespace dg::network_fileio_unified_x{
             return metadata.error();
         }
 
-        auto exception_vec = std::vector<exception_t>{};
+        Metadata new_metadata           = metadata.value();
+        new_metadata.file_sz            = src_sz;
+        new_metadata.path_status_vec    = std::vector<bool>(metadata->datapath_vec.size(), false);
+        bool updated_flag               = false; 
 
         for (size_t i = 0u; i < metadata->datapath_vec.size(); ++i){
             metadata->path_status_vec[i] = false;
-            exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value()); 
 
-            if (dg::network_exception::is_failed(metadata_write_err)){
-                return metadata_write_err;
+            if (!updated_flag){
+                if (i + 1 == metadata->datapath_vec.size()){
+                    break;
+                }
+                exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value());
+
+                if (dg::network_exception::is_failed(metadata_write_err)){
+                    return metadata_write_err;
+                }
             }
 
-            const char * fp = metadata->datapath_vec[i].c_str();
-            exception_t err = dg::network_fileio_chksum_x::dg_write_binary_indirect(fp, src, src_sz);
-            exception_vec.push_back(err);
+            const char * ffp    = metadata->datapath_vec[i].c_str();
+            exception_t err     = dg::network_fileio_chksum_x::dg_write_binary_indirect(ffp, src, src_sz);
+
+            if (dg::network_exception::is_success(err)){
+                new_metadata.path_status_vec[i] = true;
+                std::vector<bool>::swap(new_metadata.path_status_vec[i], new_metadata.path_status_vec.back());
+                std::swap(new_metadata.datapath_vec[i], new_metadata.datapath_vec.back());
+                exception_t metadata_write_err  = dg_internal_write_metadata(fp, new_metadata);
+
+                if (dg::network_exception::is_failed(metadata_write_err)){
+                    return metadata_write_err;
+                }
+
+                updated_flag = true;
+            }
         }
 
-        if (std::find(exception_vec.begin(), exception_vec.end(), dg::network_exception::SUCCESS) == exception_vec.end()){
-            return dg::network_exception::RUNTIME_FILEIO_ERROR; //promote error_code -> runtime fileio_error
+        if (updated_flag){
+            return dg::network_exception::SUCCESS;
         }
 
-        std::transform(exception_vec.begin(), exception_vec.end(), metadata->path_status_vec.begin(), dg::network_exception::is_success);
-        metadata->file_sz = src_sz;
-        
-        return dg_internal_write_metadata(fp, metadata.value());
+        return dg::network_exception::RUNTIME_FILEIO_ERROR;
     }
 
     auto dg_write_binary(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{

@@ -26,15 +26,15 @@ namespace dg::network_fileio_chksum_x{
         }
     };
 
-    static inline std::string METADATA_SUFFIX = "DGFSYS_CHKSUM_X_METADATA"; 
+    static inline std::string METADATA_SUFFIX   = "DGFSYS_CHKSUM_X_METADATA"; 
+    static inline std::string METADATA_EXT      = "bin";
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 
         try{
-            auto ext            = std::filesystem::path(fp).extension();
             auto rawname        = std::filesystem::path(fp).replace_extension("").filename();
             auto new_rawname    = std::format("{}_{}", rawname.native(), METADATA_SUFFIX); 
-            auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(ext);
+            auto new_fp         = std::filesystem::path(fp).replace_filename(new_rawname).replace_extension(METADATA_EXT);
 
             return new_fp;
         } catch (...){
@@ -120,6 +120,10 @@ namespace dg::network_fileio_chksum_x{
         if (!status.has_value()){
             return std::unexpected(status.error());
         }
+
+        if (!status.value()){
+            std::cout << metadata_path << std::endl;
+        }        
         
         return status.value();
     }
