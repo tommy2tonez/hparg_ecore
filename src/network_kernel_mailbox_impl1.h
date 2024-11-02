@@ -841,7 +841,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    //Mom is right - this will leak - this is program defined - if exhaustion controlled another component + defined GC interval then this is not a leak
+    //max_retransmission is extensible by ping/pong (packet acked) - this is user-configurable - yet this will leak bad - because unlimited retransmission == unlinmited memory_pool - it's not easy to solve this - really 
+    //packet drop is real - it is a mandatory
+
     class RetransmissionManager: public virtual RetransmissionManagerInterface{
 
         private:

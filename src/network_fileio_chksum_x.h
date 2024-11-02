@@ -9,15 +9,7 @@
 
 namespace dg::network_fileio_chksum_x{
 
-    //when I said filesystem is harder than people think - I really meant it - even if you just call the legacy library
-    //it's extremely hard to write correct fsys for database
-    //silent corrupted filesystem (hardware corruption)
-    //silent corrupted chksum_header
-    //concurrency support (different filepaths - guarantee concurrency support - pollute the folders - it's hardly an issue in this field - comparing to other bugs)
-    //direct_io support (alignment + friends)
-    //recovery (replicas)
-    //leaks - close file inappropriately - or not delete the files + dependencies correctly (major source of bug)
-    //internal cache (app) or external cache (kernel)
+    //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
 
     struct FileHeader{
         uint64_t chksum;
@@ -25,13 +17,11 @@ namespace dg::network_fileio_chksum_x{
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-
             reflector(chksum, content_size);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-
             reflector(chksum, content_size);
         }
     };

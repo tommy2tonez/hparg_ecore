@@ -9,7 +9,7 @@
 #include "stdx.h"
 #include "network_kernel_mailbox.h"
 
-namespace dg::network_post_rest_frame::model{
+namespace dg::network_rest_frame::model{
 
     using ticket_id_t   = uint64_t;
     using clock_id_t    = uint64_t;
@@ -77,7 +77,7 @@ namespace dg::network_post_rest_frame::model{
     };
 } 
 
-namespace dg::network_post_rest_frame::server{
+namespace dg::network_rest_frame::server{
 
     struct RequestHandlerInterface{
         using Request   = model::Request;
@@ -88,7 +88,7 @@ namespace dg::network_post_rest_frame::server{
     };
 } 
 
-namespace dg::network_post_rest_frame::client{
+namespace dg::network_rest_frame::client{
 
     struct RequestContainerInterface{
         virtual ~RequestContainerInterface() noexcept = default;
@@ -192,9 +192,9 @@ namespace dg::network_post_rest_frame::client{
     }
 }
 
-namespace dg::network_post_rest_frame::server_impl1{
+namespace dg::network_rest_frame::server_impl1{
 
-    using namespace dg::network_post_rest_frame::server; 
+    using namespace dg::network_rest_frame::server; 
 
     class RequestResolverWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -259,9 +259,9 @@ namespace dg::network_post_rest_frame::server_impl1{
     };
 } 
 
-namespace dg::network_post_rest_frame::client_impl1{
+namespace dg::network_rest_frame::client_impl1{
 
-    using namespace dg::network_post_rest_frame::client; 
+    using namespace dg::network_rest_frame::client; 
 
     //its better to do exhaustion control + load balancing at a different site - this is a fast thru operation
     class RequestContainer: public virtual RequestContainerInterface{

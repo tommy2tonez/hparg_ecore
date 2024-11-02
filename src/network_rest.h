@@ -4,7 +4,7 @@
 
 #include "network_rest_frame.h"
 
-namespace dg::network_post_rest{
+namespace dg::network_rest{
 
     struct TokenGenerateBaseRequest{
         dg::string auth_payload;
@@ -545,7 +545,7 @@ namespace dg::network_post_rest{
         }
     };
     
-    class TokenGenerateResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -571,7 +571,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class TokenRefreshResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TokenRefreshResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -597,7 +597,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class TileInitResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TileInitResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -637,7 +637,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class TileInjectResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TileInjectResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -677,7 +677,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class TileSignalResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TileSignalResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -717,7 +717,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class TileCondInjectResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TileCondInjectResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -757,7 +757,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class TileMemcommitResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class TileMemcommitResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -798,7 +798,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class SysLogRetrieveResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class SysLogRetrieveResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -844,7 +844,7 @@ namespace dg::network_post_rest{
             }
     };
 
-    class UserLogRetrieveResolutor: public virtual dg::network_post_rest_frame::server::RequestHandlerInterface{
+    class UserLogRetrieveResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -891,15 +891,15 @@ namespace dg::network_post_rest{
             }
     };
 
-    auto request_token_get(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TokenGenerateRequest& request) noexcept -> std::expected<TokenGenerateResponse, exception_t>{
+    auto request_token_get(dg::network_rest_frame::client::RestControllerInterface& controller, const TokenGenerateRequest& request) noexcept -> std::expected<TokenGenerateResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response; 
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response; 
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TokenGenerateBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TokenGenerateBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(controller, std::move(base_request)); 
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(controller, std::move(base_request)); 
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -922,15 +922,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_token_refresh(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TokenRefreshRequest& request) noexcept -> std::expected<TokenRefreshResponse, exception_t>{
+    auto request_token_refresh(dg::network_rest_frame::client::RestControllerInterface& controller, const TokenRefreshRequest& request) noexcept -> std::expected<TokenRefreshResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TokenRefreshBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TokenRefreshBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(controller, std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(controller, std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -953,15 +953,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_tile_init(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TileInitRequest& request) noexcept -> std::expected<TileInitResponse, exception_t>{
+    auto request_tile_init(dg::network_rest_frame::client::RestControllerInterface& controller, const TileInitRequest& request) noexcept -> std::expected<TileInitResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileInitBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileInitBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(controller, std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(controller, std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -984,15 +984,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_tile_inject(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TileInjectRequest& request) noexcept -> std::expected<TileInjectResponse, exception_t>{
+    auto request_tile_inject(dg::network_rest_frame::client::RestControllerInterface& controller, const TileInjectRequest& request) noexcept -> std::expected<TileInjectResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
         using BaseResponse  = dg::newtork_post_rest::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileInjectBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileInjectBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -1015,15 +1015,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_tile_signal(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TileSignalRequest& request) noexcept -> std::expected<TileSignalResponse, exception_t>{
+    auto request_tile_signal(dg::network_rest_frame::client::RestControllerInterface& controller, const TileSignalRequest& request) noexcept -> std::expected<TileSignalResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileSignalBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileSignalBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -1046,15 +1046,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_tile_condinject(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TileCondInjectRequest& request) noexcept -> std::expected<TileCondInjectResponse, exception_t>{
+    auto request_tile_condinject(dg::network_rest_frame::client::RestControllerInterface& controller, const TileCondInjectRequest& request) noexcept -> std::expected<TileCondInjectResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileCondInjectBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileCondInjectBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -1077,15 +1077,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_tile_seqmemcommit(dg::network_post_rest_frame::client::RestControllerInterface& controller, const TileMemcommitRequest& request) noexcept -> std::expected<TileMemcommitResponse, exception_t>{
+    auto request_tile_seqmemcommit(dg::network_rest_frame::client::RestControllerInterface& controller, const TileMemcommitRequest& request) noexcept -> std::expected<TileMemcommitResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const TileMemcommitBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const TileMemcommitBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -1108,15 +1108,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_syslog_get(dg::network_post_rest_frame::client::RestControllerInterface& controller, const SysLogRetrieveRequest& request) noexcept -> std::expected<SysLogRetrieveResponse, exception_t>{
+    auto request_syslog_get(dg::network_rest_frame::client::RestControllerInterface& controller, const SysLogRetrieveRequest& request) noexcept -> std::expected<SysLogRetrieveResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const SysLogRetrieveBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const SysLogRetrieveBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -1139,15 +1139,15 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto request_usrlog_get(dg::network_post_rest_frame::client::RestControllerInterface& controller, const UserLogRetrieveRequest& request) noexcept -> std::expected<UserLogRetrieveResponse, exception_t>{
+    auto request_usrlog_get(dg::network_rest_frame::client::RestControllerInterface& controller, const UserLogRetrieveRequest& request) noexcept -> std::expected<UserLogRetrieveResponse, exception_t>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         auto bstream        = dg::string(dg::network_compact_serializer::integrity_size(static_cast<const UserLogRetrieveBaseRequest&>(request)), ' ');
         dg::network_compact_serializer::integrity_serialize_into(bstream.data(), static_cast<const UserLogRetrieveBaseRequest&>(request));
         auto base_request   = BaseRequest{request.uri, request.requestor, std::move(bstream), request.timeout};
-        std::expected<BaseResponse, exception_t> base_response = dg::network_post_rest_frame::client::request(std::move(base_request));
+        std::expected<BaseResponse, exception_t> base_response = dg::network_rest_frame::client::request(std::move(base_request));
 
         if (!base_response.has_value()){
             return std::unexpected(base_response.error());
@@ -1170,10 +1170,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_token_get(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TokenGenerateRequest>& req_vec) noexcept -> dg::vector<std::expected<TokenGenerateResponse, exception_t>>{
+    auto requestmany_token_get(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TokenGenerateRequest>& req_vec) noexcept -> dg::vector<std::expected<TokenGenerateResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1186,7 +1186,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
         
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1213,10 +1213,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_token_refresh(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TokenRefreshRequest>& req_vec) noexcept -> dg::vector<std::expected<TokenRefreshResponse, exception_t>>{
+    auto requestmany_token_refresh(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TokenRefreshRequest>& req_vec) noexcept -> dg::vector<std::expected<TokenRefreshResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1229,7 +1229,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1256,10 +1256,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_tile_init(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileInitRequest>& req_vec) noexcept -> dg::vector<std::expected<TileInitResponse, exception_t>>{
+    auto requestmany_tile_init(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileInitRequest>& req_vec) noexcept -> dg::vector<std::expected<TileInitResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1272,7 +1272,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1299,10 +1299,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_tile_inject(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileInjectRequest>& req_vec) noexcept -> dg::vector<std::expected<TileInjectResponse, exception_t>>{
+    auto requestmany_tile_inject(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileInjectRequest>& req_vec) noexcept -> dg::vector<std::expected<TileInjectResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1315,7 +1315,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1342,10 +1342,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_tile_signal(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileSignalRequest>& req_vec) noexcept -> dg::vector<std::expected<TileSignalResponse, exception_t>>{
+    auto requestmany_tile_signal(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileSignalRequest>& req_vec) noexcept -> dg::vector<std::expected<TileSignalResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1358,7 +1358,7 @@ namespace dg::network_post_rest{
             request_vec.push_back(std::move(base_request));
         }
         
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1385,10 +1385,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_tile_condinject(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileCondInjectRequest>& req_vec) noexcept -> dg::vector<std::expected<TileCondInjectResponse, exception_t>>{
+    auto requestmany_tile_condinject(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileCondInjectRequest>& req_vec) noexcept -> dg::vector<std::expected<TileCondInjectResponse, exception_t>>{
         
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1401,7 +1401,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         } 
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1428,10 +1428,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_tile_seqmemcommit(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileMemcommitRequest>& req_vec) noexcept -> dg::vector<std::expected<TileMemcommitResponse, exception_t>>{
+    auto requestmany_tile_seqmemcommit(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<TileMemcommitRequest>& req_vec) noexcept -> dg::vector<std::expected<TileMemcommitResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1444,7 +1444,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1471,10 +1471,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_syslog_get(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<SysLogRetrieveRequest>& req_vec) noexcept -> dg::vector<std::expected<SysLogRetrieveResponse, exception_t>>{
+    auto requestmany_syslog_get(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<SysLogRetrieveRequest>& req_vec) noexcept -> dg::vector<std::expected<SysLogRetrieveResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1487,7 +1487,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){
@@ -1514,10 +1514,10 @@ namespace dg::network_post_rest{
         return rs;
     }
 
-    auto requestmany_usrlog_get(dg::network_post_rest_frame::client::RestControllerInterface& controller, const dg::vector<UserLogRetrieveRequest>& req_vec) noexcept -> dg::vector<std::expected<UserLogRetrieveResponse, exception_t>>{
+    auto requestmany_usrlog_get(dg::network_rest_frame::client::RestControllerInterface& controller, const dg::vector<UserLogRetrieveRequest>& req_vec) noexcept -> dg::vector<std::expected<UserLogRetrieveResponse, exception_t>>{
 
-        using BaseRequest   = dg::network_post_rest_frame::model::Request;
-        using BaseResponse  = dg::network_post_rest_frame::model::Response;
+        using BaseRequest   = dg::network_rest_frame::model::Request;
+        using BaseResponse  = dg::network_rest_frame::model::Response;
 
         dg::vector<BaseRequest> base_request_vec{};
         dg::vector<std::expected<BaseResponse, exception_t>> base_response_vec{};
@@ -1530,7 +1530,7 @@ namespace dg::network_post_rest{
             base_request_vec.push_back(std::move(base_request));
         }
 
-        base_response_vec   = dg::network_post_rest_frame::client::request_many(std::move(base_request_vec));
+        base_response_vec   = dg::network_rest_frame::client::request_many(std::move(base_request_vec));
 
         for (std::expected<BaseResponse, exception_t>& base_response: base_response_vec){
             if (base_response.has_value()){

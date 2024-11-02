@@ -12,23 +12,12 @@
 
 namespace dg::network_fileio_unified_x{
     
-    //this is very hard to write - because metadata could be compromised - 
-    //let's for now - assume that the corruption rate is correlated to the written/read data - such that this unified_x reduces the hardware corruption rate (increase recovery_rate) to header_sz / written_sz | this is an important note
-    //WLOG, assume 512 bytes metadata - and 10 MB for each binary file - then the not-recoverable ratio is 1/20000 * corruption_rate/byte - this is reasonably acceptable
-    //this is only to solve that very specific problem
-    //for now:
-    //there are decisions that are hard to make
-    //an inverse function of create (remove) is atomic - this requires a few functions to be noexcept - because it would leak very bad otherwise + break logical assumptions across the application - it's better to compromise the logic bug here
-    //write partially guarantees atomicity - a failed operation  leave the underlying data in either the original state or the safe-corrupted-state (such that the data is compromised yet an attempt to access the data would result in an error)
-    //a SUCCESS write guarantees the next SUCCESS read to read the original data (this is fileio_chksum feature) 
-    //std memory exhaustion needs to be handled
-    //dg_file_exists could be cached to avoid fsys_call (this assumption assumes that the application has unique reference to the object) - this is not an optimizable by directly calling get_metadata
-    //filepath could be a virtual filepath - reinventing the kernel fsystem - this is a nightmare - yet this is the least of our worries in our field of work
+    //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
     
     struct Metadata{
         std::vector<std::string> datapath_vec;
         std::vector<bool> path_status_vec;
-        std::optional<uint64_t> file_sz;
+        uint64_t file_sz;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
@@ -41,7 +30,7 @@ namespace dg::network_fileio_unified_x{
         }
     };
 
-    static inline std::string METADATA_SUFFIX           = "DFSYS_UNIFIED_X_METADATA";
+    static inline std::string METADATA_SUFFIX           = "DGFSYS_UNIFIED_X_METADATA";
     static inline constexpr size_t MAX_METADATA_SIZE    = size_t{1} << 10; 
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
@@ -203,11 +192,7 @@ namespace dg::network_fileio_unified_x{
             return std::unexpected(metadata.error());
         }
 
-        if (!metadata->file_sz.has_value()){
-            return std::unexpected(dg::network_exception::RUNTIME_FILEIO_ERROR);
-        }
-
-        return metadata->file_sz.value();
+        return metadata->file_sz;
     } 
 
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
@@ -302,18 +287,17 @@ namespace dg::network_fileio_unified_x{
         if (!metadata.has_value()){
             return metadata.error();
         }
-         
-        std::fill(metadata->path_status_vec.begin(), metadata->path_status_vec.end(), false);
-        metadata->file_sz = std::nullopt;
-        exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value());
         
-        if (dg::network_exception::is_failed(metadata_write_err)){
-            return metadata_write_err;
-        }
-
         auto exception_vec = std::vector<exception_t>{}; 
 
         for (size_t i = 0u; i < metadata->datapath_vec.size(); ++i){
+            metadata->path_status_vec[i] = false;
+            exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value()); 
+
+            if (dg::network_exception::is_failed(metadata_write_err)){
+                return metadata_write_err;
+            }
+
             const char * fp = metadata->datapath_vec[i].c_str();
             exception_t err = dg::network_fileio_chksum_x::dg_write_binary_direct(fp, src, src_sz);
             exception_vec.push_back(err);
@@ -347,17 +331,16 @@ namespace dg::network_fileio_unified_x{
             return metadata.error();
         }
 
-        std::fill(metadata->path_status_vec.begin(), metadata->path_status_vec.end(), false);
-        metadata->file_sz = std::nullopt;
-        exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value());
-        
-        if (dg::network_exception::is_failed(metadata_write_err)){
-            return metadata_write_err;
-        }
-
         auto exception_vec = std::vector<exception_t>{};
 
         for (size_t i = 0u; i < metadata->datapath_vec.size(); ++i){
+            metadata->path_status_vec[i] = false;
+            exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value()); 
+
+            if (dg::network_exception::is_failed(metadata_write_err)){
+                return metadata_write_err;
+            }
+
             const char * fp = metadata->datapath_vec[i].c_str();
             exception_t err = dg::network_fileio_chksum_x::dg_write_binary_indirect(fp, src, src_sz);
             exception_vec.push_back(err);

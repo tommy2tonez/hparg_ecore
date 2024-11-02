@@ -19,7 +19,7 @@
 
 namespace dg::network_fileio{
 
-    //alright - one more review
+    //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
 
     static constexpr inline auto DG_FILEIO_MODE                 = S_IRWXU; //user-configurable - compile-payload
     static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ     = size_t{1} << 20; //user-configurable - compile-payload
@@ -233,9 +233,7 @@ namespace dg::network_fileio{
         }
 
         size_t fsz = efsz.value();
-        
-        std::cout << dst_cap << "<>" << fsz << std::endl;
-        
+                
         if (dst_cap < fsz){
             return dg::network_exception::BUFFER_OVERFLOW;
         }
