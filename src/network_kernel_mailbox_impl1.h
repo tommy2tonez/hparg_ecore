@@ -129,17 +129,17 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint8_t retransmission_count;
         uint8_t priority;
         uint8_t kind; 
-        // dg::fixed_cap_vector<timepoint_t, MAX_STAMP_SZ> port_stamps;  //TODOs:
         std::array<timepoint_t, 16> port_stamps;
+        uint8_t port_stamp_sz; 
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(fr_addr, to_addr, id, retransmission_count, priority, kind, port_stamps);
+            reflector(fr_addr, to_addr, id, retransmission_count, priority, kind, port_stamps, port_stamp_sz);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(fr_addr, to_addr, id, retransmission_count, priority, kind, port_stamps);
+            reflector(fr_addr, to_addr, id, retransmission_count, priority, kind, port_stamps, port_stamp_sz);
         }
     };
 
@@ -207,6 +207,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
     
+    class HeartBeatServiceInterface{
+        
+        public:
+
+            virtual ~HeartBeatServiceInterface() noexcept = default;
+            virtual auto heartbeat(Address) noexcept -> exception_t = 0;
+            virtual auto last(Address) noexcept -> std::optional<std::chrono::nanoseconds> = 0;
+    };
+
     class SchedulerInterface{
 
         public:
@@ -215,7 +224,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual auto schedule(Address)  noexcept -> timepoint_t = 0;
             virtual void feedback(Address, timelapsed_t) noexcept = 0;
     };
-
+ 
     class IDGeneratorInterface{
 
         public:
@@ -237,7 +246,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~RetransmissionManagerInterface() noexcept = default;
-            virtual void add_retriable(Packet) noexcept = 0;
+            virtual auto add_retriable(Packet) noexcept -> exception_t = 0;
             virtual void ack(global_packet_id_t) noexcept = 0;
             virtual auto get_retriables() noexcept -> dg::vector<Packet> = 0;
     };
@@ -251,12 +260,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual auto pop() noexcept -> std::optional<Packet> = 0;
     };
 
-    class InBoundControllerInterface{
+    class InBoundIDControllerInterface{
 
         public:
 
-            virtual ~InBoundControllerInterface() noexcept = default;
+            virtual ~InBoundIDControllerInterface() noexcept = default;
             virtual auto thru(global_packet_id_t) noexcept -> bool = 0;
+    };
+
+    class InBoundTrafficControllerInterface{
+
+        public:
+
+            virtual ~InBoundTrafficControllerInterface() noexcept = default;
+            virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
+            virtual void reset() noexcept = 0;
     };
 }
 
@@ -289,7 +307,7 @@ namespace dg::network_kernel_mailbox_impl1::utility{
         return rs;
     } 
 
-    static auto unix_timestamp() noexcept -> uint64_t{
+    static auto utc_timestamp() noexcept -> uint64_t{
 
         std::chrono::nanoseconds ts = stdx::utc_timestamp();
         return ts.count();
@@ -657,6 +675,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         rs.priority             = pkt.priority;
         rs.kind                 = constants::rts_ack;
         rs.port_stamps          = pkt.port_stamps;
+        rs.port_stamp_sz        = pkt.port_stamp_sz;
 
         return rs;
     }
@@ -664,7 +683,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     static auto get_transit_time(const model::Packet& pkt) noexcept -> types::timelapsed_t{
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (pkt.port_stamps.size() % 2 != 0){
+            if (pkt.port_stamp_sz % 2 != 0){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
@@ -672,7 +691,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
         types::timelapsed_t lapsed{};
 
-        for (size_t i = 1; i < pkt.port_stamps.size(); i += 2){
+        for (size_t i = 1; i < pkt.port_stamp_sz; i += 2){
             lapsed += utility::timelapsed(pkt.port_stamps[i - 1], pkt.port_stamps[i]);
         }
 
@@ -682,6 +701,53 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
     
+    class HeartBeatSerivce: public virtual HeartBeatServiceInterface{
+
+        private:
+
+            dg::unordered_unstable_map<Address, std::chrono::nanoseconds> heartbeat_map;
+            size_t capacity;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            HeartBeatService(dg::unordered_unstable_map<Address, std::chrono::nanoseconds> heartbeat_map,
+                             size_t capacity,
+                             std::unique_ptr<std::mutex> mtx) noexcept: heartbeat_map(std::move(heartbeat_map)),
+                                                                        capacity(capacity),
+                                                                        mtx(std::move(mtx)){}
+            
+            auto heartbeat(Address addr) noexcept -> exception_t{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto map_ptr    = this->heartbeat_map.find(addr);
+
+                if (map_ptr != this->heartbeat_map.end()){
+                    map_ptr->second = stdx::utc_timestamp();
+                    return dg::network_exception::SUCCESS;
+                }
+
+                if (this->heartbeat_map.size() == this->capacity){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                this->heartbeat_map[addr] = stdx::utc_timestamp();
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto last(Address addr) noexcept -> std::optional<std::chrono::nanoseconds>{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto map_ptr    = this->heartbeat_map.find(addr);
+
+                if (map_ptr == this->heartbeat_map.end()){
+                    return std::nullopt;
+                }
+
+                return map_ptr->second;
+            }
+    };
+
     class StdScheduler: public virtual SchedulerInterface{
 
         private:
@@ -731,11 +797,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 if (this->last_sched.find(addr) == this->last_sched.end()){
-                    this->last_sched[addr] = utility::unix_timestamp();
+                    this->last_sched[addr] = utility::utc_timestamp();
                 }
 
                 auto tentative_sched    = this->last_sched[addr] + utility::frequency_to_period(this->frequency[addr]);
-                auto MIN_SCHED          = utility::unix_timestamp();
+                auto MIN_SCHED          = utility::utc_timestamp();
                 auto MAX_SCHED          = MIN_SCHED + this->max_q_time;
                 this->last_sched[addr]    = std::clamp(tentative_sched, MIN_SCHED, MAX_SCHED);
 
@@ -777,7 +843,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto schedule(Address) noexcept -> timepoint_t{
 
-                return utility::unix_timestamp();
+                return utility::utc_timestamp();
             }
 
             void feedback(Address addr, timelapsed_t) noexcept{
@@ -836,49 +902,54 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 pkt.priority                = 0u;
                 pkt.kind                    = constants::request;
                 pkt.port_stamps             = {};
+                pkt.port_stamp_sz           = 0u;
 
                 return pkt;
             }
     };
 
-    //max_retransmission is extensible by ping/pong (packet acked) - this is user-configurable - yet this will leak bad - because unlimited retransmission == unlinmited memory_pool - it's not easy to solve this - really 
-    //packet drop is real - it is a mandatory
-
     class RetransmissionManager: public virtual RetransmissionManagerInterface{
 
         private:
 
-            dg::deque<std::pair<timepoint_t, Packet>> pkt_deque;
+            dg::deque<std::pair<std::chrono::nanoseconds, Packet>> pkt_deque;
             std::unique_ptr<data_structure::unordered_set_interface<global_packet_id_t>> acked_id_hashset;
-            timelapsed_t transmission_delay_time;
+            std::chrono::nanoseconds transmission_delay_time;
             size_t max_retransmission;
+            size_t capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            RetransmissionManager(dg::deque<std::pair<timepoint_t, Packet>> pkt_deque,
+            RetransmissionManager(dg::deque<std::pair<std::chrono::nanoseconds, Packet>> pkt_deque,
                                   std::unique_ptr<data_structure::unordered_set_interface<global_packet_id_t>> acked_id_hashset,
-                                  timelapsed_t transmission_delay_time,
+                                  std::chrono::nanoseconds transmission_delay_time,
                                   size_t max_retransmission,
+                                  size_t capacity,
                                   std::unique_ptr<std::mutex> mtx) noexcept: pkt_deque(std::move(pkt_deque)),
                                                                              acked_id_hashset(std::move(acked_id_hashset)),
                                                                              transmission_delay_time(transmission_delay_time),
                                                                              max_retransmission(max_retransmission),
+                                                                             capacity(capacity),
                                                                              mtx(std::move(mtx)){}
 
-            void add_retriable(Packet pkt) noexcept{
+            auto add_retriable(Packet pkt) noexcept -> exception_t{
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
 
-                if (pkt.retransmission_count == this->max_retransmission){
-                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::LOST_RETRANSMISSION));
-                    return;
+                if (this->pkt_deque.size() == this->capacity){
+                    return dg::network_exception::BAD_RETRANSMISSION;
+                }
+
+                if (pkt.retransmission_count >= this->max_retransmission){
+                    return dg::network_exception::BAD_RETRANSMISSION;
                 }
 
                 pkt.retransmission_count += 1;
                 pkt.priority += 1;
-                timepoint_t ts = utility::unix_timestamp();
-                this->pkt_deque.push_back(std::make_pair(std::move(ts), std::move(pkt))); 
+                this->pkt_deque.push_back(std::make_pair(stdx::utc_timestamp(), std::move(pkt))); 
+
+                return dg::network_exception::SUCCESS;
             }
 
             void ack(global_packet_id_t pkt_id) noexcept{
@@ -890,8 +961,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto get_retriables() noexcept -> dg::vector<Packet>{
 
                 auto lck_grd    = stdx::lock_guard(*this->mtx);
-                auto ts         = utility::unix_timestamp();
-                auto lb_key     = std::make_pair(utility::subtract_timepoint(ts, this->transmission_delay_time), Packet{});
+                auto ts         = utility::utc_timestamp() - this->transmission_delay_time;
+                auto lb_key     = std::make_pair(ts, Packet{});
                 auto last       = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), lb_key, [](const auto& lhs, const auto& rhs){return lhs.first < rhs.first;});
                 auto rs         = dg::vector<Packet>(); 
                 
@@ -903,6 +974,135 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->pkt_deque.erase(this->pkt_deque.begin(), last);
                 return rs;
+            }
+    };
+
+    class HeartBeatRetransmissionManager: public virtual RetransmissionManagerInterface{
+
+        private:
+
+            dg::deque<std::pair<std::chrono::nanoseconds, Packet>> pkt_deque;
+            std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> acked_id_hashset;
+            std::shared_ptr<HeartBeatServiceInterface> heartbeat_service;
+            std::chrono::nanoseconds retransmissable_dur;
+            std::chrono::nanoseconds wait_dur;
+            size_t capacity;
+            size_t max_retransmission;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            HeartBeatRetranmissionManager(dg::deque<std::pair<std::chrono::nanoseconds, Packet>> pkt_deque, 
+                                          std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> acked_id_hashset,
+                                          std::shared_ptr<packet_controller::HeartBeatServiceInterface> heartbeat_service,
+                                          std::chrono::nanoseconds retransmissable_dur,
+                                          std::chrono::nanoseconds wait_dur,
+                                          size_t capacity,
+                                          size_t max_retransmission,
+                                          std::unique_ptr<std::mutex> mtx) noexcept: pkt_deque(std::move(pkt_deque)),
+                                                                                     acked_id_hashset(std::move(acked_id_hashset)),
+                                                                                     heartbeat_service(std::move(heartbeat_service)),
+                                                                                     retransmissable_dur(std::move(retransmissable_dur)),
+                                                                                     wait_dur(std::move(wait_dur)),
+                                                                                     capacity(capacity),
+                                                                                     max_retransmission(max_retransmission),
+                                                                                     mtx(std::move(mtx)){}
+
+
+            auto add_retriable(Packet pkt) noexcept -> exception_t{
+
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+
+                if (this->pkt_deque.size() == this->capacity){
+                    return dg::network_exception::BAD_RETRANSMISSION;
+                }
+
+                if (pkt.retransmission_count >= this->max_retransmission){
+                    return dg::network_exception::BAD_RETRANSMISSION;
+                }
+
+                std::chrono::nanoseconds now = stdx::utc_timestamp();
+                std::optional<std::chrono::nanoseconds> last_contact = this->heartbeat_service->last(pkt.id);
+                
+                if (!last_contact.has_value()){
+                    return dg::network_exception::BAD_RETRANSMISSION;
+                }
+                
+                std::chrono::nanoseconds lapsed = now - last_contact.value();
+
+                if (lapsed > this->retransmissable_dur){
+                    return dg::network_exception::BAD_RETRANSMISSION;
+                }
+
+                pkt.retranmission_count += 1;
+                pkt.priority            += 1;
+                this->pkt_deque.push_back(std::make_pair(now, std::move(pkt)));
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            void ack(global_packet_id_t pkt_id) noexcept{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                this->acked_id_hashset->insert(std::move(pkt_id));
+            }
+
+            auto get_retriables() noexcept -> dg::vector<Packet>{
+                
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto ts         = stdx::utc_timestamp() - this->wait_dur;
+                auto lb_key     = std::make_pair(ts, Packet{});
+                auto last       = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), lb_key, [](const auto& lhs, const auto& rhs){return lhs.first < rhs.first;});
+                auto rs         = dg::vector<Packet>{};
+
+                for (auto it = this->pkt_deque.begin(); it != last; ++it){
+                    if (!this->acked_id_hashset->contains(it->second.id)){
+                        rs.push_back(std::move(it->second));
+                    }
+                }
+
+                this->pkt_deque.erase(this->pkt_deque.begin(), last);
+                return rs;
+            }
+    };
+
+    class RecoverableRetransmissionManager: public virtual RetransmissionManagerInterface{
+
+        private:
+
+            std::unique_ptr<RetranmissionManagerInterface> base;
+            std::unique_ptr<RetranmissionManagerInterface> other;
+        
+        public:
+
+            RecoverableRetransmissionManager(std::unique_ptr<RetransmissionManagerInterface> base, 
+                                             std::unique_ptr<RetransmissionManagerInterface> other) noexcept: base(std::move(base)),
+                                                                                                              other(std::move(other)){}
+                                                                                                               
+            auto add_retriable(Packet packet) noexcept -> exception_t{
+
+                exception_t err = this->base->add_retriable(packet);
+
+                if (dg::network_exception::is_success(err)){
+                    return err;
+                }
+
+                return this->other->add_retriable(std::move(packet));
+            }
+
+            void ack(global_packet_id_t id) noexcept{
+
+                this->base->ack(id);
+                this->other->ack(std::move(id));
+            }
+
+            auto get_retriables() noexcept -> dg::vector<Packet>{
+
+                dg::vector<Packet> rs_1 = this->base->get_retriables();
+                dg::vector<Packet> rs_2 = this->other->get_retriables();
+                rs_1.insert(rs_1.end(), std::make_move_iterator(rs_2.begin()), std::make_move_iterator(rs_2.end()));
+
+                return rs_1;
             }
     };
 
@@ -977,7 +1177,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return std::nullopt;
                 }
 
-                if (this->packet_vec.front().sched_time > utility::unix_timestamp()){
+                if (this->packet_vec.front().sched_time > utility::utc_timestamp()){
                     return std::nullopt;
                 }
 
@@ -1030,7 +1230,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class InBoundController: public virtual InBoundControllerInterface{
+    class InBoundIDController: public virtual InBoundIDControllerInterface{
         
         private:
 
@@ -1039,7 +1239,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            InBoundController(std::unique_ptr<data_structure::unordered_set_interface<global_packet_id_t>> id_hashset,
+            InBoundIDController(std::unique_ptr<data_structure::unordered_set_interface<global_packet_id_t>> id_hashset,
                               std::unique_ptr<std::mutex> mtx) noexcept: id_hashset(std::move(id_hashset)),
                                                                          mtx(std::move(mtx)){}
             
@@ -1121,7 +1321,86 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    class InBoundTrafficController: public virtual InBoundTrafficControllerInterface{
+
+        private:
+
+            dg::unordered_unstable_map<Address, size_t> address_counter_map;
+            size_t address_cap;
+            size_t global_cap;
+            size_t max_address_cap;
+            size_t global_counter;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            InBoundTrafficController(dg::unordered_unstable_map<Address, size_t> address_counter_map,
+                                     size_t address_cap,
+                                     size_t global_cap,
+                                     size_t max_address_cap,
+                                     size_t global_counter,
+                                     std::unique_ptr<std::mutex> mtx) noexcept: address_counter_map(std::move(address_counter_map)),
+                                                                                address_cap(address_cap),
+                                                                                global_cap(global_cap),
+                                                                                max_address_cap(max_address_cap),
+                                                                                global_counter(global_counter),
+                                                                                mtx(std::move(mtx)){}
+
+            auto thru(Address addr) noexcept -> std::expected<bool, exception_t>{
+
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+
+                if (this->global_counter == this->global_cap){
+                    return false;
+                }
+
+                auto map_ptr = this->address_counter_map.find(addr);
+
+                if (map_ptr == this->address_counter_map.end()){
+                    if (this->address_counter_map.size() == this->max_address_cap){
+                        return false;
+                    }
+
+                    auto [emplace_ptr, status] = this->address_counter_map.emplace(std::make_pair(addr, 0u));
+                    dg::network_exception_handler::dg_assert(status);
+                    map_ptr = emplace_ptr;
+                }
+
+                if (map_ptr->second == this->address_cap){
+                    return false;
+                }
+
+                map_ptr->second += 1;
+                this->global_counter += 1;
+
+                return true;
+            }
+
+            void reset() noexcept{
+
+                auto lck_grd = stdx::lock_guard(*this->mtx);
+                this->address_counter_map.clear();
+                this->global_counter = 0u;
+            }
+    };
+
     struct ComponentFactory{
+
+        static auto get_heartbeat_service(size_t max_address_range) -> std::unique_ptr<HeartBeatServiceInterface>{
+
+            const size_t MIN_MAX_ADDRESS_RANGE = 0u;
+            const size_t MAX_MAX_ADDRESS_RANGE = size_t{1} << 20;
+
+            if (std::clamp(max_address_range, MIN_MAX_ADDRESS_RANGE, MAX_MAX_ADDRESS_RANGE) != max_address_range){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            auto heartbeat_map = dg::unordered_unstable_map<Address, std::chrono::nanoseconds>();
+            heartbeat_map.reserve(max_address_range);
+            auto mtx = std::make_unique<std::mutex>();
+
+            return std::make_unique<HeartBeatService>(std::move(heartbeat_map), max_address_range, std::move(mtx));
+        }
 
         static auto get_std_scheduler(double max_frequency, double min_frequency,
                                       double learning_rate, double epsilon, 
@@ -1194,14 +1473,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<PacketGenerator>(get_id_generator(factory_id), factory_addr);
         }
 
-        static auto get_retransmission_manager(timelapsed_t delay, size_t max_retransmission, size_t idhashset_cap) -> std::unique_ptr<RetransmissionManagerInterface>{
+        static auto get_static_retransmission_manager(std::chrono::nanoseconds delay, size_t max_retransmission, size_t idhashset_cap, size_t retransmission_cap) -> std::unique_ptr<RetransmissionManagerInterface>{
 
             using namespace std::chrono_literals; 
 
-            const timelapsed_t MIN_DELAY        = utility::to_timelapsed(1s);
-            const timelapsed_t MAX_DELAY        = utility::to_timelapsed(60s);
-            const size_t MIN_MAX_RETRANSMISSION = 0u;
-            const size_t MAX_MAX_RETRANSMISSION = 32u;
+            const std::chrono::nanoseconds MIN_DELAY    = std::chrono::duration_cast<std::chrono::nanoseconds>(1s);
+            const std::chrono::nanoseconds MAX_DELAY    = std::chrono::duration_cast<std::chrono::nanoseconds>(60s);
+            const size_t MIN_MAX_RETRANSMISSION         = 0u;
+            const size_t MAX_MAX_RETRANSMISSION         = 32u;
+            const size_t MIN_RETRANSMISSION_CAP         = 0u;
+            const size_t MAX_RETRANSMISSION_CAP         = size_t{1} << 20;
 
             if (std::clamp(delay, MIN_DELAY, MAX_DELAY) != delay){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -1211,12 +1492,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<RetransmissionManager>(dg::deque<std::pair<timepoint_t, Packet>>{},
+            if (std::clamp(retransmission_cap, MIN_RETRANSMISSION_CAP, MAX_RETRANSMISSION_CAP) != retransmission_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<RetransmissionManager>(dg::deque<std::pair<std::chrono::nanoseconds, Packet>>{},
                                                            data_structure::Factory::get_temporal_unordered_set<global_packet_id_t>(idhashset_cap),
                                                            delay, 
                                                            max_retransmission,
+                                                           retransmission_cap,
                                                            std::make_unique<std::mutex>());
-        } 
+        }
 
         static auto get_prioritized_packet_container() -> std::unique_ptr<PacketContainerInterface>{
 
@@ -1235,9 +1521,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                               std::make_unique<std::mutex>());
         }
 
-        static auto get_inbound_controller(size_t idhashset_cap) -> std::unique_ptr<InBoundControllerInterface>{
+        static auto get_inbound_controller(size_t idhashset_cap) -> std::unique_ptr<InBoundIDControllerInterface>{
 
-            return std::make_unique<InBoundController>(data_structure::Factory::get_temporal_unordered_set<global_packet_id_t>(idhashset_cap), 
+            return std::make_unique<InBoundIDController>(data_structure::Factory::get_temporal_unordered_set<global_packet_id_t>(idhashset_cap), 
                                                        std::make_unique<std::mutex>());
         }
 
@@ -1297,7 +1583,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     return false;
                 } 
 
-                // cur->port_stamps.push_back(utility::unix_timestamp()); //TODOs:
+                cur->port_stamps[cur->port_stamp_sz++] = utility::utc_timestamp();
                 dg::string bstream = utility::serialize_packet(std::move(cur.value()));
                 exception_t err = socket_service::send_noblock(*this->socket, cur->to_addr, bstream.data(), bstream.size());
                 
@@ -1333,7 +1619,11 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 for (Packet& packet: packets){
                     this->outbound_packet_container->push(packet);
-                    this->retransmission_manager->add_retriable(std::move(packet));
+                    exception_t err = this->retransmission_manager->add_retriable(std::move(packet));
+
+                    if (dg::network_exception::is_failed(err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                    }
                 }
 
                 return true;
@@ -1347,8 +1637,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager;
             std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container;
             std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container;
-            std::shared_ptr<packet_controller::InBoundControllerInterface> ib_controller;
+            std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller;
             std::shared_ptr<packet_controller::SchedulerInterface> scheduler;
+            std::shared_ptr<packet_controller::HeartBeatServiceInterface> heartbeat_service;
+            std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic_controller;
             std::shared_ptr<model::SocketHandle> socket;
         
         public:
@@ -1356,13 +1648,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             InBoundWorker(std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager,
                           std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
                           std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
-                          std::shared_ptr<packet_controller::InBoundControllerInterface> ib_controller,
+                          std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
                           std::shared_ptr<packet_controller::SchedulerInterface> scheduler,
+                          std::shared_ptr<packet_controller::HeartBeatServiceInterface> heartbeat_service,
+                          std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic_controller,
                           std::shared_ptr<model::SocketHandle> socket) noexcept: retransmission_manager(std::move(retransmission_manager)),
                                                                                  ob_packet_container(std::move(ob_packet_container)),
                                                                                  ib_packet_container(std::move(ib_packet_container)),
-                                                                                 ib_controller(std::move(ib_controller)),
+                                                                                 ib_id_controller(std::move(ib_id_controller)),
                                                                                  scheduler(std::move(scheduler)),
+                                                                                 heartbeat_service(std::move(heartbeat_service)),
+                                                                                 inbound_traffic_controller(std::move(inbound_traffic_controller)),
                                                                                  socket(std::move(socket)){}
             
             bool run_one_epoch() noexcept{
@@ -1386,22 +1682,45 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 }
                 
                 pkt = std::move(epkt.value());
+                std::expected<bool, exception_t> is_thru_traffic = this->inbound_traffic_controller->thru(pkt.fr_addr);
                 
-                if (!this->ib_controller->thru(pkt.id)){
+                if (!is_thru_traffic.has_value()){
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(is_thru_traffic.error()));
+                    return true;
+                }
+
+                if (!is_thru_traffic.value()){
+                    return true;
+                }
+
+                bool is_thru_id = this->ib_id_controller->thru(pkt.id);
+
+                if (!is_thru_id){
                     if (pkt.kind == constants::request){
                         auto ack_pkt = packet_service::request_to_ack(pkt);
                         this->ob_packet_container->push(std::move(ack_pkt));
+                        return true;
                     }
+                    
+                    if (pkt.kind == constants::rts_ack){
+                        exception_t heartbeat_err = this->heartbeat_service->heartbeat(pkt.fr_addr);
+
+                        if (dg::network_exception::is_failed(heartbeat_err)){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(heartbeat_err));
+                        }
+
+                        return true;
+                    }
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+
                     return true;
                 }
 
-                // pkt.port_stamps.push_back(utility::unix_timestamp());  //TODOs:
-
-                if (pkt.kind == constants::rts_ack){
-                    this->retransmission_manager->ack(pkt.id); //I was thinking about vectorization of ack packet - yet I think that's a premature optimization not yet to make (after profiling - second cut) - because the overhead of ack_packet / true_packet ~= 10% - 15% which will continue to decrease in the future
-                    this->scheduler->feedback(pkt.fr_addr, packet_service::get_transit_time(pkt));
-                    return true;
-                }
+                pkt.port_stamps[pkt.port_stamp_sz++] = utility::utc_timestamp();
 
                 if (pkt.kind == constants::request){
                     auto ack_pkt = packet_service::request_to_ack(pkt);
@@ -1409,13 +1728,42 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     this->ob_packet_container->push(std::move(ack_pkt));
                     return true;
                 }
-                
+
+                if (pkt.kind == constants::rts_ack){
+                    this->retransmission_manager->ack(pkt.id);
+                    this->scheduler->feedback(pkt.fr_addr, packet_service::get_transit_time(pkt));
+                    exception_t heartbeat_err = this->heartbeat_service->heartbeat(pkt.fr_addr);
+
+                    if (dg::network_exception::is_failed(heartbeat_err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(heartbeat_err));
+                    }
+
+                    return true;
+                }
+
                 if constexpr(DEBUG_MODE_FLAG){
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
 
                 return true;
+            }
+    };
+
+    class ResponseThrottleResetWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_throttle;
+        
+        public:
+
+            ResponseThrottleResetWorker(std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_throttle) noexcept: inbound_throttle(std::move(inbound_throttle)){}
+
+            bool run_one_epoch() noexcept{
+
+                this->inbound_throttle->reset();
+                return false;
             }
     };
 
@@ -1452,7 +1800,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         static auto spawn_inbound_worker(std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager, 
                                          std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
                                          std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
-                                         std::shared_ptr<packet_controller::InBoundControllerInterface> ib_controller,
+                                         std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
                                          std::shared_ptr<packet_controller::SchedulerInterface> scheduler, 
                                          std::shared_ptr<SocketHandle> socket) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
@@ -1468,7 +1816,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_controller == nullptr){
+            if (ib_id_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -1481,13 +1829,42 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             }
 
             return std::make_unique<InBoundWorker>(std::move(retransmission_manager), std::move(ob_packet_container), 
-                                                   std::move(ib_packet_container), std::move(ib_controller),
+                                                   std::move(ib_packet_container), std::move(ib_id_controller),
                                                    std::move(scheduler), std::move(socket));
         }
     };
 }
 
 namespace dg::network_kernel_mailbox_impl1::core{
+
+    //this is a tough implementation - to be honest - if you use traditional connections for, let's say, 10000 concurrent connections - to pipe data - it would prolly use all of the resources - it's impossible
+    //there are too many things to consider
+    //the 3-way handshake
+    //the heartbeat
+    //the cease-to-desist letter
+    //the timeout (default cease-to-desist)
+    //the transmission control per packet
+    //the cleanup 
+    //the descriptor per connection
+    //the concurrency
+    //the allocation
+    //the fragmentation
+    //yeah you name it
+    //but if you do it this way - it probably works - it's uncanny - it's strange yet it serves one purpose - to pipe data from one-end to another
+    //yet you have to spawn concurrent ports - says 64 ports for 1024 cores machine - because concurrent port is the ONLY native way to avoid lock congestion at kernel level
+    //again - containerization is real - there's a solid reason to use it - it's there so that you could do those things without fear of polluting resources
+    //and hyperthreading
+    //and probably an implementation of not-completely-fair scheduler
+    //and most importantly - a way to do std::malloc() instead of std::string(SZ, ' ') - because std::calloc is expensive and takes CPU time - wheras std::malloc() just an allocation - and hand the responsibility to the kernel
+    //you need to isolate your cores to not interfere with the kernel's internal affine service - yeah - you don't want to mess with kernel's affinity
+    //spawn virtual core - uniform speed
+
+    //the only advice I have after years of intense programming is precisely that - don't overcomplicate things - not because that it's a bad thing - but you'll get it wrong
+    //keep it simple - stupid - anticipate for worst case, anticipate for best case, anticipate for average case
+    //best case is the use case that end user would encounter 99% of the time - in the best case scenrios, things have to work as expected - like retransmission have to prolong with heartbeat + friends...
+    //in the worst case - it has to not pollute the assigned memory_usage - this would lead to OOM and death
+    //in the exotic case - it has to signal the senders to stop retranmission - to not pollute the inbound
+    //you won't believe that people actually spent 20 years just to tune TCP - yeah - and big techs (Instagram, Snapchat, Meta, ...) still use another protocol to serve clients
 
     class RetransmittableMailBoxController: public virtual MailboxInterface{
 
@@ -1515,7 +1892,11 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
                 model::Packet pkt = this->packet_gen->get(std::move(dst), std::move(msg));
                 this->ob_packet_container->push(pkt);
-                this->retransmission_manager->add_retriable(std::move(pkt));
+                exception_t err = this->retransmission_manager->add_retriable(std::move(pkt));
+
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                }
             }
 
             auto recv() noexcept -> std::optional<dg::string>{
@@ -1533,7 +1914,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
     struct ComponentFactory{
 
-        static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::InBoundControllerInterface> ib_controller,
+        static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
                                                            std::shared_ptr<packet_controller::SchedulerInterface> scheduler, //fine - scheduler is external injection - tons of optimization could be done with scheduler - this needs a right model to approx congestion - not the current one - of course
                                                            std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> socket,
                                                            std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
@@ -1547,7 +1928,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
             const size_t MIN_WORKER_SIZE    = size_t{1u};
             const size_t MAX_WORKER_SIZE    = size_t{1024u}; 
 
-            if (ib_controller == nullptr){
+            if (ib_id_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -1587,7 +1968,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            std::shared_ptr<packet_controller::InBoundControllerInterface> ib_controller_sp = std::move(ib_controller);
+            std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller_sp = std::move(ib_id_controller);
             std::shared_ptr<packet_controller::SchedulerInterface> scheduler_sp = std::move(scheduler);
             std::shared_ptr<model::SocketHandle> socket_sp = std::move(socket);
             std::shared_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager_sp = std::move(retransmission_manager);
@@ -1596,7 +1977,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec = {};
  
             for (size_t i = 0u; i < num_inbound_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::spawn_inbound_worker(retransmission_manager_sp, ob_packet_container_sp, ib_packet_container_sp, ib_controller_sp, scheduler_sp, socket_sp);
+                auto worker_ins     = worker::ComponentFactory::spawn_inbound_worker(retransmission_manager_sp, ob_packet_container_sp, ib_packet_container_sp, ib_id_controller_sp, scheduler_sp, socket_sp);
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
@@ -1633,18 +2014,30 @@ namespace dg::network_kernel_mailbox_impl1{
 
     struct ASAPSchedulerConfig{};
 
+    struct StaticRetransmissionConfig{
+        size_t max_retransmission_count;
+        std::chrono::retransmission_delay;
+    };
+
+    struct DynamciRetransmissionConfig{
+        size_t base_retransmission_count;
+        size_t max_retransmission_count;
+        std::chrono::retransmission_delay;
+        std::chrono::nanoseconds timeout_dur;
+    };
+
     struct Config{
         size_t num_inbound_worker;
         size_t num_outbound_worker;
-        size_t num_retry_worker; 
+        size_t num_retry_worker;
+        size_t max_inbound_address;
         int sin_fam;  
         int comm;
         int protocol;
         model::IP host_ip;
         uint16_t host_port;
-        std::chrono::nanoseconds retransmission_delay; 
-        size_t retransmission_count;
-        std::variant<RuntimeRTTSchedulerConfig, ASAPSchedulerConfig> scheduler;
+        std::variant<StaticRetransmissionCount, DynamicRetransmissionCount> retranmission_config;
+        std::variant<RuntimeRTTSchedulerConfig, ASAPSchedulerConfig> scheduler_config;
         size_t inbound_exhaustion_control_cap;
         size_t outbound_exhaustion_control_cap;
         size_t global_id_flush_cap;
@@ -1660,20 +2053,21 @@ namespace dg::network_kernel_mailbox_impl1{
         std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen{};
         std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container{};
         std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container{}; 
-        std::unique_ptr<packet_controller::InBoundControllerInterface> ib_controller{};
+        std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller{};
 
-        if (std::holds_alternative<RuntimeRTTSchedulerConfig>(config.scheduler)){
-            auto sched_config = std::get<RuntimeRTTSchedulerConfig>(config.scheduler); 
+        if (std::holds_alternative<RuntimeRTTSchedulerConfig>(config.scheduler_config)){
+            auto sched_config = std::get<RuntimeRTTSchedulerConfig>(config.scheduler_config); 
             scheduler = packet_controller::ComponentFactory::get_std_scheduler(sched_config.max_frequency, sched_config.min_frequency,
                                                                                sched_config.learning_rate, sched_config.rtt_epsilon, 
                                                                                utility::to_timelapsed(sched_config.max_q_time));
-        } else if (std::holds_alternative<ASAPSchedulerConfig>(config.scheduler)){
+        } else if (std::holds_alternative<ASAPSchedulerConfig>(config.scheduler_config)){
             scheduler = packet_controller::ComponentFactory::get_asap_scheduler();
         } else{
             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
         }
 
-        retransmission_manager  = packet_controller::ComponentFactory::get_retransmission_manager(utility::to_timelapsed(config.retransmission_delay), config.retransmission_count, config.global_id_flush_cap);
+        // retransmission_manager  = packet_controller::ComponentFactory::get_retransmission_manager(utility::to_timelapsed(config.retransmission_delay), config.retransmission_count, config.global_id_flush_cap);
+
         packet_gen              = packet_controller::ComponentFactory::get_packet_gen(utility::to_factory_id(Address{config.host_ip, config.host_port}), Address{config.host_ip, config.host_port});
         ib_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_outbound_packet_container(scheduler), 
                                                                                                                   config.retry_device,
@@ -1681,7 +2075,7 @@ namespace dg::network_kernel_mailbox_impl1{
         ob_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_prioritized_packet_container(),
                                                                                                                   config.retry_device,
                                                                                                                   config.outbound_exhaustion_control_cap);
-        ib_controller           = packet_controller::ComponentFactory::get_inbound_controller(config.global_id_flush_cap);
+        ib_id_controller           = packet_controller::ComponentFactory::get_inbound_controller(config.global_id_flush_cap);
 
         if (config.protocol != SOCK_DGRAM){
             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -1690,7 +2084,7 @@ namespace dg::network_kernel_mailbox_impl1{
         auto sock_handle = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
         dg::network_exception_handler::throw_nolog(socket_service::port_socket(*sock_handle, config.host_port));
 
-        return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_controller), scheduler, std::move(sock_handle), 
+        return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_id_controller), scheduler, std::move(sock_handle), 
                                                                               std::move(packet_gen), std::move(retransmission_manager),
                                                                               std::move(ob_packet_container), std::move(ib_packet_container), 
                                                                               config.num_inbound_worker, config.num_outbound_worker, 

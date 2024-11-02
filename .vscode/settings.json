@@ -83,6 +83,7 @@
         "transaction": "cpp",
         "pqxx": "cpp",
         "bitset": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "cerrno": "cpp"
     }
 }
