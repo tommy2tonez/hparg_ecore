@@ -22,7 +22,7 @@ namespace dg::network_fileio{
     //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
 
     static constexpr inline auto DG_FILEIO_MODE                 = S_IRWXU; //user-configurable - compile-payload
-    static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ     = size_t{1} << 20; //user-configurable - compile-payload
+    static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ     = size_t{1} << 12; //user-configurable - compile-payload
     static constexpr inline bool NO_KERNEL_FSYS_CACHE_FLAG      = true;
 
     constexpr auto is_met_direct_dgio_blksz_requirement(size_t blk_sz) noexcept -> bool{

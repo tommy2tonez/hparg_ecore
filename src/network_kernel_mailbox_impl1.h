@@ -193,14 +193,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t = 0;
     };
 
-    class DynamicSchedulerInterface: public virtual SchedulerInterface{
+    class UpdatableInterface{
 
         public:
 
-            virtual ~DynamicSchedulerInterface() noexcept = default;
+            virtual ~UpdatableInterface() noexcept = default;
             virtual void update() noexcept = 0;
     };
-
+    
     class IDGeneratorInterface{
 
         public:
@@ -250,7 +250,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual ~InBoundTrafficControllerInterface() noexcept = default;
             virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
-            virtual void reset() noexcept = 0;
     };
 }
 
@@ -663,7 +662,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
-    
+        
     struct WAPIntervalData{
         size_t outbound_sz;
         dg::vector<std::chrono::nanoseconds> rtt_vec;
@@ -674,19 +673,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     struct WAPStatisticValue{
         size_t outbound_sz;
         size_t inbound_sz;
-        size_t collected_sz;
     };
 
-    struct WAPStatisticalModel{
+    struct WAPStatisticModel{
         dg::unordered_unstable_map<uint32_t, dg::unordered_unstable_map<uint32_t, WAPStatisticValue>> model;
     };
 
-    class WAPScheduler: public virtual DynamicSchedulerInterface{
+    class WAPScheduler: public virtual SchedulerInterface, public virtual UpdatableInterface{
 
         private:
 
             dg::unordered_unstable_map<Address, WAPIntervalData> interval_data_map;
-            dg::unordered_unstable_map<Address, WAPStatisticalModel> statistic_data_map;
+            dg::unordered_unstable_map<Address, WAPStatisticModel> statistic_data_map;
             uint32_t rtt_discretization_sz;
             std::chrono::nanoseconds rtt_minbound;
             std::chrono::nanoseconds rtt_maxbound;
@@ -704,7 +702,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             WAPScheduler(dg::unordered_unstable_map<Address, WAPIntervalData> interval_data_map,
-                         dg::unordered_unstable_map<Address, WAPStatisticalModel> statistic_data_map,
+                         dg::unordered_unstable_map<Address, WAPStatisticModel> statistic_data_map,
                          uint32_t rtt_discretization_sz,
                          std::chrono::nanoseconds rtt_minbound,
                          std::chrono::nanoseconds rtt_maxbound,
@@ -762,9 +760,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return dg::network_exception::RESOURCE_EXHAUSTION;
                     }
 
+                    if (this->rtt_vec_capacity == 0u){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
                     auto [emplace_ptr, status] = this->interval_data_map.emplace(std::make_pair(addr, WAPIntervalData{}));
                     dg::network_exception_handler::dg_assert(status);
-                    auto [_emplace_ptr, _status] = this->statistic_data_map.emplace(std::make_pair(addr, WAPStatisticalModel{}));
+                    auto [_emplace_ptr, _status] = this->statistic_data_map.emplace(std::make_pair(addr, WAPStatisticModel{}));
                     dg::network_exception_handler::dg_assert(_status);
                     map_ptr = emplace_ptr; 
                 }
@@ -809,7 +811,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     auto& statistical_bucket                = this->statistic_data_map[interval_data_pair.first].model[rtt_idx][sched_idx];
                     statistical_bucket.outbound_sz          += interval_data_pair.second.outbound_sz;
                     statistical_bucket.inbound_sz           += interval_data_pair.second.rtt_vec.size();
-                    statistical_bucket.collected_sz         += 1;
                     interval_data_pair.second.outbound_sz   = 0u;
                     interval_data_pair.second.ideal_lapse   = this->get_ideal_or_random_lapsed(this->statistic_data_map[interval_data_pair.first].model[rtt_idx]);
                     interval_data_pair.second.last          = stdx::utc_timestamp();
@@ -832,7 +833,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 size_t lapsed_idx                                   = static_cast<size_t>(stdx::timestamp_conversion_wrap(last_lapsed - this->schedule_minbound)) / static_cast<size_t>(stdx::timestamp_conversion_wrap(discrete_sched_interval));
                 std::chrono::nanoseconds rtt_avg                    = std::accumulate(interval_data.rtt_vec.begin(), interval_data.rtt_vec.end(), std::chrono::nanoseconds(0u), std::plus<>{}) / interval_data.rtt_vec.size();
                 std::chrono::nanoseconds rtt                        = std::clamp(rtt_avg, this->rtt_minbound, this->rtt_maxbound);
-                std::chrono::nanoseconds discrete_rtt_interval      = (this->rtt_maxbound - this->rtt_minbound) / this->rtt_discretization_sz; 
+                std::chrono::nanoseconds discrete_rtt_interval      = (this->rtt_maxbound - this->rtt_minbound) / this->rtt_discretization_sz;
                 size_t rtt_idx                                      = static_cast<size_t>(stdx::timestamp_conversion_wrap(rtt - this->rtt_minbound)) / static_cast<size_t>(stdx::timestamp_conversion_wrap(discrete_rtt_interval)); 
 
                 return std::make_pair(std::min(static_cast<size_t>(this->rtt_discretization_sz - 1), rtt_idx), std::min(static_cast<size_t>(this->schedule_discretization_sz - 1), lapsed_idx));
@@ -840,7 +841,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get_ideal_or_random_lapsed(const dg::unordered_unstable_map<uint32_t, WAPStatisticValue>& sched_discrete_idx_wapstat_map) noexcept -> std::chrono::nanoseconds{
 
-                constexpr size_t DICE_SZ                            = 32;
+                constexpr size_t DICE_SZ                            = 32u;
                 size_t dice_value                                   = dg::network_randomizer::randomize_xrange(std::integral_constant<size_t, DICE_SZ>{});
                 std::chrono::nanoseconds discrete_sched_interval    = (this->schedule_maxbound - this->schedule_minbound) / this->schedule_discretization_sz;
 
@@ -849,21 +850,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return this->schedule_minbound + (discrete_sched_interval * sched_discrete_idx);
                 }
 
-                //let's for now only use the heuristics of max_packet_transmitted - without actually think of success rate and friends - this could be further improved - for computational efficiency - yet this has too many moving variables
-                //so it's best to keep it like this
-
-                size_t max_cursor           = 0u;
+                double max_cursor           = 0u;
                 size_t sched_discrete_idx   = this->schedule_discretization_sz - 1;
 
                 for (const auto& map_pair: sched_discrete_idx_wapstat_map){
-                    if (map_pair.second.collected_sz == 0u){
+                    if (map_pair.second.outbound_sz == 0u){
                         continue;
                     }
 
-                    size_t avg_transmission = map_pair.second.inbound_sz / map_pair.second.collected_sz; 
+                    double success_rate = static_cast<double>(map_pair.second.inbound_sz) / map_pair.second.outbound_sz;
 
-                    if (max_cursor < avg_transmission){
-                        max_cursor          = avg_transmission;
+                    if (max_cursor < success_rate){
+                        max_cursor          = success_rate;
                         sched_discrete_idx  = map_pair.first;
                     }
                 }
@@ -1227,7 +1225,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class InBoundTrafficController: public virtual InBoundTrafficControllerInterface{
+    class InBoundTrafficController: public virtual InBoundTrafficControllerInterface, public virtual UpdatableInterface{
 
         private:
 
@@ -1282,7 +1280,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 return true;
             }
 
-            void reset() noexcept{
+            void update() noexcept{
 
                 auto lck_grd = stdx::lock_guard(*this->mtx);
                 this->address_counter_map.clear();
@@ -1291,6 +1289,113 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     };
 
     struct ComponentFactory{
+
+        static auto get_wap_scheduler(std::chrono::nanoseconds rtt_minbound, std::chrono::nanoseconds rtt_maxbound, size_t rtt_discrete_sz,
+                                      std::chrono::nanoseconds sched_minbound, std::chrono::nanoseconds sched_maxbound, size_t sched_discrete_sz,
+                                      std::chrono::nanoseconds max_sched_time, std::chrono::nanoseconds update_interval,
+                                      size_t map_capacity, size_t rtt_vec_capacity) -> std::unique_ptr<WAPScheduler>{
+            
+            using namespace std::chrono_literals;
+
+            const std::chrono::nanoseconds MIN_RTT_MINBOUND     = std::chrono::duration_cast<std::chrono::nanoseconds>(1us);
+            const std::chrono::nanoseconds MAX_RTT_MINBOUND     = std::chrono::duration_cast<std::chrono::nanoseconds>(30s);
+            const std::chrono::nanoseconds MIN_RTT_MAXBOUND     = std::chrono::duration_cast<std::chrono::nanoseconds>(1us);
+            const std::chrono::nanoseconds MAX_RTT_MAXBOUND     = std::chrono::duration_cast<std::chrono::nanoseconds>(30s);
+            const size_t MIN_RTT_DISCRETE_SZ                    = 1u;
+            const size_t MAX_RTT_DISCRETE_SZ                    = size_t{1} << 10;
+            const std::chrono::nanoseconds MIN_SCHED_MINBOUND   = std::chrono::duration_cast<std::chrono::nanoseconds>(1us);
+            const std::chrono::nanoseconds MAX_SCHED_MINBOUND   = std::chrono::duration_cast<std::chrono::nanoseconds>(30s);
+            const std::chrono::nanoseconds MIN_SCHED_MAXBOUND   = std::chrono::duration_cast<std::chrono::nanoseconds>(1us);
+            const std::chrono::nanoseconds MAX_SCHED_MAXBOUND   = std::chrono::duration_cast<std::chrono::nanoseconds>(30s);
+            const size_t MIN_SCHED_DISCRETE_SZ                  = 1u;
+            const size_t MAX_SCHED_DISCRETE_SZ                  = size_t{1} << 10;
+            const std::chrono::nanoseconds MIN_MAX_SCHED_TIME   = std::chrono::duration_cast<std::chrono::nanoseconds>(1us);
+            const std::chrono::nanoseconds MAX_MAX_SCHED_TIME   = std::chrono::duration_cast<std::chrono::nanoseconds>(30s);
+            const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(1s);
+            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(100s);
+            const std::chrono::nanoseconds DEL_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(250ms);
+            const size_t MIN_MAP_CAPACITY                       = 0u;
+            const size_t MAX_MAP_CAPACITY                       = size_t{1} << 25;
+            const size_t MIN_RTT_VEC_CAPACITY                   = 0u;
+            const size_t MAX_RTT_VEC_CAPACITY                   = size_t{1} << 8;
+
+            if (std::clamp(rtt_minbound, MIN_RTT_MINBOUND, MAX_RTT_MINBOUND) != rtt_minbound){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(rtt_maxbound, MIN_RTT_MAXBOUND, MAX_RTT_MAXBOUND) != rtt_maxbound){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(rtt_discrete_sz, MIN_RTT_DISCRETE_SZ, MAX_RTT_DISCRETE_SZ) != rtt_discrete_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (rtt_maxbound < rtt_minbound){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::chrono::nanoseconds discrete_interval_size = (rtt_maxbound - rtt_minbound) / rtt_discrete_sz;
+            size_t udiscrete_interval_size = stdx::timestamp_conversion_wrap(discrete_interval_size); 
+
+            if (udiscrete_interval_size == 0u){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(sched_minbound, MIN_SCHED_MINBOUND, MAX_SCHED_MINBOUND) != sched_minbound){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(sched_maxbound, MIN_SCHED_MAXBOUND, MAX_SCHED_MAXBOUND) != sched_maxbound){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(sched_discrete_sz, MIN_SCHED_DISCRETE_SZ, MAX_SCHED_DISCRETE_SZ) != sched_discrete_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (sched_maxbound < sched_minbound){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::chrono::nanoseconds discrete_sched_interval_size = (sched_maxbound - sched_minbound) / sched_discrete_sz;
+            size_t udiscrete_sched_interval_size = stdx::timestamp_conversion_wrap(discrete_sched_interval_size);
+
+            if (udiscrete_sched_interval_size == 0u){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(max_sched_time, MIN_MAX_SCHED_TIME, MAX_MAX_SCHED_TIME) != max_sched_time){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(update_interval, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(map_capacity, MIN_MAP_CAPACITY, MAX_MAP_CAPACITY) != map_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(rtt_vec_capacity, MIN_RTT_VEC_CAPACITY, MAX_RTT_VEC_CAPACITY) != rtt_vec_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            auto interval_data_map                          = dg::unordered_unstable_map<Address, WAPIntervalData>{};
+            auto statistic_data_map                         = dg::unordered_unstable_map<Address, WAPStatisticModel>{};
+            auto mtx                                        = std::make_unique<std::mutex>();
+            std::chrono::nanoseconds min_update_interval    = update_interval - DEL_UPDATE_INTERVAL;
+            std::chrono::nanoseconds max_update_interval    = update_interval + DEL_UPDATE_INTERVAL;
+            interval_data_map.reserve(map_capacity);
+            statistic_data_map.reserve(map_capacity);
+
+            return std::make_unique<WAPScheduler>(std::move(interval_data_map), std::move(statistic_data_map),
+                                                  rtt_discrete_sz, rtt_minbound, rtt_maxbound,
+                                                  sched_discrete_sz, sched_minbound, sched_maxbound,
+                                                  max_sched_time, stdx::utc_timestamp(),
+                                                  min_update_interval, max_update_interval,
+                                                  map_capacity, rtt_vec_capacity, std::move(mtx));
+        }
 
         static auto get_asap_scheduler() -> std::unique_ptr<SchedulerInterface>{
 
@@ -1308,7 +1413,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<PacketGenerator>(get_id_generator(factory_id), factory_addr);
         }
-
+     
         static auto get_retransmission_manager(std::chrono::nanoseconds delay, size_t max_retransmission, 
                                                size_t idhashset_cap, size_t retransmission_cap) -> std::unique_ptr<RetransmissionManagerInterface>{
 
@@ -1364,7 +1469,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                          std::make_unique<std::mutex>());
         }
 
-        static auto get_inbound_traffic_controller(size_t addr_capacity, size_t global_capacity, size_t max_address) -> std::unique_ptr<InBoundTrafficControllerInterface>{
+        static auto get_inbound_traffic_controller(size_t addr_capacity, size_t global_capacity, size_t max_address) -> std::unique_ptr<InBoundTrafficController>{
 
             const size_t MIN_ADDR_CAPACITY      = 0u;
             const size_t MAX_ADDR_CAPACITY      = size_t{1} << 20;
@@ -1609,22 +1714,22 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             }
     };
 
-    class TrafficWorker: public virtual dg::network_concurrency::WorkerInterface{
+    class UpdateWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic;
+            std::shared_ptr<packet_controller::UpdatableInterface> updatable;
             std::chrono::nanoseconds wait_dur;
         
         public:
 
-            TrafficWorker(std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic,
-                          std::chrono::nanoseconds wait_dur) noexcept: inbound_traffic(std::move(inbound_traffic)),
-                                                                       wait_dur(std::move(wait_dur)){}
+            UpdateWorker(std::shared_ptr<packet_controller::UpdatableInterface> updatable,
+                         std::chrono::nanoseconds wait_dur) noexcept: updatable(std::move(updatable)),
+                                                                      wait_dur(std::move(wait_dur)){}
 
             bool run_one_epoch() noexcept{
 
-                this->inbound_traffic->reset();
+                this->updatable->update();
                 std::this_thread::sleep_for(this->wait_dur);
                 return true;
             }
@@ -1702,15 +1807,15 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                    std::move(socket));
         }
 
-        static auto spawn_traffic_worker(std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic,
-                                         std::chrono::nanoseconds traffic_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+        static auto spawn_update_worker(std::shared_ptr<packet_controller::UpdatableInterface> updatable,
+                                        std::chrono::nanoseconds traffic_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
             using namespace std::chrono_literals; 
 
             const std::chrono::nanoseconds MIN_TRAFFIC_DUR  = std::chrono::duration_cast<std::chrono::nanoseconds>(1s); 
             const std::chrono::nanoseconds MAX_TRAFFIC_DUR  = std::chrono::duration_cast<std::chrono::nanoseconds>(60s);
 
-            if (inbound_traffic == nullptr){
+            if (updatable == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -1718,7 +1823,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<TrafficWorker>(std::move(inbound_traffic), traffic_dur);
+            return std::make_unique<UpdateWorker>(std::move(updatable), traffic_dur);
         }
     };
 }
@@ -1775,7 +1880,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
         static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
                                                            std::unique_ptr<packet_controller::InBoundTrafficControllerInterface> ib_traffic_controller,
-                                                           std::shared_ptr<packet_controller::SchedulerInterface> scheduler, //fine - scheduler is external injection - tons of optimization could be done with scheduler - this needs a right model to approx congestion - not the current one - of course
+                                                           std::shared_ptr<packet_controller::SchedulerInterface> scheduler,
                                                            std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> socket,
                                                            std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
                                                            std::unique_ptr<packet_controller::RetransmissionManagerInterface> retransmission_manager,
@@ -1859,10 +1964,6 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
-
-            auto worker_ins     = worker::ComponentFactory::spawn_traffic_worker(ib_traffic_controller_sp, traffic_reset_dur);
-            auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(worker_ins)));
-            daemon_vec.emplace_back(std::move(daemon_handle));
 
             return std::make_unique<RetransmittableMailBoxController>(std::move(daemon_vec), std::move(packet_gen), 
                                                                       std::move(retransmission_manager_sp), std::move(ob_packet_container_sp),
