@@ -7,6 +7,7 @@
 #include <utility>
 #include <type_traits>
 #include "network_type_traits_x.h"
+#include "network_randomizer.h"
 #include <chrono>
 
 namespace dg::network_concurrency_infretry_x{

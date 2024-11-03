@@ -11,6 +11,7 @@
 #include <atomic>
 #include <mutex>
 #include <functional>
+#include <chrono>
 
 namespace stdx{
     
@@ -206,13 +207,49 @@ namespace stdx{
         return it;
     }
 
+    template <class T>
+    struct is_chrono_dur: std::false_type{};
+
+    template <class ...Args>
+    struct is_chrono_dur<std::chrono::duration<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_chrono_dur_v = is_chrono_dur<T>::value;
+
+    struct safe_timestamp_cast_wrapper{
+
+        std::chrono::nanoseconds caster;
+
+        constexpr safe_timestamp_cast_wrapper(std::chrono::nanoseconds caster) noexcept: caster(std::move(caster)){}
+
+        template <class U, std::enable_if_t<stdx::is_chrono_dur_v<U>, bool> = true>
+        constexpr operator U() const noexcept{
+
+            return std::chrono::duration_cast<U>(this->caster);
+        }
+
+        template <class U, std::enable_if_t<std::numeric_limits<U>::is_integer, bool> = true>
+        constexpr operator U() const noexcept{
+            auto counter = caster.count();
+            static_assert(std::numeric_limits<decltype(counter)>::is_integer);
+            return safe_integer_cast<U>(counter);
+        }
+    };
+
     auto utc_timestamp() noexcept -> std::chrono::nanoseconds{
 
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::utc_clock::now().time_since_epoch());
     }
 
     auto unix_timestamp() noexcept -> std::chrono::nanoseconds{
 
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
     }
+    
+    auto timestamp_conversion_wrap(std::chrono::nanoseconds dur) noexcept -> safe_timestamp_cast_wrapper{
+
+        return safe_timestamp_cast_wrapper(dur);
+    } 
 
     template <class ...Args>
     struct vector_convertible{

@@ -87,6 +87,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t ENTRY_NOT_FOUND                     = 48u;
     static inline constexpr exception_t RESOURCE_EXHAUSTION                 = 49u;
     static inline constexpr exception_t TIMEOUT                             = 50u;
+    static inline constexpr exception_t BAD_RETRANSMISSION                  = 51u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 
