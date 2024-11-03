@@ -183,14 +183,22 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
-    
+     
     class SchedulerInterface{
 
         public:
 
             virtual ~SchedulerInterface() noexcept = default;
             virtual auto schedule(Address)  noexcept -> std::chrono::nanoseconds = 0;
-            virtual void feedback(Address, std::chrono::nanoseconds) noexcept = 0;
+            virtual auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t = 0;
+    };
+
+    class DynamicSchedulerInterface: public virtual SchedulerInterface{
+
+        public:
+
+            virtual ~DynamicSchedulerInterface() noexcept = default;
+            virtual void update() noexcept = 0;
     };
 
     class IDGeneratorInterface{
@@ -618,7 +626,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         return rs;
     }
 
-    static auto get_transit_time(const model::Packet& pkt) noexcept -> std::chrono::nanoseconds{
+    static auto get_transit_time(const model::Packet& pkt) noexcept -> std::expected<std::chrono::nanoseconds, exception_t>{
+        
+        using namespace std::chrono_literals; 
 
         if constexpr(DEBUG_MODE_FLAG){
             if (pkt.port_stamp_sz % 2 != 0){
@@ -627,10 +637,25 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
             }
         }
 
+        const std::chrono::nanoseconds MIN_LAPSED = std::chrono::duration_cast<std::chrono::nanoseconds>(1ns);
+        const std::chrono::nanoseconds MAX_LAPSED = std::chrono::duration_cast<std::chrono::nanoseconds>(100s);
         std::chrono::nanoseconds lapsed{};
 
         for (size_t i = 1; i < pkt.port_stamp_sz; i += 2){
-            lapsed += std::chrono::nanoseconds(pkt.port_utc_stamps[i]) -  std::chrono::nanoseconds(pkt.port_utc_stamps[i - 1]);
+            std::chrono::nanoseconds cur    = std::chrono::nanoseconds(pkt.port_utc_stamps[i]);
+            std::chrono::nanoseconds prev   = std::chrono::nanoseconds(pkt.port_utc_stamps[i - 1]);
+
+            if (cur < prev){
+                return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::chrono::nanoseconds diff   = cur - prev; 
+
+            if (std::clamp(diff.count(), MIN_LAPSED.count(), MAX_LAPSED.count()) != diff.count()){
+                return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            lapsed += diff;
         }
 
         return lapsed;
@@ -639,6 +664,214 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
     
+    struct WAPIntervalData{
+        size_t outbound_sz;
+        dg::vector<std::chrono::nanoseconds> rtt_vec;
+        std::chrono::nanoseconds ideal_lapse;
+        std::chrono::nanoseconds last;
+    };
+
+    struct WAPStatisticValue{
+        size_t outbound_sz;
+        size_t inbound_sz;
+        size_t collected_sz;
+    };
+
+    struct WAPStatisticalModel{
+        dg::unordered_unstable_map<uint32_t, dg::unordered_unstable_map<uint32_t, WAPStatisticValue>> model;
+    };
+
+    class WAPScheduler: public virtual DynamicSchedulerInterface{
+
+        private:
+
+            dg::unordered_unstable_map<Address, WAPIntervalData> interval_data_map;
+            dg::unordered_unstable_map<Address, WAPStatisticalModel> statistic_data_map;
+            uint32_t rtt_discretization_sz;
+            std::chrono::nanoseconds rtt_minbound;
+            std::chrono::nanoseconds rtt_maxbound;
+            uint32_t schedule_discretization_sz;
+            std::chrono::nanoseconds schedule_minbound;
+            std::chrono::nanoseconds schedule_maxbound;
+            std::chrono::nanoseconds max_schedule_time;
+            std::chrono::nanoseconds last_updated_time;
+            std::chrono::nanoseconds min_update_interval;
+            std::chrono::nanoseconds max_update_interval;
+            size_t interval_data_map_capacity;
+            size_t rtt_vec_capacity;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            WAPScheduler(dg::unordered_unstable_map<Address, WAPIntervalData> interval_data_map,
+                         dg::unordered_unstable_map<Address, WAPStatisticalModel> statistic_data_map,
+                         uint32_t rtt_discretization_sz,
+                         std::chrono::nanoseconds rtt_minbound,
+                         std::chrono::nanoseconds rtt_maxbound,
+                         uint32_t schedule_discretization_sz,
+                         std::chrono::nanoseconds schedule_minbound,
+                         std::chrono::nanoseconds schedule_maxbound,
+                         std::chrono::nanoseconds max_schedule_time,
+                         std::chrono::nanoseconds last_updated_time,
+                         std::chrono::nanoseconds min_update_interval,
+                         std::chrono::nanoseconds max_update_interval,
+                         size_t interval_data_map_capacity,
+                         size_t rtt_vec_capacity,
+                         std::unique_ptr<std::mutex> mtx) noexcept: interval_data_map(std::move(interval_data_map)),
+                                                                    statistic_data_map(std::move(statistic_data_map)),
+                                                                    rtt_discretization_sz(rtt_discretization_sz),
+                                                                    rtt_minbound(rtt_minbound),
+                                                                    rtt_maxbound(rtt_maxbound),
+                                                                    schedule_discretization_sz(schedule_discretization_sz),
+                                                                    schedule_minbound(schedule_minbound),
+                                                                    schedule_maxbound(schedule_maxbound),
+                                                                    max_schedule_time(max_schedule_time),
+                                                                    last_updated_time(last_updated_time),
+                                                                    min_update_interval(min_update_interval),
+                                                                    max_update_interval(max_update_interval),
+                                                                    interval_data_map_capacity(interval_data_map_capacity),
+                                                                    rtt_vec_capacity(rtt_vec_capacity),
+                                                                    mtx(std::move(mtx)){}
+
+            auto schedule(Address addr) noexcept -> std::chrono::nanoseconds{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto map_ptr    = this->interval_data_map.find(addr);
+
+                if (map_ptr == this->interval_data_map.end()){
+                    return stdx::utc_timestamp();
+                }
+                
+                std::chrono::nanoseconds now        = stdx::utc_timestamp();
+                std::chrono::nanoseconds worst      = now + this->max_schedule_time;
+                std::chrono::nanoseconds tentative  = map_ptr->second.last + map_ptr->second.ideal_lapse;
+                std::chrono::nanoseconds chosen     = std::clamp(tentative, now, worst);
+                map_ptr->second.last                = chosen;
+                map_ptr->second.outbound_sz         += 1;
+
+                return chosen;
+            }
+
+            auto feedback(Address addr, std::chrono::nanoseconds lapsed) noexcept -> exception_t{
+
+                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                auto map_ptr    = this->interval_data_map.find(addr);
+
+                if (map_ptr == this->interval_data_map.end()){
+                    if (this->interval_data_map.size() == this->interval_data_map_capacity){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
+                    auto [emplace_ptr, status] = this->interval_data_map.emplace(std::make_pair(addr, WAPIntervalData{}));
+                    dg::network_exception_handler::dg_assert(status);
+                    auto [_emplace_ptr, _status] = this->statistic_data_map.emplace(std::make_pair(addr, WAPStatisticalModel{}));
+                    dg::network_exception_handler::dg_assert(_status);
+                    map_ptr = emplace_ptr; 
+                }
+                
+                if (map_ptr->second.rtt_vec.size() == this->rtt_vec_capacity){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                map_ptr->second.rtt_vec.push_back(lapsed);
+                return dg::network_exception::SUCCESS;
+            }
+
+            void update() noexcept{
+
+                auto lck_grd                            = stdx::lock_guard(*this->mtx);
+                std::chrono::nanoseconds now            = stdx::utc_timestamp();
+                std::chrono::nanoseconds update_lapsed  = now - this->last_updated_time;
+
+                if (update_lapsed < this->min_update_interval){
+                    return;
+                }
+
+                if (update_lapsed > this->max_update_interval){
+                    for (auto& interval_data_pair: this->interval_data_map){
+                        interval_data_pair.second.outbound_sz   = 0u;
+                        interval_data_pair.second.last          = stdx::utc_timestamp();
+                        interval_data_pair.second.rtt_vec.clear();
+                    }
+
+                    this->last_updated_time = now;
+                    return;
+                }
+
+                for (auto& interval_data_pair: this->interval_data_map){
+                    std::expected<std::pair<uint32_t, uint32_t>, exception_t> key = this->make_statistic_lookup_key(interval_data_pair.second);
+                    
+                    if (!key.has_value()){
+                        continue;
+                    }
+
+                    auto [rtt_idx, sched_idx]               = key.value(); 
+                    auto& statistical_bucket                = this->statistic_data_map[interval_data_pair.first].model[rtt_idx][sched_idx];
+                    statistical_bucket.outbound_sz          += interval_data_pair.second.outbound_sz;
+                    statistical_bucket.inbound_sz           += interval_data_pair.second.rtt_vec.size();
+                    statistical_bucket.collected_sz         += 1;
+                    interval_data_pair.second.outbound_sz   = 0u;
+                    interval_data_pair.second.ideal_lapse   = this->get_ideal_or_random_lapsed(this->statistic_data_map[interval_data_pair.first].model[rtt_idx]);
+                    interval_data_pair.second.last          = stdx::utc_timestamp();
+                    interval_data_pair.second.rtt_vec.clear();
+                }
+
+                this->last_updated_time = now;
+            }
+        
+        private:
+
+            auto make_statistic_lookup_key(const WAPIntervalData& interval_data) const noexcept -> std::expected<std::pair<uint32_t, uint32_t>, exception_t>{
+
+                if (interval_data.rtt_vec.empty()){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                std::chrono::nanoseconds last_lapsed                = std::clamp(interval_data.ideal_lapse, this->schedule_minbound, this->schedule_maxbound);
+                std::chrono::nanoseconds discrete_sched_interval    = (this->schedule_maxbound - this->schedule_minbound) / this->schedule_discretization_sz;
+                size_t lapsed_idx                                   = static_cast<size_t>(stdx::timestamp_conversion_wrap(last_lapsed - this->schedule_minbound)) / static_cast<size_t>(stdx::timestamp_conversion_wrap(discrete_sched_interval));
+                std::chrono::nanoseconds rtt_avg                    = std::accumulate(interval_data.rtt_vec.begin(), interval_data.rtt_vec.end(), std::chrono::nanoseconds(0u), std::plus<>{}) / interval_data.rtt_vec.size();
+                std::chrono::nanoseconds rtt                        = std::clamp(rtt_avg, this->rtt_minbound, this->rtt_maxbound);
+                std::chrono::nanoseconds discrete_rtt_interval      = (this->rtt_maxbound - this->rtt_minbound) / this->rtt_discretization_sz; 
+                size_t rtt_idx                                      = static_cast<size_t>(stdx::timestamp_conversion_wrap(rtt - this->rtt_minbound)) / static_cast<size_t>(stdx::timestamp_conversion_wrap(discrete_rtt_interval)); 
+
+                return std::make_pair(std::min(static_cast<size_t>(this->rtt_discretization_sz - 1), rtt_idx), std::min(static_cast<size_t>(this->schedule_discretization_sz - 1), lapsed_idx));
+            }
+
+            auto get_ideal_or_random_lapsed(const dg::unordered_unstable_map<uint32_t, WAPStatisticValue>& sched_discrete_idx_wapstat_map) noexcept -> std::chrono::nanoseconds{
+
+                constexpr size_t DICE_SZ                            = 32;
+                size_t dice_value                                   = dg::network_randomizer::randomize_xrange(std::integral_constant<size_t, DICE_SZ>{});
+                std::chrono::nanoseconds discrete_sched_interval    = (this->schedule_maxbound - this->schedule_minbound) / this->schedule_discretization_sz;
+
+                if (dice_value == 0u){
+                    size_t sched_discrete_idx = dg::network_randomizer::randomize_int<uint32_t>() % this->schedule_discretization_sz;
+                    return this->schedule_minbound + (discrete_sched_interval * sched_discrete_idx);
+                }
+
+                //let's for now only use the heuristics of max_packet_transmitted - without actually think of success rate and friends - this could be further improved - for computational efficiency - yet this has too many moving variables
+                //so it's best to keep it like this
+
+                size_t max_cursor           = 0u;
+                size_t sched_discrete_idx   = this->schedule_discretization_sz - 1;
+
+                for (const auto& map_pair: sched_discrete_idx_wapstat_map){
+                    if (map_pair.second.collected_sz == 0u){
+                        continue;
+                    }
+
+                    size_t avg_transmission = map_pair.second.inbound_sz / map_pair.second.collected_sz; 
+
+                    if (max_cursor < avg_transmission){
+                        max_cursor          = avg_transmission;
+                        sched_discrete_idx  = map_pair.first;
+                    }
+                }
+
+                return this->schedule_minbound + (discrete_sched_interval * sched_discrete_idx);
+            }
+    };
+
     class ASAPScheduler: public virtual SchedulerInterface{
 
         public:
@@ -648,9 +881,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 return stdx::utc_timestamp();
             }
 
-            void feedback(Address addr, std::chrono::nanoseconds) noexcept{
+            auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t{
 
-                (void) addr;
+                return dg::network_exception::SUCCESS;
             }
     };
 
@@ -1344,7 +1577,19 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 if (pkt.kind == constants::rts_ack){
                     this->retransmission_manager->ack(pkt.id);
-                    this->scheduler->feedback(pkt.fr_addr, packet_service::get_transit_time(pkt));
+                    std::expected<std::chrono::nanoseconds, exception_t> transit_time = packet_service::get_transit_time(pkt);
+
+                    if (!transit_time.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(transit_time.error()));
+                        return true;
+                    }
+
+                    exception_t fb_err = this->scheduler->feedback(pkt.fr_addr, transit_time.value());
+                    
+                    if (dg::network_exception::is_failed(fb_err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(fb_err));
+                    }
+
                     return true;
                 }
 
