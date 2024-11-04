@@ -1,6 +1,8 @@
 #ifndef __NETWORK_RAII_X_H__
 #define __NETWORK_RAII_X_H__
 
+//define HEADER_CONTROL 1
+
 #include <type_traits> 
 #include "network_type_traits_x.h"
 

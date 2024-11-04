@@ -1,6 +1,8 @@
 #ifndef __NETWORK_KERNELMAP_X_IMPL1_H__
 #define __NETWORK_KERNELMAP_X_IMPL1_H__
 
+//define HEADER_CONTROL 9
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <chrono>
@@ -15,7 +17,6 @@
 #include "network_fileio.h"
 #include "network_memult.h"
 #include <random>
-#include "network_std_container.h"
 
 namespace dg::network_kernelmap_x_impl1::model{
 

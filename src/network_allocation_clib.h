@@ -1,6 +1,8 @@
 #ifndef __NETWORK_ALLOCATION_CLIB_H__
 #define __NETWORK_ALLOCATION_CLIB_H__
 
+//define HEADER_CONTROL 8
+
 #include <cstring> 
 #include <stdint.h>
 #include <stdlib.h>
@@ -8,7 +10,7 @@
 #include "network_exception.h"
 #include "network_log.h"
 #include <memory>
-#include "network_utility.h"
+#include "network_raii_x.h"
 #include "stdx.h"
 
 namespace dg::network_allocation_clib{
@@ -195,12 +197,12 @@ namespace dg::network_allocation_cuda_x{
         dg::network_exception_handler::throw_nolog(dg::network_cuda_controller::cuda_mempy_peer(dst.dev_ptr, dst.device_id, src.dev_ptr, src.device_id, sz));
     } 
 
-    auto cudaraii_malloc(int device_id, size_t blk_sz) -> dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaGlobalPtr, decltype(&cuda_free)>{ //i hate the nothrow_unique_raii yet this is the way
+    auto cudaraii_malloc(int device_id, size_t blk_sz) -> dg::nothrow_immutable_unique_raii_wrapper<CudaGlobalPtr, decltype(&cuda_free)>{ //i hate the nothrow_unique_raii yet this is the way
 
         return {cuda_malloc(device_id, blk_sz), cuda_free};
     }
 
-    auto cudaraii_aligned_malloc(int device_id, size_t alignment_sz, size_t blk_sz) -> dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaGlobalPtr, decltype(&cuda_free)>{
+    auto cudaraii_aligned_malloc(int device_id, size_t alignment_sz, size_t blk_sz) -> dg::nothrow_immutable_unique_raii_wrapper<CudaGlobalPtr, decltype(&cuda_free)>{
 
         return {cuda_aligned_malloc(device_id, alignment_sz, blk_sz), cuda_free};
     }

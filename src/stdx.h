@@ -1,6 +1,8 @@
 #ifndef __STD_X_H__
 #define __STD_X_H__
 
+//define HEADER_CONTROL 0
+
 #include <memory>
 #include <vector>
 #include <unordered_map>

@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_CONCURRENCY_IMPL1_LINUX_H__
 #define __DG_NETWORK_CONCURRENCY_IMPL1_LINUX_H__
 
+//define HEADER_CONTROL 1
+
 #include <stddef.h>
 #include <stdint.h>
 #include <memory>

@@ -1,6 +1,8 @@
 #ifndef __NETWORK_FILEIO_H__
 #define __NETWORK_FILEIO_H__
 
+//define HEADER_CONTROL 9 
+
 #include "network_trivial_serializer.h" 
 #include "network_hash.h"
 #include "stdx.h"

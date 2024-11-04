@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_AUTH_H__
 #define __DG_NETWORK_AUTH_H__
 
+//define HEADER_CONTROL 7 
+
 #include "network_std_container.h"
 #include "stdx.h"
 #include "network_postgres_db.h"

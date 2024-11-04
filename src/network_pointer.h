@@ -1,6 +1,8 @@
 #ifndef __NETWORK_POINTER_H__
 #define __NETWORK_POINTER_H__
 
+//define HEADER_CONTROL 0
+
 #include <stdint.h>
 #include <stdlib.h>
 

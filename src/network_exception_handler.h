@@ -1,6 +1,8 @@
 #ifndef __NETWORK_ERROR_HANDLER_H__
 #define __NETWORK_ERROR_HANDLER_H__
 
+//define HEADER_CONTROL 8
+
 #include "network_log.h"
 #include <stdlib.h>
 #include "network_exception.h" 

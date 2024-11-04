@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_RECOVERY_LINE_H__
 #define __DG_NETWORK_RECOVERY_LINE_H__
 
+//define HEADER_CONTROL 6
+
 #include "network_exception.h"
 #include <memory>
 #include <optional>

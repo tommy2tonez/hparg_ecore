@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_STD_CONTAINER_H__
 #define __DG_NETWORK_STD_CONTAINER_H__
 
+//define HEADER_CONTROL 5
+
 #include <type_traits> 
 #include "network_type_traits_x.h"
 #include <unordered_map>

@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_CONCURRENCY_X_H__
 #define __DG_NETWORK_CONCURRENCY_X_H__
 
+//define HEADER_CONTROL 5
+
 #include <memory>
 #include <tuple>
 #include <atomic>

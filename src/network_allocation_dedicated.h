@@ -1,6 +1,8 @@
 #ifndef __DEDICATED_BUFFER_H__
 #define __DEDICATED_BUFFER_H__
 
+//define HEADER_CONTROL 4 
+
 #include <stdint.h>
 #include <stddef.h>
 #include <type_traits>
@@ -10,7 +12,6 @@
 #include <cstring>
 #include <type_traits>
 #include "network_memult.h"
-#include "network_log.h" 
 
 namespace dg::network_allocation_dedicated::buffer{
 
@@ -28,14 +29,14 @@ namespace dg::network_allocation_dedicated::buffer{
 
             static void init(){
                 
-                auto log_scope  = dg::network_log_scope::critical_terminate(); 
-                buf             = new std::add_pointer_t<void>[dg::network_concurrency::THREAD_COUNT]; 
+                // auto log_scope  = dg::network_log_scope::critical_terminate(); 
+                // buf             = new std::add_pointer_t<void>[dg::network_concurrency::THREAD_COUNT]; 
 
-                for (size_t i = 0; i < dg::network_concurrency::THREAD_COUNT; ++i){
-                    buf[i] = dg::memult::aligned_alloc_cpp(ALIGNMENT_SZ, BUF_SZ);
-                }
+                // for (size_t i = 0; i < dg::network_concurrency::THREAD_COUNT; ++i){
+                //     buf[i] = dg::memult::aligned_alloc_cpp(ALIGNMENT_SZ, BUF_SZ);
+                // }
 
-                log_scope.release();
+                // log_scope.release();
             } 
 
             static inline auto get() noexcept -> void *{

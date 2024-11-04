@@ -1,6 +1,8 @@
 #ifndef __NETWORK_FILEIO_H_
 #define __NETWORK_FILEIO_H__
 
+//define HEADER_CONTROL 8
+
 #include <stdint.h>
 #include <stddef.h>
 #include <memory>

@@ -2,6 +2,8 @@
 #ifndef __NETWORK_CONCURRENCY_H__
 #define __NETWORK_CONCURRENCY_H__
 
+//define HEADER_CONTROL 3
+
 #include <stddef.h>
 #include <stdint.h>
 #include <thread>

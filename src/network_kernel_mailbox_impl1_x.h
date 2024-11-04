@@ -1,13 +1,14 @@
 #ifndef __NETWORK_KERNEL_MAILBOX_IMPL1_X_H__
 #define __NETWORK_KERNEL_MAILBOX_IMPL1_X_H__
 
+//define HEADER_CONTROL 9
+
 #include "network_kernel_mailbox_impl1.h"
 #include "network_trivial_serializer.h"
 #include "network_concurrency.h"
 #include "network_std_container.h"
 #include <chrono>
 #include "network_log.h"
-#include "network_concurrency.h"
 #include "network_concurrency_x.h"
 #include "stdx.h"
 #include "network_exception_handler.h"
@@ -1283,7 +1284,6 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 };
 
 /*
-//this seems like a REST responsibility - yet its fine to have this extension - the normal flow is REST sending periodic heartbeats - if not response then reinitialize the component - that's the traditional way
 namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
     using radix_t = network_kernel_mailbox_impl1_radixx::radix_t; 

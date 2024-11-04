@@ -1,6 +1,8 @@
 #ifndef __NETWORK_MEMORY_UTILITY_H__
 #define __NETWORK_MEMORY_UTILITY_H__
 
+//define HEADER_CONTROL 1
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <cstring>

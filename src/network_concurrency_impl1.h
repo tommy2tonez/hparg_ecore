@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_CONCURRENCY_IMPL1_H__
 #define __DG_NETWORK_CONCURRENCY_IMPL1_H__
 
+//define HEADER_CONTROL 2 
+
 #include "stdx.h"
 #include <optional>
 

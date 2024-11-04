@@ -84,6 +84,7 @@
         "pqxx": "cpp",
         "bitset": "cpp",
         "ranges": "cpp",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "cursor": "cpp"
     }
 }

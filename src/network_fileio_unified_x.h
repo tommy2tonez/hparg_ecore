@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_UNIFIED_FILEIO_H__
 #define __DG_NETWORK_UNIFIED_FILEIO_H__
 
+//define HEADER_CONTROL 10
+
 #include "network_fileio_chksum_x.h"
 #include "network_hash.h"
 #include <filesystem>
@@ -8,19 +10,9 @@
 #include "stdx.h"
 #include <filesystem>
 #include "network_compact_serializer.h"
-#include <iostream>
 
 namespace dg::network_fileio_unified_x{
     
-    //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
-    //the only vulnerability to this is the metadata - this could be solved by using atomic write - shadow + atomic rename (this is arguable - the kernel did not implement this correctly - precisely the link and unlink can be corrupted if the timing is bad) - so that's the only variable in this implementation
-    
-    //the thing with filesystem is that most non-kernel engineers would attempt to reinvent the wheel by having everything in a massive file (they manage offset | directio | concurrency | load_balancing | lock | corruption_recovery | everything)
-    //they don't know that the kernel developers have been twisting and working on file system for 30 YEARS - to have that separate files for them to solve that very specific problem (don't try to outsmart them - yeah - you don't have that 30 YEARS of bug reports to solve)
-    //so don't be surpised when you use MySQL, SQL, PostGRES or friends - and have a sudden non-recoverable file corruption - these systems depend heavily on cloud uptime - did not implement any of the fail-safes  
-    //the only thing the kernel did not provide, which I think is a mistake, is a virtual file_path - such that the file_path is not a real filepath - but a parasite to another filepath - to prevent folder pollution
-    //I mean, containerization and friends are there for a reason - to containerize your application - run on a complete different OS environment - who cares aobut the namespace and stuffs anyway - if that does not impose performance constraints?
-
     struct Metadata{
         std::vector<std::string> datapath_vec;
         std::vector<bool> path_status_vec;

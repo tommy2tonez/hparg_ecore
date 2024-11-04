@@ -1,6 +1,8 @@
 #ifndef __NETWORK_TYPE_TRAITS_X_H__
 #define __NETWORK_TYPE_TRAITS_X_H__
 
+//define HEADER_CONTROL 0 
+
 #include <type_traits>
 #include <tuple>
 #include <stdint.h>

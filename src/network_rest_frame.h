@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_REST_FRAME_H__
 #define __DG_NETWORK_REST_FRAME_H__ 
 
+//define HEADER_CONTROL 11
+
 #include <stdint.h>
 #include <stdlib.h>
 #include "network_std_container.h"

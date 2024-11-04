@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_COMPACT_SERIALIZER_H__
 #define __DG_NETWORK_COMPACT_SERIALIZER_H__
 
+//define HEADER_CONTROL 2
+
 #include <string>
 #include <memory>
 #include <vector>

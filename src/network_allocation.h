@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_ALLOCATION_H__
 #define __DG_NETWORK_ALLOCATION_H__
 
+//define HEADER_CONTROL 4
+
 #include "dg_heap/heap.h"
 #include <stdint.h>
 #include <stdlib.h>

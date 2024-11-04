@@ -1,6 +1,8 @@
 #ifndef __NETWORK_LOGGER_H__
 #define __NETWORK_LOGGER_H__
 
+//define HEADER_CONTROL 7 
+
 #include <string>
 #include <filesystem> 
 #include <fstream>
@@ -15,10 +17,6 @@
 #include "network_postgres_db.h"
 #include <thread>
 #include "network_std_container.h"
-
-// namespace dg::network_log::last_mohican{
-
-// }
 
 namespace dg::network_log::implementation{
 

@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_POSTGRES_DB_H__
 #define __DG_NETWORK_POSTGRES_DB_H__
 
+//define HEADER_CONTROL 6
+
 #include <mutex>
 #include <memory>
 #include <stdint.h>
@@ -13,7 +15,6 @@
 #include <functional>
 #include <algorithm>
 #include <utility>
-#include "format"
 #include <pqxx/cursor>
 #include <pqxx/transaction>
 #include <pqxx/nontransaction>

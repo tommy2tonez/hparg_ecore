@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_TRIVIAL_SERIALIZER_H__
 #define __DG_NETWORK_TRIVIAL_SERIALIZER_H__
 
+//define HEADER_CONTROL 0 
+
 #include <climits>
 #include <bit>
 #include <optional>
@@ -8,7 +10,6 @@
 #include <cstring>
 #include <cstdint>
 #include <tuple>
-#include "network_type_traits_x.h"
 
 namespace dg::network_trivial_serializer::constants{
 
@@ -61,7 +62,22 @@ namespace dg::network_trivial_serializer::types_space{
     static constexpr bool is_dg_arithmetic_v = is_dg_arithmetic<T>::value;
 
     template <class T>
-    using base_type_t = dg::network_type_traits_x::base_type_t<T>;
+    struct base_type: std::enable_if<true, T>{};
+
+    template <class T>
+    struct base_type<const T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<volatile T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&&>: base_type<T>{};
+
+    template <class T>
+    using base_type_t = typename base_type<T>::type;
 }
 
 namespace dg::network_trivial_serializer::utility{

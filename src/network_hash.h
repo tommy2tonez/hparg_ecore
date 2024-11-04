@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_HASH_H__
 #define __DG_NETWORK_HASH_H__
 
+//define HEADER_CONTROL 1 
+
 #include "network_trivial_serializer.h"
 #include <stdint.h>
 #include <stdlib.h>

@@ -2,6 +2,8 @@
 #ifndef __DG_HUFFMAN_ENCODER__
 #define __DG_HUFFMAN_ENCODER__
 
+//define HEADER_CONTROL 6
+
 #include <memory>
 #include <vector>
 #include <algorithm>

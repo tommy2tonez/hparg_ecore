@@ -1,6 +1,8 @@
 #ifndef __NETWORK_EXCEPTION_H__
 #define __NETWORK_EXCEPTION_H__
 
+//define HEADER_CONTROL 0
+
 #include <exception>
 #include <stdint.h>
 #include <stdlib.h> 
@@ -88,6 +90,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t RESOURCE_EXHAUSTION                 = 49u;
     static inline constexpr exception_t TIMEOUT                             = 50u;
     static inline constexpr exception_t BAD_RETRANSMISSION                  = 51u;
+    static inline constexpr exception_t INVALID_FORMAT                      = 52u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 

@@ -1,6 +1,8 @@
 #ifndef __NETWORK_RANDOMIZER_H__
 #define __NETWORK_RANDOMIZER_H__
 
+//define HEADER_CONTROL 4
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <utility>
@@ -90,7 +92,6 @@ namespace dg::network_randomizer{
         uint64_t rs = BitRandomizer::randomize_bit(std::integral_constant<size_t, 1u>{}); 
         return static_cast<bool>(rs);
     }
-
 
     template <class T, std::enable_if_t<std::numeric_limits<T>::is_integer, bool> = true>
     auto randomize_int() noexcept -> T{
