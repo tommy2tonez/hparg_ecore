@@ -1,7 +1,7 @@
 #ifndef __DG_NETWORK_REST_FRAME_H__
 #define __DG_NETWORK_REST_FRAME_H__ 
 
-//define HEADER_CONTROL 11
+//define HEADER_CONTROL 12
 
 #include <stdint.h>
 #include <stdlib.h>

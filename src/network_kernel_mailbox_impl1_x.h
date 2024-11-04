@@ -1,7 +1,7 @@
 #ifndef __NETWORK_KERNEL_MAILBOX_IMPL1_X_H__
 #define __NETWORK_KERNEL_MAILBOX_IMPL1_X_H__
 
-//define HEADER_CONTROL 9
+//define HEADER_CONTROL 10
 
 #include "network_kernel_mailbox_impl1.h"
 #include "network_trivial_serializer.h"

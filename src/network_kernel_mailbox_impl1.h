@@ -1,7 +1,7 @@
 #ifndef __DG_SENDERLESS_MAILBOX_H__
 #define __DG_SENDERLESS_MAILBOX_H__
 
-//define HEADER_CONTROL 8
+//define HEADER_CONTROL 9
 
 #include <stdint.h>
 #include <vector>
@@ -37,6 +37,7 @@
 #include <chrono>
 #include <array>
 #include "network_randomizer.h"
+#include "network_exception_handler.h"
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -232,7 +233,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
             
             virtual ~PacketContainerInterface() noexcept = default;
-            virtual void push(Packet) noexcept = 0; //the reason this is void is because it looks dumb if auto push(Packet) noexcept -> std::expected<Packet, exception_t> - yeah the language is hard - noexcept -> exception_t is only the tip of the iceberg (https://fouronnes.github.io/cppiceberg/)
+            virtual void push(Packet) noexcept = 0;
             virtual auto pop() noexcept -> std::optional<Packet> = 0;
     };
 
@@ -284,7 +285,7 @@ namespace dg::network_kernel_mailbox_impl1::utility{
 
     static auto serialize_packet(Packet packet) noexcept -> dg::string{
 
-        size_t header_sz    = dg::network_compact_serializer::integrity_size(static_cast<const PacketHeader&>(packet));  //assure that PacketHeader is constexpr sz
+        size_t header_sz    = dg::network_compact_serializer::integrity_size(PacketHeader{});
         size_t content_sz   = packet.content.size();
         size_t total_sz     = content_sz + header_sz;
         dg::string bstream = std::move(packet.content);
@@ -297,7 +298,7 @@ namespace dg::network_kernel_mailbox_impl1::utility{
 
     static auto deserialize_packet(dg::string bstream) noexcept -> std::expected<Packet, exception_t>{
 
-        auto header_sz      = dg::network_compact_serializer::integrity_size(PacketHeader{});
+        size_t header_sz    = dg::network_compact_serializer::integrity_size(PacketHeader{});
         Packet rs           = {};
         auto [left, right]  = stdx::backsplit_str(std::move(bstream), header_sz);
         rs.content          = std::move(left);
@@ -349,11 +350,8 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
     static auto port_socket_ipv6(SocketHandle sock, uint16_t port) noexcept -> exception_t{
 
-        if constexpr(DEBUG_MODE_FLAG){
-            if (sock.sin_fam != AF_INET6){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sock.sin_fam != AF_INET6){
+            return dg::network_exception::INVALID_ARGUMENT;
         }
 
         struct sockaddr_in6 server  = legacy_struct_default_init<struct sockaddr_in6>();
@@ -370,11 +368,8 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
     static auto port_socket_ipv4(SocketHandle sock, uint16_t port) noexcept -> exception_t{
 
-        if constexpr(DEBUG_MODE_FLAG){
-            if (sock.sin_fam != AF_INET){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sock.sin_fam != AF_INET){
+            return dg::network_exception::INVALID_ARGUMENT;
         }
 
         struct sockaddr_in server   = legacy_struct_default_init<struct sockaddr_in>();
@@ -406,26 +401,20 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         struct sockaddr_in6 server = legacy_struct_default_init<struct sockaddr_in6>();
         
-        if constexpr(DEBUG_MODE_FLAG){
-            if (to_addr.ip.sin_fam() != AF_INET6){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (to_addr.ip.sin_fam() != AF_INET6){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
 
-            if (sock.sin_fam != AF_INET6){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();   
-            }
+        if (sock.sin_fam != AF_INET6){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
 
-            if (sz > constants::MAXIMUM_MSG_SIZE){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sz > constants::MAXIMUM_MSG_SIZE){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
 
-            if (sock.protocol != SOCK_DGRAM){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sock.comm != SOCK_DGRAM){
+            return dg::network_exception::INVALID_ARGUMENT;
         }
 
         if (inet_pton(AF_INET6, to_addr.ip.data(), &server.sin6_addr) == -1){
@@ -436,11 +425,11 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
         server.sin6_port    = htons(to_addr.port);
         auto n              = sendto(sock.kernel_sock_fd, buf, stdx::wrap_safe_integer_cast(sz), MSG_DONTWAIT, (const struct sockaddr *) &server, sizeof(struct sockaddr_in6));
 
-        if (n == -1){ //this is defined - 
+        if (n == -1){
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
-        if (n != sz){ //this is defined -
+        if (stdx::safe_integer_cast<size_t>(n) != sz){
             return dg::network_exception::RUNTIME_SOCKETIO_ERROR;
         }
 
@@ -451,25 +440,19 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         struct sockaddr_in server = legacy_struct_default_init<struct sockaddr_in>();
         
-        if constexpr(DEBUG_MODE_FLAG){
-            if (to_addr.ip.sin_fam() != AF_INET){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
-            if (sock.sin_fam != AF_INET){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();   
-            }
+        if (to_addr.ip.sin_fam() != AF_INET){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
+        if (sock.sin_fam != AF_INET){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
 
-            if (sz > constants::MAXIMUM_MSG_SIZE){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sz > constants::MAXIMUM_MSG_SIZE){
+            return dg::network_exception::INVALID_ARGUMENT;
+        }
 
-            if (sock.protocol != SOCK_DGRAM){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sock.comm != SOCK_DGRAM){
+            return dg::network_exception::INVALID_ARGUMENT;
         }
 
         if (inet_pton(AF_INET, to_addr.ip.data(), &server.sin_addr) == -1){
@@ -484,7 +467,7 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
-        if (n != sz){
+        if (stdx::safe_integer_cast<size_t>(n) != sz){
             return dg::network_exception::RUNTIME_SOCKETIO_ERROR;
         }
 
@@ -492,10 +475,6 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
     } 
 
     static auto send_noblock(SocketHandle sock, model::Address to_addr, const void * buf, size_t sz) noexcept -> exception_t{
-
-        //TODOS:
-        //another kernel protocol is required to saturate network bandwidth - either reimplementation or SO_REUSEPORT + SO_ATTACH + disable gro + unload ip tables + disable validation + disable audit + skip id calculation
-        //on top of all those configurations, use multiple ports to spam TCP packets - make sure that there's no lock congestion
 
         if (sock.sin_fam == AF_INET6){
             return send_noblock_ipv6(sock, to_addr, buf, sz);
@@ -505,25 +484,13 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
             return send_noblock_ipv4(sock, to_addr, buf, sz);
         }
 
-        if constexpr(DEBUG_MODE_FLAG){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-            std::abort();
-        }
-
-        return {};
+        return dg::network_exception::INVALID_ARGUMENT;
     }
 
     static auto recv_block(SocketHandle sock, void * dst, size_t& dst_sz, size_t dst_cap) noexcept -> exception_t{
 
-        //TODOS:
-        //another kernel protocol is required to saturate network bandwidth - either reimplementation or SO_REUSEPORT + SO_ATTACH + disable gro + unload ip tables + disable validation + disable audit + skip id calculation
-        //on top of all those configurations, use multiple ports to spam TCP packets - make sure that there's no lock congestion
-
-        if constexpr(DEBUG_MODE_FLAG){
-            if (sock.protocol != SOCK_DGRAM){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
+        if (sock.comm != SOCK_DGRAM){
+            return dg::network_exception::INVALID_ARGUMENT;
         }
 
         struct sockaddr_storage from    = legacy_struct_default_init<struct sockaddr_storage>();
@@ -669,7 +636,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
-        
+
     struct WAPIntervalData{
         size_t outbound_sz;
         dg::vector<std::chrono::nanoseconds> rtt_vec;
@@ -1092,7 +1059,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return std::nullopt;
                 }
 
-                auto greater    = [](const auto& lhs, const auto& rhs){return lhs.sched_time > rhs.sched_time;};
+                auto greater = [](const auto& lhs, const auto& rhs){return lhs.sched_time > rhs.sched_time;};
                 std::pop_heap(this->packet_vec.begin(), this->packet_vec.end(), greater);
                 auto rs = std::move(this->packet_vec.back().pkt);
                 this->packet_vec.pop_back();
@@ -1575,8 +1542,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(stamp_err));
                 }
 
+                Address dst             = cur->to_addr;
                 dg::string bstream      = utility::serialize_packet(std::move(cur.value()));
-                exception_t sock_err    = socket_service::send_noblock(*this->socket, cur->to_addr, bstream.data(), bstream.size());
+                exception_t sock_err    = socket_service::send_noblock(*this->socket, dst, bstream.data(), bstream.size());
                 
                 if (dg::network_exception::is_failed(sock_err)){
                     dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(sock_err));
@@ -1835,22 +1803,22 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         }
 
         static auto spawn_update_worker(std::shared_ptr<packet_controller::UpdatableInterface> updatable,
-                                        std::chrono::nanoseconds traffic_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+                                        std::chrono::nanoseconds update_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
             using namespace std::chrono_literals; 
 
-            const std::chrono::nanoseconds MIN_TRAFFIC_DUR  = std::chrono::duration_cast<std::chrono::nanoseconds>(1us); 
-            const std::chrono::nanoseconds MAX_TRAFFIC_DUR  = std::chrono::duration_cast<std::chrono::nanoseconds>(60s);
+            const std::chrono::nanoseconds MIN_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(1us); 
+            const std::chrono::nanoseconds MAX_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(3600s);
 
             if (updatable == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(traffic_dur, MIN_TRAFFIC_DUR, MAX_TRAFFIC_DUR) != traffic_dur){
+            if (std::clamp(update_dur, MIN_UPDATE_DUR, MAX_UPDATE_DUR) != update_dur){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<UpdateWorker>(std::move(updatable), traffic_dur);
+            return std::make_unique<UpdateWorker>(std::move(updatable), update_dur);
         }
     };
 }
@@ -1887,7 +1855,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
                 if (dg::network_exception::is_failed(err)){
                     dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
-                }            
+                }
             }
 
             auto recv() noexcept -> std::optional<dg::string>{
@@ -1999,7 +1967,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
             auto sched_daemon_handle    = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(sched_update_ins)));
 
             daemon_vec.push_back(std::move(traffic_daemon_handle));
-            daemon_vec.push_back(std::move(sched_daemon_handle)); 
+            daemon_vec.push_back(std::move(sched_daemon_handle));
 
             return std::make_unique<RetransmittableMailBoxController>(std::move(daemon_vec), std::move(packet_gen), 
                                                                       std::move(retransmission_manager_sp), std::move(ob_packet_container_sp),
@@ -2010,19 +1978,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 }
 
 namespace dg::network_kernel_mailbox_impl1{
-
-    //scheduler - this is actually hard to implement
-    //discretization_sz - is is uniform discretization or log discretization
-    //statistics data might be saturated and become irrelevant after a certain period of time
-    //Address need to be cleared intervally - this should be solved internally rather than default instantiation
-    //sampling needs to be fast enough and not becoming an overhead
-    //update_interval and max_sched_time are highly correlated - this is to tell whether outbound_sz | inbound_sz are affected by the sched_time
-    //update_interval guarantees inbound of all outbounds from [0, update_interval - max_sched_time - C] to be not affected - this is an important note - because the algorithm depends on success rate solely 
-    //the fuzzy interval from [update_interval - max_sched_time - C, update_interval] is uncertainty - so - the higher update_interval/ max_sched_time ratio - the lower the uncertainty
-    //sampling bias - given random time slices A, B of two random statistical points. Are they truely uniform distribution - if so - in what space does the uniform distribution happens?
-    //the probabilistic outbound distribution of the two random time slices should be identical
-    //it seems like max_update_interval is irrelevant - because only min_update_interval is required to reduce uncertainty
-
+    
     struct Config{
         size_t num_inbound_worker;
         size_t num_outbound_worker;
@@ -2071,24 +2027,30 @@ namespace dg::network_kernel_mailbox_impl1{
         scheduler               = packet_controller::ComponentFactory::get_wap_scheduler(config.sched_rtt_minbound, config.sched_rtt_maxbound, config.sched_rtt_discretization_sz,
                                                                                          config.sched_adjecent_minbound, config.sched_adjecent_maxbound, config.sched_adjecent_discretization_sz,
                                                                                          config.sched_outgoing_maxbound, config.sched_update_interval, config.sched_reset_interval,
-                                                                                        config.sched_map_cap, config.sched_rtt_vec_cap);
+                                                                                         config.sched_map_cap, config.sched_rtt_vec_cap);
 
         retransmission_manager  = packet_controller::ComponentFactory::get_retransmission_manager(config.retransmission_delay, config.retransmission_count, config.global_id_flush_cap, config.retransmission_cap);
 
         packet_gen              = packet_controller::ComponentFactory::get_packet_gen(utility::to_factory_id(Address{config.host_ip, config.host_port}), Address{config.host_ip, config.host_port});
 
-        ib_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_outbound_packet_container(scheduler), 
+        ib_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_prioritized_packet_container(),
                                                                                                                   config.retry_device,
                                                                                                                   config.inbound_exhaustion_control_cap);
                                                                                                                   
-        ob_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_prioritized_packet_container(),
+        ob_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_outbound_packet_container(scheduler), 
                                                                                                                   config.retry_device,
                                                                                                                   config.outbound_exhaustion_control_cap);
-        ib_id_controller        = packet_controller::ComponentFactory::get_inbound_id_controller(config.global_id_flush_cap);
+                                                                                                                  
 
+        ib_id_controller        = packet_controller::ComponentFactory::get_inbound_id_controller(config.global_id_flush_cap);
+        
         ib_traffic_controller   = packet_controller::ComponentFactory::get_inbound_traffic_controller(config.inbound_traffic_addr_cap, config.inbound_traffic_global_cap, config.inbound_traffic_max_address);
 
-        if (config.protocol != SOCK_DGRAM){
+        if (config.sin_fam != AF_INET && config.sin_fam != AF_INET6){
+            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        if (config.comm != SOCK_DGRAM){
             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
         }
 
