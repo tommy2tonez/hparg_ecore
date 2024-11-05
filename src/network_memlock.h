@@ -15,6 +15,9 @@
 #include "network_segcheck_bound.h"
 #include "network_std_container.h"
 #include "stdx.h"
+#include <cstdlib>
+#include "network_raii_x.h"
+#include <optional>
 
 namespace dg::network_memlock{
     
@@ -120,13 +123,12 @@ namespace dg::network_memlock{
         using lock_ptr_t    = typename memlock_ins::ptr_t; 
         static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
 
-        static int i        = 0;
-        auto destructor     = [=](int *) noexcept{
-            memlock_ins::acquire_release(ptr);
+        auto destructor = [](ptr_t ptr_arg) noexcept{
+            memlock_ins::acquire_release(ptr_arg);
         };
 
         memlock_ins::acquire_wait(ptr);
-        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+        return dg::unique_resource<ptr_t, decltype(destructor)>(ptr, std::move(destructor));
     }
 
     template <class T>
@@ -158,40 +160,27 @@ namespace dg::network_memlock{
         using memlock_ins   = dg::network_memlock::MemoryRegionLockInterface<T>;
         using lock_ptr_t    = typename memlock_ins::ptr_t<>;
         using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
+    
         static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
 
-        dg::unordered_unstable_set<lock_ptr_t> * ptr_set    = &resource_ins::get();
-        lock_ptr_t ptr_region                               = dg::memult::region(ptr, memlock_ins::memregion_size()); 
-        bool responsibility_flag                            = {};
-        bool try_success_flag                               = {};
-
-        if (ptr_set->find(ptr_region) == ptr_set->end()){
-            if (memlock_ins::acquire_try(ptr_region)){
-                responsibility_flag = true;
-                try_success_flag    = true;
-                ptr_set->insert(ptr_region);
-            } else{
-                responsibility_flag = false;
-                try_success_flag    = false;
-            }
-        } else{
-            responsibility_flag = false;
-            try_success_flag    = true;
-        }
-
-        static int i    = 0;
-        auto destructor = [=](int *) noexcept{
-            if (responsibility_flag){
-                ptr_set->erase(ptr_region);
-                memlock_ins::acquire_release(ptr_region);
-            }
+        lock_ptr_t ptr_region = dg::memult::region(ptr, memlock_ins::memregion_size());
+        auto destructor = [](lock_ptr_t arg) noexcept{
+            resource_ins::get().erase(arg);
+            memlock_ins::acquire_release(arg);
         };
-        
-        if (try_success_flag){
-            return std::unique_ptr<int, decltype(destructor)>(&i, std::move(destructor)); 
+
+        using rs_type = std::optional<dg::unique_resource<lock_ptr_t, decltype(destructor)>>; //yeah decltype(lambda) and void (*)(Args...) are the two very different things in the world of C++ - don't ask
+
+        if (resource_ins::get().contains(ptr_region)){
+            return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>());
         }
 
-        return std::unique_ptr<int, decltype(destructor)>(nullptr, std::move(destructor));
+        if (memlock_ins::acquire_try(ptr_region)){
+            resource_ins::get().insert(ptr_region);
+            return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>(ptr_region, std::move(destructor)));
+        }
+
+        return rs_type(std::nullopt);
     }
 
     template <class T, class ptr_t>
@@ -205,35 +194,32 @@ namespace dg::network_memlock{
     }
 
     template <class T, class ...Args>
+    auto recursive_trylock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
+
+        using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
+        using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}));
+        
+        static_assert(std::conjunction_v<std::is_same<Args, lock_ptr_t>...>);
+        
+        auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...};
+        auto resource_arr       = std::array<lock_resource_t, sizeof...(Args)>{};
+
+        for (size_t i = 0u; i < sizeof...(Args); ++i){
+            resource_arr[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+
+            if (!static_cast<bool>(resource_arr[i])){
+                return std::optional<std::array<lock_resource_t, sizeof...(Args)>>(std::nullopt);
+            }
+        }
+
+        return std::optional<std::array<lock_resource_t, sizeof...(Args)>>(std::move(resource_arr));
+    }
+
+    template <class T, class ...Args>
     auto recursive_lock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
 
-        auto args_tup   = std::make_tuple(args...);
-        auto try_lambda = [=]<class Self, size_t IDX>(Self& self, const std::integral_constant<size_t, IDX>){
-            if constexpr(IDX == sizeof...(Args)){
-                return bool{true};
-            } else{                
-                auto cur_lck            = recursive_trylock_guard(lock_ins, std::get<IDX>(args_tup));
-                using successor_ret_t   = decltype(self(self, std::integral_constant<size_t, IDX + 1>{}));
-                using lck_t             = decltype(cur_lck);
-                using ret_t             = std::pair<lck_t, successor_ret_t>;
-                using opt_ret_t         = std::optional<ret_t>;
-
-                if (!static_cast<bool>(cur_lck)){
-                    return opt_ret_t{std::nullopt};
-                } else{
-                    auto successor_rs = self(self, std::integral_constant<size_t, IDX + 1>{});
-                    
-                    if (!static_cast<bool>(successor_rs)){
-                        return opt_ret_t{std::nullopt};
-                    } else{
-                        return opt_ret_t{ret_t{std::move(cur_lck), std::move(successor_rs)}};
-                    }
-                }
-            }
-        };
-
         while (true){
-            if (auto rs = try_lambda(try_lambda, std::integral_constant<size_t, 0u>{}); static_cast<bool>(rs)){
+            if (auto rs = recursive_trylock_guard_many(lock_ins, args...); static_cast<bool>(rs)){
                 return rs;
             }
         }

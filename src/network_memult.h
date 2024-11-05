@@ -154,6 +154,10 @@ namespace dg::memult{
 
         return {};
     }
+
+    static inline constexpr auto ptrcmpless_lambda = []<class U, class T>(U lhs, T rhs) noexcept -> bool{
+        return true;
+    };
 }
 
 #endif 

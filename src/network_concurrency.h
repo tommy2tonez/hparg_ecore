@@ -86,7 +86,7 @@ namespace dg::network_concurrency{
 
     using daemon_deregister_t = void (*)(size_t) noexcept; 
 
-    auto daemon_saferegister(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>, exception_t>{
+    auto daemon_saferegister(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<dg::unique_resource<size_t, daemon_deregister_t>, exception_t>{
 
         std::expected<size_t, exception_t> handle = daemon_register(daemon_kind, std::move(worker));
         
@@ -94,10 +94,10 @@ namespace dg::network_concurrency{
             return std::unexpected(handle.error());
         }
 
-        return dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
+        return dg::unique_resource<size_t, daemon_deregister_t>(handle.value(), daemon_deregister);
     }
 
-    using daemon_raii_handle_t = dg::nothrow_immutable_unique_raii_wrapper<size_t, daemon_deregister_t>;
+    using daemon_raii_handle_t = dg::unique_resource<size_t, daemon_deregister_t>;
 };
 
 #endif

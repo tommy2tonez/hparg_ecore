@@ -14,6 +14,7 @@
 #include <mutex>
 #include <functional>
 #include <chrono>
+#include "network_raii_x.h"
 
 namespace stdx{
     
@@ -22,12 +23,11 @@ namespace stdx{
 
     inline auto lock_guard(std::atomic_flag& lck) noexcept{
 
-        static int i    = 0;
-        auto destructor = [&](int *) noexcept{
+        auto destructor = [](std::atomic_flag * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             }
-            lck.clear(std::memory_order_release);
+            lck_arg->clear(std::memory_order_release);
         };
 
         while (!lck.test_and_set(std::memory_order_acquire)){}
@@ -35,17 +35,17 @@ namespace stdx{
             std::atomic_thread_fence(std::memory_order_seq_cst);
         }  
 
-        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+        return dg::unique_resource<std::atomic_flag *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
     inline auto lock_guard(std::mutex& lck) noexcept{
 
         static int i    = 0;
-        auto destructor = [&](int *) noexcept{
+        auto destructor = [](std::mutex * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             }
-            lck.unlock();
+            lck_arg->unlock();
         };
 
         lck.lock();
@@ -53,7 +53,7 @@ namespace stdx{
             std::atomic_thread_fence(std::memory_order_seq_cst);
         }
 
-        return std::unique_ptr<int, decltype(destructor)>(&i, destructor);
+        return dg::unique_resource<std::mutex *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
     inline void atomic_optional_thread_fence() noexcept{
@@ -68,13 +68,12 @@ namespace stdx{
         
         static_assert(std::is_nothrow_move_constructible_v<Destructor>);
         static_assert(std::is_nothrow_invocable_v<Destructor>);
-
-        static int i    = 0;
-        auto backout_ld = [destructor_arg = std::move(destructor)](int *) noexcept{
+        
+        auto backout_ld = [destructor_arg = std::move(destructor)](int) noexcept{
             destructor_arg();
         };
 
-        return std::unique_ptr<int, decltype(backout_ld)>(&i, std::move(backout_ld));
+        return dg::unique_resource<int, decltype(backout_ld)>(int{0}, std::move(backout_ld));
     }
 
     template <class T, class T1>

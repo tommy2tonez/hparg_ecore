@@ -272,7 +272,7 @@ namespace dg::network_recovery_line{
         recovery_controller->close_recovery_line(line_id);
     }
 
-    auto get_raii_recovery_line(std::unique_ptr<RecoverableInterface> recoverable) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<size_t, decltype(&network_recovery_line::close_recovery_line)>, exception_t>{
+    auto get_raii_recovery_line(std::unique_ptr<RecoverableInterface> recoverable) noexcept -> std::expected<dg::unique_resource<size_t, decltype(&network_recovery_line::close_recovery_line)>, exception_t>{
 
         std::expected<size_t, exception_t> line_id = network_recovery_line::get_recovery_line(std::move(recoverable));
 
@@ -280,7 +280,7 @@ namespace dg::network_recovery_line{
             return std::unexpected(line_id.error());
         }
 
-        return dg::nothrow_immutable_unique_raii_wrapper<size_t, decltype(&network_recovery_line::close_recovery_line)>(line_id.value(), network_recovery_line::close_recovery_line);
+        return dg::unique_resource<size_t, decltype(&network_recovery_line::close_recovery_line)>(line_id.value(), network_recovery_line::close_recovery_line);
     }
 }
 

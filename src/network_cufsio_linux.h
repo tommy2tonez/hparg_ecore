@@ -334,7 +334,7 @@ namespace dg::network_cufsio_linux::cufs_sptr_controller{
 namespace dg::network_cufsio_linux::cufs_io{
 
     struct CudaFileDescriptor{
-        dg::network_genult::nothrow_immutable_unique_raii_wrapper<int, dg::network_fileio_linux::kernel_fclose_t> kernel_raii_fd;
+        dg::network_genult::unique_resource<int, dg::network_fileio_linux::kernel_fclose_t> kernel_raii_fd;
         CUfileHandle_t cf_handle;
     };
 

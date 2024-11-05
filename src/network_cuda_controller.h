@@ -45,7 +45,7 @@ namespace dg::network_cuda_stream{
         dg::network_exception_handler::nothrow_log(dg::network_exception::wrap_cuda_exception(cudaStreamDestroy(handle.cuda_stream)));
     }
  
-    auto cuda_stream_raiicreate(uint8_t flags) noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaStreamHandle, decltype(&cuda_stream_close)>, exception_t>{
+    auto cuda_stream_raiicreate(uint8_t flags) noexcept -> std::expected<dg::network_genult::unique_resource<CudaStreamHandle, decltype(&cuda_stream_close)>, exception_t>{
 
         std::expected<CudaStreamHandle, exception_t> handle = cuda_stream_create(flags);
 
@@ -53,7 +53,7 @@ namespace dg::network_cuda_stream{
             return std::unexpected(handle.error());
         }
 
-        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<CudaStreamHandle, decltype(&cuda_stream_close)>(std::move(handle.value()), cuda_stream_close);
+        return dg::network_genult::unique_resource<CudaStreamHandle, decltype(&cuda_stream_close)>(std::move(handle.value()), cuda_stream_close);
     }
 
     auto cuda_stream_get_legacy(CudaStreamHandle handle) noexcept -> cudaStream_t{

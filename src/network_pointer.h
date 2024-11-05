@@ -33,7 +33,12 @@ namespace dg{
 
     template <class T>
     struct ptr_limits{
-        static inline constexpr T null_value = T{};
+        // static inline constexpr T null_value = T{};
+
+        static consteval auto null_value() noexcept -> T{
+
+            return T{};
+        }
     };
 
 }

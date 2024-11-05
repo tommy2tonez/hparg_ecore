@@ -12,6 +12,10 @@
 
 namespace dg::network_uma{
 
+    //ssd + RAID + friends are very fast - DDR4, DDR5 are expensive - so it's the program responsibility to optimize locality to achieve maximum speed and minimum expensive storage
+    //cuda + friends are of different league - it's 1 << 20 faster - so it's important to not waste any flop here - this is a bare metal programming of unified mutual exclusive memory address - not recommend anyone read and understand this
+    //
+
     using device_id_t           = uint8_t;
     using uma_ptr_t             = uint64_t;
     using device_ptr_t          = void *;
@@ -107,7 +111,7 @@ namespace dg::network_uma{
         return tlb_instance::get_vma_ptr(map_resource);
     }
 
-    auto map_safewait(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
+    auto map_safewait(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 
         auto map_rs = network_uma::map_wait(device_id, ptr); 
 
@@ -115,10 +119,10 @@ namespace dg::network_uma{
             return std::unexpected(map_rs.error());
         }
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
     }
 
-    auto map_safewait(uma_ptr_t ptr) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
+    auto map_safewait(uma_ptr_t ptr) noexcept -> std::expected<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 
         auto map_rs = network_uma::map_wait(ptr);
 
@@ -126,7 +130,7 @@ namespace dg::network_uma{
             return std::unexpected(map_rs.error());
         }
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
     }
 
     auto device_count(uma_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
@@ -170,12 +174,12 @@ namespace dg::network_uma{
         return tlb_instance::map_wait(device_id, ptr);
     }
 
-    auto map_safewait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>{
+    auto map_safewait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(device_id, ptr), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(device_id, ptr), map_release_lambda);
     }
 
-    auto map_safetry_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>>{
+    auto map_safetry_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>>{
 
         auto rs = network_uma::map_try_nothrow(device_id, ptr); 
 
@@ -183,7 +187,7 @@ namespace dg::network_uma{
             return std::nullopt;
         }
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(rs.value(), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(rs.value(), map_release_lambda);
     } 
 
     auto device_count_nothrow(uma_ptr_t ptr) noexcept -> size_t{
@@ -214,9 +218,9 @@ namespace dg::network_uma{
         }
     }
 
-    auto map_wait_safe_nothrow(uma_ptr_t ptr) noexcept -> dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>{
+    auto map_wait_safe_nothrow(uma_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(ptr), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(ptr), map_release_lambda);
     }
 }
 

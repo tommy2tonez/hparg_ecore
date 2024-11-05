@@ -133,12 +133,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint8_t port_stamp_sz; 
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(fr_addr, to_addr, id, retransmission_count, priority, kind, port_utc_stamps, port_stamp_sz);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
             reflector(fr_addr, to_addr, id, retransmission_count, priority, kind, port_utc_stamps, port_stamp_sz);
         }
     };
@@ -242,7 +242,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~InBoundIDControllerInterface() noexcept = default;
-            virtual auto thru(global_packet_id_t) noexcept -> std::expected<bool, exception_t> = 0; //std::expected<bool, exception_t> is a good practice (look std::filesystem::exists)- they are used for representing different things - bool = false denotes that the thru packet is of valid format
+            virtual auto thru(global_packet_id_t) noexcept -> std::expected<bool, exception_t> = 0;
     };
 
     class InBoundTrafficControllerInterface{

@@ -39,7 +39,7 @@ namespace dg::network_fileio{
 
     using kernel_fclose_t = void (*)(int) noexcept;
 
-    auto dg_open_file(const char * fp, int flag) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>, exception_t>{
+    auto dg_open_file(const char * fp, int flag) noexcept -> std::expected<dg::unique_resource<int, kernel_fclose_t>, exception_t>{
 
         int fd = open(fp, flag, DG_FILEIO_MODE);
 
@@ -54,7 +54,7 @@ namespace dg::network_fileio{
             }
         };
 
-        return dg::nothrow_immutable_unique_raii_wrapper<int, kernel_fclose_t>{fd, std::move(destructor)}; 
+        return dg::unique_resource<int, kernel_fclose_t>{fd, std::move(destructor)}; 
     }
     
     auto dg_file_size(int fd) noexcept -> std::expected<size_t, exception_t>{

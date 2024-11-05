@@ -17,6 +17,10 @@
 #include "network_type_traits_x.h" 
 #include "network_uma_tlb.h" 
 
+//ssd + RAID + friends are very fast - DDR4, DDR5 are expensive - so it's the program responsibility to optimize locality to achieve maximum speed and minimum expensive storage
+//cuda + friends are of different league - it's 1 << 20 faster - so it's important to not waste any flop here - this is a bare metal programming of unified mutual exclusive memory address - not recommend anyone to read and understand this
+//tensor combinatorial operations are expensive (linear - all_row (lhs) combines all columns (rhs)) - sometimes more expensive than a load from a slow speed storage - so the usage of slow storage devices are recommended 
+
 namespace dg::network_uma_tlb_impl1::interface{
 
     template <class T>
@@ -34,7 +38,7 @@ namespace dg::network_uma_tlb_impl1::interface{
         using vma_ptr_t     = typename T1::vma_ptr_t;
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto map_try(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept -> typename T1::vma_ptr_t{ //I never liked the idea of NULLPTR - its bad - buggy - optional<ptr_t> is the way yet I think there's performance constraints - nullptr is too heavily optimized such that 0 cmp is SO FAST than other type of cmps
+        static auto map_try(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept -> typename T1::vma_ptr_t{
 
             return T::map_try(device_id, host_ptr);
         }
@@ -76,24 +80,6 @@ namespace dg::network_uma_tlb_impl1::interface{
         static void memcpy(typename T1::vma_ptr_t dst, typename T1::vma_ptr_t src, size_t n) noexcept{
             
             T::memcpy(dst, src, n);
-        }
-    };
-
-    template <class T>
-    struct MemregionQualiferGetterInterface{
-
-        using interface_t           = MemregionQualiferGetterInterface<T>;
-
-        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        using uma_ptr_t             = typename T1::uma_ptr_t;
-        
-        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        using memqualifier_kind_t   = typename T1::memqualifier_kind_t;  
-
-        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto get(typename T1::uma_ptr_t host_ptr) noexcept -> typename T1::memqualifier_kind_t{
-
-            return T1::get(host_ptr);
         }
     };
 }
@@ -150,10 +136,18 @@ namespace dg::network_uma_tlb_impl1::translation_table_impl{
                     if (dg::pointer_cast<dst_uptr_t>(dst_region_arr[i]) % MEMREGION_SZ != 0u){
                         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
+
+                    if (src_region_arr[i] == dg::ptr_limits<src_ptr_t>::null_value()){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    if (dst_region_arr[i] == dg::ptr_limits<dst_ptr_t>::null_value()){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
                 }
 
-                src_ptr_t first_src_region  = *std::min_element(src_region_arr, src_region_arr + n);
-                src_ptr_t last_src_region   = *std::max_element(src_region_arr, src_region_arr + n); 
+                src_ptr_t first_src_region  = *std::min_element(src_region_arr, src_region_arr + n, dg::memult::ptrcmpless_lambda);
+                src_ptr_t last_src_region   = dg::memult::advance(*std::max_element(src_region_arr, src_region_arr + n, dg::memult::ptrcmpless_lambda), MEMREGION_SZ);
                 size_t table_sz             = dg::memult::distance(first_src_region, last_src_region) / MEMREGION_SZ;
                 translation_table           = std::make_unique<dst_ptr_t[]>(table_sz);
                 region_first                = first_src_region;
@@ -187,6 +181,9 @@ namespace dg::network_uma_tlb_impl1::translation_table_impl{
                 return dg::memult::advance(translation_table[idx], off);
             }
     };
+
+    //it's better to be device_id * MEM_WIDTH + static_cast<uptr_t>(ptr) - its more cache-efficient this way - if memregion is reordered to achieve adjecency - otherwise use unordered_unstable_map
+    //the problem with the multiplication there is that - it's a pipeline halt - but still better than a cache miss
 
     template <class ID, class UMAPtrType, class VMAPtrType, class DeviceIDType, size_t MEMREGION_SZ, size_t DEVICE_COUNT>
     class UMATranslationTable{
@@ -244,7 +241,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
     using namespace interface;
 
-    template <class ID, class MemTransferDevice, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemRegionSize, class ProxyCount>                                    
+    template <class ID, class MemTransferDevice, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemregionSize, class ProxyCount>
     struct ProxyTLB{};
 
     template <class ID, class T, class DeviceIDType, class UMAPtrType, class VMAPtrType, size_t MEMREGION_SZ, size_t PROXY_COUNT>
@@ -255,11 +252,11 @@ namespace dg::network_uma_tlb_impl1::exclusive{
             using device_id_t           = DeviceIDType;
             using uma_ptr_t             = UMAPtrType;
             using vma_ptr_t             = dg::network_type_traits_x::mono_reduction_type_t<VMAPtrType, typename MemoryTransferDeviceInterface<T>::vma_ptr_t<>>;
-            
+
         private:
             
             using self                  = ProxyTLB;
-            using memtransfer_device    = MemoryTransferDeviceInterface<T>; 
+            using memtransfer_device    = MemoryTransferDeviceInterface<T>;
             using uma_proxy_lock        = dg::network_memlock_proxyspin::ReferenceLock<self, std::integral_constant<size_t, MEMREGION_SZ>, uma_ptr_t, device_id_t>;
             using translation_table     = translation_table_impl::UMATranslationTable<self, uma_ptr_t, vma_ptr_t, device_id_t, MEMREGION_SZ, PROXY_COUNT>;
 
@@ -277,7 +274,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
             }
 
             static void dispatch_steal(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept{
-                
+
                 uma_ptr_t host_region = memregion(host_ptr);
                 std::optional<device_id_t> potential_stealee_id = uma_proxy_lock::acquire_try(host_region);  
 
@@ -301,22 +298,22 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static_assert(memult::is_pow2(MEMREGION_SZ));
 
-            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id, bool * is_proxy_rep, size_t n){
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, bool * is_proxy_rep_arr, size_t n){
 
-                auto uma_rep_region     = std::make_unique<uma_ptr_t[]>(n);
-                auto uma_rep_device_id  = std::make_unique<device_id_t[]>(n);
-                size_t rep_sz           = 0u; 
+                auto uma_rep_region_arr     = std::make_unique<uma_ptr_t[]>(n);
+                auto uma_rep_device_id_arr  = std::make_unique<device_id_t[]>(n);
+                size_t rep_sz               = 0u; 
 
-                for (size_t i = 0; i < n; ++i){
-                    if (is_proxy_rep[i]){
-                        uma_rep_region[rep_sz]      = uma_region_arr[i];
-                        uma_rep_device_id[rep_sz]   = device_id[i];
+                for (size_t i = 0u; i < n; ++i){
+                    if (is_proxy_rep_arr[i]){
+                        uma_rep_region_arr[rep_sz]      = uma_region_arr[i];
+                        uma_rep_device_id_arr[rep_sz]   = device_id_arr[i];
                         ++rep_sz;
                     }
                 }
-                
-                translation_table::init(uma_region_arr, vma_region_arr, device_id, n); 
-                uma_proxy_lock::init(uma_rep_region.get(), uma_rep_device_id.get(), rep_sz);
+
+                translation_table::init(uma_region_arr, vma_region_arr, device_id_arr, n); 
+                uma_proxy_lock::init(uma_rep_region_arr.get(), uma_rep_device_id_arr.get(), rep_sz);
             }
 
             static void deinit() noexcept{
@@ -374,7 +371,7 @@ namespace dg::network_uma_tlb_impl1::direct{
 
     using namespace interface; 
 
-    template <class ID, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemRegionSize, class ProxyCount>
+    template <class ID, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemregionSize, class ProxyCount>
     class ProxyTLB{};
 
     template <class ID, class DeviceIDType, class UMAPtrType, class VMAPtrType, size_t MEMREGION_SZ, size_t PROXY_COUNT>
@@ -399,9 +396,9 @@ namespace dg::network_uma_tlb_impl1::direct{
 
         public:
 
-            static void init(uma_ptr_t * host_region, vma_ptr_t * device_region, device_id_t * device_id, size_t n){
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, size_t n){
                 
-                translation_table::init(host_region, device_region, device_id, n);
+                translation_table::init(uma_region_arr, vma_region_arr, device_id_arr, n);
             }
 
             static void deinit() noexcept{
@@ -467,16 +464,16 @@ namespace dg::network_uma_tlb_impl1::bijective{
             using translation_table = translation_table_impl::TranslationTable<self, uma_ptr_t, vma_ptr_t, MEMREGION_SZ>; 
 
             static auto memregion_slot(uma_ptr_t ptr) noexcept -> size_t{
-    
+
                 using uptr_t = typename dg::ptr_info<uma_ptr_t>::max_unsigned_t; 
                 return dg::pointer_cast<uptr_t>(ptr) / MEMREGION_SZ;
             }
 
         public:
 
-            static void init(uma_ptr_t * host_region, vma_ptr_t * device_region, size_t n){
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, size_t n){
                 
-                translation_table::init(host_region, device_region, n); 
+                translation_table::init(uma_region_arr, vma_region_arr, n); 
             }
 
             static void deinit() noexcept{
@@ -520,138 +517,150 @@ namespace dg::network_uma_tlb_impl1::bijective{
     };
 }
 
-namespace dg::network_uma_tlb_impl1::dbe{ //direct - bijective - exclusive
+namespace dg::network_uma_tlb_impl1::biex{
 
     using namespace interface;
-    using memregion_qualifier_t = uint8_t;
-
-    enum memregion_qualifier_option: memregion_qualifier_t{
-        memqualifier_readonly   = 0u,
-        memqualifier_bijective  = 1u,
-        memqualifier_default    = 2u
-    };
     
-    template <class ID, class DirectTLB, class BijectiveTLB, class ExclusiveTLB, class QualifierTable>
+    template <class ID, class MemTransferDevice, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemregionSize, class ProxyCount>
     class ProxyTLB{}; 
 
-    template <class ID, class T, class T1, class T2, class T3>
-    class ProxyTLB<ID, ProxyTLBInterface<T>, ProxyTLBInterface<T1>, ProxyTLBInterface<T2>, MemregionQualiferGetterInterface<T3>>: public ProxyTLBInterface<ProxyTLB<ID, ProxyTLBInterface<T>, ProxyTLBInterface<T1>, ProxyTLBInterface<T2>, MemregionQualiferGetterInterface<T3>>>{
-
-        private:
-
-            using readonly_tlb          = ProxyTLBInterface<T>;
-            using bijective_tlb         = ProxyTLBInterface<T1>;
-            using default_tlb           = ProxyTLBInterface<T2>;
-            using qualifier_table       = MemregionQualiferGetterInterface<T3>; 
+    template <class ID, class T, class DeviceIDType, class UMAPtrType, class VMAPtrType, size_t MEMREGION_SZ, size_t PROXY_COUNT>
+    class ProxyTLB<ID, MemoryTransferDeviceInterface<T>, DeviceIDType, UMAPtrType, VMAPtrType, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>: public ProxyTLBInterface<ProxyTLB<ID, MemoryTransferDeviceInterface<T>, DeviceIDType, UMAPtrType, VMAPtrType, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>>{
 
         public:
 
-            using device_id_t           = dg::network_type_traits_x::mono_reduction_type_t<typename readonly_tlb::device_id_t<>, typename bijective_tlb::device_id_t<>, typename default_tlb::device_id_t<>>; 
-            using uma_ptr_t             = dg::network_type_traits_x::mono_reduction_type_t<typename readonly_tlb::uma_ptr_t<>, typename bijective_tlb::uma_ptr_t<>, typename default_tlb::uma_ptr_t<>, typename qualifier_table::uma_ptr_t<>>;
-            using vma_ptr_t             = dg::network_type_traits_x::mono_reduction_type_t<typename readonly_tlb::vma_ptr_t<>, typename bijective_tlb::vma_ptr_t<>, typename default_tlb::vma_ptr_t<>>;
+            using device_id_t           = DeviceIDType; 
+            using uma_ptr_t             = UMAPtrType;
+            using vma_ptr_t             = VMAPtrType;
+
+        private:
+
+            using self                  = ProxyTLB;
+            using bijective_tlb         = network_uma_tlb_impl1::bijective::ProxyTLB<self, device_id_t, uma_ptr_t, vma_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>>; 
+            using exclusive_tlb         = network_uma_tlb_impl1::exclusive::ProxyTLB<self, MemoryTransferDeviceInterface<T>, device_id_t, uma_ptr_t, vma_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>;
+            using segcheck_ins          = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
+
+            static inline constexpr uint8_t DISPATCH_CODE_BIJECTIVE     = 0u;
+            static inline constexpr uint8_t DISPATCH_CODE_EXCLUSIVE     = 1u;
+            static inline std::unique_ptr<uint8_t[]> dispatch_table     = nullptr;
+            static inline uma_ptr_t first_region                        = {}; 
+
+            static auto memregion_slot(uma_ptr_t ptr) noexcept -> size_t{
+ 
+                return dg::memult::distance(first_region, ptr) / MEMREGION_SZ;
+            }
+
+        public:
+
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, bool * is_proxy_rep_arr, size_t n){
+
+                if (n == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                for (size_t i = 0u; i < n; ++i){
+                    using uma_uptr_t = dg::ptr_info<uma_ptr_t>::max_unsigned_t; 
+
+                    if (dg::pointer_cast<uma_uptr_t>(uma_region_arr[i]) % MEMREGION_SZ != 0u){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    if (uma_region_arr[i] == dg::ptr_limits<uma_ptr_t>::null_value()){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+                }
+
+                uma_ptr_t uma_region_first      = *std::min_element(uma_region_arr, uma_region_arr + n, dg::memult::ptrcmpless_lambda);
+                uma_ptr_t uma_region_last       = dg::memult::advance(*std::max_element(uma_region_arr, uma_region_arr + n, dg::memult::ptrcmpless_lambda), MEMREGION_SZ);
+                auto counter_map                = std::unordered_map<uma_ptr_t, size_t>{};
+                auto bijective_uma_region_arr   = std::make_unique<uma_ptr_t[]>(n);
+                auto bijective_vma_region_arr   = std::make_unique<vma_ptr_t[]>(n);
+                size_t bijective_arr_sz         = 0u; 
+                size_t dispatch_table_sz        = dg::memult::distance(uma_region_first, uma_region_last) / MEMREGION_SZ;
+                dispatch_table                  = std::make_unique<uint8_t[]>(dispatch_table_sz);
+                first_region                    = uma_region_first;
+
+                for (size_t i = 0u; i < n; ++i){
+                    counter_map[uma_region_arr[i]] += 1;
+                }
+
+                for (size_t i = 0u; i < n; ++i){
+                    size_t table_idx = dg::memult::distance(uma_region_first, uma_region_arr[i]) / MEMREGION_SZ;
+
+                    if (counter_map[uma_region_arr[i]] == 1u){
+                        bijective_uma_region_arr[bijective_arr_sz] = uma_region_arr[i];
+                        bijective_vma_region_arr[bijective_arr_sz] = vma_region_arr[i];
+                        bijective_arr_sz += 1;
+                        dispatch_table[table_idx] = DISPATCH_CODE_BIJECTIVE;
+                    } else{
+                        dispatch_table[table_idx] = DISPATCH_CODE_EXCLUSIVE;
+                    }
+                }
+
+                exclusive_tlb::init(uma_region_arr, vma_region_arr, device_id_arr, is_proxy_rep_arr, n);
+                bijective_tlb::init(bijective_uma_region_arr.get(), bijective_vma_region_arr.get(), bijective_arr_sz);
+                segcheck_ins::init(uma_region_first, uma_region_last);
+            }
+
+            static void deinit() noexcept{
+
+                bijective_tlb::deinit();
+                exclusive_tlb::deinit();
+                dispatch_table = {};
+            }
 
             static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                auto memqualifier = qualifier_table::get(host_ptr); 
+                uint8_t dispatch_code = dispatch_table[memregion_slot(segcheck_ins::access(host_ptr))];
 
-                switch (memqualifier){
-                    case memqualifier_readonly:
-                        return readonly_tlb::map_try(device_id, host_ptr);
-                    case memqualifier_bijective:
-                        return bijective_tlb::map_try(device_id, host_ptr);
-                    case memqualifier_default:
-                        return default_tlb::map_try(device_id, host_ptr);
-                    default:
-                        if constexpr(DEBUG_MODE_FLAG){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                            return {};
-                        } else{
-                            std::unreachable();
-                            return {};
-                        }
-                }        
+                if (dispatch_code == DISPATCH_CODE_BIJECTIVE){ //== 0 is heavily optimized
+                    return bijective_tlb::map_try(device_id, host_ptr);
+                }
+
+                return exclusive_tlb::map_try(device_id, host_ptr);
             }
 
             static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                auto memqualifier = qualifier_table::get(host_ptr); 
+                uint8_t dispatch_code = dispatch_table[memregion_slot(segcheck_ins::access(host_ptr))];
 
-                switch (memqualifier){
-                    case memqualifier_readonly:
-                        return readonly_tlb::map_wait(device_id, host_ptr);
-                    case memqualifier_bijective:
-                        return bijective_tlb::map_wait(device_id, host_ptr);
-                    case memqualifier_default:
-                        return default_tlb::map_wait(device_id, host_ptr);
-                    default:
-                        if constexpr(DEBUG_MODE_FLAG){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                            return {};
-                        } else{
-                            std::unreachable();
-                            return {};
-                        }
-                }           
+                if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
+                    return bijective_tlb::map_wait(device_id, host_ptr);
+                }
+
+                return exclusive_tlb::map_wait(device_id, host_ptr);
             }
 
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
 
-                auto memqualifier = qualifier_table::get(host_ptr); 
+                uint8_t dispatch_code = dispatch_table[memregion_slot(segcheck_ins::access(host_ptr))];
 
-                switch (memqualifier){
-                    case memqualifier_readonly:
-                        readonly_tlb::map_release(device_id, host_ptr);
-                        return;
-                    case memqualifier_bijective:
-                        bijective_tlb::map_release(device_id, host_ptr);
-                        return;
-                    case memqualifier_default:
-                        default_tlb::map_release(device_id, host_ptr);
-                        return;
-                    default:
-                        if constexpr(DEBUG_MODE_FLAG){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                            return;
-                        } else{
-                            std::unreachable();
-                            return;
-                        }
-                }           
+                if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
+                    bijective_tlb::map_release(device_id, host_ptr);
+                    return;
+                }
+
+                exclusive_tlb::map_release(device_id, host_ptr);
             }
 
             static auto remap_try(device_id_t device_id, uma_ptr_t new_host_ptr, uma_ptr_t old_host_ptr, vma_ptr_t old_device_ptr) noexcept -> vma_ptr_t{
                 
-                auto new_qualifier  = qualifier_table::get(new_host_ptr);
-                auto old_qualifier  = qualifier_table::get(old_host_ptr); 
+                uint8_t old_dispatch_code   = dispatch_table[memregion_slot(segcheck_ins::access(old_host_ptr))];
+                uint8_t new_dispatch_code   = dispatch_table[memregion_slot(segcheck_ins::access(new_host_ptr))];
 
-                if (old_qualifier != new_qualifier){
-                    return dg::ptr_limits<vma_ptr_t>::null_value();
+                if (old_dispatch_code != new_dispatch_code){
+                    return dg::ptr_limits<vma_ptr_t>::null_value(); 
+                }
+                
+                if (old_dispatch_code == DISPATCH_CODE_BIJECTIVE){
+                    return bijective_tlb::remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
                 }
 
-                switch (old_qualifier){
-                    case memqualifier_readonly:
-                        return readonly_tlb::remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
-                    case memqualifier_bijective:
-                        return bijective_tlb::remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
-                    case memqualifier_default:
-                        return default_tlb::remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
-                    default:
-                        if constexpr(DEBUG_MODE_FLAG){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                            return {};
-                        } else{
-                            std::unreachable();
-                            return {};
-                        }
-                }           
+                return exclusive_tlb::remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr);
             }
 
             static auto remap_wait(device_id_t device_id, uma_ptr_t new_host_ptr, uma_ptr_t old_host_ptr, vma_ptr_t old_device_ptr) noexcept -> vma_ptr_t{
-
+                
                 if (auto rs = remap_try(device_id, new_host_ptr, old_host_ptr, old_device_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
                     return rs;
                 }
@@ -662,150 +671,115 @@ namespace dg::network_uma_tlb_impl1::dbe{ //direct - bijective - exclusive
     };
 }
 
-namespace dg::network_uma_tlb_impl1::wrapper{
+namespace dg::network_uma_tlb_impl1::generic{
 
-    // template <class T>
-    // struct DirectWrappedProxyTLB{};
+    template <class ID, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemregionSize, class ProxyCount>
+    class DirectTLB: public dg::network_uma_tlb::interface::DirectTLBInterface<DirectTLB<ID, DeviceIDType, UMAPtrType, VMAPtrType, MemregionSize, ProxyCount>>{
 
-    // template <class T>
-    // struct DirectWrappedProxyTLB<dg::network_uma_tlb_impl1::interface::ProxyTLBInterface<T>>: DirectTLBInterface<DirectWrappedProxyTLB<dg::network_uma_tlb_impl1::interface::ProxyTLBInterface<T>>>{
+        private:
 
-    //     //it's the factory responsibility to make sure that map_release is (void) function  
+            using self = DirectTLB;
+            using base = network_uma_tlb_impl1::direct::ProxyTLB<self, DeviceIDType, UMAPtrType, VMAPtrType, MemregionSize, ProxyCount>;
 
-    //     using base          = dg::network_uma_tlb_impl1::interface::ProxyTLBInterface<T>;
-    //     using device_id_t   = typename base::device_id_t;
-    //     using uma_ptr_t     = typename base::uma_ptr_t;
-    //     using vma_ptr_t     = typename base::vma_ptr_t;
+        public:
 
-    //     static auto map(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+            using device_id_t   = DeviceIDType;
+            using uma_ptr_t     = UMAPtrType;
+            using vma_ptr_t     = VMAPtrType; 
 
-    //         return base::map_wait(device_id, host_ptr); 
-    //     }
-    // };
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, size_t n){
 
-    // template <class T>
-    // struct ResourceWrappedProxyTLB{};  
+                base::init(uma_region_arr, vma_region_arr, device_id_arr, n);
+            }
 
-    // template <class T>
-    // struct ResourceWrappedProxyTLB<dg::network_uma_tlb_impl1::interface::ProxyTLBInterface<T>>: ProxyTLBInterface<ResourceWrappedProxyTLB<dg::network_uma_tlb_impl1::interface::ProxyTLBInterface<T>>>{
+            static void deinit() noexcept{
 
-    //     public:
+                base::deinit();
+            }
 
-    //         using base          = dg::network_uma_tlb_impl1::interface::ProxyTLBInterface<T>;
-    //         using device_id_t   = typename base::device_id_t;
-    //         using uma_ptr_t     = typename base::uma_ptr_t;
-    //         using vma_ptr_t     = typename base::vma_ptr_t;
+            static auto map(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
-    //     private:
+                return base::map_wait(device_id, ptr);
+            }
+    };
 
-    //         struct MapResource{
-    //             device_id_t arg_id;
-    //             uma_ptr_t arg_ptr;
-    //             vma_ptr_t map_ptr;
-    //         };
-        
-    //     public:
+    template <class ID, class MemTransferDevice, class DeviceIDType, class UMAPtrType, class VMAPtrType, class MemregionSize, class ProxyCount>
+    class BiexTLB: public dg::network_uma_tlb::interface::MutexTLBInterface<BiexTLB<ID, MemTransferDevice, DeviceIDType, UMAPtrType, VMAPtrType, MemregionSize, ProxyCount>>{
 
-    //         using map_resource_handle_t = MapResource;
+        private:
 
-    //         static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> std::optional<MapResource>{
+            using self  = BiexTLB;
+            using base  = network_uma_tlb_impl1::biex::ProxyTLB<self, MemTransferDevice, DeviceIDType, UMAPtrType, VMAPtrType, MemregionSize, ProxyCount>;
 
-    //             vma_ptr_t rs = base::map_try(device_id, host_ptr);
+        public:
 
-    //             if (dg::memult::is_nullptr(rs)){
-    //                 return std::nullopt;
-    //             }
+            using device_id_t           = DeviceIDType;
+            using uma_ptr_t             = UMAPtrType;
+            using vma_ptr_t             = VMAPtrType;
+            using map_resource_handle_t = std::tuple<device_id_t, uma_ptr_t, vma_ptr_t>;
 
-    //             return MapResource{device_id, host_ptr, rs};
-    //         }
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, bool * is_proxy_rep_arr, size_t n){
 
-    //         static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> MapResource{
+                base::init(uma_region_arr, vma_region_arr, device_id_arr, is_proxy_rep_arr, n);
+            }
 
-    //             vma_ptr_t rs = base::map_wait(device_id, host_ptr);
-    //             return MapResource{device_id, host_ptr, rs};
-    //         }
+            static void deinit() noexcept{
 
-    //         static void map_release(MapResource map_resource) noexcept{
+                base::deinit();
+            }
 
-    //             base::map_release(map_resource.arg_id, map_resource.arg_ptr);
-    //         }
+            static auto map_try(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<map_resource_handle_t>{
 
-    //         static auto get_vma_ptr(MapResource map_resource) noexcept -> vma_ptr_t{
+                vma_ptr_t rs = base::map_try(device_id, ptr);
 
-    //             return map_resource.map_ptr;
-    //         }
-    // };
-}
+                if (rs == dg::ptr_limits<vma_ptr_t>::null_value()){
+                    return std::nullopt;
+                }
 
-namespace dg::network_uma_tlb_impl1{
+                return std::make_tuple(device_id, ptr, rs);
+            }
 
-    // using namespace dg::network_uma_tlb::memqualifier_taxonomy; 
-    // using internal_memqualifier_t = uint8_t; 
+            static auto map_wait(device_id_t device_id, uma_ptr_t ptr) noexcept -> map_resource_handle_t{
 
-    // enum internal_memqualifier_option: internal_memqualifier_t{
-    //     memqualifier_readonly   = 0b0001,
-    //     memqualifier_direct     = 0b0010,
-    //     memqualifier_exclusive  = 0b0100,
-    //     memqualifier_bijective  = 0b1000
-    // };
+                return std::make_tuple(device_id, ptr, base::map_wait(device_id, ptr));
+            }
 
-    // template <class ID, class DeviceIDType, class VMAPtrType, class DevicePtrType, class MemRegionSize, class ProxyCount>
-    // struct Factory{}; 
+            static void map_release(map_resource_handle_t map_resource) noexcept{
 
-    // template <class ID, class DeviceIDType, class VMAPtrType, class DevicePtrType, size_t MEMREGION_SZ, size_t PROXY_COUNT>
-    // struct Factory<ID, DeviceIDType, VMAPtrType, DevicePtrType, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>{
+                base::map_release(std::get<0>(map_resource), std::get<1>(map_resource));
+            }
 
-    //     private:
-
-    //         using self                          = Factory;
-    //         using internal_memtransfer_device   = MemTransferDevice<DevicePtrType, DeviceIDType>;
-    //         using internal_memqualifier_table   = void *;
-
-    //         using internal_tlb_readonly         = direct::ProxyTLB<tags<self, std::integral_constant<size_t, 0>>, DeviceIDType, VMAPtrType, DevicePtrType, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>;
-    //         using internal_tlb_direct           = direct::ProxyTLB<self, DeviceIDType, VMAPtrType, DevicePtrType, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>;
-    //         using internal_tlb_exclusive        = exclusive::ProxyTLB<self, typename internal_memtransfer_device::interface_t, DeviceIDType, VMAPtrType, DevicePtrType, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>;
-    //         using internal_tlb_bijective        = bijective::ProxyTLB<self, DeviceIDType, VMAPtrType, DevicePtrType, std::integral_constant<size_t, MEMREGION_SZ>>;
-    //         using internal_tlb                  = dbe::ProxyTLB<self, typename internal_tlb_readonly::interface_t, typename internal_tlb_bijective::interface_t, typename internal_tlb_exclusive::interface_t, typename internal_memqualifier_table::interface_t>;
-    //         using internal_tlbx                 = dbe::ProxyTLBX<self, typename internal_tlb::interface_t>; 
-
-    //     public:
-
-    //         using tlb                           = typename internal_tlb::interface_t;
-    //         using tlbx                          = typename internal_tlbx::interface_t;
-    //         using tlb_direct                    = typename internal_tlb_direct::interface_t;
-
-    //         static void init(uma_ptr_t * host_ptr, vma_ptr_t * device_ptr, device_id_t * device_id, memqualifier_t * mem_qualifier, size_t n){
+            static auto remap_try(device_id_t device_id, uma_ptr_t ptr, map_resource_handle_t resource) noexcept -> std::optional<map_resource_handle_t>{
                 
-    //             auto logger                 = dg::network_log_scope::critical_error_terminate();
-    //             auto memqualifier_table     = to_memqualifier_table(host_ptr, device_ptr, device_id, mem_qualifier, n); 
+                if (std::get<0>(resource) != device_id){
+                    return std::nullopt;
+                }
 
-    //             auto readonly_host_ptr      = std::make_unique<uma_ptr_t[]>(n);
-    //             auto readonly_device_ptr    = std::make_unique<vma_ptr_t[]>(n);
-    //             auto readonly_device_id     = std::make_unique<device_id_t[]>(n); 
-    //             size_t readonly_sz          = partition_readonly_qualifier_to(readonly_host_ptr.get(), readonly_device_ptr.get(), readonly_device_id.get(), host_ptr, device_ptr, device_id, n, memqualifier_table);
-    //             internal_tlb_readonly::init(readonly_host_ptr.get(), readonly_device_ptr.get(), readonly_device_id.get(), readonly_sz);
+                vma_ptr_t rs = base::remap_try(device_id, ptr, std::get<1>(resource), std::get<2>(resource));
+                
+                if (rs == dg::ptr_limits<vma_ptr_t>::null_value()){
+                    return std::nullopt;
+                }
 
-    //             auto direct_host_ptr        = std::make_unique<uma_ptr_t[]>(n);
-    //             auto direct_device_ptr      = std::make_unique<vma_ptr_t[]>(n);
-    //             auto direct_device_id       = std::make_unique<device_id_t[]>(n);
-    //             size_t direct_sz            = partition_direct_qualifier_to(direct_host_ptr.get(), direct_device_ptr.get(), direct_device_id.get(), host_ptr, device_ptr, device_id, n, memqualifier_table); 
-    //             internal_tlb_direct::init(direct_host_ptr.get(), direct_device_ptr.get(), direct_device_id.get(), direct_sz);
+                return std::make_tuple(device_id, ptr, rs);
+            }
 
-    //             auto exclusive_host_ptr     = std::make_unique<uma_ptr_t[]>(n);
-    //             auto exclusive_device_ptr   = std::make_unique<vma_ptr_t[]>(n);
-    //             auto exclusive_device_id    = std::make_unique<device_id_t[]>(n);
-    //             auto exclusive_proxy_flag   = std::make_unique<bool[]>(n); 
-    //             size_t exclusive_sz         = partition_exclusive_qualifier_to(exclusive_host_ptr.get(), exclusive_device_ptr.get(), exclusive_device_id.get(), exclusive_proxy_flag.get(), host_ptr, device_ptr, device_id, n, memqualifier_table); 
-    //             internal_tlb_exclusive::init(exclusive_host_ptr.get(), exclusive_device_ptr.get(), exclusive_device_id.get(), exclusive_proxy_flag.get(), exclusive_sz);
+            static auto remap_wait(device_id_t device_id, uma_ptr_t ptr, map_resource_handle_t resource) noexcept -> map_resource_handle_t{
 
-    //             auto bijective_host_ptr     = std::make_unique<uma_ptr_t[]>(n);
-    //             auto bijective_device_ptr   = std::make_unique<vma_ptr_t[]>(n);
-    //             size_t bijective_sz         = partition_bijective_qualifier_to(bijective_host_ptr.get(), bijective_device_ptr.get(0, host_ptr, device_ptr, device_id, n, memqualifier_table)); 
-    //             internal_tlb_bijective::init(bijective_host_ptr.get(), bijective_device_ptr.get(), bijective_sz); 
+                if (std::get<0>(resource) != device_id){
+                    map_release(resource);
+                    return map_wait(device_id, ptr);
+                }
+                
+                vma_ptr_t rs = base::remap_wait(device_id, ptr, std::get<1>(resource), std::get<2>(resource));
+                return std::make_tuple(device_id, ptr, rs);
+            }
 
-    //             logger.release();
-    //         }
-    // };
+            static auto get_vma_ptr(map_resource_handle_t resource) noexcept -> vma_ptr_t{
+
+                return std::get<2>(resource);
+            }
+    };
 }
 
 #endif

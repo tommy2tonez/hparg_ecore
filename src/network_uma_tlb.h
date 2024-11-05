@@ -11,15 +11,8 @@
 
 namespace dg::network_uma_tlb::interface{
     
-    //I've been trying to find a way to deinitialize interface - it's hard - impossible - I guess that the price for static linking - it's fine - it's an object - just not deallocatable - program-bound  
-    //I mean you could do std::vector<std::shared_ptr<void>> as arguments - but who do that - really ?
-    //I've been coding bare metal for years now
-    //there are two ways - static-linking + crtp + static inline <root_object> + decomposite by inheritance
-    //or this - static crtp
-    //out of what's worse - I choose this to be the better way to do dirty C++ things
-
     template <class T>
-    struct ProxyTLBInterface{
+    struct MutexTLBInterface{
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         using device_id_t           = typename T1::device_id_t;
@@ -52,13 +45,13 @@ namespace dg::network_uma_tlb::interface{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto remap_try(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr, typename T1::map_resource_handle_t resource) -> std::optional<typename T1::map_resource_handle_t>{
+        static auto remap_try(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr, typename T1::map_resource_handle_t resource) noexcept -> std::optional<typename T1::map_resource_handle_t>{
 
             return T::remap_try(device_id, host_ptr, resource);
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto remap_wait(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr, typename T1::map_resource_handle_t resource) -> typename T1::map_resource_handle_t{
+        static auto remap_wait(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr, typename T1::map_resource_handle_t resource) noexcept -> typename T1::map_resource_handle_t{
 
             return T::remap_wait(device_id, host_ptr, resource);
         }
@@ -67,6 +60,16 @@ namespace dg::network_uma_tlb::interface{
         static auto get_vma_ptr(typename T1::map_resource_handle_t map_resource) noexcept -> typename T1::vma_ptr_t{
 
             return T::get_vma_ptr(map_resource);
+        }
+    };
+
+    template <class T>
+    struct MutexRegionTLBInterface: MutexTLBInterface<T>{
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto memregion_size() noexcept -> size_t{
+
+            return T::memregion_size();
         }
     };
 
@@ -145,108 +148,34 @@ namespace dg::network_uma_tlb::interface{
         }
     };
 
-
-    //^^^
-    //-the interface is consistent yet the implementation of a specific map (memregion) should not be here - for future extension
-    //this is messy
-
-    // struct RecusriveMapResource{
-    //     map_resource_handle_t handle;
-    //     uma_ptr_t region_ptr;
-    //     size_t offset;
-    //     bool responsibility_flag;
-    // };
-
-    // using map_recusrive_resource_handle_t = RecusriveMapResource;
-
-    // void map_recursive_release(map_recusrive_resource_handle_t map_resource) noexcept{
-
-    //     if (map_resource.responsibility_flag){
-    //         map_release(map_resource.handle);
-
-    //         dg::unordered_map<uma_ptr_t, std::pair<device_id_t, map_resource_handle_t>>& map_ins = map_recursive_resource_instance::get();
-    //         auto map_ptr = map_ins.find(map_resource.region_ptr);
-
-    //         if (map_ptr == map_ins.end()){ //DEBUG_FLAG here - all internal error should be disable-able
-    //             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_ERROR));
-    //             std::abort();
-    //         }
-
-    //         map_ins.erase(map_ptr);
-    //     }
-    // }
-
-    // static inline auto map_recursive_release_lambda = [](map_recursive_resource_handle_t map_resource) noexcept{
-    //     map_recursive_release(map_resource);
-    // };
-
-    // auto mapsafe_recusivetry_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>>{
+    template <class T>
+    auto recursive_raiimap_try(const MutexRegionTLBInterface<T>, 
+                               typename MutexRegionTLBInterface<T>::device_id_t device_id, 
+                               typename MutexRegionTLBInterface<T>::uma_ptr_t ptr) noexcept -> std::optional<dg::unique_resource<typename MutexRegionTLBInterface<T>::map_resource_handle_t, void (*)(typename MutexRegionTLBInterface<T>::map_resource_handle_t) noexcept>>{
         
-    //     dg::unordered_map<uma_ptr_t, std::pair<device_id_t, map_resource_handle_t>>& map_ins = map_recursive_resource_instance::get();
-    //     uma_ptr_t region_ptr        = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-    //     size_t region_off           = dg::memult::region_offset(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-    //     auto map_ptr                = map_ins.find(region_ptr);
+        using tlb_ins       = MutexRegionTLBInterface<T>;
+        using resource_ins  = RecursiveMapResource<MutexRegionTLBInterface<T>>;
+        using ptr_t         = typename tlb_ins:uma_ptr_t;
+        using resource_t    = typename tlb_ins::map_resource_handle_t;
 
-    //     if (map_ptr == map_ins.end()){
-    //         auto rs = map_try_nothrow(device_id, region_ptr);
+        dg::unordered_unstable_set<ptr_t>& ptr_set = resource_ins::get();
+        ptr_t ptr_region = dg::memult::region(ptr);
+        
+        if (ptr_set.contains(ptr_region)){
+            return dg::unique_resource<typename MutexRegionTLBInterface<T>::map_resource_handle_t, void (*)(typename MutexRegionTLBInterface<T>::map_resource_handle_t) noexcept>{};
+        }
 
-    //         if (!static_cast<bool>(rs)){
-    //             return std::nullopt;
-    //         }
+        auto destructor = [](resource_t resource_arg) noexcept{
+            resource_ins::get().erase();
+            tlb_ins::map_release(resource_arg);
+        };
 
-    //         map_ins[region_ptr]     = std::make_pair(device_id, rs.value());
-    //         auto handle             = map_recursive_resource_handle_t{rs.value(), region_ptr, region_off, true};
-    //         return dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>(handle, map_recursive_release_lambda);
-    //     }
-
-    //     auto [bucket_device_id, bucket_resource] = *map_ptr;
-
-    //     if (bucket_device_id != device_id){ //DEBUG_FLAG here - all internal error should be disable-able
-    //         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-    //         std::abort();
-    //     }
-
-    //     auto handle = map_recursive_resource_handle_t{bucket_resource, region_ptr, region_off, false};  //region_ptr should be std::optional - yet I find it more intuitive to have a separate bool flag
-    //     return dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>(handle, map_recursive_release_lambda);
-    // }
-
-    // auto mapsafe_recursivewait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>{
-
-    //     while (true){
-    //         if (auto rs = mapsafe_recusivetry_nothrow(device_id, ptr); static_cast<bool>(rs)){
-    //             return rs.value();
-    //         }
-    //     }
-    // } 
-
-    // template <size_t SZ>
-    // auto mapsafe_recursivetry_many_nothrow(std::array<std::pair<device_id_t, uma_ptr_t>, SZ> arg) noexcept -> std::optional<std::array<dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>, SZ>>{
-
-    //     std::array<dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>, SZ> rs{};
-
-    //     for (size_t i = 0; i < SZ; ++i){
-    //         rs[i] = dg::network_genult::tuple_invoke(mapsafe_recusivetry_nothrow, arg[i]);
-
-    //         if (!static_cast<bool>(rs[i])){
-    //             return std::nullopt;
-    //         }
-    //     }
-
-    //     return rs;
-    // }
-
-    // template <size_t SZ>
-    // auto mapsafe_recursivewait_many_nothrow(std::array<std::pair<device_id_t, uma_ptr_t>, SZ> arg) noexcept -> std::array<dg::genult::nothrow_immutable_unique_raii_wrapper<map_recursive_resource_handle_t, decltype(map_recursive_release_lambda)>, SZ>{
-
-    //     while (true){
-    //         if (auto rs = mapsafe_recursivetry_many_nothrow(arg); static_cast<bool>(rs)){
-    //             return rs.value();
-    //         }
-    //     }
-    // }
-    // //vvv
-
-    //undefined otherwise
+        if (auto rs = resource_ins::map_try(device_id, ptr); rs.has_value()){
+            return dg::unique_resource<typename MutexRegionTLBInterface<T>::map_resource_handle_t, void (*)(typename MutexRegionTLBInterface<T>::map_resource_handle_t) noexcept>{rs.value(), destructor};
+        }
+        
+        return std::nullopt;
+    }
 }
 
 namespace dg::network_uma_tlb::access{

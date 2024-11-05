@@ -48,7 +48,7 @@ namespace dg::network_kernelmap_x{
         network_kernelmap_x::map_release(map_resource);
     };
 
-    auto map_safe(fsys_ptr_t ptr) noexcept -> std::expected<dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
+    auto map_safe(fsys_ptr_t ptr) noexcept -> std::expected<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 
         auto map_rs = network_kernelmap_x::map(ptr);
 
@@ -56,12 +56,12 @@ namespace dg::network_kernelmap_x{
             return std::unexpected(map_rs.error());
         }
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
     } 
 
-    auto map_nothrow_safe(fsys_ptr_t ptr) noexcept -> dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>{
+    auto map_nothrow_safe(fsys_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
-        return dg::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(network_kernelmap_x::map_nothrow(ptr), map_release_lambda);
+        return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(network_kernelmap_x::map_nothrow(ptr), map_release_lambda);
     }
 
     auto get_host_ptr(map_resource_handle_t map_resource) noexcept -> void *{

@@ -130,12 +130,12 @@ namespace dg::network_vmamap{
         return map_nothrow(ptr);
     } 
 
-    auto mapsafe_nothrow(vma_ptr_t ptr) noexcept -> dg::network_genult::nothrow_immutable_unique_raii_wrapper<vmamap_resource_handle_t, unmap_t>{
+    auto mapsafe_nothrow(vma_ptr_t ptr) noexcept -> dg::network_genult::unique_resource<vmamap_resource_handle_t, unmap_t>{
 
         return {map_nothrow(ptr), unmap};
     }
 
-    auto mapsafe(vma_ptr_t ptr) noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<vmamap_resource_handle_t, unmap_t>, exception_t>{
+    auto mapsafe(vma_ptr_t ptr) noexcept -> std::expected<dg::network_genult::unique_resource<vmamap_resource_handle_t, unmap_t>, exception_t>{
 
         exception_t err = safecthrow_vmaptr_access(ptr);
 

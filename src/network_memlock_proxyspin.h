@@ -194,11 +194,15 @@ namespace dg::network_memlock_proxyspin{
                     if (uregion % MEMREGION_SZ != 0u){
                         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
+
+                    if (region_arr[i] == dg::ptr_limits<ptr_t>::null_value()){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
                 }
 
-                ptr_t first_region  = *std::min_element(region_arr, region_arr + n);
-                ptr_t last_region   = *std::max_element(region_arr, region_arr + n); 
-                size_t lck_table_sz = dg::memult::distance(first_region, last_region) / MEMREGION_SZ; 
+                ptr_t first_region  = *std::min_element(region_arr, region_arr + n, dg::memult::ptrcmpless_lambda);
+                ptr_t last_region   = dg::memult::advance(*std::max_element(region_arr, region_arr + n, dg::memult::ptrcmpless_lambda), MEMREGION_SZ);
+                size_t lck_table_sz = dg::memult::distance(first_region, last_region) / MEMREGION_SZ;
                 lck_table           = std::make_unique<std::atomic<lock_state_t>[]>(lck_table_sz);
                 region_first        = first_region;
 
@@ -349,10 +353,14 @@ namespace dg::network_memlock_proxyspin{
                     if (uregion % MEMREGION_SZ != 0u){
                         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
+
+                    if (region_arr[i] == dg::ptr_limits<ptr_t>::null_value()){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
                 }
 
-                ptr_t first_region  = *std::min_element(region_arr, region_arr + n);
-                ptr_t last_region   = *std::max_element(region_arr, region_arr + n);
+                ptr_t first_region  = *std::min_element(region_arr, region_arr + n, dg::memult::ptrcmpless_lambda);
+                ptr_t last_region   = dg::memult::advance(*std::max_element(region_arr, region_arr + n, dg::memult::ptrcmpless_lambda), MEMREGION_SZ);
                 size_t lck_table_sz = dg::memult::distance(first_region, last_region) / MEMREGION_SZ;
                 lck_table           = std::make_unique<ControlUnit[]>(lck_table_sz); 
                 region_first        = first_region;

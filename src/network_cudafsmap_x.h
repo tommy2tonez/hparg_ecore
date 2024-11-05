@@ -45,7 +45,7 @@ namespace dg::network_cudafsmap_x{
         map_release(map_resource);
     };
 
-    auto map_safe(cufs_ptr_t ptr) noexcept -> std::expected<dg::network_genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
+    auto map_safe(cufs_ptr_t ptr) noexcept -> std::expected<dg::network_genult::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 
         std::expected<map_resource_handle_t, exception_t> map_rs = map(ptr);
 
@@ -53,10 +53,10 @@ namespace dg::network_cudafsmap_x{
             return std::unexpected(map_rs.error());
         }
 
-        return dg::network_genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
+        return dg::network_genult::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
     }
 
-    auto map_nothrow_safe(cufs_ptr_t ptr) noexcept -> dg::network_genult::nothrow_immutable_unique_raii_wrapper<map_resource_handle_t, decltype(map_release_lambda)>{
+    auto map_nothrow_safe(cufs_ptr_t ptr) noexcept -> dg::network_genult::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
         return {map_nothrow(ptr), map_release_lambda};
     }

@@ -18,7 +18,7 @@ namespace dg::network_concurrency_infretry_x{
         virtual ~Executable() noexcept = default;
         virtual auto run() noexcept -> bool = 0;
     };
-    
+
     struct ExecutorInterface{
         virtual ~ExecutorInterface() noexcept = default;
         virtual void exec(Executable&) noexcept = 0;

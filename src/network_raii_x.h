@@ -1,15 +1,41 @@
 #ifndef __NETWORK_RAII_X_H__
 #define __NETWORK_RAII_X_H__
 
-//define HEADER_CONTROL 1
+//define HEADER_CONTROL -1
 
 #include <type_traits> 
-#include "network_type_traits_x.h"
 
 namespace dg{
 
+    template <class T>
+    struct base_type: std::enable_if<true, T>{};
+
+    template <class T>
+    struct base_type<const T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<volatile T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&&>: base_type<T>{};
+
+    template <class T>
+    using base_type_t = typename base_type<T>::type;
+    
+    template <class T, class = void>
+    struct is_base_type: std::false_type{}; 
+
+    template <class T>
+    struct is_base_type<T, std::void_t<std::enable_if_t<std::is_same_v<T, base_type_t<T>>>>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_base_type_v = is_base_type<T>::value;
+
     template <class ResourceType, class ResourceDeallocator>
-    class nothrow_immutable_unique_raii_wrapper{
+    class unique_resource{
     
         private:
 
@@ -19,31 +45,31 @@ namespace dg{
 
         public:
 
+            static_assert(!std::is_same_v<ResourceType, bool>);
             static_assert(std::is_trivial_v<ResourceType>);
             static_assert(std::is_nothrow_invocable_v<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>);
             static_assert(std::is_nothrow_move_constructible_v<ResourceDeallocator>);
-            static_assert(dg::network_type_traits_x::is_base_type_v<ResourceDeallocator>);
+            static_assert(dg::is_base_type_v<ResourceDeallocator>);
 
-            using self = nothrow_immutable_unique_raii_wrapper;
+            using self = unique_resource;
 
             template <class DelArg = ResourceDeallocator, std::enable_if_t<std::is_nothrow_default_constructible_v<DelArg>, bool> = true>
-            nothrow_immutable_unique_raii_wrapper() noexcept: resource(), 
+            unique_resource() noexcept: resource(), 
                                                               deallocator(), 
                                                               responsibility_flag(false){}
 
-            nothrow_immutable_unique_raii_wrapper(ResourceType resource,
-                                                  ResourceDeallocator deallocator) noexcept: resource(resource),
-                                                                                             deallocator(std::move(deallocator)),
-                                                                                             responsibility_flag(true){}
+            unique_resource(ResourceType resource, ResourceDeallocator deallocator) noexcept: resource(resource),
+                                                                                              deallocator(std::move(deallocator)),
+                                                                                              responsibility_flag(true){}
             
-            nothrow_immutable_unique_raii_wrapper(const self&) = delete;
-            nothrow_immutable_unique_raii_wrapper(self&& other) noexcept: resource(other.resource),
+            unique_resource(const self&) = delete;
+            unique_resource(self&& other) noexcept: resource(other.resource),
                                                                           deallocator(std::move(other.deallocator)),
                                                                           responsibility_flag(other.responsibility_flag){
                 other.responsibility_flag = false;
             }
 
-            ~nothrow_immutable_unique_raii_wrapper() noexcept{
+            ~unique_resource() noexcept{
 
                 if (this->responsibility_flag){
                     this->deallocator(this->resource);
@@ -83,11 +109,22 @@ namespace dg{
                 return this->value();
             }
 
+            operator bool() const noexcept{
+
+                return this->responsibility_flag;
+            }
+
             auto has_value() const noexcept -> bool{
 
                 return this->responsibility_flag;
             }
+            
+            void release() noexcept{
+
+                this->responsibility_flag = false;
+            }
     }; 
+
 }
 
 #endif
