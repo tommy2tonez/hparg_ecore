@@ -116,19 +116,18 @@ namespace dg::network_memlock{
         }
     };
 
-    template <class T, class ptr_t>
-    auto lock_guard(const dg::network_memlock::MemoryLockInterface<T>, ptr_t ptr) noexcept{
+    template <class T>
+    auto lock_guard(const dg::network_memlock::MemoryLockInterface<T>, typename dg::network_memlock::MemoryLockInterface<T>::ptr_t<> ptr) noexcept{
 
         using memlock_ins   = dg::network_memlock::MemoryLockInterface<T>;
-        using lock_ptr_t    = typename memlock_ins::ptr_t; 
-        static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
+        using lock_ptr_t    = typename memlock_ins::ptr_t<>; 
 
-        auto destructor = [](ptr_t ptr_arg) noexcept{
-            memlock_ins::acquire_release(ptr_arg);
+        auto destructor = [](lock_ptr_t arg) noexcept{
+            memlock_ins::acquire_release(arg);
         };
 
         memlock_ins::acquire_wait(ptr);
-        return dg::unique_resource<ptr_t, decltype(destructor)>(ptr, std::move(destructor));
+        return dg::unique_resource<lock_ptr_t, decltype(destructor)>(ptr, std::move(destructor));
     }
 
     template <class T>
@@ -154,14 +153,12 @@ namespace dg::network_memlock{
             }
     };
     
-    template <class T, class ptr_t>
-    auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, ptr_t ptr) noexcept{
-        
+    template <class T>
+    auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
+
         using memlock_ins   = dg::network_memlock::MemoryRegionLockInterface<T>;
         using lock_ptr_t    = typename memlock_ins::ptr_t<>;
         using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
-    
-        static_assert(std::is_same_v<lock_ptr_t, ptr_t>);
 
         lock_ptr_t ptr_region = dg::memult::region(ptr, memlock_ins::memregion_size());
         auto destructor = [](lock_ptr_t arg) noexcept{
@@ -169,7 +166,7 @@ namespace dg::network_memlock{
             memlock_ins::acquire_release(arg);
         };
 
-        using rs_type = std::optional<dg::unique_resource<lock_ptr_t, decltype(destructor)>>; //yeah decltype(lambda) and void (*)(Args...) are the two very different things in the world of C++ - don't ask
+        using rs_type = std::optional<dg::unique_resource<lock_ptr_t, decltype(destructor)>>;
 
         if (resource_ins::get().contains(ptr_region)){
             return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>());
@@ -183,8 +180,8 @@ namespace dg::network_memlock{
         return rs_type(std::nullopt);
     }
 
-    template <class T, class ptr_t>
-    auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, ptr_t ptr) noexcept{
+    template <class T>
+    auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
 
         while (true){
             if (auto rs = recursive_trylock_guard(lock_ins, ptr); static_cast<bool>(rs)){
@@ -198,9 +195,7 @@ namespace dg::network_memlock{
 
         using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
         using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}));
-        
-        static_assert(std::conjunction_v<std::is_same<Args, lock_ptr_t>...>);
-        
+                
         auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...};
         auto resource_arr       = std::array<lock_resource_t, sizeof...(Args)>{};
 
@@ -788,7 +783,7 @@ namespace dg::network_memlock_impl1{
 
                 reference_release(old_ptr);
                 reference_wait(new_ptr);
-            }  
+            }
     };
 
     static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true; 

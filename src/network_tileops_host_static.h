@@ -6,6 +6,8 @@
 #include <type_traits> 
 #include <math.h>
 #include "network_xmath_host.h"
+#include <limits.h>
+#include <bit>
 
 namespace dg::network_tileops_host_static::templated_ops{
 
@@ -16,12 +18,17 @@ namespace dg::network_tileops_host_static::templated_ops{
 
     static constexpr auto log2(size_t val) noexcept -> size_t{
 
-        return std::countr_zero(val);
+        return static_cast<size_t>(sizeof(size_t) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
     } 
  
-    static constexpr auto sqrt2(size_t val) noexcept -> size_t{
+    static constexpr auto sqrt(size_t val) noexcept -> size_t{
 
         return pow2(log2(val) >> 1);
+    }
+
+    static constexpr auto is_pow2(size_t val) noexcept -> bool{
+
+        return val != 0u && (val & (val - 1)) == 0u;
     }
 
     template <class arithmetic_ops_t>
@@ -37,7 +44,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             return network_xmath_host::exp(value);
         }
 
-        static inline auto ln(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
+        static inline auto log(arithmetic_ops_t value) noexcept -> arithmetic_ops_t{
 
             return network_xmath_host::log(value);
         }
@@ -149,93 +156,94 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>;
 
-        static inline void exp(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void exp(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::exp(src[i]);
             }
         } 
 
-        static inline void ln(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void log(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
-                dst[i] = x_math::ln(src[i]);
+                dst[i] = x_math::log(src[i]);
             }
         }
 
-        static inline void clone(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void clone(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = static_cast<casting_ops_t>(src[i]);
             }
         } 
 
-        static inline void negative(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void negative(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::negative(src[i]);
             }
         }
 
-        static inline void inverse(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void inverse(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::div(1, src[i]);
             }
         }
 
-        static inline void abs(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void abs(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::abs(src[i]);
             }    
         }
 
-        static inline void cos(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void cos(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::cos(src[i]);
             }        
         }
 
-        static inline void acos(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void acos(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::acos(src[i]);
             }            
         }
 
-        static inline void sin(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void sin(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sin(src[i]);
             }        
         }
 
-        static inline void asin(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void asin(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
             
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::asin(src[i]);
             }      
         }
 
-        static inline void tan(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void tan(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::tan(src[i]);
             }      
         }
 
-        static inline void atan(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void atan(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::atan(src[i]);
             }          
         }
 
-        static inline void transpose(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void transpose(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            constexpr size_t BLK_SZ = sqrt2(SZ);
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
             for (size_t i = 0; i < BLK_SZ; ++i){
                 for (size_t j = 0; j < BLK_SZ; ++j){
@@ -250,21 +258,21 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void max(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void max(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i]  = x_math::max(dst[i], src[i]);
             }
         }
 
-        static inline void min(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void min(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i]  = x_math::min(dst[i], src[i]);
             }
         }
 
-        static inline void sum(dst_logit_value_t * const dst, const src_logit_value_t * const src) noexcept{
+        static inline void sum(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src[i]);
@@ -277,44 +285,45 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void add(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::add(lhs[i], rhs[i]));
             }
         }
 
-        static inline void sub(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void sub(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::sub(lhs[i], rhs[i]));
             }    
         }
 
-        static inline void mul(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void mul(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(lhs[i], rhs[i]));
             }            
         }
 
-        static inline void div(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void div(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(lhs[i], rhs[i]));
             }    
         }
 
-        static inline void pow(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void pow(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::pow(lhs[i], rhs[i]));
             }    
         }
 
-        static inline void linear(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
-            
-            constexpr size_t BLK_SZ = sqrt2(SZ); 
+        static inline void linear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
             for (size_t j = 0; j < BLK_SZ; ++j){
                 for (size_t i = 0; i < BLK_SZ; ++i){
@@ -333,44 +342,45 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void add(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(lhs[i], rhs[i]);
             }
         }
 
-        static inline void sub(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void sub(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(lhs[i], rhs[i]);
             }    
         }
 
-        static inline void mul(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void mul(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::mul(lhs[i], rhs[i]);
             }            
         }
 
-        static inline void div(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void div(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::div(lhs[i], rhs[i]);
             }    
         }
 
-        static inline void pow(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
+        static inline void pow(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::pow(lhs[i], rhs[i]);
             }    
         }
 
-        static inline void linear(dst_logit_value_t * const dst, const lhs_logit_value_t * const lhs, const rhs_logit_value_t * const rhs) noexcept{
-            
-            constexpr size_t BLK_SZ = sqrt2(SZ); 
+        static inline void linear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
             for (size_t j = 0; j < BLK_SZ; ++j){
                 for (size_t i = 0; i < BLK_SZ; ++i){
@@ -389,93 +399,94 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void exp(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void exp(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::exp(dst_logit[i]), dst[i]);
             }
         }
 
-        static inline void ln(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void log(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], dst_logit[i]));
             }
         }
 
-        static inline void clone(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad) noexcept{
+        static inline void clone(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
-        static inline void negative(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad) noexcept{
+        static inline void negative(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], src_grad[i]);
             }
         }
 
-        static inline void inverse(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void inverse(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::div(src_grad[i], x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})));
             }
         }
 
-        static inline void abs(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void abs(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::sign(dst_logit[i]), dst[i]);
             }
         }
 
-        static inline void cos(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void cos(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::mul(src_grad[i], x_math::sin(dst_logit[i])));
             }
         }
 
-        static inline void acos(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void acos(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::div(src_grad[i], x_math::sqrt(x_math::sub(1, x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})))));
             }
         } 
 
-        static inline void sin(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void sin(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::cos(dst_logit[i]), dst[i]);
             }
         }
 
-        static inline void asin(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void asin(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], x_math::sqrt(x_math::sub(1, x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})))));
             }
         }
 
-        static inline void tan(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void tan(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], x_math::pow(x_math::cos(dst_logit[i]), std::integral_constant<size_t, 2>{})));
             }
         }
 
-        static inline void atan(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad) noexcept{
+        static inline void atan(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], x_math::add(x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{}), 1)));
             }
         }
 
-        static inline void transpose(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad) noexcept{
+        static inline void transpose(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad) noexcept{
             
-            constexpr size_t BLK_SZ = sqrt2(SZ);
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
             for (size_t i = 0; i < BLK_SZ; ++i){
                 for (size_t j = 0; j < BLK_SZ; ++j){
@@ -490,50 +501,51 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void max(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad, const src_logit_value_t * const src_logit) noexcept{
+        static inline void max(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const src_logit_value_t * src_logit) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::eqcmp_mul(dst_logit[i], src_logit[i], src_grad[i]));
             }
         }
 
-        static inline void min(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad, const src_logit_value_t * const src_logit) noexcept{
+        static inline void min(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const src_logit_value_t * src_logit) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::eqcmp_mul(dst_logit[i], src_logit[i], src_grad[i]));
             }
         }
 
-        static inline void sum(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad, const src_logit_value_t * const) noexcept{
+        static inline void sum(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const src_logit_value_t *) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
     };
-    
+
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
     struct bwd_pair_bdr_unaligned_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void add(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad, const other_logit_value_t * const) noexcept{
+        static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
-        static inline void mul(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad, const other_logit_value_t * const other) noexcept{
+        static inline void mul(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], other[i], dst[i]);
             }
         }
 
-        static inline void linear(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad, const other_logit_value_t * const other) noexcept{
+        static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
             
-            constexpr size_t BLK_SZ = sqrt2(SZ);
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
             for (size_t i = 0; i < BLK_SZ; ++i){
                 for (size_t j = 0; j < BLK_SZ; ++j){
@@ -552,21 +564,21 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void sub(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad, const other_logit_value_t * const) noexcept{
+        static inline void sub(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
-        static inline void div(dst_grad_value_t * const dst, const dst_logit_value_t * const, const src_grad_value_t * const src_grad, const other_logit_value_t * const other_logit) noexcept{
+        static inline void div(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], other_logit[i]));
             }
         }
 
-        static inline void pow(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const src_grad_value_t * const src_grad, const other_logit_value_t * const other_logit) noexcept{
+        static inline void pow(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::mul(other_logit[i], x_math::pow(dst_logit[i], x_math::sub(other_logit[i], 1))), dst[i]);
@@ -579,21 +591,21 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void sub(dst_grad_value_t * const dst, const dst_logit_value_t * const, const grad_value_t * const src_grad, const other_logit_value_t * const) noexcept{
+        static inline void sub(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], src_grad[i]);
             }
         }
 
-        static inline void div(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const grad_value_t * const src_grad, const other_logit_value_t * const other_logit) noexcept{
-
+        static inline void div(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+            
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::mul(src_grad[i], x_math::div(other_logit[i], x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})))); 
             }
         }
 
-        static inline void pow(dst_grad_value_t * const dst, const dst_logit_value_t * const dst_logit, const grad_value_t * const src_grad, const other_logit_value_t * other_logit) noexcept{
+        static inline void pow(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::mul(x_math::pow(other_logit[i], dst_logit[i]), x_math::log(other_logit[i])), dst[i]);
@@ -606,62 +618,62 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = fwd_mono_unaligned_ops<dst_logit_value_t, src_logit_value_t, casting_ops_t, SZ>;
 
-        static __attribute__((flatten)) void exp(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void exp(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::exp(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         } 
 
-        static __attribute__((flatten)) void ln(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void log(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
-            base::ln(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
+            base::log(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void clone(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void clone(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::clone(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         } 
 
-        static __attribute__((flatten)) void negative(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void negative(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::negative(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void inverse(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void inverse(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::inverse(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void abs(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void abs(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::abs(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void cos(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void cos(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::cos(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void acos(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void acos(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::acos(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void sin(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void sin(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::sin(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void asin(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void asin(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
             
             base::asin(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void tan(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void tan(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::tan(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void atan(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void atan(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::atan(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
@@ -672,17 +684,17 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = fwd_uacm_unaligned_ops<dst_logit_value_t, src_logit_value_t, casting_ops_t, SZ>;
 
-        static __attribute__((flatten)) void max(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void max(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::max(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void min(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void min(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::min(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
 
-        static __attribute__((flatten)) void sum(dst_logit_value_t * __restrict__ const dst, const src_logit_value_t * __restrict__ const src) noexcept{
+        static __attribute__((flatten)) void sum(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
 
             base::sum(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
@@ -693,32 +705,32 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = fwd_pacm_unaligned_ops<dst_logit_value_t, lhs_logit_value_t, rhs_logit_value_t, casting_ops_t, SZ>;
 
-        static __attribute__((flatten)) void add(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void add(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void sub(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void sub(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void mul(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void mul(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void div(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void div(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::div(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void pow(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void pow(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
             
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
@@ -730,32 +742,32 @@ namespace dg::network_tileops_host_static::templated_ops{
         using base      = fwd_pair_unaligned_ops<dst_logit_value_t, lhs_logit_value_t, rhs_logit_value_t, casting_ops_t, SZ>;
         using x_math    = coerced_x_math<casting_ops_t>;
 
-        static __attribute__((flatten)) void add(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void add(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void sub(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void sub(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void mul(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void mul(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void div(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void div(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::div(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void pow(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void pow(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ const dst, const lhs_logit_value_t * __restrict__ const lhs, const rhs_logit_value_t * __restrict__ const rhs) noexcept{
+        static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
@@ -766,67 +778,67 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = bwd_mono_unaligned_ops<dst_logit_value_t, dst_grad_value_t, src_grad_value_t, casting_ops_t, SZ>; 
 
-        static __attribute__((flatten)) void exp(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void exp(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::exp(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void ln(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void log(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
-            base::ln(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
+            base::log(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void clone(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void clone(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
             
             base::clone(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void negative(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void negative(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::negative(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void inverse(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void inverse(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
             
             base::inverse(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void abs(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void abs(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::abs(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void cos(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void cos(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::cos(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void acos(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void acos(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::acos(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         } 
 
-        static __attribute__((flatten)) void sin(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void sin(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::sin(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void asin(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void asin(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::asin(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void tan(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void tan(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::tan(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
 
-        static __attribute__((flatten)) void atan(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void atan(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::atan(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
     
-        static __attribute__((flatten)) void transpose(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad) noexcept{
+        static __attribute__((flatten)) void transpose(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad) noexcept{
 
             base::transpose(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad));
         }
@@ -837,17 +849,17 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = bwd_uacm_unaligned_ops<dst_logit_value_t, dst_grad_value_t, src_logit_value_t, src_grad_value_t, casting_ops_t, SZ>; 
 
-        static __attribute__((flatten)) void max(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const src_logit_value_t * __restrict__ const src_logit) noexcept{
+        static __attribute__((flatten)) void max(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const src_logit_value_t * __restrict__ src_logit) noexcept{
 
             base::max(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(src_logit));
         }
 
-        static __attribute__((flatten)) void min(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const src_logit_value_t * __restrict__ const src_logit) noexcept{
+        static __attribute__((flatten)) void min(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const src_logit_value_t * __restrict__ src_logit) noexcept{
 
             base::min(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(src_logit));
         }
 
-        static __attribute__((flatten)) void sum(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const src_logit_value_t * __restrict__ const src_logit) noexcept{
+        static __attribute__((flatten)) void sum(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const src_logit_value_t * __restrict__ src_logit) noexcept{
 
             base::sum(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(src_logit));
         }
@@ -858,32 +870,32 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = bwd_pair_lhs_unaligned_ops<dst_logit_value_t, dst_grad_value_t, other_logit_value_t, src_grad_value_t, casting_ops_t, SZ>; 
 
-        static __attribute__((flatten)) void add(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void add(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void mul(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void mul(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void sub(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void sub(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void div(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void div(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::div(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void pow(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void pow(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
@@ -894,32 +906,32 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = bwd_pair_rhs_unaligned_ops<dst_logit_value_t, dst_grad_value_t, other_logit_value_t, src_grad_value_t, casting_ops_t, SZ>;
 
-        static __attribute__((flatten)) void add(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void add(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         } 
 
-        static __attribute__((flatten)) void mul(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void mul(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void sub(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void sub(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void div(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void div(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::div(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void pow(dst_grad_value_t * __restrict__ const dst, const dst_logit_value_t * __restrict__ const dst_logit, const src_grad_value_t * __restrict__ const src_grad, const other_logit_value_t * __restrict__ const other_logit) noexcept{
+        static __attribute__((flatten)) void pow(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
@@ -928,16 +940,15 @@ namespace dg::network_tileops_host_static::templated_ops{
 
 namespace dg::network_tileops_host_static{
 
-    //I feel like i'm swimming in this tons of code
-    //it's better to actually generate header per class than generate header per function - this is because of controlled instantiation of templates
-
     static inline constexpr size_t LOGIT_COUNT_PER_TILE     = size_t{1} << 16;
     static inline constexpr size_t ALIGNMENT_SZ             = size_t{1} << 10; 
 
-    using nw_uint8_t                = uint8_t;
-    using nw_uint16_t               = uint16_t;
-    using nw_float8_t               = int8_t;
-    using nw_float16_t              = int16_t;
+    //
+    
+    // using nw_uint8_t                = uint8_t;
+    // using nw_uint16_t               = uint16_t;
+    // using nw_float8_t               = int8_t;
+    // using nw_float16_t              = int16_t;
 
     // using fwd_mono_ops_uu_8_8       = templated_ops::fwd_mono_restrict_aligned_ops<nw_uint8_t, nw_uint8_t,  ALIGNMENT_SZ, LOGIT_COUNT_PER_TILE>;
     // using fwd_mono_ops_uu_8_16      = templated_ops::fwd_mono_restrict_aligned_ops<nw_uint8_t, nw_uint16_t, ALIGNMENT_SZ, LOGIT_COUNT_PER_TILE>;

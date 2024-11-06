@@ -49,8 +49,9 @@ namespace dg::memult{
     }
 
     template <class ptr_t>
-    constexpr auto advance(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{
+    constexpr auto advance(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{ //change sematics -> byte_advance - this is too ambiguous - and potentially buggy
 
+        return {};
     }
     
     template <class T, std::enable_if_t<std::is_trivial_v<T>, bool> = true>

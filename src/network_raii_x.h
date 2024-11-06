@@ -55,8 +55,8 @@ namespace dg{
 
             template <class DelArg = ResourceDeallocator, std::enable_if_t<std::is_nothrow_default_constructible_v<DelArg>, bool> = true>
             unique_resource() noexcept: resource(), 
-                                                              deallocator(), 
-                                                              responsibility_flag(false){}
+                                        deallocator(), 
+                                        responsibility_flag(false){}
 
             unique_resource(ResourceType resource, ResourceDeallocator deallocator) noexcept: resource(resource),
                                                                                               deallocator(std::move(deallocator)),
@@ -64,8 +64,8 @@ namespace dg{
             
             unique_resource(const self&) = delete;
             unique_resource(self&& other) noexcept: resource(other.resource),
-                                                                          deallocator(std::move(other.deallocator)),
-                                                                          responsibility_flag(other.responsibility_flag){
+                                                    deallocator(std::move(other.deallocator)),
+                                                    responsibility_flag(other.responsibility_flag){
                 other.responsibility_flag = false;
             }
 

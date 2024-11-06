@@ -18,6 +18,8 @@ namespace dg::network_memlock_proxyspin{
 
     static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = false;
 
+    struct increase_reference_tag{}; 
+
     template <class T>
     struct ReferenceLockInterface{
 
@@ -40,15 +42,21 @@ namespace dg::network_memlock_proxyspin{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static void acquire_release(typename T1::proxy_id_t new_proxy_id, typename T1::ptr_t ptr) noexcept{
+        static void acquire_release(typename T1::ptr_t ptr, typename T1::proxy_id_t new_proxy_id) noexcept{
 
-            T::acquire_release(new_proxy_id, ptr);
+            T::acquire_release(ptr, new_proxy_id);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_release(typename T1::ptr_t ptr, typename T1::proxy_id_t new_proxy_id, const increase_reference_tag){
+
+            T::acquire_release(ptr, new_proxy_id, increase_reference_tag{});
         } 
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto reference_try(typename T1::proxy_id_t expected_proxy_id, typename T1::ptr_t ptr) noexcept -> bool{
+        static auto reference_try(typename T1::ptr_t ptr, typename T1::proxy_id_t expected_proxy_id) noexcept -> bool{
 
-            return T::reference_try(expected_proxy_id, ptr);
+            return T::reference_try(ptr, expected_proxy_id);
         } 
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
@@ -150,6 +158,12 @@ namespace dg::network_memlock_proxyspin{
                 lck_table[table_idx].exchange(controller::make(new_proxy_id, controller::REFERENCE_EMPTY_VALUE), std::memory_order_release);
             }
             
+            static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id, const increase_reference_tag){
+
+                stdx::atomic_optional_thread_fence();
+                lck_table[table_idx].exchange(controller::make(new_proxy_id, 1), std::memory_order_release);
+            }
+
             static auto internal_reference_try(size_t table_idx, proxy_id_t expected_proxy_id) noexcept -> bool{
 
                 lock_state_t cur = lck_table[table_idx].load(std::memory_order_relaxed);
@@ -219,27 +233,32 @@ namespace dg::network_memlock_proxyspin{
                 lck_table = nullptr;
             }
 
-            static inline auto acquire_try(ptr_t ptr) noexcept -> std::optional<proxy_id_t>{
+            static auto acquire_try(ptr_t ptr) noexcept -> std::optional<proxy_id_t>{
                 
                 return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
             } 
 
-            static inline auto acquire_wait(ptr_t ptr) noexcept -> proxy_id_t{
+            static auto acquire_wait(ptr_t ptr) noexcept -> proxy_id_t{
 
                 return internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
             }
 
-            static inline void acquire_release(proxy_id_t new_proxy_id, ptr_t ptr) noexcept{
+            static void acquire_release(ptr_t ptr, proxy_id_t new_proxy_id) noexcept{
 
                 internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)), new_proxy_id);
             }
 
-            static inline auto reference_try(proxy_id_t expected_proxy_id, ptr_t ptr) noexcept -> bool{
+            static void acquire_release(ptr_t ptr, proxy_id_t new_proxy_id, const increase_reference_tag) noexcept{
+
+                internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)), new_proxy_id, increase_reference_tag{});
+            }
+
+            static auto reference_try(ptr_t ptr, proxy_id_t expected_proxy_id) noexcept -> bool{
 
                 return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)), expected_proxy_id);
             } 
 
-            static inline void reference_release(ptr_t ptr) noexcept{
+            static void reference_release(ptr_t ptr) noexcept{
 
                 internal_reference_release(memregion_slot(segcheck_ins::access(ptr)));
             }
@@ -312,6 +331,14 @@ namespace dg::network_memlock_proxyspin{
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_VALUE;
             }
 
+            static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id, const increase_reference_tag){
+
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
+
+                lck_table[table_idx].proxy_id = new_proxy_id;
+                lck_table[table_idx].refcount = 1;
+            } 
+
             static auto internal_reference_try(size_t table_idx, proxy_id_t expected_proxy_id) noexcept -> bool{
 
                 auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
@@ -379,27 +406,32 @@ namespace dg::network_memlock_proxyspin{
                 lck_table = nullptr;
             }
 
-            static inline auto acquire_try(ptr_t ptr) noexcept -> std::optional<proxy_id_t>{
+            static auto acquire_try(ptr_t ptr) noexcept -> std::optional<proxy_id_t>{
                 
                 return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
             } 
 
-            static inline auto acquire_wait(ptr_t ptr) noexcept -> proxy_id_t{
+            static auto acquire_wait(ptr_t ptr) noexcept -> proxy_id_t{
 
                 return internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
             }
 
-            static inline void acquire_release(proxy_id_t new_proxy_id, ptr_t ptr) noexcept{
+            static void acquire_release(ptr_t ptr, proxy_id_t new_proxy_id) noexcept{
 
                 internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)), new_proxy_id);
             }
 
-            static inline auto reference_try(proxy_id_t expected_proxy_id, ptr_t ptr) noexcept -> bool{
+            static void acquire_release(ptr_t ptr, proxy_id_t new_proxy_id, const increase_reference_tag) noexcept{
+
+                internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)), new_proxy_id, increase_reference_tag{});
+            }
+
+            static auto reference_try(ptr_t ptr, proxy_id_t expected_proxy_id) noexcept -> bool{
 
                 return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)), expected_proxy_id);
             } 
 
-            static inline void reference_release(ptr_t ptr) noexcept{
+            static void reference_release(ptr_t ptr) noexcept{
 
                 internal_reference_release(memregion_slot(segcheck_ins::access(ptr)));
             }

@@ -116,6 +116,17 @@ namespace dg::network_type_traits_x{
 
     template <size_t BYTE_LENGTH>
     using unsigned_of_byte_t = typename unsigned_of_byte<BYTE_LENGTH>::type;
+
+    template <class T>
+    struct remove_optional{};
+
+    template <class T>
+    struct remove_optional<std::optional<T>>{
+        using type = T;
+    };
+
+    template <class T>
+    using remove_optional_t = typename remove_optional<T>::type;
 }
 
 #endif

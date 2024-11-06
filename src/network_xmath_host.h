@@ -4,100 +4,302 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdfloat>
+#include <math.h> 
 
 namespace dg::network_xmath_host{
-     
-    inline auto sign(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    
+    template <class T>
+    struct is_std_float: std::false_type{};
 
+    template <>
+    struct is_std_float<std::float16_t>: std::true_type{};
+
+    template <>
+    struct is_std_float<std::float32_t>: std::true_type{};
+
+    template <>
+    struct is_std_float<std::float64_t>: std::true_type{};
+
+    template <>
+    struct is_std_float<std::bfloat16_t>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_std_float_v = is_std_float<T>::value;
+    
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true> 
+    inline auto sign(T value) noexcept -> T{
+        
+        return (value < 0) ? -1 : 1;
     }
 
-    inline auto exp(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto exp(T value) noexcept -> T{
 
+        return std::exp(value);
     }
 
-    inline auto ln(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto log(T value) noexcept -> T{
 
+        return std::log(value); //nan
     }
 
-    inline auto abs(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto abs(T value) noexcept -> T{
 
+        return std::abs(value);
     }
 
-    inline auto cos(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto cos(T value) noexcept -> T{
 
+        return std::cos(value);
     }
 
-    inline auto acos(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto acos(T value) noexcept -> T{
 
+        return std::acos(value);
     }
 
-    inline auto sin(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto sin(T value) noexcept -> T{
 
+        return std::sin(value);
     }
 
-    inline auto asin(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto asin(T value) noexcept -> T{
 
+        return std::asin(value);
     }
 
-    inline auto tan(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto tan(T value) noexcept -> T{
 
+        return std::tan(value);
     }
 
-    inline auto atan(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto atan(T value) noexcept -> T{
 
+        return std::atan(value);
     }
 
-    inline auto sqrt(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto sqrt(T value) noexcept -> T{
 
+        return std::sqrt(value); //nan
     }
 
-    inline auto invsqrt() noexcept{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto invsqrt(T value) noexcept -> T{
 
+        return 1 / std::sqrt(value); //nan
     }
 
-    inline auto negative(std::bfloat16_t value) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto negative(T value) noexcept -> T{
 
+        return -value;
     } 
 
-    inline auto add(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto add(T lhs, T rhs) noexcept -> T{
 
+        return lhs + rhs; //sat
     }
 
-    inline auto sub(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto sub(T lhs, T rhs) noexcept -> T{
 
+        return lhs - rhs; //sat
     }
 
-    inline auto mul(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto mul(T lhs, T rhs) noexcept -> T{
 
+        return lhs * rhs;
     }
 
-    inline auto div(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto div(T lhs, T rhs) noexcept -> T{
 
+        return lhs / rhs;
     }
 
-    inline auto pow(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto pow(T lhs, T rhs) noexcept -> T{
 
+        return std::pow(lhs, rhs);
     }
 
-    template <size_t RHS_VALUE>
-    inline auto pow(std::bfloat16_t lhs, const std::integral_constant<size_t, RHS_VALUE>) noexcept -> arithmetic_ops_t{
+    template <class T, size_t RHS_VALUE, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto pow(T lhs, const std::integral_constant<size_t, RHS_VALUE>) noexcept -> T{
 
+        return std::pow(lhs, RHS_VALUE);
     }
 
-    inline auto fma(std::bfloat16_t first, std::bfloat16_t second, std::bfloat16_t third){
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto fma(T first, T second, T third){
 
+        return first * second + third;
     }
 
-    inline auto min(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto min(T lhs, T rhs) noexcept -> T{
 
+        return std::min(lhs, rhs);
     }
 
-    inline auto max(std::bfloat16_t lhs, std::bfloat16_t rhs) noexcept -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto max(T lhs, T rhs) noexcept -> T{
 
+        return std::max(lhs, rhs);
     }
 
-    inline auto eqcmp_mul(std::bfloat16_t lcmp, std::bfloat16_t rcmp, std::bfloat16_t val) -> std::bfloat16_t{
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto eqcmp_mul(T lcmp, T rcmp, T val) -> T{
 
+        return (lcmp == rcmp) * val;
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto sign(T value) noexcept -> T{
+        
+        return 1;
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto exp(T value) noexcept -> T{
+
+        return std::exp(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto log(T value) noexcept -> T{
+
+        return std::log(value); //nan
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto abs(T value) noexcept -> T{
+
+        return std::abs(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto cos(T value) noexcept -> T{
+
+        return std::cos(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto acos(T value) noexcept -> T{
+
+        return std::acos(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto sin(T value) noexcept -> T{
+
+        return std::sin(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto asin(T value) noexcept -> T{
+
+        return std::asin(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto tan(T value) noexcept -> T{
+
+        return std::tan(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto atan(T value) noexcept -> T{
+
+        return std::atan(value);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto sqrt(T value) noexcept -> T{
+
+        return std::sqrt(value); //nan
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto invsqrt(T value) noexcept -> T{
+
+        return 1 / std::sqrt(value); //nan
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto negative(T value) noexcept -> T{
+
+        return 0;
+    } 
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto add(T lhs, T rhs) noexcept -> T{
+
+        return lhs + rhs; //sat
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto sub(T lhs, T rhs) noexcept -> T{
+
+        return lhs - rhs; //sat
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto mul(T lhs, T rhs) noexcept -> T{
+
+        return lhs * rhs; //sat
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto div(T lhs, T rhs) noexcept -> T{
+
+        return lhs / rhs; //inf
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto pow(T lhs, T rhs) noexcept -> T{
+
+        return std::pow(lhs, rhs);
+    }
+
+    template <class T, size_t RHS_VALUE, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto pow(T lhs, const std::integral_constant<size_t, RHS_VALUE>) noexcept -> T{
+
+        return std::pow(lhs, RHS_VALUE);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto fma(T first, T second, T third){
+
+        return first * second + third; //sat
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto min(T lhs, T rhs) noexcept -> T{
+
+        return std::min(lhs, rhs);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto max(T lhs, T rhs) noexcept -> T{
+
+        return std::max(lhs, rhs);
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto eqcmp_mul(T lcmp, T rcmp, T val) -> T{
+
+        return (lcmp == rcmp) * val;
     }
 } 
 

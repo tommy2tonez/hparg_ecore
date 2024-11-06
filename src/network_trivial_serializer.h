@@ -329,7 +329,7 @@ namespace dg::network_trivial_serializer{
     struct is_serializable: std::false_type{};
 
     template <class T>
-    struct is_serializable<T, std::void_t<std::enable_if_t<std::is_trivial_v<T> && archive::IsSerializable().is_serializable(T{})>>>: std::true_type{};
+    struct is_serializable<T, std::void_t<std::enable_if_t<archive::IsSerializable().is_serializable(T{})>>>: std::true_type{};
     
     template <class T>
     static inline constexpr bool is_serializable_v = is_serializable<T>::value;

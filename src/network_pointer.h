@@ -29,6 +29,7 @@ namespace dg{
     template <class T1, class T>
     auto pointer_cast(T) noexcept -> T1{
 
+        return T1{};
     }
 
     template <class T>

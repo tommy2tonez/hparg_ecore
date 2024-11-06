@@ -9,39 +9,54 @@
 #include "network_randomizer.h" 
 #include "stdx.h"
 #include "network_raii_x.h"
+#include "network_uma_tlb_impl1.h"
 
 namespace dg::network_uma{
 
-    //ssd + RAID + friends are very fast - DDR4, DDR5 are expensive - so it's the program responsibility to optimize locality to achieve maximum speed and minimum expensive storage
-    //cuda + friends are of different league - it's 1 << 20 faster - so it's important to not waste any flop here - this is a bare metal programming of unified mutual exclusive memory address - not recommend anyone read and understand this
-    //
+    //it's a bare metal programming version of mutual exclusive unified memory address - it works - its fast - its not intuitive - fine
+    //when every flop of CPU counts - it's important to actually code like this - given the current technology
 
-    using device_id_t           = uint8_t;
-    using uma_ptr_t             = uint64_t;
-    using device_ptr_t          = void *;
+    using device_id_t           = uint16_t;
+    using uma_ptr_t             = uintptr_t;
+    using vma_ptr_t             = uintptr_t;
     
-    static inline constexpr size_t MEMREGION_SZ         = size_t{0u};
-    static inline constexpr size_t PROXY_COUNT          = size_t{0u};
+    static inline constexpr size_t MEMREGION_SZ         = size_t{1u};
+    static inline constexpr size_t PROXY_COUNT          = size_t{1u};
     static inline constexpr size_t MAX_PROXY_PER_REGION = 32u;
 
     struct signature_dg_network_uma{}; 
-      
-    using tlb_factory                   = dg::network_uma_tlb::v1::Factory<signature_dg_network_uma, device_id_t, uma_ptr_t, device_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>, std::integral_constant<size_t, PROXY_COUNT>>; 
-    using tlb_instance                  = typename tlb_factory::tlb;
-    using tlbdirect_instance            = typename tlb_factory::tlb_direct;
-    using uma_ptr_access                = typename tlb_factory::uma_ptr_access;
-    using metadata_getter               = typename tlb_factory::uma_metadata; 
-    using map_resource_handle_t         = typename tlb_factory::map_resource_handle_t; 
+    
+    struct MemoryTransferDevice: dg::network_uma_tlb_impl1::interface::MemoryTransferDeviceInterface<MemoryTransferDevice>{
 
-    static_assert(std::is_trivial_v<map_resource_handle_t>);
+        using ptr_t = vma_ptr_t; 
 
-    void init(uma_ptr_t * host_region, vma_ptr_t * device_region, device_id_t * device_id, size_t n){
+        static inline void memcpy(ptr_t dst, ptr_t src, size_t n) noexcept{
+          
+            (void) dst;
+        } 
+    };
 
-        // tlb_factory::init(host_region, device_region, device_id, n);
+    using direct_tlb_instance   = dg::network_uma_tlb_impl1::generic::DirectTLB<signature_dg_network_uma, device_id_t, uma_ptr_t, vma_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>>;
+    using tlb_instance          = dg::network_uma_tlb_impl1::generic::BiexTLB<signature_dg_network_uma, MemoryTransferDevice::interface_t, device_id_t, uma_ptr_t, vma_ptr_t, std::integral_constant<size_t, MEMREGION_SZ>>;
+    using uma_ptr_access        = dg::network_uma_tlb::access::StdSafeRegionAccess<signature_dg_network_uma, uma_ptr_t, device_id_t, MEMREGION_SZ>; 
+    using metadata_getter       = dg::network_uma_tlb::access::MetadataGetter<signature_dg_network_uma, device_id_t, uma_ptr_t, MEMREGION_SZ>;
+    using map_resource_handle_t = typename tlb_instance::map_resource_handle_t; 
+
+
+    void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, bool * is_proxy_arr, size_t n){
+
+        direct_tlb_instance::init(uma_region_arr, vma_region_arr, device_id_arr, n);
+        tlb_instance::init(uma_region_arr, vma_region_arr, device_id_arr, is_proxy_arr, n);
+        uma_ptr_access::init(uma_region_arr, device_id_arr, n);
+        metadata_getter::init(uma_region_arr, device_id_arr, n);
     }
     
     void deinit() noexcept{
 
+        direct_tlb_instance::deinit();
+        tlb_instance::deinit();
+        uma_ptr_access::deinit();
+        metadata_getter::deinit();
     }
     
     auto map_direct(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<vma_ptr_t, exception_t>{
@@ -52,7 +67,7 @@ namespace dg::network_uma{
             return std::unexpected(ptrchk);
         }
 
-        return tlbdirect_instance::map(device_id, ptr);
+        return direct_tlb_instance::map(device_id, ptr);
     }
 
     auto map_try(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<std::optional<map_resource_handle_t>, exception_t>{
@@ -88,7 +103,7 @@ namespace dg::network_uma{
         while (true){
             size_t random_value     = dg::network_randomizer::randomize_xrange(std::integral_constant<size_t, MAX_PROXY_PER_REGION>{}); 
             size_t device_sz        = metadata_getter::device_count(ptr);
-            size_t idx              = stdx::pow2mod_unsigned(random_value, device_sz); //this is actually hard to tell
+            size_t idx              = stdx::pow2mod_unsigned(random_value, device_sz);
             device_id_t device_id   = metadata_getter::device_at(ptr, idx);
 
             if (auto rs = tlb_instance::map_try(device_id, ptr); rs.has_value()){
@@ -155,14 +170,13 @@ namespace dg::network_uma{
         return metadata_getter::device_at(ptr, idx);
     }
  
-    //--
     auto map_direct_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
         uma_ptr_access::safe_access(device_id, ptr);
-        return tlbdirect_instance::map(device_id, ptr); 
+        return direct_tlb_instance::map(device_id, ptr); 
     } 
 
-    auto map_try_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<map_resource_handle_t, exception_t>{
+    auto map_try_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<map_resource_handle_t>{
 
         uma_ptr_access::safe_access(device_id, ptr);
         return tlb_instance::map_try(device_id, ptr);
@@ -193,7 +207,7 @@ namespace dg::network_uma{
     auto device_count_nothrow(uma_ptr_t ptr) noexcept -> size_t{
 
         uma_ptr_access::safe_access(ptr);
-        return metatdata_getter::device_count(ptr);
+        return metadata_getter::device_count(ptr);
     }
 
     auto device_at_nothrow(uma_ptr_t ptr, size_t idx) noexcept -> device_id_t{

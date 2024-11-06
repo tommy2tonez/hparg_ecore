@@ -766,9 +766,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 if (reset_lapsed > this->min_reset_interval){
                     this->interval_data_map.clear();
                     this->statistic_data_map.clear();
-                    this->last_reset_time = now;
+                    this->last_reset_time   = now;
+                    this->last_updated_time = now;
                     return;
-                } 
+                }
 
                 if (update_lapsed < this->min_update_interval){
                     return;
@@ -1621,7 +1622,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 
                 model::Packet pkt   = {};
                 size_t sz           = {};
-                auto bstream        = dg::string(constants::MAXIMUM_MSG_SIZE, ' '); //this is an optimizable - custom string implementation that only does std::malloc() - instead of calloc
+                auto bstream        = dg::string(constants::MAXIMUM_MSG_SIZE, ' '); //this is an optimizable - custom string implementation that only does std::malloc() - instead of calloc - it's actually hard to tell - this could be prefetch - depends on the kernel implementation of recv
                 exception_t err     = socket_service::recv_block(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE);
 
                 if (dg::network_exception::is_failed(err)){

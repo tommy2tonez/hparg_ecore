@@ -8,11 +8,18 @@
 #include "network_log.h"
 #include "network_std_container.h"
 #include "network_exception_handler.h"
+#include "network_concurrency.h"
+#include <tuple>
+#include <array>
+#include "stdx.h"
+#include "network_type_traits_x.h"
 
 namespace dg::network_uma_tlb::interface{
-    
+
     template <class T>
     struct MutexTLBInterface{
+
+        using interface_t           = MutexTLBInterface<T>;
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         using device_id_t           = typename T1::device_id_t;
@@ -65,6 +72,8 @@ namespace dg::network_uma_tlb::interface{
 
     template <class T>
     struct MutexRegionTLBInterface: MutexTLBInterface<T>{
+
+        using interface_t = MutexRegionTLBInterface<T>; 
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto memregion_size() noexcept -> size_t{
@@ -148,33 +157,150 @@ namespace dg::network_uma_tlb::interface{
         }
     };
 
+    template <class TLBInterface>
+    struct MapResource{
+        typename TLBInterface::uma_ptr_t<> region;
+        typename TLBInterface::map_resource_handle_t<> map_resource;
+        bool responsibility_flag; 
+        size_t offset;
+    };
+
     template <class T>
-    auto recursive_raiimap_try(const MutexRegionTLBInterface<T>, 
-                               typename MutexRegionTLBInterface<T>::device_id_t device_id, 
-                               typename MutexRegionTLBInterface<T>::uma_ptr_t ptr) noexcept -> std::optional<dg::unique_resource<typename MutexRegionTLBInterface<T>::map_resource_handle_t, void (*)(typename MutexRegionTLBInterface<T>::map_resource_handle_t) noexcept>>{
-        
-        using tlb_ins       = MutexRegionTLBInterface<T>;
-        using resource_ins  = RecursiveMapResource<MutexRegionTLBInterface<T>>;
-        using ptr_t         = typename tlb_ins:uma_ptr_t;
-        using resource_t    = typename tlb_ins::map_resource_handle_t;
+    struct RecursiveMapController{};
 
-        dg::unordered_unstable_set<ptr_t>& ptr_set = resource_ins::get();
-        ptr_t ptr_region = dg::memult::region(ptr);
-        
-        if (ptr_set.contains(ptr_region)){
-            return dg::unique_resource<typename MutexRegionTLBInterface<T>::map_resource_handle_t, void (*)(typename MutexRegionTLBInterface<T>::map_resource_handle_t) noexcept>{};
-        }
+    template <class T>
+    struct RecursiveMapController<MutexRegionTLBInterface<T>>{
 
-        auto destructor = [](resource_t resource_arg) noexcept{
-            resource_ins::get().erase();
-            tlb_ins::map_release(resource_arg);
+        public:
+
+            using tlb_ins       = MutexRegionTLBInterface<T>;
+            using key_t         = typename tlb_ins::uma_ptr_t<>;
+            using value_t       = std::pair<typename tlb_ins::device_id_t<>, typename tlb_ins::map_resource_handle_t<>>;
+
+        private:
+
+            using self              = RecursiveMapController;
+            using singleton_object  = stdx::singleton<self, std::array<dg::unordered_unstable_map<key_t, value_t>, dg::network_concurrency::THREAD_COUNT>>;
+
+        public:
+
+            static void insert(key_t key, value_t value) noexcept{
+
+                auto& map = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
+                map.insert(std::make_pair(key, value));
+            } 
+
+            static auto find(key_t key) noexcept -> std::optional<value_t>{
+
+                auto& map   = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
+                auto ptr    = map.find(key); 
+
+                if (ptr == map.end()){
+                    return std::nullopt;
+                }
+
+                return ptr->second;
+            }
+
+            static auto erase(key_t key) noexcept{
+
+                auto& map = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
+                map.erase(key);
+            }
+    };
+    
+    template <class T>
+    auto recursive_lockmap_try(const MutexRegionTLBInterface<T>, typename MutexRegionTLBInterface<T>::device_id_t<> device_id, typename MutexRegionTLBInterface<T>::uma_ptr_t<> ptr) noexcept{
+
+        using tlb_ins                   = MutexRegionTLBInterface<T>;
+        using controller_ins            = RecursiveMapController<MutexRegionTLBInterface<T>>;
+        using map_ptr_t                 = typename tlb_ins::uma_ptr_t<>;
+        using device_id_t               = typename tlb_ins::device_id_t<>;
+        using map_resource_t            = typename tlb_ins::map_resource_handle_t<>; 
+        using recursive_map_resource_t  = MapResource<tlb_ins>;
+
+        map_ptr_t region                                                = dg::memult::region(ptr, tlb_ins::memregion_size());
+        size_t offset                                                   = dg::memult::region_offset(ptr, tlb_ins::memregion_size());
+        std::optional<std::pair<device_id_t, map_resource_t>> mapped    = controller_ins::find(region);
+
+        auto destructor = [](recursive_map_resource_t arg) noexcept{
+            if (arg.responsibility_flag){
+                controller_ins::erase(arg.region);
+                tlb_ins::map_release(arg.map_resource);
+            }
         };
 
-        if (auto rs = resource_ins::map_try(device_id, ptr); rs.has_value()){
-            return dg::unique_resource<typename MutexRegionTLBInterface<T>::map_resource_handle_t, void (*)(typename MutexRegionTLBInterface<T>::map_resource_handle_t) noexcept>{rs.value(), destructor};
+        if (mapped.has_value()){
+            if (mapped->first != device_id){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+
+            return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_map_resource_t{region, mapped->second, false, offset}, std::move(destructor)));
         }
+
+        std::optional<map_resource_t> map_rs = tlb_ins::map_try(device_id, ptr);
+
+        if (map_rs.has_value()){
+            controller_ins::insert(region, std::make_pair(device_id, map_rs.value()));
+            return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_map_resource_t{region, map_rs.value(), true, offset}, std::move(destructor)));
+        }
+
+        return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(std::nullopt);
+    }
+
+    template <class T>
+    auto recursive_lockmap_wait(const MutexRegionTLBInterface<T> tlb, typename MutexRegionTLBInterface<T>::device_id_t<> device_id, typename MutexRegionTLBInterface<T>::uma_ptr_t<> ptr) noexcept{
+
+        while (true){
+            if (auto rs = recursive_lockmap_try(tlb, device_id, ptr); rs.has_value()){
+                using ret_t = dg::network_type_traits_x::remove_optional_t<decltype(rs)>;
+                return ret_t{std::move(rs.value())};
+            }
+        }
+    }
+
+    template <size_t SZ, class T>
+    auto recursive_lockmap_try_many(const MutexRegionTLBInterface<T> tlb, const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
+
+        using opt_element_t     = decltype(recursive_lockmap_try(tlb, {}, {}));
+        using element_t         = dg::network_type_traits_x::remove_optional_t<opt_element_t>;
+        using resource_arr_t    = std::array<element_t, SZ>;
+        using ret_t             = std::optional<resource_arr_t>;
+
+        resource_arr_t rs{};
+
+        for (size_t i = 0u; i < args.size(); ++i){
+            auto tmp = recursive_lockmap_try(tlb, args[i].first, args[i].second);
+
+            if (!tmp.has_value()){
+                return ret_t{std::nullopt};
+            }
+
+            rs[i] = std::move(tmp.value());
+        }
+
+        return ret_t{std::move(rs)};
+    }
+
+    template <size_t SZ, class T>
+    auto recursive_lockmap_wait_many(const MutexRegionTLBInterface<T> tlb, const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
+
+        while (true){
+            if (auto rs = recursive_lockmap_try_many(tlb, args); rs.has_value()){
+                using ret_t = dg::network_type_traits_x::remove_optional_t<decltype(rs)>; 
+                return ret_t{std::move(rs.value())};
+            }
+        }
+    }
+
+    template <class TLBInterface>
+    auto get_vma_ptr(MapResource<TLBInterface> resource) noexcept -> typename TLBInterface::vma_ptr_t<>{
+
+        auto region = dg::memult::region(TLBInterface::get_vma_ptr(resource.map_resource), TLBInterface::memregion_size()); 
+        auto rs     = dg::memult::advance(region, resource.offset);
         
-        return std::nullopt;
+        return rs;
     }
 }
 
@@ -184,8 +310,48 @@ namespace dg::network_uma_tlb::access{
 
     static inline constexpr bool IS_SAFE_ACCESS_ENABLED = true;
 
+    template <class ID, class DeviceIdType, class UMAPtrType, size_t MEMREGION_SZ>
+    class MetadataGetter: public MetadataGetterInterface<MetadataGetter<ID, DeviceIdType, UMAPtrType, MEMREGION_SZ>>{
+
+        public:
+
+            using device_id_t   = DeviceIdType;
+            using uma_ptr_t     = UMAPtrType;
+
+        private:
+
+            static inline dg::unordered_unstable_map<uma_ptr_t, dg::vector<device_id_t>> region_device_map{};  
+
+        public:
+
+            static void init(uma_ptr_t * uma_region_arr, device_id_t * device_id_arr, size_t n){
+
+                for (size_t i = 0u; i < n; ++i){
+                    region_device_map[uma_region_arr[i]].push_back(device_id_arr[i]);
+                }
+            }
+
+            static void deinit() noexcept{
+
+                region_device_map = {};
+            }
+
+            static auto device_count(uma_ptr_t host_ptr) noexcept -> size_t{
+
+                uma_ptr_t region = dg::memult::region(host_ptr, MEMREGION_SZ);
+                return region_device_map[region].size();
+            }
+
+            static auto device_at(uma_ptr_t host_ptr, size_t idx) noexcept -> device_id_t{
+
+                uma_ptr_t region = dg::memult::region(host_ptr, MEMREGION_SZ);
+                return region_device_map[region][idx];
+            }
+    };
+
+
     template <class ID, class UMAPtrType, class DeviceIdType, size_t MEMREGION_SZ>
-    struct StdSafeRegionAccess: SafePtrAccessInterface<StdSafeRegionAccess<ID, UMAPtrType, DeviceIdType, MEMREGION_SZ>>{
+    class StdSafeRegionAccess: public SafePtrAccessInterface<StdSafeRegionAccess<ID, UMAPtrType, DeviceIdType, MEMREGION_SZ>>{
 
         public:
 
