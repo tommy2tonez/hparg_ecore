@@ -157,6 +157,12 @@ namespace dg::network_uma_tlb::interface{
         }
     };
 
+}
+
+namespace dg::network_uma_tlb::rec_lck{
+
+    using namespace interface;
+
     template <class TLBInterface>
     struct MapResource{
         typename TLBInterface::uma_ptr_t<> region;
@@ -173,9 +179,11 @@ namespace dg::network_uma_tlb::interface{
 
         public:
 
-            using tlb_ins       = MutexRegionTLBInterface<T>;
-            using key_t         = typename tlb_ins::uma_ptr_t<>;
-            using value_t       = std::pair<typename tlb_ins::device_id_t<>, typename tlb_ins::map_resource_handle_t<>>;
+            static inline constexpr size_t MAX_KEY_PER_THREAD = size_t{1} << 16; 
+
+            using tlb_ins           = MutexRegionTLBInterface<T>;
+            using key_t             = typename tlb_ins::uma_ptr_t<>;
+            using value_t           = std::pair<typename tlb_ins::device_id_t<>, typename tlb_ins::map_resource_handle_t<>>;
 
         private:
 
@@ -185,16 +193,23 @@ namespace dg::network_uma_tlb::interface{
         public:
 
             static void insert(key_t key, value_t value) noexcept{
-
+                
                 auto& map = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
-                map.insert(std::make_pair(key, value));
-            } 
 
-            static auto find(key_t key) noexcept -> std::optional<value_t>{
+                if (map.size() == MAX_KEY_PER_THREAD + 1){ 
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RESOURCE_EXHAUSTION));
+                    std::abort();
+                }
+
+                map[key] = value;
+            }
+
+            static auto map(key_t key) noexcept -> std::optional<value_t>{
 
                 auto& map   = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
-                auto ptr    = map.find(key); 
+                auto ptr    = map.find(key);
 
+                //optimizable
                 if (ptr == map.end()){
                     return std::nullopt;
                 }
@@ -202,13 +217,16 @@ namespace dg::network_uma_tlb::interface{
                 return ptr->second;
             }
 
-            static auto erase(key_t key) noexcept{
+            static void erase(key_t key) noexcept{
 
                 auto& map = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
                 map.erase(key);
             }
     };
-    
+
+    template <class T>
+    constexpr auto recursive_resource_type(const MutexRegionTLBInterface<T>) noexcept -> MapResource<MutexRegionTLBInterface<T>>;
+
     template <class T>
     auto recursive_lockmap_try(const MutexRegionTLBInterface<T>, typename MutexRegionTLBInterface<T>::device_id_t<> device_id, typename MutexRegionTLBInterface<T>::uma_ptr_t<> ptr) noexcept{
 
@@ -221,7 +239,7 @@ namespace dg::network_uma_tlb::interface{
 
         map_ptr_t region                                                = dg::memult::region(ptr, tlb_ins::memregion_size());
         size_t offset                                                   = dg::memult::region_offset(ptr, tlb_ins::memregion_size());
-        std::optional<std::pair<device_id_t, map_resource_t>> mapped    = controller_ins::find(region);
+        std::optional<std::pair<device_id_t, map_resource_t>> mapped    = controller_ins::map(region);
 
         auto destructor = [](recursive_map_resource_t arg) noexcept{
             if (arg.responsibility_flag){

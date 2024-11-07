@@ -26,4 +26,6 @@
 
 
 int main(){
+
+    dg::network_uma::lockmap_safewait_many<1>({});
 }
