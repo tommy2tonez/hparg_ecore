@@ -379,6 +379,11 @@ namespace stdx{
         UniquePtrVirtualGuard virt_guard(std::move(resource_grd));
         return std::make_unique<decltype(virt_guard)>(std::move(virt_guard));
     }
+
+    template <class T>
+    struct hdi_container{
+        alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value;
+    };
 }
 
 #endif

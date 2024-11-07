@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <network_addr_lookup.h>
-#include "network_tile_member_access.h"   
-#include "network_memcommit_factory.h" 
+#include "network_tile_member_access.h"
+#include "network_memcommit_factory.h"
 #include "network_producer_consumer.h"
 
 namespace dg::network_memcommit_resolutor{

@@ -108,12 +108,6 @@ namespace dg::network_memlock{
 
             T::reference_transfer_wait(new_ptr, old_ptr);
         }
-
-        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
-            
-            return T::transfer_try(new_ptr, old_ptr);
-        }
     };
 
     template <class T>
@@ -241,7 +235,7 @@ namespace dg::network_memlock_impl1{
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;;
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t; 
 
-            static inline std::unique_ptr<std::atomic_flag[]> lck_table{};
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> lck_table{};
             static inline ptr_t region_first{}; 
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
@@ -251,7 +245,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
-                bool rs = lck_table[table_idx].test_and_set(std::memory_order_acquire);
+                bool rs = lck_table[table_idx].value.test_and_set(std::memory_order_acquire);
                 stdx::atomic_optional_thread_fence();
                 return rs;
             }
@@ -264,7 +258,7 @@ namespace dg::network_memlock_impl1{
             static void internal_acquire_release(size_t table_idx) noexcept{
                 
                 stdx::atomic_optional_thread_fence();
-                lck_table[table_idx].clear(std::memory_order_release);
+                lck_table[table_idx].value.clear(std::memory_order_release);
             }
 
         public:
@@ -289,7 +283,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table           = std::make_unique<std::atomic_flag[]>(lck_table_sz);
+                lck_table           = std::make_unique<stdx::hdi_container<std::atomic_flag>[]>(lck_table_sz);
                 region_first        = first;
                 segcheck_ins::init(first, last);
             }
@@ -351,7 +345,7 @@ namespace dg::network_memlock_impl1{
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>; 
 
-            static inline std::unique_ptr<std::mutex[]> lck_table{};
+            static inline std::unique_ptr<stdx::hdi_container<std::mutex>[]> lck_table{};
             static inline ptr_t region_first{};
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
@@ -379,7 +373,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 size_t lck_table_sz     = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table               = std::make_unique<std::mutex[]>(lck_table_sz);
+                lck_table               = std::make_unique<stdx::hdi_container<std::mutex>[]>(lck_table_sz);
                 region_first            = first;
                 segcheck_ins::init(first, last);
             }
@@ -396,21 +390,21 @@ namespace dg::network_memlock_impl1{
 
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
-                bool rs = lck_table[memregion_slot(segcheck_ins::access(ptr))].try_lock();
+                bool rs = lck_table[memregion_slot(segcheck_ins::access(ptr))].value.try_lock();
                 stdx::atomic_optional_thread_fence();
                 return rs;
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
 
-                lck_table[memregion_slot(segcheck_ins::access(ptr))].lock();
+                lck_table[memregion_slot(segcheck_ins::access(ptr))].value.lock();
                 stdx::atomic_optional_thread_fence();
             }
             
             static void acquire_release(ptr_t ptr) noexcept{
 
                 stdx::atomic_optional_thread_fence();
-                lck_table[memregion_slot(segcheck_ins::access(ptr))].unlock();
+                lck_table[memregion_slot(segcheck_ins::access(ptr))].value.unlock();
             }
 
             static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
@@ -449,7 +443,7 @@ namespace dg::network_memlock_impl1{
             static inline constexpr atomic_lock_t MEMREGION_EMP_STATE = 0u;
             static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE = std::numeric_limits<atomic_lock_t>::max();
 
-            static inline std::unique_ptr<std::atomic<atomic_lock_t>[]> lck_table{};    
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic<atomic_lock_t>>[]> lck_table{};    
             static inline ptr_t region_first{};
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
@@ -460,7 +454,7 @@ namespace dg::network_memlock_impl1{
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
                 
                 atomic_lock_t expected = MEMREGION_EMP_STATE;
-                bool rs = lck_table[table_idx].compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_acq_rel);
+                bool rs = lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_acq_rel);
                 stdx::atomic_optional_thread_fence();
                 
                 return rs;
@@ -474,19 +468,19 @@ namespace dg::network_memlock_impl1{
             static void internal_acquire_release(size_t table_idx) noexcept{
 
                 stdx::atomic_optional_thread_fence();
-                lck_table[table_idx].exchange(MEMREGION_EMP_STATE, std::memory_order_release);
+                lck_table[table_idx].value.exchange(MEMREGION_EMP_STATE, std::memory_order_release);
             }
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
-                atomic_lock_t cur_state  = lck_table[table_idx].load(std::memory_order_relaxed);
+                atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
 
                 if (cur_state == MEMREGION_ACQ_STATE){
                     return false;
                 }
 
                 atomic_lock_t nxt_state  = cur_state + 1;
-                bool rs = lck_table[table_idx].compare_exchange_weak(cur_state, nxt_state, std::memory_order_acq_rel);
+                bool rs = lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_acq_rel);
                 stdx::atomic_optional_thread_fence();
 
                 return rs;
@@ -500,7 +494,7 @@ namespace dg::network_memlock_impl1{
             static void internal_reference_release(size_t table_idx) noexcept{
 
                 stdx::atomic_optional_thread_fence();
-                lck_table[table_idx].fetch_sub(1, std::memory_order_release);
+                lck_table[table_idx].value.fetch_sub(1, std::memory_order_release);
             }
 
         public:
@@ -525,11 +519,11 @@ namespace dg::network_memlock_impl1{
                 }
 
                 size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table           = std::make_unique<std::atomic<atomic_lock_t>[]>(lck_table_sz);
+                lck_table           = std::make_unique<stdx::hdi_container<std::atomic<atomic_lock_t>>[]>(lck_table_sz);
                 region_first        = first;
 
                 for (size_t i = 0u; i < lck_table_sz; ++i){
-                    lck_table[i] = MEMREGION_EMP_STATE;
+                    lck_table[i].value = MEMREGION_EMP_STATE;
                 }
 
                 segcheck_ins::init(first, last);
@@ -631,7 +625,7 @@ namespace dg::network_memlock_impl1{
                 refcount_t refcount;
             };
 
-            static inline std::unique_ptr<LockUnit[]> lck_table{};
+            static inline std::unique_ptr<stdx::hdi_container<LockUnit>[]> lck_table{};
             static inline ptr_t region_first{}; 
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
@@ -643,11 +637,11 @@ namespace dg::network_memlock_impl1{
 
                 auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
                 
-                if (lck_table[table_idx].refcount != REFERENCE_EMPTY_STATE){
+                if (lck_table[table_idx].value.refcount != REFERENCE_EMPTY_STATE){
                     return false;
                 }
 
-                lck_table[table_idx].refcount = REFERENCE_ACQUIRED_STATE;
+                lck_table[table_idx].value.refcount = REFERENCE_ACQUIRED_STATE;
                 return true;
             }
 
@@ -658,19 +652,19 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_release(size_t table_idx) noexcept{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].value.lck);
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_STATE;
             }
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].value.lck);
                 
-                if (lck_table[table_idx].refcount == REFERENCE_ACQUIRED_STATE){
+                if (lck_table[table_idx].value.refcount == REFERENCE_ACQUIRED_STATE){
                     return false;
                 }
 
-                ++lck_table[table_idx].refcount;
+                ++lck_table[table_idx].value.refcount;
                 return true;
             }
 
@@ -681,8 +675,8 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_reference_release(size_t table_idx) noexcept{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
-                --lck_table[table_idx].refcount;
+                auto lck_grd = stdx::lock_guard(lck_table[table_idx].value.lck);
+                --lck_table[table_idx].value.refcount;
             }
 
         public:
@@ -705,11 +699,11 @@ namespace dg::network_memlock_impl1{
                 }
 
                 size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table           = std::make_unique<LockUnit[]>(lck_table_sz);
+                lck_table           = std::make_unique<stdx::hdi_container<LockUnit>[]>(lck_table_sz);
                 region_first        = first;
                 
                 for (size_t i = 0u; i < lck_table_sz; ++i){
-                    lck_table[i].refcount = REFERENCE_EMPTY_STATE;
+                    lck_table[i].value.refcount = REFERENCE_EMPTY_STATE;
                 }
 
                 segcheck_ins::init(first, last);

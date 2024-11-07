@@ -625,10 +625,10 @@ namespace dg::network_uma_tlb_impl1::biex{
                 uint8_t old_dispatch_code   = dispatch_table[memregion_slot(segcheck_ins::access(old_host_ptr))];
                 uint8_t new_dispatch_code   = dispatch_table[memregion_slot(segcheck_ins::access(new_host_ptr))];
 
-                if ((old_dispatch_code ^ new_dispatch_code) == 1u){
+                if (old_dispatch_code != new_dispatch_code){
                     return dg::ptr_limits<vma_ptr_t>::null_value(); 
                 }
-                
+
                 if (old_dispatch_code == DISPATCH_CODE_BIJECTIVE){
                     return bijective_tlb::remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr);
                 }
@@ -637,7 +637,7 @@ namespace dg::network_uma_tlb_impl1::biex{
             }
 
             static auto remap_wait(device_id_t device_id, uma_ptr_t new_host_ptr, device_id_t old_device_id, uma_ptr_t old_host_ptr) noexcept -> vma_ptr_t{
-                
+
                 if (auto rs = remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
                     return rs;
                 }

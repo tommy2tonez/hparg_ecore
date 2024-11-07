@@ -346,9 +346,6 @@ namespace dg::network_virtual_device{
 
     }
 
-    //having ids here break single responsibility
-    //ptr semantically encapsulates id - reconsider 
-
     auto virtualize_cuda_ptr(cuda_ptr_t ptr) noexcept -> virtual_ptr_t{
 
     }
