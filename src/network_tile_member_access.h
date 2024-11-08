@@ -18,7 +18,7 @@ namespace dg::network_tile_member_access::implementation{
     
     using uma_ptr_t = dg::network_pointer::uma_ptr_t;
 
-    static constexpr auto least_aligned_greater_eq_than(size_t alignment_sz, size_t blk_sz) noexcept -> size_t{
+    static constexpr auto dg_align(size_t alignment_sz, size_t blk_sz) noexcept -> size_t{
 
         assert(stdx::is_pow2(alignment_sz));
 
@@ -27,7 +27,7 @@ namespace dg::network_tile_member_access::implementation{
 
         return fwd_blk_sz & bit_mask;
     }
-    
+
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ>
     struct LeafAddressLookup{
 
@@ -48,40 +48,40 @@ namespace dg::network_tile_member_access::implementation{
                 return idx;
             }
 
-            static constexpr auto offset_init_status(size_t idx) noexcept -> size_t{
+            static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             } 
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
                 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status(TILE_COUNT) + PADDING_SZ) + ARR_IDX * OBSERVER_VALUE_SZ); 
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX); 
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             } 
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
@@ -90,8 +90,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -126,7 +126,7 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status(self::index(access_ins::access(ptr))));
+                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             } 
 
             template <size_t ARR_IDX>
@@ -192,45 +192,45 @@ namespace dg::network_tile_member_access::implementation{
                 return idx;
             }
 
-            static constexpr auto offset_init_status(size_t idx) noexcept -> size_t{
+            static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status(TILE_COUNT) + PADDING_SZ) + ARR_IDX * OBSERVER_VALUE_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
             
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
@@ -239,8 +239,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -275,7 +275,7 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status(self::index(access_ins::access(ptr))));
+                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
@@ -348,44 +348,44 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ACM_IDX>
             static constexpr auto offset_descendant_addr(size_t idx, const std::integral_constant<size_t, ACM_IDX>) noexcept -> size_t{
 
-                return idx * (ACM_SZ * DESCENDANT_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ) + ACM_IDX * DESCENDANT_SZ);
+                return idx * (DESCENDANT_SZ * ACM_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ) + DESCENDANT_SZ * ACM_IDX);
             }
 
         public:
@@ -394,8 +394,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -510,50 +510,50 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ACM_IDX>
             static constexpr auto offset_left_descendant_addr(size_t idx, const std::integral_constant<size_t, ACM_IDX>) noexcept -> size_t{
 
-                return idx * (DESCENDANT_SZ * ACM_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ) + ACM_IDX * DESCENDANT_SZ);
+                return idx * (DESCENDANT_SZ * ACM_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ) + DESCENDANT_SZ * ACM_IDX);
             }
 
             template <size_t ACM_IDX>
             static constexpr auto offset_right_descendant_addr(size_t idx, const std::integral_constant<size_t, ACM_IDX>) noexcept -> size_t{
 
-                return idx * (DESCENDANT_SZ * ACM_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_left_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ) + ACM_IDX * DESCENDANT_SZ);
+                return idx * (DESCENDANT_SZ * ACM_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_left_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ) + DESCENDANT_SZ * ACM_IDX);
             }
 
         public:
@@ -562,8 +562,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -685,48 +685,48 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + ARR_IDX * OBSERVER_VALUE_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_left_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_right_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_left_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_left_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
@@ -735,8 +735,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -849,48 +849,48 @@ namespace dg::network_tile_member_access::implementation{
             
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ); 
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ); 
             } 
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_crit_kind_addr(size_t idx) noexcept -> size_t{
 
-                return idx * CRIT_KIND_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * CRIT_KIND_SZ + dg_align(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
@@ -899,8 +899,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1001,11 +1001,6 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{};
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            }
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
                 return dg::memult::distance(self::get_head(), ptr);
@@ -1018,48 +1013,48 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dst_info_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DST_INFO_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DST_INFO_SZ + dg_align(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
@@ -1068,8 +1063,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1091,6 +1086,11 @@ namespace dg::network_tile_member_access::implementation{
 
                 return OBSERVER_ARRAY_SZ;
             } 
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
+            }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
@@ -1165,11 +1165,6 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{};
             
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            } 
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
                 return dg::memult::distance(self::head, ptr);
@@ -1182,53 +1177,53 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ * least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ * dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             } 
 
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dst_info_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DST_INFO_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DST_INFO_SZ + dg_align(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_timein_addr(size_t idx) noexcept -> size_t{
 
-                return idx * TIMEIN_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dst_info_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * TIMEIN_SZ + dg_align(ALIGNMENT_SZ, self::offset_dst_info_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
@@ -1237,8 +1232,8 @@ namespace dg::network_tile_member_access::implementation{
 
             static void init(uma_ptr_t buf){
                 
-                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1260,6 +1255,11 @@ namespace dg::network_tile_member_access::implementation{
 
                 return OBSERVER_ARRAY_SZ;
             }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
+            } 
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
@@ -1412,30 +1412,30 @@ namespace dg::network_tile_member_access{
         id_mono_16      = 5u,
         id_mono_32      = 6u,
         id_mono_64      = 7u,
-        id_uacm_8       = 8u,
-        id_uacm_16      = 9u,
-        id_uacm_32      = 10u,
-        id_uacm_64      = 11u,
-        id_pacm_8       = 12u,
-        id_pacm_16      = 13u,
-        id_pacm_32      = 14u,
-        id_pacm_64      = 15u,
-        id_pair_8       = 16u,
-        id_pair_16      = 17u,
-        id_pair_32      = 18u,
-        id_pair_64      = 19u,
-        id_crit_8       = 20u,
-        id_crit_16      = 21u,
-        id_crit_32      = 22u,
-        id_crit_64      = 23u,
-        id_msgrfwd_8    = 24u,
-        id_msgrfwd_16   = 25u,
-        id_msgrfwd_32   = 26u,
-        id_msgrfwd_64   = 27u,
-        id_msgrbwd_8    = 28u,
-        id_msgrbwd_16   = 29u,
-        id_msgrbwd_32   = 30u,
-        id_msgrbwd_64   = 31u
+        id_crit_8       = 8u,
+        id_crit_16      = 9u,
+        id_crit_32      = 10u,
+        id_crit_64      = 11u,
+        id_msgrfwd_8    = 12u,
+        id_msgrfwd_16   = 13u,
+        id_msgrfwd_32   = 14u,
+        id_msgrfwd_64   = 15u,
+        id_msgrbwd_8    = 16u,
+        id_msgrbwd_16   = 17u,
+        id_msgrbwd_32   = 18u,
+        id_msgrbwd_64   = 19u,
+        id_pair_8       = 20u,
+        id_pair_16      = 21u,
+        id_pair_32      = 22u,
+        id_pair_64      = 23u,
+        id_uacm_8       = 24u,
+        id_uacm_16      = 25u,
+        id_uacm_32      = 26u,
+        id_uacm_64      = 27u,
+        id_pacm_8       = 28u,
+        id_pacm_16      = 29u,
+        id_pacm_32      = 30u,
+        id_pacm_64      = 31u,
     };
 
     struct network_tile_member_access_signature{}; 
@@ -1485,91 +1485,92 @@ namespace dg::network_tile_member_access{
     struct Resource{
         dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_t> region_id_map;
         std::unique_ptr<tile_polymorphic_t[]> region_id_table;
+        uma_ptr_t region_first;
     };
 
-    static inline Resource resource{};
+    inline Resource resource{};
 
-    static void init(uma_ptr_t buf){
+    consteval auto get_memory_usage() -> size_t{
 
-        uma_ptr_t last = buf;
+        return      leaf8_accessor_t::buf_size() + leaf16_accessor_t::buf_size() + leaf32_accessor_t::buf_size() + leaf64_accessor_t::buf_size()
+                +   mono8_accessor_t::buf_size() + mono16_accessor_t::buf_size() + mono32_accessor_t::buf_size() + mono64_accessor_t::buf_size()
+                +   pair8_accessor_t::buf_size() + pair16_accessor_t::buf_size() + pair32_accessor_t::buf_size() + pair64_accessor_t::buf_size()
+                +   uacm8_accessor_t::buf_size() + uacm16_accessor_t::buf_size() + uacm32_accessor_t::buf_size() + uacm64_accessor_t::buf_size()
+                +   pacm8_accessor_t::buf_size() + pacm16_accessor_t::buf_size() + pacm32_accessor_t::buf_size() + pacm64_accessor_t::buf_size()
+                +   crit8_accessor_t::buf_size() + crit16_accessor_t::buf_size() + crit32_accessor_t::buf_size() + crit64_accessor_t::buf_size()
+                +   msgrfwd8_accessor_t::buf_size() + msgrfwd16_accessor_t::buf_size() + msgrfwd32_accessor_t::buf_size() + msgrfwd64_accessor_t::buf_size()
+                +   msgrbwd8_accessor_t::buf_size() + msgrbwd16_accessor_t::buf_size() + msgrbwd32_accessor_t::buf_size() + msgrbwd64_accessor_t::buf_size();
+    } 
 
-        leaf8_accessor_t::init(last);
-        last = dg::memult::advance(last, leaf8_accessor_t::buf_size());
-        leaf16_accessor_t::init(last);
-        last = dg::memult::advance(last, leaf16_accessor_t::buf_size());
-        leaf32_accessor_t::init(last);
-        last = dg::memult::advance(last, leaf32_accessor_t::buf_size());
-        leaf64_accessor_t::init(last);
-        last = dg::memult::advance(last, leaf64_accessor_t::buf_size());
+    void init(uma_ptr_t buf){
 
-        mono8_accessor_t::init(last);
-        last = dg::memult::advance(last, mono8_accessor_t::buf_size());
-        mono16_accessor_t::init(last);
-        last = dg::memult::advance(last, mono16_accessor_t::buf_size());
-        mono32_accessor_t::init(last);
-        last = dg::memult::advance(last, mono32_accessor_t::buf_size());
-        mono64_accessor_t::init(last);
-        last = dg::memult::advance(last, mono64_accessor_t::buf_size());
-
-        pair8_accessor_t::init(last);
-        last = dg::memult::advance(last, pair8_accessor_t::buf_size());
-        pair16_accessor_t::init(last);
-        last = dg::memult::advance(last, pair16_accessor_t::buf_size());
-        pair32_accessor_t::init(last);
-        last = dg::memult::advance(last, pair32_accessor_t::buf_size());
-        pair64_accessor_t::init(last);
-        last = dg::memult::advance(last, pair64_accessor_t::buf_size());
-
-        uacm8_accessor_t::init(last);
-        last = dg::memult::advance(last, uacm8_accessor_t::buf_size());
-        uacm16_accessor_t::init(last);
-        last = dg::memult::advance(last, uacm16_accessor_t::buf_size());
-        uacm32_accessor_t::init(last);
-        last = dg::memult::advance(last, uacm32_accessor_t::buf_size());
-        uacm64_accessor_t::init(last);
-        last = dg::memult::advance(last, uacm64_accessor_t::buf_size());
-
-        pacm8_accessor_t::init(last);
-        last = dg::memult::advance(last, pacm8_accessor_t::buf_size());
-        pacm16_accessor_t::init(last);
-        last = dg::memult::advance(last, pacm16_accessor_t::buf_size());
-        pacm32_accessor_t::init(last);
-        last = dg::memult::advance(last, pacm32_accessor_t::buf_size());
-        pacm64_accessor_t::init(last);
-        last = dg::memult::advance(last, pacm64_accessor_t::buf_size());
-
-        crit8_accessor_t::init(last);
-        last = dg::memult::advance(last, crit8_accessor_t::buf_size());
-        crit16_accessor_t::init(last);
-        last = dg::memult::advance(last, crit16_accessor_t::buf_size());
-        crit32_accessor_t::init(last);
-        last = dg::memult::advance(last, crit32_accessor_t::buf_size());
-        crit64_accessor_t::init(last);
-        last = dg::memult::advance(last, crit64_accessor_t::buf_size());
-
-        msgrfwd8_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrfwd8_accessor_t::buf_size());
-        msgrfwd16_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrfwd16_accessor_t::buf_size());
-        msgrfwd32_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrfwd32_accessor_t::buf_size());
-        msgrfwd64_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrfwd64_accessor_t::buf_size());
-
-        msgrbwd8_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrbwd8_accessor_t::buf_size());
-        msgrbwd16_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrbwd16_accessor_t::buf_size());
-        msgrbwd32_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrbwd32_accessor_t::buf_size());
-        msgrbwd64_accessor_t::init(last);
-        last = dg::memult::advance(last, msgrbwd64_accessor_t::buf_size());
-
+        uma_ptr_t cur               = buf;
+        uma_ptr_t first             = buf;
+        uma_ptr_t last              = dg::memult::advance(first, get_memory_usage()); 
+        uma_ptr_t region_first      = dg::memult::region(first, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t region_last       = dg::memult::align(last, std::integral_constant<size_t, MEMREGION_SZ>{});
+        size_t table_sz             = dg::memult::distance(region_first, region_last) / MEMREGION_SZ;
+        resource.region_id_table    = std::make_unique<tile_polymorphic_t[]>(table_sz);
         resource.region_id_map      = {};
-        resource.region_id_table    = std::make_unique<tile_polymorphic_t[]>(dg::pointer_cast<dg::ptr_info<uma_ptr_t>::max_unsigned_t>(last) / MEMREGION_SZ);
+        resource.region_first       = region_first;
+
+        auto initializer = []<class Accessor>(const Accessor, uma_ptr_t cur, uma_ptr_t table_head, tile_polymorphic_t tile_polymorphic){
+            Accessor::init(cur);
+            uma_ptr_t head = Accessor::get_head();
+
+            for (size_t i = 0u; i < Accessor::tile_size(); ++i){
+                uma_ptr_t id_ptr                    = Accessor::id_addr(dg::memult::advance(head, i));
+                uma_ptr_t id_region                 = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                size_t table_idx                    = dg::memult::distance(table_head, id_region) / MEMREGION_SZ;
+                resource.region_id_map[id_region]   = tile_polymorphic;
+                resource.region_id_table[table_idx] = tile_polymorphic;
+            }
+
+            return dg::memult::advance(cur, Accessor::tile_size());
+        };
+        
+        cur = initializer(leaf8_accessor_t{},  cur, region_first, id_leaf_8);
+        cur = initializer(leaf16_accessor_t{}, cur, region_first, id_leaf_16);
+        cur = initializer(leaf32_accessor_t{}, cur, region_first, id_leaf_32);
+        cur = initializer(leaf64_accessor_t{}, cur, region_first, id_leaf_64);
+        
+        cur = initializer(mono8_accessor_t{},  cur, region_first, id_mono_8);
+        cur = initializer(mono16_accessor_t{}, cur, region_first, id_mono_16);
+        cur = initializer(mono32_accessor_t{}, cur, region_first, id_mono_32);
+        cur = initializer(mono64_accessor_t{}, cur, region_first, id_mono_64);
+
+        cur = initializer(pair8_accessor_t{},  cur, region_first, id_pair_8);
+        cur = initializer(pair16_accessor_t{}, cur, region_first, id_pair_16);
+        cur = initializer(pair32_accessor_t{}, cur, region_first, id_pair_32);
+        cur = initializer(pair64_accessor_t{}, cur, region_first, id_pair_64);
+        
+        cur = initializer(uacm8_accessor_t{},  cur, region_first, id_uacm_8);
+        cur = initializer(uacm16_accessor_t{}, cur, region_first, id_uacm_16);
+        cur = initializer(uacm32_accessor_t{}, cur, region_first, id_uacm_32);
+        cur = initializer(uacm64_accessor_t{}, cur, region_first, id_uacm_64);
+
+        cur = initializer(pacm8_accessor_t{},  cur, region_first, id_pacm_8);
+        cur = initializer(pacm16_accessor_t{}, cur, region_first, id_pacm_16);
+        cur = initializer(pacm32_accessor_t{}, cur, region_first, id_pacm_32);
+        cur = initializer(pacm64_accessor_t{}, cur, region_first, id_pacm_64);
+        
+        cur = initializer(crit8_accessor_t{},  cur, region_first, id_crit_8);
+        cur = initializer(crit16_accessor_t{}, cur, region_first, id_crit_16);
+        cur = initializer(crit32_accessor_t{}, cur, region_first, id_crit_32);
+        cur = initializer(crit64_accessor_t{}, cur, region_first, id_crit_64);
+        
+        cur = initializer(msgrfwd8_accessor_t{},  cur, region_first, id_msgrfwd_8);
+        cur = initializer(msgrfwd16_accessor_t{}, cur, region_first, id_msgrfwd_16);
+        cur = initializer(msgrfwd32_accessor_t{}, cur, region_first, id_msgrfwd_32);
+        cur = initializer(msgrfwd64_accessor_t{}, cur, region_first, id_msgrfwd_64);
+
+        cur = initializer(msgrbwd8_accessor_t{},  cur, region_first, id_msgrbwd_8);
+        cur = initializer(msgrbwd8_accessor_t{},  cur, region_first, id_msgrbwd_16);
+        cur = initializer(msgrbwd16_accessor_t{}, cur, region_first, id_msgrbwd_32);
+        cur = initializer(msgrbwd32_accessor_t{}, cur, region_first, id_msgrbwd_64);
     }
 
-    static void deinit() noexcept{
+    void deinit() noexcept{
 
         resource = {};
     }
@@ -1776,9 +1777,7 @@ namespace dg::network_tile_member_access{
 
     inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_t{
 
-        using unsigned_t = dg::ptr_info<uma_ptr_t>::max_unsigned_t; 
-        size_t slot = dg::pointer_cast<unsigned_t>(ptr) / MEMREGION_SZ; 
-
+        size_t slot = dg::memult::distance(resource.region_first, ptr) / MEMREGION_SZ;
         return resource.region_id_table[slot];
     }
 

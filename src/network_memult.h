@@ -77,7 +77,7 @@ namespace dg::memult{
     }
 
     template <size_t ALIGNMENT_SZ>
-    constexpr auto align(uintptr_t buf, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> uintptr_t{ 
+    constexpr auto internal_align(uintptr_t buf, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> uintptr_t{ 
 
         static_assert(is_pow2(ALIGNMENT_SZ));
 
@@ -87,26 +87,16 @@ namespace dg::memult{
         return (buf + FWD) & BITMASK;
     } 
 
-    inline auto align(void * buf, size_t alignment_sz) noexcept -> void *{
+    template <class T, size_t ALIGNMENT_SZ>
+    constexpr auto align(T ptr, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> T{
 
-        return reinterpret_cast<void *>(align(reinterpret_cast<uintptr_t>(buf), alignment_sz));
-    } 
-
-    inline auto align(const void * buf, size_t alignment_sz) noexcept -> const void *{
-
-        return reinterpret_cast<const void *>(align(reinterpret_cast<uintptr_t>(buf), alignment_sz));
-    } 
-
-    template <size_t ALIGNMENT_SZ>
-    inline auto align(void * buf, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> void *{
-
-        return reinterpret_cast<void *>(align(reinterpret_cast<uintptr_t>(buf), std::integral_constant<size_t, ALIGNMENT_SZ>{}));
+        return {};
     }
 
-    template <size_t ALIGNMENT_SZ>
-    inline auto align(const void * buf, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> const void *{
+    template <class T>
+    constexpr auto align(T ptr, size_t alignment_sz) noexcept -> T{
 
-        return reinterpret_cast<const void *>(align(reinterpret_cast<uintptr_t>(buf), std::integral_constant<size_t, ALIGNMENT_SZ>{}));
+        return {};
     }
 
     template <class T>
