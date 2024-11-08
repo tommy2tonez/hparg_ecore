@@ -33,7 +33,19 @@
 
 int main(){
     
+    auto cb = [](...) noexcept{};
+
+    dg::network_tile_member_access::get_leaf_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_mono_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_pair_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_uacm_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_pacm_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_msgrfwd_static_polymorphic_accessor(cb, {});
+    dg::network_tile_member_access::get_msgrbwd_static_polymorphic_accessor(cb, {});
+
     // using memlock_ins = dg::network_memlock_impl1::ReferenceLock<std::integral_constant<size_t, 0>, std::integral_constant<size_t, 1024>>;
+
     // memlock_ins::acquire_wait({});
 
     // using hardware_destructive_atomic_flag = std::atomic_flag alignas(64); 
