@@ -11,12 +11,24 @@
 #include "network_exception_handler.h"
 #include "network_pointer.h"
 #include <array>
+#include "assert.h"
+#include "network_std_container.h"
 
 namespace dg::network_tile_member_access::implementation{
     
     using uma_ptr_t = dg::network_pointer::uma_ptr_t;
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ>
+    static constexpr auto least_aligned_greater_eq_than(size_t alignment_sz, size_t blk_sz) noexcept -> size_t{
+
+        assert(stdx::is_pow2(alignment_sz));
+
+        size_t bit_mask     = ~static_cast<size_t>(alignment_sz - 1);  
+        size_t fwd_blk_sz   = blk_sz + alignment_sz - 1;
+
+        return fwd_blk_sz & bit_mask;
+    }
+    
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ>
     struct LeafAddressLookup{
 
         private:
@@ -26,14 +38,9 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{}; 
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            } 
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-                return dg::memult::distance(self::get_head(), ptr);
+                return dg::memult::distance(self::head, ptr);
             }
 
             static constexpr auto offset_id(size_t idx) noexcept -> size_t{
@@ -43,45 +50,47 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             } 
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
                 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status(TILE_COUNT) + ARR_IDX * OBSERVER_VALUE_SZ + PADDING_SZ); 
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status(TILE_COUNT) + PADDING_SZ) + ARR_IDX * OBSERVER_VALUE_SZ); 
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             } 
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -90,10 +99,25 @@ namespace dg::network_tile_member_access::implementation{
                 (void) self::head;
             }
 
-            static consteval auto size() -> size_t{
+            static consteval auto buf_size() -> size_t{
 
-                return self::offset_pong_count_addr(TILE_COUNT);
+                return self::offset_pong_count_addr(TILE_COUNT) + ALIGNMENT_SZ - 1;
             } 
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
+            }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
@@ -148,7 +172,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
     struct MonoAddressLookup{
 
         private:
@@ -158,14 +182,9 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{};
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            }
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-                return dg::memult::distance(self::get_head(), ptr);
+                return dg::memult::distance(self::head, ptr);
             }
 
             static constexpr auto offset_id(size_t idx) noexcept -> size_t{
@@ -175,50 +194,52 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status(TILE_COUNT) + ARR_IDX * OBSERVER_VALUE_SZ + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status(TILE_COUNT) + PADDING_SZ) + ARR_IDX * OBSERVER_VALUE_SZ);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
             
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + (self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -227,9 +248,24 @@ namespace dg::network_tile_member_access::implementation{
                 (void) self::head;
             }
 
-            static consteval auto size() -> size_t{
+            static consteval auto buf_size() -> size_t{
 
-                return self::offset_old_addr(TILE_COUNT);
+                return self::offset_descendant_addr(TILE_COUNT) + ALIGNMENT_SZ - 1;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
             }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -290,7 +326,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t ACM_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t ACM_SZ>
     struct UACMAddressLookup{
         
         private:
@@ -300,14 +336,9 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{};
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            }
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-                return dg::memult::distance(self::get_head(), ptr);
+                return dg::memult::distance(self::head, ptr);
             }
 
             static constexpr auto offset_id(size_t idx) noexcept -> size_t{
@@ -317,51 +348,53 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status_addr(TILE_COUNT) + OBSERVER_VALUE_SZ * ARR_IDX + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ACM_IDX>
             static constexpr auto offset_descendant_addr(size_t idx, const std::integral_constant<size_t, ACM_IDX>) noexcept -> size_t{
 
-                return idx * (ACM_SZ * DESCENDANT_SZ) + (self::offset_pong_count_addr(TILE_COUNT) + ACM_IDX * DESCENDANT_SZ + PADDING_SZ);
+                return idx * (ACM_SZ * DESCENDANT_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ) + ACM_IDX * DESCENDANT_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -370,14 +403,29 @@ namespace dg::network_tile_member_access::implementation{
                 (void) self::head;
             }
 
-            static consteval auto size() -> size_t{
+            static consteval auto buf_size() -> size_t{
 
-                return self::offset_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{});
+                return self::offset_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + ALIGNMENT_SZ - 1;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
             }
 
             static consteval auto accum_size() -> size_t{
 
                 return ACM_SZ;
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
             }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -440,7 +488,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t ACM_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t ACM_SZ>
     struct PACMAddressLookup{
 
         private:
@@ -450,14 +498,9 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{};
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            }
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-                return dg::memult::distance(self::get_head(), ptr);
+                return dg::memult::distance(self::head, ptr);
             }
 
             static constexpr auto offset_id(size_t idx) noexcept -> size_t{
@@ -467,57 +510,59 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status_addr(TILE_COUNT) + OBSERVER_VALUE_SZ * ARR_IDX + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ACM_IDX>
             static constexpr auto offset_left_descendant_addr(size_t idx, const std::integral_constant<size_t, ACM_IDX>) noexcept -> size_t{
 
-                return idx * (DESCENDANT_SZ * ACM_SZ) + (self::offset_pong_count_addr(TILE_COUNT) + ACM_IDX * DESCENDANT_SZ + PADDING_SZ);
+                return idx * (DESCENDANT_SZ * ACM_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ) + ACM_IDX * DESCENDANT_SZ);
             }
 
             template <size_t ACM_IDX>
             static constexpr auto offset_right_descendant_addr(size_t idx, const std::integral_constant<size_t, ACM_IDX>) noexcept -> size_t{
 
-                return idx * (DESCENDANT_SZ * ACM_SZ) + (self::offset_left_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + ACM_IDX * DESCENDANT_SZ + PADDING_SZ);
+                return idx * (DESCENDANT_SZ * ACM_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_left_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ) + ACM_IDX * DESCENDANT_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -526,14 +571,29 @@ namespace dg::network_tile_member_access::implementation{
                 (void) self::head;
             }
 
-            static consteval auto size() -> size_t{
+            static consteval auto buf_size() -> size_t{
 
-                return self::offset_right_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{});
+                return self::offset_right_descendant_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + ALIGNMENT_SZ - 1;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
             }
 
             static consteval auto accum_size() -> size_t{
 
                 return ACM_SZ;
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
             }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -603,7 +663,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
     struct PairAddressLookup{
 
         private:
@@ -613,14 +673,9 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{};
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            }
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-                return dg::memult::distance(self::get_head(), ptr);
+                return dg::memult::distance(self::head, ptr);
             }
 
             static constexpr auto offset_id(size_t idx) noexcept -> size_t{
@@ -630,61 +685,83 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status_addr(TILE_COUNT) + ARR_IDX * OBSERVER_VALUE_SZ + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + ARR_IDX * OBSERVER_VALUE_SZ);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_left_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + (self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_right_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + (self::offset_left_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_left_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
             static void deinit() noexcept{
 
                 (void) self::head; 
+            }
+
+            static consteval auto buf_size() -> size_t{
+
+                return offset_right_descendant_addr(TILE_COUNT) + ALIGNMENT_SZ - 1;
+            } 
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() ->  size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
             }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -750,7 +827,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t CRIT_KIND_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t CRIT_KIND_SZ>
     struct CritAddressLookup{
 
         private:
@@ -760,14 +837,9 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline uma_ptr_t head{}; 
 
-            static inline auto get_head() noexcept -> uma_ptr_t{
-
-                return self::head;
-            } 
-
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-                return dg::memult::distance(self::get_head(), ptr);
+                return dg::memult::distance(self::head, ptr);
             }
 
             static constexpr auto offset_id(size_t idx) noexcept -> size_t{
@@ -777,55 +849,57 @@ namespace dg::network_tile_member_access::implementation{
             
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offest_id(TILE_COUNT) + PADDING_SZ); 
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ); 
             } 
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status_addr(TILE_COUNT) + OBSERVER_VALUE_SZ * ARR_IDX + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + (self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_crit_kind_addr(size_t idx) noexcept -> size_t{
 
-                return idx * CRIT_KIND_SZ + (self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * CRIT_KIND_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -833,6 +907,26 @@ namespace dg::network_tile_member_access::implementation{
 
                 (void) self::head;
             }
+
+            static consteval auto buf_size() -> size_t{
+
+                return offset_crit_kind_addr(TILE_COUNT) + ALIGNMENT_SZ - 1;
+            } 
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            } 
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
+            } 
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
@@ -897,7 +991,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ>
     struct MsgrFwdAddressLookup{
 
         private:
@@ -924,55 +1018,57 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status_addr(TILE_COUNT) + OBSERVER_VALUE_SZ * ARR_IDX + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ + (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + (self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dst_info_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DST_INFO_SZ + (self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DST_INFO_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -981,9 +1077,19 @@ namespace dg::network_tile_member_access::implementation{
                 (void) self::head;
             }
 
-            static consteval auto size() -> size_t{
+            static consteval auto buf_size() -> size_t{
 
-                return self::offset_dst_info_addr(TILE_COUNT);
+                return self::offset_dst_info_addr(TILE_COUNT) + ALIGNMENT_SZ - 1;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
             } 
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1049,7 +1155,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ, size_t TIMEIN_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ, size_t TIMEIN_SZ>
     struct MsgrBwdAddressLookup{
 
         private:
@@ -1076,60 +1182,62 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
 
-                return idx * INIT_STATUS_SZ + (self::offset_id(TILE_COUNT) + PADDING_SZ);
+                return idx * INIT_STATUS_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
             }
 
             template <size_t ARR_IDX>
             static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
 
-                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (self::offset_init_status_addr(TILE_COUNT) + OBSERVER_VALUE_SZ * ARR_IDX + PADDING_SZ);
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
             }
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_VALUE_SZ + (self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + (self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
 
-                return idx * OPERATABLE_ID_SZ * (self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * OPERATABLE_ID_SZ * least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DISPATCH_CONTROL_SZ + (self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DISPATCH_CONTROL_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
 
-                return idx * PONG_COUNT_SZ + (self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * PONG_COUNT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
             } 
 
             static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DESCENDANT_SZ + (self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DESCENDANT_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_dst_info_addr(size_t idx) noexcept -> size_t{
 
-                return idx * DST_INFO_SZ + (self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * DST_INFO_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_timein_addr(size_t idx) noexcept -> size_t{
 
-                return idx * TIMEIN_SZ + (self::offset_dst_info_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * TIMEIN_SZ + least_aligned_greater_eq_than(ALIGNMENT_SZ, self::offset_dst_info_addr(TILE_COUNT) + PADDING_SZ);
             }
 
         public:
 
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
             static void init(uma_ptr_t buf){
                 
-                self::head = buf;
+                self::head = dg::pointer_cast<uma_ptr_t>(least_aligned_greater_eq_than(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
                 access_ins::init(buf, dg::memult::advance(buf, TILE_COUNT));
             }
 
@@ -1138,9 +1246,19 @@ namespace dg::network_tile_member_access::implementation{
                 (void) self::head;
             }
 
-            static consteval auto size() -> size_t{
+            static consteval auto buf_size() -> size_t{
 
-                return self::offset_timein_addr(TILE_COUNT);
+                return self::offset_timein_addr(TILE_COUNT) + ALIGNMENT_SZ - 1;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            } 
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
             }
 
             static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1217,7 +1335,6 @@ namespace dg::network_tile_member_access{
     static_assert(sizeof(char) == 1);
     static_assert(CHAR_BIT == 8);
 
-    static inline constexpr size_t ID_MEMREGION_SZ          = size_t{1} << 20;
     static inline constexpr size_t TILE_COUNT_LEAF_8        = size_t{1} << 20;
     static inline constexpr size_t TILE_COUNT_LEAF_16       = size_t{1} << 20;
     static inline constexpr size_t TILE_COUNT_LEAF_32       = size_t{1} << 20;
@@ -1260,9 +1377,12 @@ namespace dg::network_tile_member_access{
 
     static inline constexpr size_t LOGIT_COUNT_PER_TILE     = size_t{1} << 8;
     static inline constexpr size_t PADDING_SZ               = 0u;
+    static inline constexpr size_t MEMREGION_SZ             = size_t{1} << 20;
     static inline constexpr size_t UACM_ACM_SZ              = size_t{1} << 5;
     static inline constexpr size_t PACM_ACM_SZ              = size_t{1} << 5;
     static inline constexpr size_t OBSERVER_ARRAY_SZ        = size_t{1} << 5;
+
+    static inline constexpr bool IS_SAFE_ACCESS_ENABLED     = true;
 
     using tile_polymorphic_t    = uint8_t;
     using init_status_t         = uint8_t;
@@ -1320,277 +1440,350 @@ namespace dg::network_tile_member_access{
 
     struct network_tile_member_access_signature{}; 
 
-    using leaf8_accessor_t          = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
-    using leaf16_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
-    using leaf32_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
-    using leaf64_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>; 
+    using leaf8_accessor_t          = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
+    using leaf16_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
+    using leaf32_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
+    using leaf64_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>; 
 
-    using mono8_accessor_t          = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using mono16_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using mono32_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using mono64_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using mono8_accessor_t          = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using mono16_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using mono32_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using mono64_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
 
-    using pair8_accessor_t          = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t) , LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using pair16_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using pair32_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using pair64_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using pair8_accessor_t          = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t) , LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using pair16_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using pair32_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using pair64_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
 
-    using uacm8_accessor_t          = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
-    using uacm16_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
-    using uacm32_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
-    using uacm64_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
+    using uacm8_accessor_t          = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
+    using uacm16_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
+    using uacm32_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
+    using uacm64_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
 
-    using pacm8_accessor_t          = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
-    using pacm16_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
-    using pacm32_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
-    using pacm64_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
+    using pacm8_accessor_t          = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
+    using pacm16_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
+    using pacm32_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
+    using pacm64_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
 
-    using crit8_accessor_t          = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
-    using crit16_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
-    using crit32_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
-    using crit64_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
+    using crit8_accessor_t          = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
+    using crit16_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
+    using crit32_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
+    using crit64_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
 
-    using msgrfwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
-    using msgrfwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_16, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
-    using msgrfwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_32, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
-    using msgrfwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_64, PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
+    using msgrfwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
+    using msgrfwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
+    using msgrfwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
+    using msgrfwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
 
-    using msgrbwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),   LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),   sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-    using msgrbwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_16_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-    using msgrbwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_32_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-    using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),   LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),   sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_16_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_32_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
 
     using uma_ptr_t                 = dg::network_pointer::uma_ptr_t;
 
     struct Resource{
-        dg::unordered_unstable_map<uma_ptr_t, polymorphic_kind_t> region_id_map;
+        dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_t> region_id_map;
+        std::unique_ptr<tile_polymorphic_t[]> region_id_table;
     };
+
+    static inline Resource resource{};
 
     static void init(uma_ptr_t buf){
 
+        uma_ptr_t last = buf;
+
+        leaf8_accessor_t::init(last);
+        last = dg::memult::advance(last, leaf8_accessor_t::buf_size());
+        leaf16_accessor_t::init(last);
+        last = dg::memult::advance(last, leaf16_accessor_t::buf_size());
+        leaf32_accessor_t::init(last);
+        last = dg::memult::advance(last, leaf32_accessor_t::buf_size());
+        leaf64_accessor_t::init(last);
+        last = dg::memult::advance(last, leaf64_accessor_t::buf_size());
+
+        mono8_accessor_t::init(last);
+        last = dg::memult::advance(last, mono8_accessor_t::buf_size());
+        mono16_accessor_t::init(last);
+        last = dg::memult::advance(last, mono16_accessor_t::buf_size());
+        mono32_accessor_t::init(last);
+        last = dg::memult::advance(last, mono32_accessor_t::buf_size());
+        mono64_accessor_t::init(last);
+        last = dg::memult::advance(last, mono64_accessor_t::buf_size());
+
+        pair8_accessor_t::init(last);
+        last = dg::memult::advance(last, pair8_accessor_t::buf_size());
+        pair16_accessor_t::init(last);
+        last = dg::memult::advance(last, pair16_accessor_t::buf_size());
+        pair32_accessor_t::init(last);
+        last = dg::memult::advance(last, pair32_accessor_t::buf_size());
+        pair64_accessor_t::init(last);
+        last = dg::memult::advance(last, pair64_accessor_t::buf_size());
+
+        uacm8_accessor_t::init(last);
+        last = dg::memult::advance(last, uacm8_accessor_t::buf_size());
+        uacm16_accessor_t::init(last);
+        last = dg::memult::advance(last, uacm16_accessor_t::buf_size());
+        uacm32_accessor_t::init(last);
+        last = dg::memult::advance(last, uacm32_accessor_t::buf_size());
+        uacm64_accessor_t::init(last);
+        last = dg::memult::advance(last, uacm64_accessor_t::buf_size());
+
+        pacm8_accessor_t::init(last);
+        last = dg::memult::advance(last, pacm8_accessor_t::buf_size());
+        pacm16_accessor_t::init(last);
+        last = dg::memult::advance(last, pacm16_accessor_t::buf_size());
+        pacm32_accessor_t::init(last);
+        last = dg::memult::advance(last, pacm32_accessor_t::buf_size());
+        pacm64_accessor_t::init(last);
+        last = dg::memult::advance(last, pacm64_accessor_t::buf_size());
+
+        crit8_accessor_t::init(last);
+        last = dg::memult::advance(last, crit8_accessor_t::buf_size());
+        crit16_accessor_t::init(last);
+        last = dg::memult::advance(last, crit16_accessor_t::buf_size());
+        crit32_accessor_t::init(last);
+        last = dg::memult::advance(last, crit32_accessor_t::buf_size());
+        crit64_accessor_t::init(last);
+        last = dg::memult::advance(last, crit64_accessor_t::buf_size());
+
+        msgrfwd8_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrfwd8_accessor_t::buf_size());
+        msgrfwd16_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrfwd16_accessor_t::buf_size());
+        msgrfwd32_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrfwd32_accessor_t::buf_size());
+        msgrfwd64_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrfwd64_accessor_t::buf_size());
+
+        msgrbwd8_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrbwd8_accessor_t::buf_size());
+        msgrbwd16_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrbwd16_accessor_t::buf_size());
+        msgrbwd32_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrbwd32_accessor_t::buf_size());
+        msgrbwd64_accessor_t::init(last);
+        last = dg::memult::advance(last, msgrbwd64_accessor_t::buf_size());
+
+        resource.region_id_map      = {};
+        resource.region_id_table    = std::make_unique<tile_polymorphic_t[]>(dg::pointer_cast<dg::ptr_info<uma_ptr_t>::max_unsigned_t>(last) / MEMREGION_SZ);
     }
 
     static void deinit() noexcept{
 
+        resource = {};
     }
 
-    constexpr auto is_leaf_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_leaf_8) || (id == id_leaf_16) || (id == id_leaf_32) || (id == id_leaf_64);
     }
 
-    constexpr auto is_mono_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_mono_8) || (id == id_mono_16) || (id == id_mono_32) || (id == id_mono_64);
     }
 
-    constexpr auto is_pair_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_pair_8) || (id == id_pair_16) || (id == id_pair_32) || (id == id_pair_64);
     }
 
-    constexpr auto is_uacm_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_uacm_8) || (id == id_uacm_16) || (id == id_uacm_32) || (id == id_uacm_64);
     } 
 
-    constexpr auto is_pacm_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_pacm_8) || (id == id_pacm_16) || (id == id_pacm_32) || (id == id_pacm_64);
     }
 
-    constexpr auto is_crit_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_crit_8) || (id == id_crit_16) || (id == id_crit_32) || (id == id_crit_64);
     }
 
-    constexpr auto is_msgrfwd_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_msgrfwd_8) || (id == id_msgrfwd_16) || (id == id_msgrfwd_32) || (id == id_msgrfwd_64);
     }
 
-    constexpr auto is_msgrbwd_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return (id == id_msgrbwd_8) || (id == id_msgrbwd_16) || (id == id_msgrbwd_32) || (id == id_msgrbwd_64);
     }
 
-    constexpr auto is_leaf8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_leaf_8;
     }
 
-    constexpr auto is_mono8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_mono_8;
     }
 
-    constexpr auto is_pair8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pair_8;
     }
 
-    constexpr auto is_uacm8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_uacm_8;
     }
 
-    constexpr auto is_pacm8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pacm_8;
     }
 
-    constexpr auto is_crit8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_crit_8;
     }
 
-    constexpr auto is_msgrfwd8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrfwd_8;
     }
 
-    constexpr auto is_msgrbwd8_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd8_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrbwd_8;
     } 
 
-    constexpr auto is_leaf16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_leaf_16;
     }
 
-    constexpr auto is_mono16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_mono_16;
     }
 
-    constexpr auto is_pair16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pair_16;
     }
 
-    constexpr auto is_uacm16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_uacm_16;
     }
 
-    constexpr auto is_pacm16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pacm_16;
     }
 
-    constexpr auto is_crit16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit16_tile(tile_polymorphic_t id) noexcept -> bool{
         
         return id == id_crit_16;
     }
 
-    constexpr auto is_msgrfwd16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrfwd_16;
     }
 
-    constexpr auto is_msgrbwd16_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd16_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrbwd_16;
     }
 
-    constexpr auto is_leaf32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_leaf_32;
     }
 
-    constexpr auto is_mono32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_mono_32;
     }
 
-    constexpr auto is_pair32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pair_32;
     }
 
-    constexpr auto is_uacm32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_uacm_32;
     }
 
-    constexpr auto is_pacm32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pacm_32;
     }
 
-    constexpr auto is_crit32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_crit_32;
     }
 
-    constexpr auto is_msgrfwd32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd32_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrfwd_32;
     }
 
-    constexpr auto is_msgrbwd32_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd32_tile(tile_polymorphic_t id) noexcept -> bool{
         
         return id == id_msgrbwd_32;
     }
 
-    constexpr auto is_leaf64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_leaf_64;
     }
 
-    constexpr auto is_mono64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_mono_64;
     }
 
-    constexpr auto is_pair64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pair_64;
     }
 
-    constexpr auto is_uacm64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_uacm_64;
     }
 
-    constexpr auto is_pacm64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_pacm_64;
     }
 
-    constexpr auto is_crit64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_crit_64;
     }
 
-    constexpr auto is_msgrfwd64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrfwd_64;
     }
 
-    constexpr auto is_msgrbwd64_tile(const tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd64_tile(tile_polymorphic_t id) noexcept -> bool{
 
         return id == id_msgrbwd_64;
     }
 
     inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_t{
 
-        uma_ptr_t id_region     = dg::mmeult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        using unsigned_t = dg::ptr_info<uma_ptr_t>::max_unsigned_t; 
+        size_t slot = dg::pointer_cast<unsigned_t>(ptr) / MEMREGION_SZ; 
 
-        if constexpr(DEBUG_MODE_FLAG){
-            if (map_ptr == resource.region_id_map.end()){
-                dg::network_exception::throw_exception(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
-                std::abort();
-            }
-        }
-
-        return map_ptr->second;
+        return resource.region_id_table[slot];
     }
 
     template <class CallBack>
-    constexpr void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{ //const id to provide strong optimization hint - uma_ptr_t arg to allow internal assert in future implementations - all these are optimized into 2 array reads (static var + const var) - a substract - a fma operation
+    constexpr void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_leaf8_tile(id)){
             static_assert(noexcept(cb(leaf8_accessor_t{})));
@@ -1621,7 +1814,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_mono8_tile(id)){
             static_assert(noexcept(cb(mono8_accessor_t{})));
@@ -1652,7 +1845,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_pair8_tile(id)){
             static_assert(noexcept(cb(pair8_accessor_t{})));
@@ -1683,7 +1876,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_uacm8_tile(id)){
             static_assert(noexcept(cb(uacm8_accessor_t{})));
@@ -1714,7 +1907,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_pacm8_tile(id)){
             static_assert(noexcept(cb(pacm8_accessor_t{})));
@@ -1745,7 +1938,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_crit8_tile(id)){
             static_assert(noexcept(cb(crit8_accessor_t{})));
@@ -1776,7 +1969,7 @@ namespace dg::network_tile_member_access{
     } 
 
     template <class CallBack>
-    constexpr void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_msgrfwd8_tile(id)){
             static_assert(noexcept(cb(msgrfwd8_accessor_t{})));
@@ -1807,7 +2000,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, const tile_polymorphic_t id) noexcept{
+    constexpr void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
 
         if (is_msgrbwd8_tile(id)){
             static_assert(noexcept(cb(msgrbwd8_accessor_t{})));
@@ -1839,7 +2032,7 @@ namespace dg::network_tile_member_access{
 
     inline auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1855,7 +2048,7 @@ namespace dg::network_tile_member_access{
 
     inline auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1871,7 +2064,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1887,7 +2080,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1903,7 +2096,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1919,7 +2112,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1935,7 +2128,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1951,7 +2144,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -1967,7 +2160,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
