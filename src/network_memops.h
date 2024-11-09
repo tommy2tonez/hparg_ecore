@@ -58,7 +58,7 @@ namespace dg::network_memops_clib{
 
     auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
+        std::atomic_signal_fence(std::memory_order_seq_cst); //all memory operations are demoted to signal fence - because if it is not an acquire_release transaction - then it is definitely undefined - this is to fence against compiler's bug rather than logic bug - this is to be debate - might promote this to a full acquire_release block
         std::memcpy(dst, src, sz);
         return dg::network_exception::SUCCESS;
     }

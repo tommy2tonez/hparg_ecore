@@ -28,7 +28,7 @@ namespace dg::network_tile_member_getsetter{
     void set_leaf_operatable_id(uma_ptr_t ptr, operatable_id operatable_id){
 
         set_leaf_operatable_id_nothrow(dg::network_tile_member_access::safethrow_leaf_ptr_access(ptr), operatable_id);
-    } 
+    }
 
     template <size_t ARR_IDX>
     void set_leaf_observer_addr_nothrow(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>) noexcept{
