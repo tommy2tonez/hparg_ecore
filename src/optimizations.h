@@ -94,7 +94,6 @@ namespace dg::optimization::path{
     auto astar_sssp(size_t src_id, size_t dst_id, const std::unordered_map<size_t, std::vector<size_t>>& edges, const std::unordered_map<std::pair<size_t, size_t>, double>& edge_value, Heuristic&& heuristic) -> std::optional<double>{
 
         std::unordered_set<size_t> visited_nodes{};
-        std::unordered_map<size_t, double> heuristic_map{};
         std::vector<std::pair<size_t, double>> priority_queue{};
 
         priority_queue.push_back(std::make_pair(src_id, heuristic(src_id, dst_id)));
@@ -120,7 +119,6 @@ namespace dg::optimization::path{
             }
 
             visited_nodes.insert(hinge);
-            heuristic_map[hinge] = dist; 
 
             for (size_t i = 0u; i < edges[hinge].size(); ++i){
                 size_t neighbor         = edges[hinge][i];
