@@ -112,7 +112,7 @@ namespace dg::optimization::path{
             priority_queue.pop_back(); 
 
             if (hinge == dst_id){
-                return heuristic_map[hinge];
+                return dist;
             }
 
             if (visited_nodes.contains(hinge)){
