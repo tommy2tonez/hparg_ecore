@@ -56,8 +56,7 @@ namespace dg::optimization::path{
 
         while (!priority_queue.empty()){
             std::pop_heap(priority_queue.begin(), priority_queue.end(), cmp);
-            size_t hinge    = priority_queue.back().first;
-            double dist     = priority_queue.back().second;
+            auto [hinge, dist] = priority_queue.back();
             priority_queue.pop_back();
             
             if (visited_nodes.contains(hinge)){
@@ -109,8 +108,7 @@ namespace dg::optimization::path{
             }
 
             std::pop_heap(priority_queue.begin(), priority_queue.end(), cmp);
-            size_t hinge    = priority_queue.back().first;
-            double dist     = priority_queue.back().second;
+            auto [hinge, dist] = priority_queue.back();
             priority_queue.pop_back(); 
 
             if (hinge == dst_id){
@@ -127,8 +125,6 @@ namespace dg::optimization::path{
             for (size_t i = 0u; i < edges[hinge].size(); ++i){
                 size_t neighbor         = edges[hinge][i];
                 double new_heuristic    = dist - heuristic(hinge, dst_id) + edge_value[std::make_pair(hinge, neighbor)] + heuristic(neighbor, dst_id);
-                auto mptr               = heuristic_map.find(neighbor);
-
                 priority_queue.push_back(std::make_pair(neighbor, new_heuristic));
                 std::push_heap(priority_queue.begin(), priority_queue.end(), cmp);
             }

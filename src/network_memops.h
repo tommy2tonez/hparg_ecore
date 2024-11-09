@@ -15,85 +15,87 @@ namespace dg::network_memops_clib{
 
     #ifdef __DG_NETWORK_CUDA_FLAG__
 
-    inline auto memcpy_host_to_cuda(cuda_ptr_t, void *, size_t) noexcept -> exception_t{
+    auto memcpy_host_to_cuda(cuda_ptr_t, void *, size_t) noexcept -> exception_t{
 
         // cudaMemcpy();
     }
 
-    inline auto memcpy_cuda_to_host(void *, cuda_ptr_t, size_t) noexcept -> exception_t{
+    auto memcpy_cuda_to_host(void *, cuda_ptr_t, size_t) noexcept -> exception_t{
 
     }
 
-    inline auto memcpy_cuda_to_cuda(cuda_ptr_t, cuda_ptr_t, size_t) noexcept -> exception_t{
+    auto memcpy_cuda_to_cuda(cuda_ptr_t, cuda_ptr_t, size_t) noexcept -> exception_t{
 
     }
 
-    inline auto memset_cuda(cuda_ptr_t, int, size_t) noexcept -> exception_t{
+    auto memset_cuda(cuda_ptr_t, int, size_t) noexcept -> exception_t{
 
     }
 
     #else 
 
-    inline auto memcpy_host_to_cuda(...) noexcept -> exception_t{
+    auto memcpy_host_to_cuda(...) noexcept -> exception_t{
 
         return dg::network_exception::CUDA_DEVICE_NOT_SUPPORTED;
     }
 
-    inline auto memcpy_cuda_to_host(...) noexcept -> exception_t{
+    auto memcpy_cuda_to_host(...) noexcept -> exception_t{
 
         return dg::network_exception::CUDA_DEVICE_NOT_SUPPORTED;
     }
 
-    inline auto memcpy_cuda_to_cuda(...) noexcept -> exception_t{
+    auto memcpy_cuda_to_cuda(...) noexcept -> exception_t{
 
         return dg::network_exception::CUDA_DEVICE_NOT_SUPPORTED;
     }
 
-    inline auto memset_cuda(...) noexcept -> exception_t{
+    auto memset_cuda(...) noexcept -> exception_t{
 
         return dg::network_exception::CUDA_DEVICE_NOT_SUPPORTED;
     }
 
     #endif
 
-    inline auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
+    auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         std::memcpy(dst, src, sz);
         return dg::network_exception::SUCCESS;
     }
 
-    inline auto memset_host(void * dst, int c, size_t sz) noexcept -> exception_t{
+    auto memset_host(void * dst, int c, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         std::memset(dst, c, sz);
         return dg::network_exception::SUCCESS;
     }
 
-    inline void memcpy_host_to_cuda_nothrow(cuda_ptr_t dst, void * src, size_t sz) noexcept{
+    void memcpy_host_to_cuda_nothrow(cuda_ptr_t dst, void * src, size_t sz) noexcept{
         
         dg::network_error_handler::nothrow_log(memcpy_host_to_cuda(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_host_nothrow(void * dst, cuda_ptr_t src, size_t sz) noexcept{
+    void memcpy_cuda_to_host_nothrow(void * dst, cuda_ptr_t src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_cuda_to_host(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_cuda_nothrow(cuda_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
+    void memcpy_cuda_to_cuda_nothrow(cuda_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_cuda_to_cuda(dst, src, sz));
     }
     
-    inline void memcpy_host_to_host_nothrow(void * dst, const void * src, size_t sz) noexcept{
+    void memcpy_host_to_host_nothrow(void * dst, const void * src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_host_to_host(dst, src, sz));
     }
 
-    inline void memset_cuda_nothrow(cuda_ptr_t dst, int c, size_t sz) noexcept{
+    void memset_cuda_nothrow(cuda_ptr_t dst, int c, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memset_cuda(dst, c, sz));
     }
 
-    inline void memset_host_nothrow(void * dst, int c, size_t sz) noexcept{
+    void memset_host_nothrow(void * dst, int c, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memset_host(dst, c, sz));
     }
@@ -101,8 +103,9 @@ namespace dg::network_memops_clib{
 
 namespace dg::network_memops_fsys{
 
-    inline auto memcpy_host_to_fsys(fsys_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
+    auto memcpy_host_to_fsys(fsys_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
         
         if (!map_rs.has_value()){
@@ -115,8 +118,9 @@ namespace dg::network_memops_fsys{
         return err;
     }
 
-    inline auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
 
         if (!map_rs.has_value()){
@@ -129,8 +133,9 @@ namespace dg::network_memops_fsys{
         return err;
     }
 
-    inline auto memcpy_fsys_to_host(void * dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_fsys_to_host(void * dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
         if (!map_rs.has_value()){
@@ -143,8 +148,9 @@ namespace dg::network_memops_fsys{
         return err;
     }
 
-    inline auto memcpy_fsys_to_cuda(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_fsys_to_cuda(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
         if (!map_rs.has_value()){
@@ -157,8 +163,9 @@ namespace dg::network_memops_fsys{
         return err;
     }
 
-    inline auto memcpy_fsys_to_fsys(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_fsys_to_fsys(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -178,8 +185,9 @@ namespace dg::network_memops_fsys{
         return err;
     }
 
-    inline auto memset_fsys(fsys_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
+    auto memset_fsys(fsys_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
         
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -192,32 +200,32 @@ namespace dg::network_memops_fsys{
         return err;
     }
 
-    inline void memcpy_host_to_fsys_nothrow(fsys_ptr_t dst, const void * src, size_t sz) noexcept{
+    void memcpy_host_to_fsys_nothrow(fsys_ptr_t dst, const void * src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_host_to_fsys(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_fsys_nothrow(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
+    void memcpy_cuda_to_fsys_nothrow(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_cuda_to_fsys(dst, src, sz));
     }
 
-    inline void memcpy_fsys_to_host_nothrow(void * dst, fsys_ptr_t src, size_t sz) noexcept{
+    void memcpy_fsys_to_host_nothrow(void * dst, fsys_ptr_t src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_fsys_to_host(dst, src, sz));
     }
 
-    inline void memcpy_fsys_to_cuda_nothrow(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
+    void memcpy_fsys_to_cuda_nothrow(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_fsys_to_cuda(dst, src, sz));
     }
 
-    inline void memcpy_fsys_to_fsys_nothrow(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
+    void memcpy_fsys_to_fsys_nothrow(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memcpy_fsys_to_fsys(dst, src, sz));
     }
 
-    inline void memset_fsys_nothrow(fsys_ptr_t dst, int c, size_t sz) noexcept{
+    void memset_fsys_nothrow(fsys_ptr_t dst, int c, size_t sz) noexcept{
 
         dg::network_error_handler::nothrow_log(memset_fsys(dst, c, sz));
     }
@@ -225,8 +233,9 @@ namespace dg::network_memops_fsys{
 
 namespace dg::network_memops_cufs{
 
-    inline auto memcpy_host_to_cufs(cufs_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
+    auto memcpy_host_to_cufs(cufs_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -239,8 +248,9 @@ namespace dg::network_memops_cufs{
         return err;
     } 
 
-    inline auto memcpy_cuda_to_cufs(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_cuda_to_cufs(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -253,8 +263,9 @@ namespace dg::network_memops_cufs{
         return err;
     }
 
-    inline auto memcpy_fsys_to_cufs(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_fsys_to_cufs(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -274,8 +285,9 @@ namespace dg::network_memops_cufs{
         return err;
     }
 
-    inline auto memcpy_cufs_to_cufs(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_cufs_to_cufs(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -295,8 +307,9 @@ namespace dg::network_memops_cufs{
         return err;
     }
 
-    inline auto memcpy_cufs_to_host(void * dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_cufs_to_host(void * dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
 
         if (!src_map_rs.has_value()){
@@ -309,8 +322,9 @@ namespace dg::network_memops_cufs{
         return err;
     }
 
-    inline auto memcpy_cufs_to_cuda(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_cufs_to_cuda(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
 
         if (!src_map_rs.has_value()){
@@ -323,8 +337,9 @@ namespace dg::network_memops_cufs{
         return err; 
     }
 
-    inline auto memcpy_cufs_to_fsys(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy_cufs_to_fsys(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -344,8 +359,9 @@ namespace dg::network_memops_cufs{
         return err;
     }
 
-    inline auto memset_cufs(cufs_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
+    auto memset_cufs(cufs_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -358,42 +374,42 @@ namespace dg::network_memops_cufs{
         return err;
     }
 
-    inline void memcpy_host_to_cufs_nothrow(cufs_ptr_t dst, const void * src, size_t sz) noexcept{
+    void memcpy_host_to_cufs_nothrow(cufs_ptr_t dst, const void * src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_host_to_cufs(dst, src, sz));
     }
 
-    inline void memcpy_cuda_to_cufs_nothrow(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
+    void memcpy_cuda_to_cufs_nothrow(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_cuda_to_cufs(dst, src, sz));
     }
 
-    inline void memcpy_fsys_to_cufs_nothrow(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
+    void memcpy_fsys_to_cufs_nothrow(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_fsys_to_cufs(dst, src, sz));
     }
 
-    inline void memcpy_cufs_to_cufs_nothrow(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
+    void memcpy_cufs_to_cufs_nothrow(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_cufs_to_cufs(dst, src, sz));
     }
 
-    inline void memcpy_cufs_to_host_nothrow(void * dst, cufs_ptr_t src, size_t sz) noexcept{
+    void memcpy_cufs_to_host_nothrow(void * dst, cufs_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_cufs_to_host(dst, src, sz));
     }
 
-    inline void memcpy_cufs_to_cuda_nothrow(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
+    void memcpy_cufs_to_cuda_nothrow(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_cufs_to_cuda(dst, src, sz));
     }
 
-    inline void memcpy_cufs_to_fsys_nothrow(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
+    void memcpy_cufs_to_fsys_nothrow(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_cufs_to_fsys(dst, src, sz));
     }
 
-    inline void memset_cufs_nothrow(cufs_ptr_t dst, int c, size_t sz) noexcept{
+    void memset_cufs_nothrow(cufs_ptr_t dst, int c, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memset_cufs(dst, c, sz));
     }
@@ -403,7 +419,7 @@ namespace dg::network_memops_virt{
 
     using vma_ptr_t = uint32_t; 
 
-    inline auto memcpy(vma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept -> exception_t{
+    auto memcpy(vma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept -> exception_t{
 
         using namespace dg::network_virtual_device; 
         
@@ -506,12 +522,12 @@ namespace dg::network_memops_virt{
         return dg::network_exception::INVALID_SERIALIZATION_FORMAT;
     }
 
-    inline void memcpy_nothrow(vma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept{
+    void memcpy_nothrow(vma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy(dst, src, sz));
     }
 
-    inline auto memset(vma_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
+    auto memset(vma_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
 
         using namespace dg::network_virtual_device;
 
@@ -538,7 +554,7 @@ namespace dg::network_memops_virt{
         return dg::network_exception::INVALID_SERIALIZATION_FORMAT;
     }
 
-    inline void memset_nothrow(vma_ptr_t dst, int c, size_t sz) noexcept{
+    void memset_nothrow(vma_ptr_t dst, int c, size_t sz) noexcept{
 
         dg::network_exception_handler::nothrow_log(memset(dst, c, sz));
     }
