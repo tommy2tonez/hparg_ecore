@@ -1332,6 +1332,14 @@ namespace dg::network_tile_member_access::implementation{
 
 namespace dg::network_tile_member_access{
 
+    //this implementation is to assume that the total memregion <= 1024 - to fit in L1 | at most L2 cache 
+    //assume the mean concurrency factor of 32
+    //then there's not a performance constraint
+    //otherwise it's better to use unordered_unstable_map for cache efficiency - this is an important note
+    //this cannot be told | measured without a hollistic view of the program
+    //if the designated core that accesses this is solely responsible for offloading to cuda - and all these (including other tables) fit in L1 cache - then everyone's happy - life moves on
+    //if the designated core that accesses this is responsible for doing the actual work - then cache thrashing happens and everyone's not happy - life does not move on
+
     static_assert(sizeof(char) == 1);
     static_assert(CHAR_BIT == 8);
 
@@ -1378,6 +1386,7 @@ namespace dg::network_tile_member_access{
     static inline constexpr size_t LOGIT_COUNT_PER_TILE     = size_t{1} << 8;
     static inline constexpr size_t PADDING_SZ               = 0u;
     static inline constexpr size_t MEMREGION_SZ             = size_t{1} << 20;
+    static inline constexpr size_t ID_MEMREGION_SZ          = size_t{1} << 10;
     static inline constexpr size_t UACM_ACM_SZ              = size_t{1} << 5;
     static inline constexpr size_t PACM_ACM_SZ              = size_t{1} << 5;
     static inline constexpr size_t OBSERVER_ARRAY_SZ        = size_t{1} << 5;
@@ -1521,8 +1530,9 @@ namespace dg::network_tile_member_access{
             for (size_t i = 0u; i < Accessor::tile_size(); ++i){
                 uma_ptr_t id_ptr                    = Accessor::id_addr(dg::memult::advance(head, i));
                 uma_ptr_t id_region                 = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                uma_ptr_t idd_region                = dg::memult::region(id_ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
                 size_t table_idx                    = dg::memult::distance(table_head, id_region) / MEMREGION_SZ;
-                resource.region_id_map[id_region]   = tile_polymorphic;
+                resource.region_id_map[idd_region]  = tile_polymorphic;
                 resource.region_id_table[table_idx] = tile_polymorphic;
             }
 
@@ -2031,7 +2041,7 @@ namespace dg::network_tile_member_access{
 
     inline auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2047,7 +2057,7 @@ namespace dg::network_tile_member_access{
 
     inline auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2063,7 +2073,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2079,7 +2089,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2095,7 +2105,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2111,7 +2121,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2127,7 +2137,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2143,7 +2153,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
@@ -2159,7 +2169,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){

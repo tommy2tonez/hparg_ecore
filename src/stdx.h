@@ -21,7 +21,7 @@ namespace stdx{
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
-    inline auto lock_guard(std::atomic_flag& lck) noexcept{
+    inline auto lock_guard(volatile std::atomic_flag& lck) noexcept{
 
         auto destructor = [](std::atomic_flag * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
