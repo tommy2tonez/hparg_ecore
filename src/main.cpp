@@ -8,7 +8,6 @@
 #include <thread>
 #include <mutex>
 
-
 template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true>
 inline auto launder_pointer(void * volatile ptr) noexcept -> T *{
 

@@ -17,11 +17,39 @@
 #include "network_raii_x.h"
 
 namespace stdx{
+
+    template <class T>
+    struct base_type: std::enable_if<true, T>{};
+
+    template <class T>
+    struct base_type<const T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<volatile T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&&>: base_type<T>{};
+
+    template <class T>
+    using base_type_t = typename base_type<T>::type;
     
+    template <class T, class = void>
+    struct is_base_type: std::false_type{}; 
+
+    template <class T>
+    struct is_base_type<T, std::void_t<std::enable_if_t<std::is_same_v<T, base_type_t<T>>>>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_base_type_v = is_base_type<T>::value;
+
+
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
-    [[gnu::always_inline]] inline auto lock_guard(std::atomic_flag& lck) noexcept{
+    inline auto lock_guard(std::atomic_flag& lck) noexcept{
 
         auto destructor = [](std::atomic_flag * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
@@ -38,7 +66,7 @@ namespace stdx{
         return dg::unique_resource<std::atomic_flag *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
-    [[gnu::always_inline]] inline auto lock_guard(std::mutex& lck) noexcept{
+    inline auto lock_guard(std::mutex& lck) noexcept{
 
         auto destructor = [](std::mutex * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
@@ -55,7 +83,7 @@ namespace stdx{
         return dg::unique_resource<std::mutex *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
-    [[gnu::always_inline]] inline void atomic_signal_fence() noexcept{
+    inline void atomic_signal_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -64,7 +92,7 @@ namespace stdx{
         }
     } 
 
-    [[gnu::always_inline]] inline auto memtransaction_guard() noexcept{
+    inline auto memtransaction_guard() noexcept{
 
         auto destructor = [](int) noexcept{
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -74,7 +102,7 @@ namespace stdx{
         return dg::unique_resource<int, decltype(destructor)>(0, std::move(destructor));
     }
 
-    [[gnu::always_inline]] inline auto memtransaction_optional_guard() noexcept{
+    inline auto memtransaction_optional_guard() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             return memtransaction_guard();
@@ -83,7 +111,7 @@ namespace stdx{
         }
     }
     
-    [[gnu::always_inline]] inline void atomic_optional_thread_fence() noexcept{
+    inline void atomic_optional_thread_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -92,15 +120,17 @@ namespace stdx{
         }
     }
 
-    template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true>
-    inline auto launder_pointer(void * volatile ptr) noexcept -> T *{
+    //this is defined - because I wrote it 
+    
+    template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
+    inline __attribute__ ((noinline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         return static_cast<T *>(*std::launder(&ptr));
     }
 
-    template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true>
-    inline auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
+    template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
+    inline __attribute__ ((noinline)) auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         return static_cast<const T *>(*std::launder(&ptr));
