@@ -63,7 +63,7 @@ namespace dg::memult{
     template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - 
     inline auto start_lifetime_as_array(void * arr, size_t n) noexcept -> T *{
 
-        return static_cast<T *>(arr);
+        return static_cast<T *>(*std::launder(&arr));
     }
 
     constexpr auto align(uintptr_t buf, size_t alignment_sz) noexcept -> uintptr_t{

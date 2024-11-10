@@ -21,7 +21,7 @@ namespace stdx{
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
-    inline auto lock_guard(volatile std::atomic_flag& lck) noexcept{
+    [[gnu::always_inline]] inline auto lock_guard(std::atomic_flag& lck) noexcept{
 
         auto destructor = [](std::atomic_flag * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
@@ -38,9 +38,8 @@ namespace stdx{
         return dg::unique_resource<std::atomic_flag *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
-    inline auto lock_guard(std::mutex& lck) noexcept{
+    [[gnu::always_inline]] inline auto lock_guard(std::mutex& lck) noexcept{
 
-        static int i    = 0;
         auto destructor = [](std::mutex * lck_arg) noexcept{
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
                 std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -56,10 +55,40 @@ namespace stdx{
         return dg::unique_resource<std::mutex *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
-    inline void atomic_optional_thread_fence() noexcept{
+    [[gnu::always_inline]] inline void atomic_signal_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+        }
+    } 
+
+    [[gnu::always_inline]] inline auto memtransaction_guard() noexcept{
+
+        auto destructor = [](int) noexcept{
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        };
+
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        return dg::unique_resource<int, decltype(destructor)>(0, std::move(destructor));
+    }
+
+    [[gnu::always_inline]] inline auto memtransaction_optional_guard() noexcept{
+
+        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+            return memtransaction_guard();
+        } else{
+            return int{0};
+        }
+    }
+    
+    [[gnu::always_inline]] inline void atomic_optional_thread_fence() noexcept{
+
+        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            (void) IS_SAFE_INTEGER_CONVERSION_ENABLED;
         }
     }
 

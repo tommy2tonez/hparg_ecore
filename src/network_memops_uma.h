@@ -5,7 +5,8 @@
 #include "network_uma.h"
 #include "network_memops.h"
 #include "network_exception_handler.h"
-#include <atomic> 
+#include <atomic>
+#include "stdx.h"
 
 namespace dg::network_memops_uma{
 
@@ -31,7 +32,6 @@ namespace dg::network_memops_uma{
 
     auto memcpy_uma_to_vma(vma_ptr_t dst, uma_ptr_t src, size_t n) noexcept -> exception_t{
         
-        std::atomic_signal_fence(std::memory_order_seq_cst); //this is equivalent to volatile function - in the sense that the compiler might not make const propagation of dst, src and n
         auto src_map_rs = dg::network_uma::map_wait_safe(src);
 
         if (!src_map_rs.has_value()){
@@ -49,7 +49,6 @@ namespace dg::network_memops_uma{
 
     auto memcpy_vma_to_uma(uma_ptr_t dst, vma_ptr_t src, size_t n) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs = dg::network_uma::map_wait_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -67,7 +66,6 @@ namespace dg::network_memops_uma{
 
     auto memcpy_vma_to_uma_directall_bypass_qualifier_nothrow(uma_ptr_t dst, vma_ptr_t src, size_t n) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         size_t dc = dg::network_uma::device_count_nothrow(dst); 
 
         for (size_t i = 0; i < dc; ++i){
@@ -79,7 +77,6 @@ namespace dg::network_memops_uma{
 
     auto memset(uma_ptr_t dst, int c, size_t n) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs = dg::network_uma::map_wait_safe(dst);
         
         if (!dst_map_rs.has_value()){
@@ -97,7 +94,6 @@ namespace dg::network_memops_uma{
 
     void memset_directall_bypass_qualifier_nothrow(uma_ptr_t dst, int c, size_t n) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         size_t dc = dg::network_uma::device_count_nothrow(dst);
 
         for (size_t i = 0; i < dc; ++i){

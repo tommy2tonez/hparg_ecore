@@ -6,6 +6,7 @@
 #include "network_exception.h"
 #include "network_virtual_device.h"
 #include "network_kernelmap_x.h" 
+#include "stdx.h"
 
 namespace dg::network_memops_clib{
 
@@ -58,15 +59,15 @@ namespace dg::network_memops_clib{
 
     auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst); //all memory operations are demoted to signal fence - because if it is not an acquire_release transaction - then it is definitely undefined - this is to fence against compiler's bug rather than logic bug - this is to be debate - might promote this to a full acquire_release block
-        std::memcpy(dst, src, sz);
+        auto grd = stdx::memtransaction_optional_guard();
+        std::memcpy(*std::launder(&dst), *std::launder(&src), sz);
         return dg::network_exception::SUCCESS;
     }
 
     auto memset_host(void * dst, int c, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
-        std::memset(dst, c, sz);
+        auto grd = stdx::memtransaction_optional_guard();
+        std::memset(*std::launder(&dst), c, sz);
         return dg::network_exception::SUCCESS;
     }
 
@@ -105,7 +106,6 @@ namespace dg::network_memops_fsys{
 
     auto memcpy_host_to_fsys(fsys_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
         
         if (!map_rs.has_value()){
@@ -120,7 +120,6 @@ namespace dg::network_memops_fsys{
 
     auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
 
         if (!map_rs.has_value()){
@@ -135,7 +134,6 @@ namespace dg::network_memops_fsys{
 
     auto memcpy_fsys_to_host(void * dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
         if (!map_rs.has_value()){
@@ -150,7 +148,6 @@ namespace dg::network_memops_fsys{
 
     auto memcpy_fsys_to_cuda(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
 
         if (!map_rs.has_value()){
@@ -165,7 +162,6 @@ namespace dg::network_memops_fsys{
 
     auto memcpy_fsys_to_fsys(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -187,7 +183,6 @@ namespace dg::network_memops_fsys{
 
     auto memset_fsys(fsys_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
         
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -235,7 +230,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_host_to_cufs(cufs_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -250,7 +244,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_cuda_to_cufs(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -265,7 +258,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_fsys_to_cufs(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -287,7 +279,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_cufs_to_cufs(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -309,7 +300,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_cufs_to_host(void * dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
 
         if (!src_map_rs.has_value()){
@@ -324,7 +314,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_cufs_to_cuda(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
 
         if (!src_map_rs.has_value()){
@@ -339,7 +328,6 @@ namespace dg::network_memops_cufs{
 
     auto memcpy_cufs_to_fsys(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){
@@ -361,7 +349,6 @@ namespace dg::network_memops_cufs{
 
     auto memset_cufs(cufs_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
 
         if (!dst_map_rs.has_value()){

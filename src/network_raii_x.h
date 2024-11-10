@@ -69,7 +69,7 @@ namespace dg{
                 other.responsibility_flag = false;
             }
 
-            ~unique_resource() noexcept{
+            [[gnu::always_inline]] inline ~unique_resource() noexcept{
 
                 if (this->responsibility_flag){
                     this->deallocator(this->resource);
