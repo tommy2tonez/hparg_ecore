@@ -60,14 +60,14 @@ namespace dg::network_memops_clib{
     auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
 
         auto grd = stdx::memtransaction_optional_guard();
-        std::memcpy(*std::launder(&dst), *std::launder(&src), sz);
+        std::memcpy(stdx::launder_pointer<void>(dst), stdx::launder_pointer<void>(src), sz);
         return dg::network_exception::SUCCESS;
     }
 
     auto memset_host(void * dst, int c, size_t sz) noexcept -> exception_t{
 
         auto grd = stdx::memtransaction_optional_guard();
-        std::memset(*std::launder(&dst), c, sz);
+        std::memset(stdx::launder_pointer<void>(dst), c, sz);
         return dg::network_exception::SUCCESS;
     }
 

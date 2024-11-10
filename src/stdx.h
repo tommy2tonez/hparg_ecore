@@ -92,6 +92,20 @@ namespace stdx{
         }
     }
 
+    template <class T>
+    inline auto launder_pointer(void * ptr) noexcept -> T *{
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        return static_cast<T *>(*std::launder(&ptr));
+    }
+
+    template <class T>
+    inline auto launder_pointer(const void * ptr) noexcept -> const T *{
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        return static_cast<const T *>(*std::launder(&ptr));
+    }
+
     template <class Destructor>
     inline auto resource_guard(Destructor destructor) noexcept{
         

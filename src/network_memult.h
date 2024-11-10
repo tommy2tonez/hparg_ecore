@@ -12,6 +12,7 @@
 #include <memory>
 #include <limits.h>
 #include "network_pointer.h"
+#include "stdx.h"
 
 namespace dg::memult{
 
@@ -60,10 +61,10 @@ namespace dg::memult{
         return std::launder(static_cast<T *>(std::memmove(buf, buf, sizeof(T))));
     } 
 
-    template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - 
+    template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - this is DEFINED in C but not in C++ 
     inline auto start_lifetime_as_array(void * arr, size_t n) noexcept -> T *{
 
-        return static_cast<T *>(*std::launder(&arr));
+        return stdx::launder_pointer<T>(arr);
     }
 
     constexpr auto align(uintptr_t buf, size_t alignment_sz) noexcept -> uintptr_t{
