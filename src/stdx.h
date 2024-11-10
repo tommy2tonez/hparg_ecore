@@ -121,16 +121,16 @@ namespace stdx{
     }
 
     //this is defined - because I wrote it 
-    
+
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
-    inline __attribute__ ((noinline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
+    inline auto launder_pointer(void * volatile ptr) noexcept -> T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         return static_cast<T *>(*std::launder(&ptr));
     }
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
-    inline __attribute__ ((noinline)) auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
+    inline auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         return static_cast<const T *>(*std::launder(&ptr));
