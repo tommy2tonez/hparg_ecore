@@ -120,7 +120,16 @@ namespace stdx{
         }
     }
 
-    //this is defined - because I wrote it 
+    //this is defined - because I wrote it
+    //remember - launder is the savior and launder is the devil - this is ONLY defined if you synchronize all read and write at the MEMCPY
+    //not read through dereferncing the uint64_5 * or uint32_t * or uint16_t *
+    //the ONLY pointer you should have in the program is either void * or uintptr_t - YEAH
+    //because when you launder a pointer - the compiler assumes that it does not alias with ANY OTHER POINTER - it's like a newly allocated pointer
+    //so when you write to a uint32_t *, the other laundered uint64_t * won't see the result and, congratulations, you have invoked undefined behavior
+    //this is the main reason std::start_lifetime_as_array is not implemented - it's not feasible - from the perspective of a compiler engineer
+    //the only other defined case, in conjunction with the above use case, is when you have a restricted void * pointer - you want to launder that restricted pointer to an arithmetic ptr type
+    //and you only do basic operations on the newly created arithmetic pointer - and the lifetime of such pointer - you might not call the above memcpy - and you cannot launder another pointer
+    //it's that hard - really
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
     inline auto launder_pointer(void * volatile ptr) noexcept -> T *{

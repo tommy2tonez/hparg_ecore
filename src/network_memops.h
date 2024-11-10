@@ -57,17 +57,29 @@ namespace dg::network_memops_clib{
 
     #endif
 
+
+    //this is defined - because I wrote it
+    //remember - launder is the savior and launder is the devil - this is ONLY defined if you synchronize all read and write at the MEMCPY
+    //not read through dereferncing the uint64_5 * or uint32_t * or uint16_t *
+    //the ONLY pointer you should have in the program is either void * or uintptr_t - YEAH
+    //because when you launder a pointer - the compiler assumes that it does not alias with ANY OTHER POINTER - it's like a newly allocated pointer
+    //so when you write to a uint32_t *, the other laundered uint64_t * won't see the result and, congratulations, you have invoked undefined behavior
+    //this is the main reason std::start_lifetime_as_array is not implemented - it's not feasible - from the perspective of a compiler engineer
+    //the only other defined case, in conjunction with the above use case, is when you have a restricted void * pointer - you want to launder that restricted pointer to an arithmetic ptr type
+    //and you only do basic operations on the newly created arithmetic pointer - and the lifetime of such pointer - you might not call the above memcpy - and you cannot launder another pointer
+    //it's that hard - really
+
     auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
 
         auto grd = stdx::memtransaction_optional_guard();
-        std::memcpy(stdx::launder_pointer<void>(dst), stdx::launder_pointer<void>(src), sz);
+        std::memcpy(dst, stdx::launder_pointer<void>(src), sz);
         return dg::network_exception::SUCCESS;
     }
 
     auto memset_host(void * dst, int c, size_t sz) noexcept -> exception_t{
 
         auto grd = stdx::memtransaction_optional_guard();
-        std::memset(stdx::launder_pointer<void>(dst), c, sz);
+        std::memset(dst, c, sz);
         return dg::network_exception::SUCCESS;
     }
 
