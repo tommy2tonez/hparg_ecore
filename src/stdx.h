@@ -124,20 +124,25 @@ namespace stdx{
     //as if it is unique_ptr<void * __restrict__>
 
     //input: restricted void ptr
-    //ouput: restricted arithmetic pointer - as if it is returned by new (storage) arithemtic_t[sz] and the compiler might not assume values of the pointing data - this is the least requirement
+    //ouput: restricted arithmetic pointer - as if it is returned by new (storage) arithemtic_t[sz] and the compiler might not assume values of the immediate pointing data - such data is accessed directly by the laundered pointer
+    //but it can assume the values of the not immediate pointing data - this is very fishy
+    //the only defined usecase of this is network_tileops_static - you should not call this function ANYWHERE else - this is undefined
+    //this is for now, the best one can launder
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
     inline auto launder_pointer(void * volatile ptr) noexcept -> T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        return static_cast<T *>(*std::launder(&ptr));
+        void * tmp = ptr;
+        return static_cast<T *>(*std::launder(&tmp));
     }
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
     inline auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        return static_cast<const T *>(*std::launder(&ptr));
+        const void * tmp = ptr;
+        return static_cast<const T *>(*std::launder(&tmp));
     }
 
     template <class Destructor>
