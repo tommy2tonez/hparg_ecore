@@ -106,29 +106,29 @@ namespace dg::network_memops_uma{
 
 namespace dg::network_memops_umax{
 
-    auto memcpy_uma_to_host(void * dst, uma_ptr_t src, size_t n) volatile noexcept -> exception_t{
+    auto memcpy_uma_to_host(void * dst, uma_ptr_t src, size_t n) noexcept -> exception_t{
 
         vma_ptr_t dst_vptr = dg::network_virtual_device::virtualize_host_ptr(dst, dg::network_virtual_device::HOST_MAIN_ID); 
         return dg::network_memops_uma::memcpy_uma_to_vma(dst_vptr, src, n);
     }
 
-    void memcpy_uma_to_host_nothrow(void * dst, uma_ptr_t src, size_t n) volatile noexcept{
+    void memcpy_uma_to_host_nothrow(void * dst, uma_ptr_t src, size_t n) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_uma_to_host(dst, src, n));
     }
 
-    auto memcpy_host_to_uma(uma_ptr_t dst, void * src, size_t n) volatile noexcept -> exception_t{ //remove constness for now - next iteration 
+    auto memcpy_host_to_uma(uma_ptr_t dst, void * src, size_t n) noexcept -> exception_t{ //remove constness for now - next iteration 
 
         vma_ptr_t src_vptr = dg::network_virtual_device::virtualize_host_ptr(src, dg::network_virtual_device::HOST_MAIN_ID);
         return dg::network_memops_uma::memcpy_vma_to_uma(dst, src_vptr, n);
     }
 
-    void memcpy_host_to_uma_nothrow(uma_ptr_t dst, void * src, size_t n) volatile noexcept{
+    void memcpy_host_to_uma_nothrow(uma_ptr_t dst, void * src, size_t n) noexcept{
 
         dg::network_exception_handler::nothrow_log(memcpy_host_to_uma(dst, src, n));
     }
 
-    void memcpy_host_to_uma_directall_bypass_qualifier_nothrow(uma_ptr_t dst, void * src, size_t n) volatile noexcept{ //remove constness for now - next iteration
+    void memcpy_host_to_uma_directall_bypass_qualifier_nothrow(uma_ptr_t dst, void * src, size_t n) noexcept{ //remove constness for now - next iteration
 
         vma_ptr_t src_vptr  = dg::network_virtual_device::virtualize_host_ptr(src, dg::network_virtual_device::HOST_MAIN_ID);
         dg::network_memops_uma::memcpy_vma_to_uma_directall_bypass_qualifier_nothrow(dst, src_vptr, n);

@@ -17,15 +17,18 @@ namespace dg::network_kernelmap_x{
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 
-    inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface> map_instance{}; 
+    inline dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface * volatile map_instance{}; 
 
     void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
 
-        map_instance = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        auto map_instance_uptr = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        map_instance = map_instance_uptr.get();
+        map_instance_uptr.release();
     }
 
     void deinit() noexcept{
         
+        delete map_instance;
         map_instance = nullptr;
     }
 

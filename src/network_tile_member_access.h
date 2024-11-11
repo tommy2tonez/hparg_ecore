@@ -114,6 +114,16 @@ namespace dg::network_tile_member_access::implementation{
                 return OBSERVER_ARRAY_SZ;
             }
 
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
+            }
+
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -261,6 +271,16 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto observer_arr_size() -> size_t{
 
                 return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -421,6 +441,16 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto accum_size() -> size_t{
 
                 return ACM_SZ;
+            }
+
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -591,6 +621,16 @@ namespace dg::network_tile_member_access::implementation{
                 return ACM_SZ;
             }
 
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
+            }
+
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -759,6 +799,16 @@ namespace dg::network_tile_member_access::implementation{
                 return OBSERVER_ARRAY_SZ;
             }
 
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
+            }
+
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -923,6 +973,16 @@ namespace dg::network_tile_member_access::implementation{
                 return OBSERVER_ARRAY_SZ;
             } 
 
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
+            }
+
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -1086,6 +1146,16 @@ namespace dg::network_tile_member_access::implementation{
 
                 return OBSERVER_ARRAY_SZ;
             } 
+
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
+            }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
 
@@ -1256,6 +1326,16 @@ namespace dg::network_tile_member_access::implementation{
                 return OBSERVER_ARRAY_SZ;
             }
 
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_VALUE_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_VALUE_SZ;
+            }
+
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -1393,6 +1473,7 @@ namespace dg::network_tile_member_access{
 
     static inline constexpr bool IS_SAFE_ACCESS_ENABLED     = true;
 
+    using uma_ptr_t             = dg::network_pointer::uma_ptr_t;
     using tile_polymorphic_t    = uint8_t;
     using init_status_t         = uint8_t;
     using observer_t            = uint64_t;
@@ -1489,7 +1570,6 @@ namespace dg::network_tile_member_access{
     using msgrbwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_32_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
     using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
 
-    using uma_ptr_t                 = dg::network_pointer::uma_ptr_t;
 
     struct Resource{
         dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_t> region_id_map;
@@ -1537,10 +1617,10 @@ namespace dg::network_tile_member_access{
             uma_ptr_t head = Accessor::get_head();
 
             for (size_t i = 0u; i < Accessor::tile_size(); ++i){
-                uma_ptr_t id_ptr                    = Accessor::id_addr(dg::memult::advance(head, i));
-                uma_ptr_t id_region                 = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-                uma_ptr_t idd_region                = dg::memult::region(id_ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
-                size_t table_idx                    = dg::memult::distance(table_head, id_region) / MEMREGION_SZ;
+                uma_ptr_t id_ptr                        = Accessor::id_addr(dg::memult::advance(head, i));
+                uma_ptr_t id_region                     = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                uma_ptr_t idd_region                    = dg::memult::region(id_ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+                size_t table_idx                        = dg::memult::distance(table_head, id_region) / MEMREGION_SZ;
                 tmp_resource.region_id_map[idd_region]  = tile_polymorphic;
                 tmp_resource.region_id_table[table_idx] = tile_polymorphic;
             }
@@ -2263,6 +2343,15 @@ namespace dg::network_tile_member_access{
         }
     }
 
+    auto safe_tile_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_tile_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
     auto safethrow_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_leaf_ptr_access(ptr));
@@ -2301,6 +2390,11 @@ namespace dg::network_tile_member_access{
     auto safethrow_msgrbwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_msgrbwd_ptr_access(ptr));
+    }
+
+    auto safethrow_tile_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_tile_ptr_access(ptr));
     }
 }
 

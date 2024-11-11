@@ -6,10 +6,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <algorithm>
-#include "network_bitset.h"
 #include "network_exception.h"
 #include "network_log.h" 
-#include "network_error_handler.h"
+#include "network_exception_handler.h"
 
 namespace dg::network_device_virtualizer::incremental{
 
