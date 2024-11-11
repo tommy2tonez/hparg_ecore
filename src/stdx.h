@@ -48,9 +48,9 @@ namespace stdx{
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
-    inline auto lock_guard(std::atomic_flag& lck) noexcept{
+    inline __attribute__((always_inline)) auto lock_guard(std::atomic_flag& lck) noexcept{
 
-        auto destructor = [](std::atomic_flag * lck_arg) noexcept{
+        auto destructor = [](std::atomic_flag * lck_arg) noexcept __attribute__((always_inline)){
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             }
@@ -65,9 +65,9 @@ namespace stdx{
         return dg::unique_resource<std::atomic_flag *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
-    inline auto lock_guard(std::mutex& lck) noexcept{
+    inline __attribute__((always_inline)) auto lock_guard(std::mutex& lck) noexcept{
 
-        auto destructor = [](std::mutex * lck_arg) noexcept{
+        auto destructor = [](std::mutex * lck_arg) noexcept __attribute__((always_inline)) {
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             }
@@ -82,7 +82,7 @@ namespace stdx{
         return dg::unique_resource<std::mutex *, decltype(destructor)>(&lck, std::move(destructor));
     }
 
-    inline void atomic_signal_fence() noexcept{
+    inline __attribute__((always_inline)) void atomic_signal_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -91,7 +91,7 @@ namespace stdx{
         }
     } 
 
-    inline auto memtransaction_guard() noexcept{
+    inline __attribute__((always_inline)) auto memtransaction_guard() noexcept{
 
         auto destructor = [](int) noexcept{
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -101,7 +101,7 @@ namespace stdx{
         return dg::unique_resource<int, decltype(destructor)>(0, std::move(destructor));
     }
 
-    inline auto memtransaction_optional_guard() noexcept{
+    inline __attribute__((always_inline)) auto memtransaction_optional_guard() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             return memtransaction_guard();
@@ -110,7 +110,7 @@ namespace stdx{
         }
     }
     
-    inline void atomic_optional_thread_fence() noexcept{
+    inline __attribute__((always_inline)) void atomic_optional_thread_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -124,13 +124,13 @@ namespace stdx{
     //as if it is unique_ptr<void * __restrict__>
 
     //input: restricted void ptr
-    //ouput: restricted arithmetic pointer - as if it is returned by new (storage) arithemtic_t[sz] and the compiler might not assume values of the immediate pointing data - such data is accessed directly by the laundered pointer
-    //but it can assume the values of the not immediate pointing data - this is very fishy
-    //the only defined usecase of this is network_tileops_static - you should not call this function ANYWHERE else - this is undefined
-    //this is for now, the best one can launder
+    //ouput: restricted arithmetic pointer - as if it is returned by new (storage) arithemtic_t[sz] and the compiler might not assume values of the immediate pointing data
+    //the newly restricted pointer can only be used in the callee function scope - not outside the function scope - otherwise undefined
+    //to be honest - I only trust GCC - if I have to choose between all the compilers - it seems like it's the only decent compiler which actually implements features - and adhere to std
+    //this is correct logic for laundering - if you wonder
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
-    inline auto launder_pointer(void * volatile ptr) noexcept -> T *{
+    inline __attribute__((always_inline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         void * tmp = ptr;
@@ -138,7 +138,7 @@ namespace stdx{
     }
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
-    inline auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
+    inline __attribute__((always_inline)) auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         const void * tmp = ptr;

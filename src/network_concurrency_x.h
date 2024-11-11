@@ -64,7 +64,7 @@ namespace dg::network_concurrency_infretry_x{
                 size_t dice_idx = dg::network_randomizer::randomize_xrange(std::integral_constant<size_t, DICE_SZ>{});
 
                 if (dice_idx == 0u){
-                    return this->poison_pill->load(std::memory_order_relaxed);
+                    return this->poison_pill->load(std::memory_order_seq_cst);
                 }
 
                 return false;
@@ -83,7 +83,7 @@ namespace dg::network_concurrency_infretry_x{
 
             ~StdExecutorDestructor() noexcept{
 
-                this->eventloop_poison_pill->exchange(true, std::memory_order_relaxed);
+                this->eventloop_poison_pill->exchange(true, std::memory_order_seq_cst);
             }
     };
 

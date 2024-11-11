@@ -69,7 +69,7 @@ namespace dg{
                 other.responsibility_flag = false;
             }
 
-            inline ~unique_resource() noexcept{
+            inline __attribute__((always_inline)) ~unique_resource() noexcept{
 
                 if (this->responsibility_flag){
                     this->deallocator(this->resource);

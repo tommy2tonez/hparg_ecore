@@ -146,9 +146,9 @@ namespace dg::network_concurrency_impl1_linux{
 
             void infloop() noexcept{
 
-                this->poison_pill->exchange(false, std::memory_order_relaxed);
+                this->poison_pill->exchange(false, std::memory_order_seq_cst);
 
-                while (!this->poison_pill->load(std::memory_order_relaxed)){
+                while (!this->poison_pill->load(std::memory_order_seq_cst)){
                     auto lck_grd    = stdx::lock_guard(*this->mtx);
                     bool run_flag   = this->worker->run_one_epoch();
 
@@ -160,7 +160,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             void signal_abort() noexcept{
 
-                this->poison_pill->exchange(true, std::memory_order_relaxed);
+                this->poison_pill->exchange(true, std::memory_order_seq_cst);
             }
     };
 
