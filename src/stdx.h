@@ -45,7 +45,6 @@ namespace stdx{
     template <class T>
     static inline constexpr bool is_base_type_v = is_base_type<T>::value;
 
-
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
@@ -120,16 +119,12 @@ namespace stdx{
         }
     }
 
-    //this is defined - because I wrote it
-    //remember - launder is the savior and launder is the devil - this is ONLY defined if you synchronize all read and write at the MEMCPY
-    //not read through dereferncing the uint64_5 * or uint32_t * or uint16_t *
-    //the ONLY pointer you should have in the program is either void * or uintptr_t - YEAH
-    //because when you launder a pointer - the compiler assumes that it does not alias with ANY OTHER POINTER - it's like a newly allocated pointer
-    //so when you write to a uint32_t *, the other laundered uint64_t * won't see the result and, congratulations, you have invoked undefined behavior
-    //this is the main reason std::start_lifetime_as_array is not implemented - it's not feasible - from the perspective of a compiler engineer
-    //the only other defined case, in conjunction with the above use case, is when you have a restricted void * pointer - you want to launder that restricted pointer to an arithmetic ptr type
-    //and you only do basic operations on the newly created arithmetic pointer - and the lifetime of such pointer - you might not call the above memcpy - and you cannot launder another pointer
-    //it's that hard - really
+    //battle tested - need version control macros - for gcc 14, gcc 13, gcc 12, gcc 11, gcc 10 - for std=c++20 and std=c++23, optimization flag: -O3, -O2, -O1
+    //defined if the operation is restriction transferring
+    //as if it is unique_ptr<void * __restrict__>
+
+    //input: restricted void ptr
+    //ouput: restricted arithmetic pointer - as if it is returned by new (storage) arithemtic_t[sz] and the compiler might not assume values of the pointing data - this is the least requirement
 
     template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
     inline auto launder_pointer(void * volatile ptr) noexcept -> T *{

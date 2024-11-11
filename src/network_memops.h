@@ -57,19 +57,13 @@ namespace dg::network_memops_clib{
 
     #endif
 
-
-    //this is defined - because I wrote it
-    //remember - launder is the savior and launder is the devil - this is ONLY defined if you synchronize all read and write at the MEMCPY
-    //not read through dereferncing the uint64_5 * or uint32_t * or uint16_t *
-    //the ONLY pointer you should have in the program is either void * or uintptr_t - YEAH
-    //because when you launder a pointer - the compiler assumes that it does not alias with ANY OTHER POINTER - it's like a newly allocated pointer
-    //so when you write to a uint32_t *, the other laundered uint64_t * won't see the result and, congratulations, you have invoked undefined behavior
-    //this is the main reason std::start_lifetime_as_array is not implemented - it's not feasible - from the perspective of a compiler engineer
-    //the only other defined case, in conjunction with the above use case, is when you have a restricted void * pointer - you want to launder that restricted pointer to an arithmetic ptr type
-    //and you only do basic operations on the newly created arithmetic pointer - and the lifetime of such pointer - you might not call the above memcpy - and you cannot launder another pointer
-    //it's that hard - really
-
-    auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
+    //dst is guaranteed to be physically written
+    //the alias of dst - however - is not flushed during the compilation and might return incorrect results (this is not a hardware issue but a compiling issue)
+    //it's important not to launder dst right here - because that's a logic issue, dst is tracked by the compiler and should be continued to be tracked by the compiler
+    //so it's important NOT TO memcpy_host_to_host(static_cast<void *>(uint64_t *) ... - the behavior is only guaranteed to be defined IF the uint64_t * is laundered afterwards - this is where the fishy things happen
+    //I don't want to dig into details - it would be at least one thousand two hundreds and thirty four issues
+    
+    auto memcpy_host_to_host(void * __restrict__ dst, const void * __restrict__ src, size_t sz) noexcept -> exception_t{
 
         auto grd = stdx::memtransaction_optional_guard();
         std::memcpy(dst, stdx::launder_pointer<void>(src), sz);
