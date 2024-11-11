@@ -56,7 +56,7 @@ namespace dg::memult{
     }
     
     template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - this is DEFINED in C but not in C++ 
-    inline auto start_lifetime_as_array(void * arr, size_t n) noexcept -> T *{
+    inline __attribute__((always_inline)) auto start_lifetime_as_array(void * arr, size_t n) noexcept -> T *{
 
         return stdx::launder_pointer<T>(arr);
     }

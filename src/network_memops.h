@@ -56,23 +56,15 @@ namespace dg::network_memops_clib{
     }
 
     #endif
-
-    //dst is guaranteed to be physically written
-    //the alias of dst - however - is not flushed during the compilation and might return incorrect results (this is not a hardware issue but a compiling issue)
-    //it's important not to launder dst right here - because that's a logic issue, dst is tracked by the compiler and should be continued to be tracked by the compiler
-    //so it's important NOT TO memcpy_host_to_host(static_cast<void *>(uint64_t *) ... - the behavior is only guaranteed to be defined IF the uint64_t * is laundered afterwards - this is where the fishy things happen
-    //I don't want to dig into details - it would be at least one thousand two hundreds and thirty four issues
     
-    auto memcpy_host_to_host(void * __restrict__ dst, const void * __restrict__ src, size_t sz) noexcept -> exception_t{
+    auto memcpy_host_to_host(void * dst, const void * src, size_t sz) noexcept -> exception_t{
 
-        auto grd = stdx::memtransaction_optional_guard();
-        std::memcpy(dst, stdx::launder_pointer<void>(src), sz);
+        std::memcpy(dst, src, sz);
         return dg::network_exception::SUCCESS;
     }
 
     auto memset_host(void * dst, int c, size_t sz) noexcept -> exception_t{
 
-        auto grd = stdx::memtransaction_optional_guard();
         std::memset(dst, c, sz);
         return dg::network_exception::SUCCESS;
     }

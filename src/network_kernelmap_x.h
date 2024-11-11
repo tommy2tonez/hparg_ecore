@@ -17,7 +17,7 @@ namespace dg::network_kernelmap_x{
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 
-    inline dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface * volatile map_instance{}; 
+    inline dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface * volatile map_instance{};
 
     void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
 
