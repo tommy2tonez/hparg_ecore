@@ -101,13 +101,14 @@ namespace stdx{
         return dg::unique_resource<int, decltype(destructor)>(0, std::move(destructor));
     }
 
-    inline __attribute__((always_inline)) auto memtransaction_optional_guard() noexcept{
+    inline __attribute__((always_inline)) auto seq_cst_guard() noexcept{
 
-        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            return memtransaction_guard();
-        } else{
-            return int{0};
-        }
+        auto destructor = [](int) noexcept __attribute__((always_inline)){
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+        };
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        return dg::unique_resource<int, decltype(destructor)>(0, std::move(destructor));
     }
     
     inline __attribute__((always_inline)) void atomic_optional_thread_fence() noexcept{
