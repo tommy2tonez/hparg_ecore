@@ -67,7 +67,7 @@ namespace stdx{
 
     inline __attribute__((always_inline)) auto lock_guard(std::mutex& lck) noexcept{
 
-        auto destructor = [](std::mutex * lck_arg) noexcept __attribute__((always_inline)) {
+        auto destructor = [](std::mutex * lck_arg) noexcept __attribute__((always_inline)){
             if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             }
@@ -93,7 +93,7 @@ namespace stdx{
 
     inline __attribute__((always_inline)) auto memtransaction_guard() noexcept{
 
-        auto destructor = [](int) noexcept{
+        auto destructor = [](int) noexcept __attribute__((always_inline)){
             std::atomic_thread_fence(std::memory_order_seq_cst);
         };
 
