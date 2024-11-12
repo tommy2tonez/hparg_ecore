@@ -303,6 +303,23 @@ namespace stdx{
             xlock_guard& operator =(xlock_guard&&) = delete;
     };
 
+    //this is for deprecating volatile * (not to worry for now)
+    //though std::add_volatile_t<std::add_pointer_t<T>> is more appropriate and accurate 
+    
+    //assume that memory fence only works if the compiler flow control reaches the fence statement - we call this consume - every variables + optimizables that in the tmp compiler buffer have to be flushed before/after the statement
+    //this is not the assumption but it is actually how it works as of gcc-14 but not documented by the std
+    
+    //call an arbitrary concurrent tranaction __transaction__
+    //within this __transaction__: radix all statements as - inline-ables and not inline-ables
+
+    //inlineables: fine - covered by stdx::xlock_guard<polymorphic_lock_type>
+    //not inlinables:   - stateless:    - depends solely on the arguments (we can assume that self is also an argument - python) - guaranteed to be covered as if we are referencing object * volatile
+    //                  - stateful:     - stateful (reference inline global variables) but the states are not for concurrent usages - volatiles are not required
+    //                                                                                         states are for concurrent usages - volatiles are required  
+    //with volatile deprecating - seq_cst_transaction is the only suitable replacement
+
+    //programs that adhere to the above rules are guaranteed to be defined by GCC-14
+
     class seq_cst_transaction{
 
         public:
@@ -333,34 +350,36 @@ namespace stdx{
         }
     }
 
-    template <class T, class T1>
-    inline __attribute__((always_inline)) auto launder_pointer(T1 * volatile ptr) noexcept -> T *{
+    //as-of gcc-14 - this launder works as if ptr is unique_ptr<void * __restrict__> and the scope of usage is the same as the callee scope
+    //the implementation is defined, according to STD - this is not a Russian hack
+    //extra instructions were introduced (std::atomic_signal_fence() + void * volatile) to be gcc-compiler-compliant
+
+    template <class T>
+    inline __attribute__((always_inline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
 
         static_assert(std::disjunction_v<std::is_same<T, uint8_t>, std::is_same<T, uint16_t>, std::is_same<T, uint32_t>, std::is_same<T, uint64_t>,
                                          std::is_same<T, int8_t>, std::is_same<T, int16_t>, std::is_same<T, int32_t>, std::is_same<T, int64_t>,
                                          std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>>);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        launderer<T1> launder_machine{};
+        launderer<void> launder_machine{};
         launder_machine.value = ptr;
-        polymorphic_launderer * virtual_machine = &launder_machine;
 
-        return static_cast<T *>((*std::launder(&virtual_machine))->ptr()); //this is correct way of laundering - this is an extra layer of protection - though not as performant (according to std std::launder(&void *) must suffice - but it's hard to be compiler-correct)
+        return static_cast<T *>(std::launder(&launder_machine)->ptr()); //this is a correct way of laundering defined by the std - force ptr() to read the polymorphic header
     }
 
-    template <class T, class T1>
-    inline __attribute__((always_inline)) auto launder_pointer(const T1 * volatile ptr) noexcept -> const T *{
+    template <class T>
+    inline __attribute__((always_inline)) auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
 
         static_assert(std::disjunction_v<std::is_same<T, uint8_t>, std::is_same<T, uint16_t>, std::is_same<T, uint32_t>, std::is_same<T, uint64_t>,
                                          std::is_same<T, int8_t>, std::is_same<T, int16_t>, std::is_same<T, int32_t>, std::is_same<T, int64_t>,
                                          std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>>);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        const_launderer<T1> launder_machine{};
+        const_launderer<void> launder_machine{};
         launder_machine.value = ptr;
-        polymorphic_const_launderer * virtual_machine = &launder_machine;
 
-        return static_cast<const T *>((*std::launder(&virtual_machine))->ptr()); //this is correct way of laundering - this is an extra layer of protection - though not as performant (according to std std::launder(&void *) must suffice - but it's hard to be compiler-correct)
+        return static_cast<const T *>(std::launder(&launder_machine)->ptr()); //this is a correct way of laundering defined by the std - force ptr() to read the polymorphic header
     }
 
     template <class Destructor>
