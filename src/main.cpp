@@ -1,8 +1,77 @@
 #define DEBUG_MODE_FLAG true
 
-#include "stdx.h"
+// #include "stdx.h"
+
+#include <atomic>
+#include <mutex>
+
+    template <class Lock>
+    class xlock_guard{};
+
+    template <>
+    class xlock_guard<std::atomic_flag>{
+
+        private:
+
+            std::atomic_flag * volatile mtx; 
+
+        public:
+
+            __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
+
+                this->mtx->test_and_set();
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+           }
+
+            xlock_guard(const xlock_guard&) = delete;
+            xlock_guard(xlock_guard&&) = delete;
+
+            __attribute__((always_inline)) ~xlock_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                this->mtx->clear();
+            }
+
+            xlock_guard& operator =(const xlock_guard&) = delete;
+            xlock_guard& operator =(xlock_guard&&) = delete;
+    };
+
+    template <>
+    class xlock_guard<std::mutex>{
+
+        private:
+
+            std::mutex * volatile mtx;
+        
+        public:
+
+            __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
+
+                this->mtx->lock();
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            xlock_guard(const xlock_guard&) = delete;
+            xlock_guard(xlock_guard&&) = delete;
+
+            __attribute__((always_inline)) ~xlock_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                this->mtx->unlock();
+            }
+
+            xlock_guard& operator =(const xlock_guard&) = delete;
+            xlock_guard& operator =(xlock_guard&&) = delete;
+    };
 
 int main(){
+
+    std::mutex lck{};
+    xlock_guard<std::mutex> lck_grd(lck);
+
+    {
+        //transaction goes here
+    }
 
     //let's say assume that we are in a seq_cst transaction block
     //if a function is inlinable - fine

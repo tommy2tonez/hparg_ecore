@@ -48,62 +48,86 @@ namespace stdx{
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
-    inline __attribute__((always_inline)) auto lock_guard(std::atomic_flag& lck) noexcept{
+    template <class Lock>
+    class xlock_guard{};
 
-        auto destructor = [](std::atomic_flag * lck_arg) noexcept __attribute__((always_inline)){
-            if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+    template <>
+    class xlock_guard<std::atomic_flag>{
+
+        private:
+
+            std::atomic_flag * volatile mtx; 
+
+        public:
+
+            __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
+
+                this->mtx->test_and_set();
                 std::atomic_thread_fence(std::memory_order_seq_cst);
-            } else{
+           }
+
+            xlock_guard(const xlock_guard&) = delete;
+            xlock_guard(xlock_guard&&) = delete;
+
+            __attribute__((always_inline)) ~xlock_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                this->mtx->clear();
+            }
+
+            xlock_guard& operator =(const xlock_guard&) = delete;
+            xlock_guard& operator =(xlock_guard&&) = delete;
+    };
+
+    template <>
+    class xlock_guard<std::mutex>{
+
+        private:
+
+            std::mutex * volatile mtx;
+        
+        public:
+
+            __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
+
+                this->mtx->lock();
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            xlock_guard(const xlock_guard&) = delete;
+            xlock_guard(xlock_guard&&) = delete;
+
+            __attribute__((always_inline)) ~xlock_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                this->mtx->unlock();
+            }
+
+            xlock_guard& operator =(const xlock_guard&) = delete;
+            xlock_guard& operator =(xlock_guard&&) = delete;
+    };
+
+    class seq_cst_transaction{
+
+        public:
+
+            __attribute__((always_inline)) seq_cst_transaction() noexcept{
+            
                 std::atomic_signal_fence(std::memory_order_seq_cst);
             }
-            lck_arg->clear(std::memory_order_release);
-        };
 
-        while (!lck.test_and_set(std::memory_order_acquire)){}
+            seq_cst_transaction(const seq_cst_transaction&) = delete;
+            seq_cst_transaction(seq_cst_transaction&&) = delete;
 
-        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-        } else{
-            std::atomic_signal_fence(std::memory_order_seq_cst);
-        }
+            __attribute__((always_inline)) ~seq_cst_transaction() noexcept{
 
-        return dg::inline_unique_resource<std::atomic_flag *, decltype(destructor)>(&lck, std::move(destructor));
-    }
-
-    inline __attribute__((always_inline)) auto lock_guard(std::mutex& lck) noexcept{
-
-        auto destructor = [](std::mutex * lck_arg) noexcept __attribute__((always_inline)){
-            if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-            } else{
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                std::atomic_thread_fence(std::memory_order_release);
             }
-            lck_arg->unlock();
-        };
 
-        lck.lock();
-
-        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-        } else{
-            std::atomic_thread_fence(std::memory_order_acquire);
-            std::atomic_signal_fence(std::memory_order_seq_cst);
-        }
-
-        return dg::inline_unique_resource<std::mutex *, decltype(destructor)>(&lck, std::move(destructor));
-    }
-
-    inline __attribute__((always_inline)) auto seq_cst_guard() noexcept{
-
-        auto destructor = [](int) noexcept __attribute__((always_inline)){
-            std::atomic_signal_fence(std::memory_order_seq_cst);
-        };
-
-        std::atomic_signal_fence(std::memory_order_seq_cst);
-        return dg::inline_unique_resource<int, decltype(destructor)>(0, std::move(destructor));
-    }
-
+            seq_cst_transaction& operator =(const seq_cst_transaction&) = delete;
+            seq_cst_transaction& operator =(seq_cst_transaction&&) = delete;
+    };
+    
     inline __attribute__((always_inline)) void atomic_optional_thread_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
