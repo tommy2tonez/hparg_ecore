@@ -282,11 +282,19 @@ namespace dg::network_tileops_host_poly::dispatcher{
     //(3): separate compilation
     //(4): stateless function - such computation is solely based on its arguments
     //(5): compiled by GCC - ver 14, 13, 12, 11, 10, compilation flags O3 O2 O1
+    
+    //please don't talk about being dirty or not
+    //when you choose C++ and concurrency (not fork) - you have chosen the path of undefined https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSaddJnfGQqlPoWUYSGqpV66mHiEtgPizZCww&s
+    //to make this defined - you have to actually know every corner of the chosen compiler - test it - check the assembly - and version control it
+    //it's not for the faint of heart - even if you are being std-correct - you are still in the undefined zone - because the compiler is not std-compliant
+    //C is great - even if it's computing incorrect result (a random reddit commentor)
+    //so be greatful when your program is running smoothly and most importantly - don't change anything afterwards - even compiler version or dependency updates - compromise it - containerize it - use it
+    //you'd be surprised to know the number of concurrent C++ programs that compute correct results  
 
     static void fwd_mono(void * __restrict__ dst, const void * __restrict__ src, ops_kind_t ops_kind, tile_kind_t tile_kind) noexcept{
 
         using namespace taxonomy;
-        
+           
         switch (tile_kind){
             case uu_8_8:
                 ops_dispatcher::fwd_mono(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_mono_ops_uu_8_8{});
@@ -354,52 +362,52 @@ namespace dg::network_tileops_host_poly::dispatcher{
         
         switch (tile_kind){
             case uu_8_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_8_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_8_8{});
                 break;
             case uu_8_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_8_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_8_16{});
                 break;
             case uu_16_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_16_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_16_8{});
                 break;
             case uu_16_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_16_16{})
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uu_16_16{})
                 break;
             case uf_8_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_8_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_8_8{});
                 break;
             case uf_8_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_8_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_8_16{});
                 break;
             case uf_16_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_16_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_16_8{});
                 break;
             case uf_16_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_16_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_uf_16_16{});
                 break;
             case fu_8_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_8_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_8_8{});
                 break;
             case fu_8_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_8_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_8_16{});
                 break;
             case fu_16_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_16_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_16_8{});
                 break;
             case fu_16_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_16_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_fu_16_16{});
                 break;
             case ff_8_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_8_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_8_8{});
                 break;
             case ff_8_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_8_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_8_16{});
                 break;
             case ff_16_8:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_16_8{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_16_8{});
                 break;
             case ff_16_16:
-                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_16_16{});
+                ops_dispatcher::fwd_uacm(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_uacm_ops_ff_16_16{});
                 break;
             default:
                 if constexpr(DEBUG_MODE_FLAG){
@@ -419,52 +427,52 @@ namespace dg::network_tileops_host_poly::dispatcher{
         
         switch (tile_kind){
             case uu_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_8_8{});
                 break;
             case uu_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_8_16{});
                 break;
             case uu_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_16_8{});
                 break;
             case uu_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_16_16{})
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uu_16_16{})
                 break;
             case uf_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_8_8{});
                 break;
             case uf_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_8_16{});
                 break;
             case uf_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_16_8{});
                 break;
             case uf_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_16_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_uf_16_16{});
                 break;
             case fu_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_8_8{});
                 break;
             case fu_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_8_16{});
                 break;
             case fu_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_16_8{});
                 break;
             case fu_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_16_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_fu_16_16{});
                 break;
             case ff_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_8_8{});
                 break;
             case ff_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_8_16{});
                 break;
             case ff_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_16_8{});
                 break;
             case ff_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_16_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pacm_ops_ff_16_16{});
                 break;
             default:
                 if constexpr(DEBUG_MODE_FLAG){
@@ -484,52 +492,52 @@ namespace dg::network_tileops_host_poly::dispatcher{
         
         switch (tile_kind){
             case uu_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_8_8{});
                 break;
             case uu_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_8_16{});
                 break;
             case uu_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_16_8{});
                 break;
             case uu_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_16_16{})
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uu_16_16{})
                 break;
             case uf_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_8_8{});
                 break;
             case uf_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_8_16{});
                 break;
             case uf_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_16_8{});
                 break;
             case uf_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_16_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_uf_16_16{});
                 break;
             case fu_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_8_8{});
                 break;
             case fu_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_8_16{});
                 break;
             case fu_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_16_8{});
                 break;
             case fu_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_16_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_fu_16_16{});
                 break;
             case ff_8_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_8_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_8_8{});
                 break;
             case ff_8_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_8_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_8_16{});
                 break;
             case ff_16_8:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_16_8{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_16_8{});
                 break;
             case ff_16_16:
-                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_16_16{});
+                ops_dispatcher::fwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs, LOGIT_COUNT_PER_TILE), ops_opt, fwd_pair_ops_ff_16_16{});
                 break;
             default:
                 if constexpr(DEBUG_MODE_FLAG){
@@ -549,52 +557,52 @@ namespace dg::network_tileops_host_poly::dispatcher{
         
         switch (tile_kind){
             case uu_8_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_8_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_8_8{});
                 break;
             case uu_8_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_8_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_8_16{});
                 break;
             case uu_16_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_16_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_16_8{});
                 break;
             case uu_16_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_16_16{})
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uu_16_16{})
                 break;
             case uf_8_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_8_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_8_8{});
                 break;
             case uf_8_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_8_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_8_16{});
                 break;
             case uf_16_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_16_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_16_8{});
                 break;
             case uf_16_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_16_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_uf_16_16{});
                 break;
             case fu_8_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_8_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_8_8{});
                 break;
             case fu_8_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_8_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_8_16{});
                 break;
             case fu_16_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_16_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_16_8{});
                 break;
             case fu_16_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_16_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_fu_16_16{});
                 break;
             case ff_8_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_8_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_8_8{});
                 break;
             case ff_8_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_8_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_8_16{});
                 break;
             case ff_16_8:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_16_8{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_16_8{});
                 break;
             case ff_16_16:
-                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_16_16{});
+                ops_dispatcher::bwd_mono(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), ops_opt, bwd_mono_ops_ff_16_16{});
                 break;
             default:
                 if constexpr(DEBUG_MODE_FLAG){
@@ -614,52 +622,52 @@ namespace dg::network_tileops_host_poly::dispatcher{
         
         switch (tile_kind){
             case uu_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_8_8{});
                 break;
             case uu_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_8_16{});
                 break;
             case uu_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_16_8{});
                 break;
             case uu_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_16_16{})
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uu_16_16{})
                 break;
             case uf_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_8_8{});
                 break;
             case uf_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_8_16{});
                 break;
             case uf_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_16_8{});
                 break;
             case uf_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_16_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_uf_16_16{});
                 break;
             case fu_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_8_8{});
                 break;
             case fu_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_8_16{});
                 break;
             case fu_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_16_8{});
                 break;
             case fu_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_16_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_fu_16_16{});
                 break;
             case ff_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_8_8{});
                 break;
             case ff_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_8_16{});
                 break;
             case ff_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_16_8{});
                 break;
             case ff_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_16_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_lhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_rhs_ops_ff_16_16{});
                 break;
             default:
                 if constexpr(DEBUG_MODE_FLAG){
@@ -679,52 +687,52 @@ namespace dg::network_tileops_host_poly::dispatcher{
         
         switch (tile_kind){
             case uu_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_8_8{});
                 break;
             case uu_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_8_16{});
                 break;
             case uu_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_16_8{});
                 break;
             case uu_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_16_16{})
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uu_16_16{})
                 break;
             case uf_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_8_8{});
                 break;
             case uf_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_8_16{});
                 break;
             case uf_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_16_8{});
                 break;
             case uf_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_16_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_uf_16_16{});
                 break;
             case fu_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_8_8{});
                 break;
             case fu_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_8_16{});
                 break;
             case fu_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_16_8{});
                 break;
             case fu_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_16_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<uint16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_fu_16_16{});
                 break;
             case ff_8_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_8_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_8_8{});
                 break;
             case ff_8_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_8_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float8_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_8_16{});
                 break;
             case ff_16_8:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_16_8{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_16_8{});
                 break;
             case ff_16_16:
-                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<nw_float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<nw_float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_16_16{});
+                ops_dispatcher::bwd_pair(dg::memult::start_lifetime_as_array<std::float16_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(lhs_logit, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_grad, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<std::float16_t>(rhs_rhs_logit, LOGIT_COUNT_PER_TILE), ops_opt, bwd_pair_lhs_ops_ff_16_16{});
                 break;
             default:
                 if constexpr(DEBUG_MODE_FLAG){
