@@ -18,32 +18,228 @@
 
 namespace stdx{
 
-    template <class T>
-    struct base_type: std::enable_if<true, T>{};
+    struct polymorphic_launderer{
+        virtual auto ptr() noexcept -> void * = 0;
+    };
 
     template <class T>
-    struct base_type<const T>: base_type<T>{};
+    struct launderer{}; 
+
+    template <>
+    struct launderer<uint8_t>: polymorphic_launderer{
+        uint8_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<uint16_t>: polymorphic_launderer{
+        uint16_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<uint32_t>: polymorphic_launderer{
+        uint32_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<uint64_t>: polymorphic_launderer{
+        uint64_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int8_t>: polymorphic_launderer{
+        int8_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int16_t>: polymorphic_launderer{
+        int16_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int32_t>: polymorphic_launderer{
+        int32_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int64_t>: polymorphic_launderer{
+        int64_t * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<float>: polymorphic_launderer{
+        float * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<double>: polymorphic_launderer{
+        double * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<void>: polymorphic_launderer{
+        void * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    struct polymorphic_const_launderer{
+        virtual auto ptr() noexcept -> const void * = 0;
+    };
 
     template <class T>
-    struct base_type<volatile T>: base_type<T>{};
+    struct const_launderer{};
 
-    template <class T>
-    struct base_type<T&>: base_type<T>{};
+    template <>
+    struct const_launderer<uint8_t>: polymorphic_const_launderer{
+        const uint8_t * value;
 
-    template <class T>
-    struct base_type<T&&>: base_type<T>{};
+        virtual auto ptr() noexcept -> const void *{
 
-    template <class T>
-    using base_type_t = typename base_type<T>::type;
-    
-    template <class T, class = void>
-    struct is_base_type: std::false_type{}; 
+            return value;
+        }
+    };
 
-    template <class T>
-    struct is_base_type<T, std::void_t<std::enable_if_t<std::is_same_v<T, base_type_t<T>>>>>: std::true_type{};
+    template <>
+    struct const_launderer<uint16_t>: polymorphic_const_launderer{
+        const uint16_t * value; 
 
-    template <class T>
-    static inline constexpr bool is_base_type_v = is_base_type<T>::value;
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<uint32_t>: polymorphic_const_launderer{
+        const uint32_t * value;
+
+        virtual auto ptr() noexcept -> const void *{
+            
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<uint64_t>: polymorphic_const_launderer{
+        const uint64_t * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<int8_t>: polymorphic_const_launderer{
+        const int8_t * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        } 
+    };
+
+    template <>
+    struct const_launderer<int16_t>: polymorphic_const_launderer{
+        const int16_t * value;
+
+        virtual auto ptr() noexcept -> const void *{
+            
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<int32_t>: polymorphic_const_launderer{
+        const int32_t * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<int64_t>: polymorphic_const_launderer{
+        const int64_t * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<float>: polymorphic_const_launderer{
+        const float * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        } 
+    };
+
+    template <>
+    struct const_launderer<double>: polymorphic_const_launderer{
+        const double * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        }
+    };
+
+    template <>
+    struct const_launderer<void>: polymorphic_const_launderer{
+        const void * value;
+
+        virtual auto ptr() noexcept -> const void *{
+
+            return value;
+        }
+    };
 
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true; 
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
@@ -137,20 +333,34 @@ namespace stdx{
         }
     }
 
-    template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
-    inline __attribute__((always_inline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
+    template <class T, class T1>
+    inline __attribute__((always_inline)) auto launder_pointer(T1 * volatile ptr) noexcept -> T *{
+
+        static_assert(std::disjunction_v<std::is_same<T, uint8_t>, std::is_same<T, uint16_t>, std::is_same<T, uint32_t>, std::is_same<T, uint64_t>,
+                                         std::is_same<T, int8_t>, std::is_same<T, int16_t>, std::is_same<T, int32_t>, std::is_same<T, int64_t>,
+                                         std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>>);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        void * tmp = ptr;
-        return static_cast<T *>(*std::launder(&tmp));
+        launderer<T1> launder_machine{};
+        launder_machine.value = ptr;
+        polymorphic_launderer * virtual_machine = &launder_machine;
+
+        return static_cast<T *>((*std::launder(&virtual_machine))->ptr()); //this is correct way of laundering - this is an extra layer of protection - though not as performant (according to std std::launder(&void *) must suffice - but it's hard to be compiler-correct)
     }
 
-    template <class T, std::enable_if_t<std::conjunction_v<std::is_arithmetic<T>, is_base_type<T>>, bool> = true>
-    inline __attribute__((always_inline)) auto launder_pointer(const void * volatile ptr) noexcept -> const T *{
+    template <class T, class T1>
+    inline __attribute__((always_inline)) auto launder_pointer(const T1 * volatile ptr) noexcept -> const T *{
+
+        static_assert(std::disjunction_v<std::is_same<T, uint8_t>, std::is_same<T, uint16_t>, std::is_same<T, uint32_t>, std::is_same<T, uint64_t>,
+                                         std::is_same<T, int8_t>, std::is_same<T, int16_t>, std::is_same<T, int32_t>, std::is_same<T, int64_t>,
+                                         std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>>);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        const void * tmp = ptr;
-        return static_cast<const T *>(*std::launder(&tmp));
+        const_launderer<T1> launder_machine{};
+        launder_machine.value = ptr;
+        polymorphic_const_launderer * virtual_machine = &launder_machine;
+
+        return static_cast<const T *>((*std::launder(&virtual_machine))->ptr()); //this is correct way of laundering - this is an extra layer of protection - though not as performant (according to std std::launder(&void *) must suffice - but it's hard to be compiler-correct)
     }
 
     template <class Destructor>

@@ -5,73 +5,133 @@
 #include <atomic>
 #include <mutex>
 
-    template <class Lock>
-    class xlock_guard{};
+    struct polymorphic_launderer{
+        virtual auto ptr() volatile noexcept -> void * = 0;
+    };
+
+    template <class T>
+    struct launderer{}; 
 
     template <>
-    class xlock_guard<std::atomic_flag>{
+    struct launderer<uint8_t>: polymorphic_launderer{
+        uint8_t * volatile value;
 
-        private:
-
-            std::atomic_flag * volatile mtx; 
-
-        public:
-
-            __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
-
-                this->mtx->test_and_set();
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-           }
-
-            xlock_guard(const xlock_guard&) = delete;
-            xlock_guard(xlock_guard&&) = delete;
-
-            __attribute__((always_inline)) ~xlock_guard() noexcept{
-
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-                this->mtx->clear();
-            }
-
-            xlock_guard& operator =(const xlock_guard&) = delete;
-            xlock_guard& operator =(xlock_guard&&) = delete;
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
     };
 
     template <>
-    class xlock_guard<std::mutex>{
+    struct launderer<uint16_t>: polymorphic_launderer{
+        uint16_t * volatile value;
 
-        private:
-
-            std::mutex * volatile mtx;
-        
-        public:
-
-            __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
-
-                this->mtx->lock();
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-            }
-
-            xlock_guard(const xlock_guard&) = delete;
-            xlock_guard(xlock_guard&&) = delete;
-
-            __attribute__((always_inline)) ~xlock_guard() noexcept{
-
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-                this->mtx->unlock();
-            }
-
-            xlock_guard& operator =(const xlock_guard&) = delete;
-            xlock_guard& operator =(xlock_guard&&) = delete;
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
     };
+
+    template <>
+    struct launderer<uint32_t>: polymorphic_launderer{
+        uint32_t * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<uint64_t>: polymorphic_launderer{
+        uint64_t * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int8_t>: polymorphic_launderer{
+        int8_t * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int16_t>: polymorphic_launderer{
+        int16_t * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int32_t>: polymorphic_launderer{
+        int32_t * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<int64_t>: polymorphic_launderer{
+        int64_t * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<float>: polymorphic_launderer{
+        float * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<double>: polymorphic_launderer{
+        double * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
+    struct launderer<void>: polymorphic_launderer{
+        void * volatile value;
+
+        virtual auto ptr() volatile noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <class T, class T1>
+    inline __attribute__((always_inline)) auto launder_pointer(T1 * volatile ptr) noexcept -> T *{
+
+        volatile launderer<T1> launder_machine;
+        launder_machine.value = ptr;
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        void * clean_ptr = std::launder(static_cast<volatile polymorphic_launderer *>(&launder_machine))->ptr(); 
+
+        return static_cast<T *>(clean_ptr);
+    }
 
 int main(){
 
-    std::mutex lck{};
-    xlock_guard<std::mutex> lck_grd(lck);
+    uint32_t * ptr{};
+    auto other = launder_pointer<int>(ptr);
+    // std::mutex lck{};
+    // xlock_guard<std::mutex> lck_grd(lck);
 
-    {
-        //transaction goes here
-    }
+    // {
+    //     //transaction goes here
+    // }
 
     //let's say assume that we are in a seq_cst transaction block
     //if a function is inlinable - fine
