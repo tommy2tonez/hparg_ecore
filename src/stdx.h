@@ -64,6 +64,15 @@ namespace stdx{
     };
 
     template <>
+    struct launderer<char>: polymorphic_launderer{
+        char * value;
+
+        virtual auto ptr() noexcept -> void *{
+            return value;
+        }
+    };
+
+    template <>
     struct launderer<int8_t>: polymorphic_launderer{
         int8_t * value;
 
@@ -140,17 +149,15 @@ namespace stdx{
         const uint8_t * value;
 
         virtual auto ptr() noexcept -> const void *{
-
             return value;
         }
     };
 
     template <>
     struct const_launderer<uint16_t>: polymorphic_const_launderer{
-        const uint16_t * value; 
+        const uint16_t * value;
 
         virtual auto ptr() noexcept -> const void *{
-
             return value;
         }
     };
@@ -160,7 +167,6 @@ namespace stdx{
         const uint32_t * value;
 
         virtual auto ptr() noexcept -> const void *{
-            
             return value;
         }
     };
@@ -170,7 +176,15 @@ namespace stdx{
         const uint64_t * value;
 
         virtual auto ptr() noexcept -> const void *{
+            return value;
+        }
+    };
 
+    template <>
+    struct const_launderer<char>: polymorphic_const_launderer{
+        const char * value;
+
+        virtual auto ptr() noexcept -> const void *{
             return value;
         }
     };
@@ -244,6 +258,31 @@ namespace stdx{
             return value;
         }
     };
+
+    using uint8_launderer           = launderer<uint8_t>;
+    using uint16_launderer          = launderer<uint16_t>;
+    using uint32_launderer          = launderer<uint32_t>;
+    using uint64_launderer          = launderer<uint64_t>;
+    using char_launderer            = launderer<char>; //
+    using int8_launderer            = launderer<int8_t>;
+    using int16_launderer           = launderer<int16_t>;
+    using int32_launderer           = launderer<int32_t>;
+    using int64_launderer           = launderer<int64_t>;
+    using float_launderer           = launderer<float>;
+    using double_launderer          = launderer<double>; 
+    using void_launderer            = launderer<void>;
+    using uint8_const_launderer     = const_launderer<uint8_t>;
+    using uint16_const_launderer    = const_launderer<uint16_t>;
+    using uint32_const_launderer    = const_launderer<uint32_t>;
+    using uint64_const_launderer    = const_launderer<uint64_t>;
+    using char_const_launderer      = const_launderer<char>; //
+    using int8_const_launderer      = const_launderer<int8_t>;
+    using int16_const_launderer     = const_launderer<int16_t>;
+    using int32_const_launderer     = const_launderer<int32_t>;
+    using int64_const_launderer     = const_launderer<int64_t>;
+    using float_const_launderer     = const_launderer<float>;
+    using double_const_launderer    = const_launderer<double>; 
+    using void_const_launderer      = const_launderer<void>;
 
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true;
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
@@ -354,10 +393,13 @@ namespace stdx{
         }
     }
 
-    //as-of gcc-14 - this launder works as if ptr is unique_ptr<void * __restrict__> and the scope of usage is the same as the callee scope
-    //the implementation is defined, according to STD - this is not a Russian hack
-    //extra instructions were introduced (std::atomic_signal_fence() + void * volatile) to be gcc-compiler-compliant
-    //some random commentor mentioned that this should be a seq_cst transaction to hinder inlining things -> launder dispatch table
+    //alright - thank yall
+    //after all the comments from the community - we have put together a working version
+    //the proof is virtualization fence -> dispatch_table -> launder pointer - and a seq_cst before and after to hinder vtable inlinability (which is rare, but exists) - so there's no switch (dispatch_code): case uint64_t: caller(std::assume_aligned<alignof(uint64_t)>(...)), etc.
+    //this behavior is defined after speaking to the committees
+    //because launder_pointer turns a maybe-compiled-time determistic void * -> a run-time deterministic void * which is equally, uniformly aliased to char *, int8_t *, uint8_t *, uint16_t *, etc - right after the std::launder() but before the .ptr() invoke
+    //assume that the compiler does not carry the information associated with the vtable dispatch_code post the dispatch - then the equally, uniformly aliased property is carried post the invoke
+    //assume that the compiler carries the information associated with the vtable dispatch_code post the dispatch - then only const void * and void * work 
 
     template <class T>
     inline __attribute__((always_inline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
