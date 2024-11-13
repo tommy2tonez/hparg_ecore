@@ -19,7 +19,9 @@
 namespace stdx{
 
     struct polymorphic_launderer{
-        virtual auto ptr() noexcept -> void * = 0;
+        virtual auto ptr() noexcept -> void *{
+            return nullptr;
+        }
     };
 
     template <class T>
@@ -125,7 +127,9 @@ namespace stdx{
     };
 
     struct polymorphic_const_launderer{
-        virtual auto ptr() noexcept -> const void * = 0;
+        virtual auto ptr() noexcept -> const void *{
+            return nullptr;
+        }
     };
 
     template <class T>
