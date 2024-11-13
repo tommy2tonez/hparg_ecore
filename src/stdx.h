@@ -363,27 +363,48 @@ namespace stdx{
 
     //programs that adhere to the above rules are guaranteed to be defined by GCC-14
 
-    class seq_cst_transaction{
+    class seq_cst_guard{
 
         public:
 
-            __attribute__((always_inline)) seq_cst_transaction() noexcept{
+            __attribute__((always_inline)) seq_cst_guard() noexcept{
             
                 std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
-            seq_cst_transaction(const seq_cst_transaction&) = delete;
-            seq_cst_transaction(seq_cst_transaction&&) = delete;
+            seq_cst_guard(const seq_cst_guard&) = delete;
+            seq_cst_guard(seq_cst_guard&&) = delete;
 
-            __attribute__((always_inline)) ~seq_cst_transaction() noexcept{
+            __attribute__((always_inline)) ~seq_cst_guard() noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
-            seq_cst_transaction& operator =(const seq_cst_transaction&) = delete;
-            seq_cst_transaction& operator =(seq_cst_transaction&&) = delete;
+            seq_cst_guard& operator =(const seq_cst_guard&) = delete;
+            seq_cst_guard& operator =(seq_cst_guard&&) = delete;
     };
     
+    class memtransaction_guard{
+
+        public:
+
+            __attribute__((always_inline)) memtransaction_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            memtransaction_guard(const memtransaction_guard&) = delete;
+            memtransaction_guard(memtransaction_guard&&) = delete;
+
+            __attribute__((always_inline)) ~memtransaction_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_acq_rel);
+            }
+
+            memtransaction_guard& operator =(const memtransaction_guard&) = delete;
+            memtransaction_guard& operator =(memtransaction_guard&&) = delete;
+    };
+
     inline __attribute__((always_inline)) void atomic_optional_thread_fence() noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
