@@ -11,6 +11,7 @@
 #include "network_raii_x.h"
 #include "network_uma_tlb_impl1.h"
 #include "network_pointer.h" 
+#include <atomic>
 
 namespace dg::network_uma{
 
@@ -84,7 +85,12 @@ namespace dg::network_uma{
     }
 
     auto map_direct(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<vma_ptr_t, exception_t>{
+        
+        //the only reason that these require a atomic_signal_fence is because it might not be used in a concurrent block - but in a concurrent situation | such situation might not see the instantiation of the inline object - and the result is wrongly assumed and computed  
+        //in which scenrio, it is not protected by std::atomic_thread_fence(std::memory_order_seq_cst) and this is buggy. So it's important to fence up at solely at this line - because it might hinder compiler optimizations
+        //give user an option to promote to seq_cst - next iteration  
 
+        std::atomic_signal_fence(std::memory_order_acquire); //this is required as a replacement for volatile - if the calling function is not inlined - then everything works as expected - because the caller does not see the wrongly-assumed-not-yet-initialization
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr); 
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
@@ -96,6 +102,7 @@ namespace dg::network_uma{
 
     auto map_try(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<std::optional<map_resource_handle_t>, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr);
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
@@ -107,6 +114,7 @@ namespace dg::network_uma{
 
     auto map_wait(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr);
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
@@ -118,6 +126,7 @@ namespace dg::network_uma{
 
     auto map_wait(uma_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(ptr);
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
@@ -138,6 +147,7 @@ namespace dg::network_uma{
 
     void map_release(map_resource_handle_t map_resource) noexcept{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         tlb_instance::map_release(map_resource);
     }
 
@@ -147,16 +157,19 @@ namespace dg::network_uma{
 
     auto get_vma_ptr(map_resource_handle_t map_resource) noexcept -> vma_ptr_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         return tlb_instance::get_vma_ptr(map_resource);
     }
 
     auto get_vma_ptr(recursive_map_resource_handle_t map_resource) noexcept -> vma_ptr_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         return dg::network_uma_tlb::rec_lck::get_vma_ptr(map_resource); //refactor
     }
 
     auto map_safewait(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         auto map_rs = network_uma::map_wait(device_id, ptr); 
 
         if (!map_rs.has_value()){ [[unlikely]]
@@ -167,7 +180,8 @@ namespace dg::network_uma{
     }
 
     auto map_safewait(uma_ptr_t ptr) noexcept -> std::expected<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
-
+        
+        std::atomic_signal_fence(std::memory_order_acquire);
         auto map_rs = network_uma::map_wait(ptr);
 
         if (!map_rs.has_value()){ [[unlikely]]
@@ -182,6 +196,8 @@ namespace dg::network_uma{
 
         using rec_lockmap_resource_t    = decltype(dg::network_uma_tlb::rec_lck::recursive_lockmap_try_many(tlb_instance{}, args));
         using ret_t                     = std::expected<rec_lockmap_resource_t, exception_t>; 
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         for (size_t i = 0u; i < args.size(); ++i){
             exception_t ptrchk = uma_ptr_access::safecthrow_access(args[i].first, args[i].second);
@@ -200,6 +216,8 @@ namespace dg::network_uma{
         using rec_lockmap_resource_t    = decltype(dg::network_uma_tlb::rec_lck::recursive_lockmap_wait_many(tlb_instance{}, args));
         using ret_t                     = std::expected<rec_lockmap_resource_t, exception_t>; 
 
+        std::atomic_signal_fence(std::memory_order_acquire);
+
         for (size_t i = 0u; i < args.size(); ++i){
             exception_t ptrchk = uma_ptr_access::safecthrow_access(args[i].first, args[i].second);
 
@@ -213,6 +231,7 @@ namespace dg::network_uma{
     
     auto device_count(uma_ptr_t ptr) noexcept -> std::expected<size_t, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(ptr);
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
@@ -224,6 +243,7 @@ namespace dg::network_uma{
 
     auto device_at(uma_ptr_t ptr, size_t idx) noexcept -> std::expected<device_id_t, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(ptr);
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
@@ -237,29 +257,37 @@ namespace dg::network_uma{
 
     auto map_direct_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(device_id, ptr);
+
         return direct_tlb_instance::map(device_id, ptr); 
     } 
 
     auto map_try_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<map_resource_handle_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(device_id, ptr);
+
         return tlb_instance::map_try(device_id, ptr);
     }
 
     auto map_wait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> map_resource_handle_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(device_id, ptr);
+
         return tlb_instance::map_wait(device_id, ptr);
     }
 
     auto map_safewait_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(device_id, ptr), map_release_lambda);
     }
 
     auto map_safetry_nothrow(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(device_id, ptr);
         auto rs = tlb_instance::map_try(device_id, ptr);
 
@@ -273,6 +301,8 @@ namespace dg::network_uma{
     template <size_t SZ>
     auto lockmap_safetry_many_nothrow(const std::array<std::pair<device_id_t, uma_ptr_t>, SZ>& args) noexcept /* -> std::optional<std::array<unique_resource<recursive_map_resource_handle_t, decltype(destructor)>, SZ>> */ {
 
+        std::atomic_signal_fence(std::memory_order_acquire);
+
         for (size_t i = 0u; i < SZ; ++i){
             uma_ptr_access::safe_access(args[i].first, args[i].second);
         }
@@ -283,6 +313,8 @@ namespace dg::network_uma{
     template <size_t SZ>
     auto lockmap_safewait_many_nothrow(const std::array<std::pair<device_id_t, uma_ptr_t>, SZ>& args) noexcept /* -> std::array<unique_resource<recursive_map_resource_handle_t, decltype(destructor)>, SZ> */ {
 
+        std::atomic_signal_fence(std::memory_order_acquire);
+
         for (size_t i = 0u; i < SZ; ++i){
             uma_ptr_access::safe_access(args[i].first, args[i].second);
         }
@@ -292,18 +324,23 @@ namespace dg::network_uma{
     
     auto device_count_nothrow(uma_ptr_t ptr) noexcept -> size_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(ptr);
+
         return metadata_getter::device_count(ptr);
     }
 
     auto device_at_nothrow(uma_ptr_t ptr, size_t idx) noexcept -> device_id_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(ptr);
+
         return metadata_getter::device_at(ptr, idx);
     }
 
     auto map_wait_nothrow(uma_ptr_t ptr) noexcept -> map_resource_handle_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         uma_ptr_access::safe_access(ptr);
 
          while (true){
@@ -320,6 +357,7 @@ namespace dg::network_uma{
 
     auto map_wait_safe_nothrow(uma_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_wait_nothrow(ptr), map_release_lambda);
     }
 }

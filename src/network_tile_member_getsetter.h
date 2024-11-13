@@ -3489,7 +3489,6 @@ namespace dg::network_tile_member_getsetter{
 
         return get_tile_pong_count_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr));
     }
-
 }
 
 #endif

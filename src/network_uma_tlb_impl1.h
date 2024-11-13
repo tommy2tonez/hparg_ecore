@@ -283,13 +283,16 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                     return false;
                 }
 
-                device_id_t stealee_id = potential_stealee_id.value();
+                {
+                    stdx::memtransaction_guard transaction_guard();
+                    device_id_t stealee_id = potential_stealee_id.value();
 
-                if (stealee_id != stealer_id){
-                    vma_ptr_t dst   = translation_table::translate(stealer_id, host_region);
-                    vma_ptr_t src   = translation_table::translate(stealee_id, host_region);
-                    size_t cpy_sz   = MEMREGION_SZ;
-                    memcopy_device::memcpy(dst, src, cpy_sz);
+                    if (stealee_id != stealer_id){
+                        vma_ptr_t dst   = translation_table::translate(stealer_id, host_region);
+                        vma_ptr_t src   = translation_table::translate(stealee_id, host_region);
+                        size_t cpy_sz   = MEMREGION_SZ;
+                        memcopy_device::memcpy(dst, src, cpy_sz);
+                    }
                 }
 
                 uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{});

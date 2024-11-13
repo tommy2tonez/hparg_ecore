@@ -11,7 +11,7 @@
 #include "network_tile_member_access.h"
 #include "stdx.h"
 
-namespace dg::network_tile_initialization_static{
+namespace dg::network_tile_initialization::statix{
     
     //idk why people see concurrency as a hard thing to understand
     //it's not - make sure that the compile control flows reach the fences in and out if you are in a concurrent transaction
@@ -163,7 +163,7 @@ namespace dg::network_tile_initialization_static{
     }
 }
 
-namespace dg::network_tile_initialization_poly{
+namespace dg::network_tile_initialization::poly{
     
     struct LeafPayLoad{
         uma_ptr_t ptr;
@@ -312,6 +312,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_leaf_payload(LeafPayLoad payload) noexcept -> exception_t{
         
+        try{
+            dg::network_tile_initialization::statix::init_leaf(payload.ptr, payload.operatable_id);
+            return dg::network_excepion::SUCCESS;
+        } catch (,,,){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     } 
 
     auto make_mono_payload(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id) noexcept -> MonoPayLoad{
@@ -321,6 +327,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_mono_payload(MonoPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_mono(payload.ptr, payload.src, payload.dispatch_control, payload.operatable_id);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     } 
 
     auto make_pair_payload(uma_ptr_t ptr, uma_ptr_t lhs, uma_ptr_t rhs, dispatch_control_t dispatch_control, operatable_id_t operatable_id) noexcept -> PairPayLoad{
@@ -330,6 +342,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_pair_payload(PairPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_mono(payload.ptr, payload.lhs, payload.rhs, payload.dispatch_control, payload.operatable_id);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     }
 
     auto make_uacm_payload(uma_ptr_t ptr, std::array<uma_ptr_t, UACM_ACM_SZ> src, dispatch_control_t dispatch_control, operatable_id_t operatable_id) noexcept -> UACMPayLoad{
@@ -339,6 +357,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_uacm_payload(UACMPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_uacm(payload.ptr, payload.src, payload.dispatch_control, payload.operatable_id);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     }
 
     auto make_pacm_payload(uma_ptr_t ptr, std::array<uma_ptr_t, PACM_ACM_SZ> lhs, std::array<uma_ptr_t, PACM_ACM_SZ> rhs, dispatch_control_t dispatch_control, operatable_id_t operatable_id) noexcept -> PACMPayLoad{
@@ -348,6 +372,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_pacm_payload(PACMPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_pacm(payload.ptr, payload.left_descendant, payload.right_descendant, payload.dispatch_control, payload.operatable_id);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     }
     
     auto make_crit_payload(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id) noexcept -> CritPayLoad{
@@ -357,6 +387,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_crit_payload(CritPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_crit(payload.ptr, payload.src, payload.dispatch_control, payload.operatable_id, payload.crit_kind);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     }
 
     auto make_msgrfwd_payload(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, dst_info_t dst_info) noexcept -> MsgrFwdPayLoad{
@@ -366,6 +402,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_msgrfwd_payload(MsgrFwdPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_msgrfwd(ptr, src, dispatch_control, operatable_id, dst_info);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     }
 
     auto make_msgrbwd_payload(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, timein_t timein, dst_info_t dst_info) noexcept -> MsgrBwdPayLoad{
@@ -375,6 +417,12 @@ namespace dg::network_tile_initialization_poly{
 
     auto load_msgrbwd_payload(MsgrBwdPayLoad payload) noexcept -> exception_t{
 
+        try{
+            dg::network_tile_initialization::statix::init_msgrbwd(ptr, src, dispatch_control, operatable_id, timein, dst_info);
+            return dg::network_exception::SUCCESS;
+        } catch (...){
+            return dg::network_exception::wrap_std_exception(std::current_exception());
+        }
     }
 
     static inline constexpr size_t MAX_PAYLOAD_CONTENT_SZ = size_t{1} << 6; 
