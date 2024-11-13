@@ -96,7 +96,7 @@ namespace dg::network_log::implementation{
 
             void log(const char * content, const char * kind){
 
-                auto lck_grd = stdx::lock_guard(*this->lck); 
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->lck);
 
                 if (this->syslog_vec.size() == this->syslog_vec.capacity()){
                     this->flush();
@@ -113,7 +113,7 @@ namespace dg::network_log::implementation{
 
             void flush(){
                 
-                auto lck_grd = stdx::lock_guard(*this->lck); 
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->lck);
 
                 dg::vector<std::unique_ptr<dg::network_postgres_db::CommitableInterface>> commitable_vec{};
 

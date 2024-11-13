@@ -342,19 +342,19 @@ namespace dg::network_postgres_db{
 
     void init(const dg::string& pq_conn_arg){
         
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
         pq_conn = std::make_unique<pqxx::connection>(pq_conn_arg.c_str());
     }
 
     void deinit() noexcept{
 
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
         pq_conn = nullptr;
     }
 
     auto get_heartbeat() noexcept -> bool{
         
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
         if (!pq_conn){
             return false;
@@ -389,7 +389,7 @@ namespace dg::network_postgres_db{
 
     auto get_user_by_id(const dg::string& id) noexcept -> std::expected<model::UserEntry, exception_t>{
 
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -421,7 +421,7 @@ namespace dg::network_postgres_db{
     
     auto get_systemlog(const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::SystemLogEntry>, exception_t>{
 
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -461,7 +461,7 @@ namespace dg::network_postgres_db{
 
     auto get_userlog(const dg::string&  user_id, const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::UserLogEntry>, exception_t>{
 
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
         if (!pq_conn){
             return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
@@ -562,7 +562,7 @@ namespace dg::network_postgres_db{
 
     auto commit(dg::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
 
-        auto lck_grd = stdx::lock_guard(mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
         if (!pq_conn){
             return dg::network_exception::POSTGRES_NOT_INITIALIZED;

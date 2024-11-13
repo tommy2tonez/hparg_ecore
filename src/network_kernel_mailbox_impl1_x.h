@@ -41,13 +41,13 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
             
             void tick(size_t incoming_sz) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->count += incoming_sz;
             }
 
             auto get() noexcept -> std::pair<size_t, std::chrono::nanoseconds>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto now        = static_cast<std::chrono::nanoseconds>(stdx::unix_timestamp());
                 auto lapsed     = now - this->then;
                 auto rs         = std::make_pair(this->count, lapsed);
@@ -320,7 +320,8 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             
             void tick(const GlobalIdentifier& key) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                
                 size_t entry_id = this->id_size;
                 std::chrono::nanoseconds now = stdx::unix_timestamp();
                 EntranceEntry entry{now, key, entry_id};
@@ -332,7 +333,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto get_expired() noexcept -> dg::vector<GlobalIdentifier>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto expired    = static_cast<std::chrono::nanoseconds>(stdx::unix_timestamp()) - this->expiry_period;
                 auto rs         = dg::vector<GlobalIdentifier>{};
 
@@ -382,7 +383,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             
             auto assemble(PacketSegment segment) noexcept -> std::optional<AssembledPacket>{
                 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr = this->packet_map.find(segment.id);
 
                 if (map_ptr == this->packet_map.end()){
@@ -407,7 +408,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             void destroy(const GlobalIdentifier& id) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->packet_map.erase(id);
             }
         
@@ -469,7 +470,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto internal_assemble(PacketSegment& segment, std::optional<AssembledPacket>& rs) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 
                 if (this->size == this->capacity){
                     return false;
@@ -498,7 +499,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             void internal_destroy(const GlobalIdentifier& id) noexcept{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr    = this->counter_map.find(id);
 
                 if (map_ptr != this->counter_map.end()){
@@ -525,13 +526,13 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             
             void push(dg::string buf) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->vec.push_back(std::move(buf));
             }
 
             auto pop() noexcept -> std::optional<dg::string>{
                 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 
                 if (this->vec.empty()){
                     return std::nullopt;
@@ -584,7 +585,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto internal_push(dg::string& data) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->size == this->capacity){
                     return false;
@@ -598,7 +599,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             auto internal_pop() noexcept -> std::optional<dg::string>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 std::optional<dg::string> rs = this->base->pop();
 
                 if (rs.has_value()){
@@ -1002,7 +1003,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             auto thru_one() noexcept -> bool{
                 
-                auto lck_grd = stdx::lock_guard(*this->mtx); 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->cur_sz == this->capacity){
                     return false;
@@ -1014,7 +1015,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             void exit_one() noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx); 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->cur_sz -= 1;
             }
     };
@@ -1034,7 +1035,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             auto pop(radix_t radix) noexcept -> std::optional<dg::string>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto ptr        = this->map.find(radix);
 
                 if (ptr == this->map.end()){
@@ -1053,7 +1054,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             void push(radix_t radix, dg::string content) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->map[radix].push_back(std::move(content));
             }
     };
@@ -1093,7 +1094,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
 
             auto internal_push(radix_t& radix, dg::string& content) noexcept -> bool{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto ec_ptr     = this->exhaustion_controller_map.find(radix);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -1113,7 +1114,7 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
             
             auto internal_pop(radix_t radix) noexcept -> std::optional<dg::string>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto rs         = this->base->pop(radix);
 
                 if (!rs.has_value()){
@@ -1320,7 +1321,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
             void recv_signal(const Address& addr) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto ptr = this->address_ts_dict.find(addr);
 
                 if (ptr == this->address_ts_dict.end()){
@@ -1334,7 +1335,7 @@ namespace dg::network_kernel_mailbox_impl1_heartbeatx{
 
             bool check() noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 std::chrono::nanoseconds now = dg::network_genult::unix_timestamp(); 
                 bool status = true; 
 

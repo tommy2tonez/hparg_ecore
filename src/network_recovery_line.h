@@ -94,7 +94,7 @@ namespace dg::network_recovery_line{
 
             auto push(size_t ticket_id) noexcept -> exception_t{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->ticket_vec.size() == this->capacity){
                     return dg::network_exception::RESOURCE_EXHAUSTION;
@@ -106,7 +106,7 @@ namespace dg::network_recovery_line{
 
             auto pop() noexcept -> std::optional<size_t>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->ticket_vec.empty()){
                     return std::nullopt;
@@ -137,7 +137,7 @@ namespace dg::network_recovery_line{
 
             auto get_recovery_line() noexcept -> std::expected<size_t, exception_t>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 
                 if (this->line_vec.empty()){
                     return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
@@ -158,7 +158,7 @@ namespace dg::network_recovery_line{
 
             auto set_resource(size_t line_id, std::shared_ptr<RecoverableInterface> recoverable) noexcept -> exception_t{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr    = this->line_resource_map.find(line_id);
 
                 if (map_ptr == this->line_resource_map.end()){
@@ -171,7 +171,7 @@ namespace dg::network_recovery_line{
 
             auto get_resource(size_t line_id) noexcept -> std::expected<std::shared_ptr<RecoverableInterface>, exception_t>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr    = this->line_resource_map.find(line_id);
 
                 if (map_ptr == this->line_resource_map.end()){
@@ -183,7 +183,7 @@ namespace dg::network_recovery_line{
 
             void close_recovery_line(size_t line_id) noexcept{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr    = this->line_resource_map.find(line_id);
 
                 if constexpr(DEBUG_MODE_FLAG){

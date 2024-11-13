@@ -120,7 +120,7 @@ namespace dg::network_cufsio_linux::driver_x{
 
     auto dg_cufs_driver_open() noexcept -> std::expected<int, exception_t>{
 
-        auto lck_grd = stdx::lock_guard(cufs_driver_resource.mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(cufs_driver_resource.mtx);
 
         if (cufs_driver_resource.reference == 0u){
             exception_t err = dg_cufs_legacy_driver_open(); 
@@ -148,7 +148,7 @@ namespace dg::network_cufsio_linux::driver_x{
 
     void dg_cufs_driver_close(int fd) noexcept{
 
-        auto lck_grd    = stdx::lock_guard(cufs_driver_resource.mtx);
+        stdx::xlock_guard<std::mutex> lck_grd(cufs_driver_resource.mtx);
         auto rm_ptr     = cufs_driver_resource.rtti_resource.find(fd);
 
         if constexpr(DEBUG_FLAG_MODE){
@@ -177,7 +177,7 @@ namespace dg::network_cufsio_linux::driver_x{
  
         static_assert(std::is_nothrow_move_constructible_v<T>);
 
-        auto lck_grd    = stdx::lock_guard(cufs_driver_resource.mtx); 
+        stdx::xlock_guard<std::mutex> lck_grd(cufs_driver_resource.mtx);
         auto raii_obj   = std::make_unique<Object<T>>(Object<T>{std::move(resource)}); //TODOs: either compromise log at make_unique or macro resolution
         auto dict_ptr   = cufs_driver_resource.rtti_resource.find(fd);
 

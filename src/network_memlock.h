@@ -635,7 +635,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].lck);
+                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
                 
                 if (lck_table[table_idx].value.refcount != REFERENCE_EMPTY_STATE){
                     return false;
@@ -652,13 +652,13 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_release(size_t table_idx) noexcept{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].value.lck);
+                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_STATE;
             }
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].value.lck);
+                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
                 
                 if (lck_table[table_idx].value.refcount == REFERENCE_ACQUIRED_STATE){
                     return false;
@@ -675,7 +675,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_reference_release(size_t table_idx) noexcept{
 
-                auto lck_grd = stdx::lock_guard(lck_table[table_idx].value.lck);
+                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
                 --lck_table[table_idx].value.refcount;
             }
 

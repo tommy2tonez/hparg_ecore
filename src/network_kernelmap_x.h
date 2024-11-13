@@ -29,7 +29,7 @@ namespace dg::network_kernelmap_x{
     void deinit() noexcept{
         
         delete map_instance;
-        map_instance = nullptrz
+        map_instance = nullptr;
     }
 
     auto map(fsys_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{

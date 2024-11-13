@@ -310,7 +310,7 @@ namespace dg::cublas_x::utility{
 
             static auto next_id() -> std::string{
 
-                auto lck_grd = stdx::lock_guard(mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(mtx);
                 std::string rs(ID_SIZE, ' ');
                 std::generate(rs.begin(), rs.end(), std::ref(random_device));
 

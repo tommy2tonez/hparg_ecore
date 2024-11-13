@@ -78,19 +78,19 @@ namespace dg::network_allocation{
 
              std::optional<interval_type> alloc(store_type arg) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->lck);
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->lck);
                 return this->allocator->alloc(arg);
              }
 
              void free(const interval_type& arg) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->lck);
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->lck);
                 this->allocator->free(arg);
              }
 
              void gc() noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->lck);
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->lck);
 
                 try{
                     this->allocator = dg::heap::user_interface::get_allocator_x(this->management_buf.get());

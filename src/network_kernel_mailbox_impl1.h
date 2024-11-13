@@ -710,7 +710,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto schedule(Address addr) noexcept -> std::chrono::nanoseconds{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr    = this->interval_data_map.find(addr);
 
                 if (map_ptr == this->interval_data_map.end()){
@@ -729,7 +729,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto feedback(Address addr, std::chrono::nanoseconds lapsed) noexcept -> exception_t{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr    = this->interval_data_map.find(addr);
 
                 if (map_ptr == this->interval_data_map.end()){
@@ -758,7 +758,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void update() noexcept{
 
-                auto lck_grd                            = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 std::chrono::nanoseconds now            = stdx::utc_timestamp();
                 std::chrono::nanoseconds reset_lapsed   = now - this->last_reset_time;
                 std::chrono::nanoseconds update_lapsed  = now - this->last_updated_time;
@@ -878,7 +878,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get() noexcept -> GlobalPacketIdentifier{
 
-                auto lck_grd        = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto rs             = model::GlobalPacketIdentifier{this->last_pkt_id, this->factory_id};
                 this->last_pkt_id   += 1;
 
@@ -943,7 +943,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto add_retriable(Packet pkt) noexcept -> exception_t{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->pkt_deque.size() == this->capacity){
                     return dg::network_exception::BAD_RETRANSMISSION;
@@ -962,13 +962,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void ack(global_packet_id_t pkt_id) noexcept{
                 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->acked_id_hashset->insert(std::move(pkt_id));
             }
 
             auto get_retriables() noexcept -> dg::vector<Packet>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto ts         = stdx::utc_timestamp() - this->transmission_delay_time;
                 auto lb_key     = std::make_pair(ts, Packet{});
                 auto last       = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), lb_key, [](const auto& lhs, const auto& rhs){return lhs.first < rhs.first;});
@@ -1000,7 +1000,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void push(Packet pkt) noexcept{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto less       = [](const Packet& lhs, const Packet& rhs){return lhs.priority < rhs.priority;};
                 this->packet_vec.push_back(std::move(pkt)); 
                 std::push_heap(this->packet_vec.begin(), this->packet_vec.end(), less);
@@ -1008,7 +1008,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto pop() noexcept -> std::optional<Packet>{
                 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->packet_vec.empty()){
                     return std::nullopt;
@@ -1041,7 +1041,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             
             void push(Packet pkt) noexcept{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto appender   = ScheduledPacket{std::move(pkt), this->scheduler->schedule(pkt.to_addr)};
                 auto greater    = [](const auto& lhs, const auto& rhs){return lhs.sched_time > rhs.sched_time;};
                 this->packet_vec.push_back(std::move(appender));
@@ -1050,7 +1050,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto pop() noexcept -> std::optional<Packet>{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->packet_vec.empty()){
                     return std::nullopt;
@@ -1087,7 +1087,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void push(Packet pkt) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (pkt.kind == constants::rts_ack){
                     this->ack_container->push(std::move(pkt));
@@ -1099,7 +1099,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto pop() noexcept -> std::optional<Packet>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (auto rs = this->ack_container->pop(); rs){
                     return rs;
@@ -1124,7 +1124,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             
             auto thru(global_packet_id_t packet_id) noexcept -> std::expected<bool, exception_t>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->id_hashset->contains(packet_id)){
                     return false;
@@ -1175,7 +1175,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto internal_push(Packet& pkt) noexcept -> bool{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->size == this->capacity){
                     return false;
@@ -1189,7 +1189,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto internal_pop() noexcept -> std::optional<Packet>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto rs = this->base->pop();
 
                 if (rs.has_value()){
@@ -1227,7 +1227,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto thru(Address addr) noexcept -> std::expected<bool, exception_t>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->global_counter == this->global_cap){
                     return false;
@@ -1261,7 +1261,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void update() noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->address_counter_map.clear();
                 this->global_counter = 0u;
             }

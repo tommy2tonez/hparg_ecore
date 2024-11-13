@@ -214,13 +214,13 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
             auto map(cufs_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
-                auto lck_grd = dg::genult::lock_guard(*this->lck);
+                stdx::xlock_guard<Lock> lck_grd(*this->lck);
                 return this->internal_map(ptr);
             }
 
             void unmap(MapResource map_resource) noexcept{
 
-                auto lck_grd = dg::genult::lock_guard(*this->lck);
+                stdx::xlock_guard<Lock> lck_grd(*this->lck);
                 this->internal_unmap(map_resource);
             }
 

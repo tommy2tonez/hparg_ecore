@@ -18,6 +18,39 @@
 
 namespace stdx{
 
+    //I need to make sense of the compiler definition of launder, and the std definition of launder
+    //and actually implement a version that actually intersects the logic
+    
+    //compiler only defined usage of launder:
+    //convert type A * to type B * - such that pointer reachability of A is the same as pointer reachability of B
+    //and A * and B * coexist at the same address
+    //exists as if defined by the std lifetime rules
+    //the result of launder must not outlive its argument
+
+    //std defined usage of launder:
+    //convert type A * to type B *
+    //A * and B * coexists at the same address
+    //pointer reachability of B <= pointer reachability of A
+    //the result of launder must not outlive its argument
+    //only used for devirtualization fence
+    //such that an access to a polymorphic function requires a read of the polymorphic header associated with the calling function - before returning result 
+    //in this case - ptr() is a property of polymorphic_launderer
+    //which is aliased to launder<uint8_t>::ptr, launder<uint8_t>::uint16_t, launder<uin32_t>::ptr, launder<uint64_t>::ptr, launder<void *>::ptr, etc.
+
+    //assume that the compiler exit point is a table read (such table is only used for returning results - not inlining calling functions)
+    //then the usage is defined
+    //because a force of the polymorphic read turns void * -> runtime-defined
+    //and the probabilistic of void * being uint8_t *, uint16_t *, uint32_t * is then uniformly distributed
+    //so void * assumptions post the table read must be the ones that satisfy aliasing-rules with all the uint8_t *, uint16_t *, etc.
+    //so the void * post the table read is clean  
+
+    //assume that the compiler does malicious thing and inline caller -> table_dispatch
+    //then the usage of const void * or void * is defined
+    //and the const void * or void * must be cleansed according to the launder logic
+
+    //the only compiler that adheres to the std is, unsurprisingly, GCC
+    //clang ignores the polymorphic read and makes malicious optimization
+
     struct polymorphic_launderer{
         virtual auto ptr() noexcept -> void *{
             return nullptr;

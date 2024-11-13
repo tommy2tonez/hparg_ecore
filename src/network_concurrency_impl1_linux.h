@@ -135,7 +135,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             void set_worker(std::unique_ptr<WorkerInterface> worker) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->mtx);
 
                 if (!worker){
                     std::abort();
@@ -149,7 +149,7 @@ namespace dg::network_concurrency_impl1_linux{
                 this->poison_pill->exchange(false, std::memory_order_seq_cst);
 
                 while (!this->poison_pill->load(std::memory_order_seq_cst)){
-                    auto lck_grd    = stdx::lock_guard(*this->mtx);
+                    stdx::xlock_guard<std::atomic_flag> lck_grd(*this->mtx);
                     bool run_flag   = this->worker->run_one_epoch();
 
                     if (!run_flag){
@@ -207,7 +207,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             auto _register(daemon_kind_t daemon_kind, std::unique_ptr<WorkerInterface> worker) noexcept -> std::expected<size_t, exception_t>{
                 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto map_ptr = this->daemon_id_map.find(daemon_kind);
 
                 if (worker == nullptr){
@@ -231,7 +231,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             void deregister(size_t encoded) noexcept{
 
-                auto lck_grd            = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 auto [id, daemon_kind]  = this->decode(encoded);
                 auto worker             = WorkerFactory::spawn_rest();
                 

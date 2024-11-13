@@ -48,7 +48,7 @@ namespace dg::network_mempress{
         private:
 
             const size_t _memregion_sz;
-            const uma_ptr_t _first;
+            const volatile uma_ptr_t _first;
             const uma_ptr_t _last;
             const size_t max_submit_size_per_region;
             std::vector<RegionBucket> region_vec; 
@@ -96,7 +96,7 @@ namespace dg::network_mempress{
             void collect(uma_ptr_t region, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
                 size_t bucket_idx   = dg::memult::distance(this->_first, region) / this->_memregion_sz;
-                auto lck_grd        = stdx::lock_guard(*this->region_vec[bucket_idx].lck);
+                stdx::xlock_guard<Lock> lck_grd(*this->region_vec[bucket_idx].lck);
                 dst_sz              = std::min(dst_cap, static_cast<size_t>(this->region_vec[bucket_idx].event_container.size()));
                 size_t rem_sz       = this->region_vec[bucket_idx].event_container.size() - dst_sz;
                 auto opit_first     = this->region_vec[bucket_idx].event_container.begin() + rem_sz; 
@@ -121,7 +121,7 @@ namespace dg::network_mempress{
             auto retry_push(uma_ptr_t region, event_t * event, size_t event_sz) noexcept -> bool{
 
                 size_t bucket_idx   = dg::memult::distance(this->_first, region) / this->_memregion_sz;
-                auto lck_grd        = stdx::lock_guard(*this->region_vec[bucket_idx].lck);
+                stdx::xlock_guard<Lock> lck_grd(*this->region_vec[bucket_idx].lck);
                 size_t old_sz       = this->region_vec[bucket_idx].event_container.size();
                 size_t new_sz       = old_sz + event_sz;
 

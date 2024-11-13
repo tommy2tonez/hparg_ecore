@@ -152,14 +152,14 @@ namespace dg::network_producer_consumer{
          
             auto push(EventType * ingestible_arr, size_t sz) noexcept -> bool{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->digest_cap){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
-
-                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->vec.size() + sz > this->vec.capacity()){
                     return false;
@@ -171,7 +171,7 @@ namespace dg::network_producer_consumer{
 
             void get(EventType * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
-                auto lck_grd    = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 dst_sz          = std::min(dst_cap, this->vec.size());
                 size_t new_sz   = this->vec.size() - dst_sz;
                 std::copy(this->vec.begin() + new_sz, this->vec.end(), dst);
@@ -358,14 +358,14 @@ namespace dg::network_raii_producer_consumer{
             
             auto push(dg::vector<EventType> ingesting_vec) noexcept -> dg::vector<EventType>{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
                 if constexpr(DEBUG_MODE_FLAG){
                     if (ingesting_vec.size() > this->ingest_cap){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
-
-                auto lck_grd = stdx::lock_guard(*this->mtx);
 
                 if (this->vec.size() + ingesting_vec.size() > this->vec.capacity()){
                     return ingesting_vec;
@@ -380,7 +380,7 @@ namespace dg::network_raii_producer_consumer{
 
             auto get(size_t cap) noexcept -> dg::vector<EventType>{
 
-                auto lck_grd = stdx::lock_guard(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 dg::vector<EventType> rs{};
 
                 for (size_t i = 0u; i < cap; ++i){

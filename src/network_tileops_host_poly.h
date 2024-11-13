@@ -276,21 +276,6 @@ namespace dg::network_tileops_host_poly::ops_dispatcher{
 
 namespace dg::network_tileops_host_poly::dispatcher{
 
-    //this is only defined if the following things happen:
-    //(1): a complete flush of pointer aliasing - by using noinline
-    //(2): stdx::launder<> - polymorphic barrier of (void *) + seq_cst barrier + const void * volatile
-    //(3): separate compilation
-    //(4): stateless function - such computation is solely based on its arguments
-    //(5): compiled by GCC - ver 14, 13, 12, 11, 10, compilation flags O3 O2 O1
-    
-    //please don't talk about being dirty or not
-    //when you choose C++ and concurrency (not fork) - you have chosen the path of undefined https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSaddJnfGQqlPoWUYSGqpV66mHiEtgPizZCww&s
-    //to make this defined - you have to actually know every corner of the chosen compiler - test it - check the assembly - and version control it
-    //it's not for the faint of heart - even if you are being std-correct - you are still in the undefined zone - because the compiler is not std-compliant
-    //C is great - even if it's computing incorrect result (a random reddit commentor)
-    //so be greatful when your program is running smoothly and most importantly - don't change anything afterwards - even compiler version or dependency updates - compromise it - containerize it - use it
-    //you'd be surprised to know the number of concurrent C++ programs that compute correct results  
-
     static void fwd_mono(void * __restrict__ dst, const void * __restrict__ src, ops_kind_t ops_kind, tile_kind_t tile_kind) noexcept{
 
         using namespace taxonomy;

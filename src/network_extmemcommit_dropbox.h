@@ -57,13 +57,13 @@ namespace dg::network_extmemcommit_dropbox{
 
             void push(Request request) noexcept{
 
-                auto lck_grd = stdx::lock_guard(*this->lck);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->lck);
                 this->request_vec.push_back(std::move(request));
             }
 
             auto pop() noexcept -> std::optional<Request>{
 
-                auto lck_grd = stdx::lock_guard(*this->lck);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->lck);
                 
                 if (this->request_vec.empty()){
                     return std::nullopt;
