@@ -61,7 +61,7 @@ namespace dg::network_tileops_host_poly::taxonomy{
 namespace dg::network_tileops_host_poly::ops_dispatcher{
 
     template <class T, class U, class OperationHandler>
-    static __attribute__((noinline)) void fwd_mono(T *  dst, const U * src, ops_kind_t ops_kind, const OperationHandler) noexcept{
+    static void fwd_mono(T *  dst, const U * src, ops_kind_t ops_kind, const OperationHandler) noexcept{
 
         using namespace taxonomy;
 
@@ -118,7 +118,7 @@ namespace dg::network_tileops_host_poly::ops_dispatcher{
     }
 
     template <class T, class U, class OperationHandler>
-    static __attribute__((noinline)) void fwd_uacm(T * dst, const U * src, ops_kind_t ops_kind, const OperationHandler) noexcept{
+    static void fwd_uacm(T * dst, const U * src, ops_kind_t ops_kind, const OperationHandler) noexcept{
 
         using namespace taxonomy;
 
@@ -145,7 +145,7 @@ namespace dg::network_tileops_host_poly::ops_dispatcher{
     }
 
     template <class T, class U, class K, class OperationHandler>
-    static __attribute__((noinline)) void fwd_pair(T * dst, const U * lhs, const K * rhs, ops_kind_t ops_kind, const OperationHandler) noexcept{
+    static void fwd_pair(T * dst, const U * lhs, const K * rhs, ops_kind_t ops_kind, const OperationHandler) noexcept{
 
         using namespace taxonomy;
 
@@ -181,7 +181,7 @@ namespace dg::network_tileops_host_poly::ops_dispatcher{
     }
 
     template <class T, class U, class K, class OperationHandler>
-    static __attribute__((noinline)) void bwd_mono(T * dst, const U * lhs_logit, const K * rhs_grad, ops_kind_t ops_kind, const OperationHandler) noexcept{
+    static void bwd_mono(T * dst, const U * lhs_logit, const K * rhs_grad, ops_kind_t ops_kind, const OperationHandler) noexcept{
 
         using namespace taxonomy;
 
@@ -238,7 +238,7 @@ namespace dg::network_tileops_host_poly::ops_dispatcher{
     }
 
     template <class T, class U, class K, class G, class OperationHandler>
-    static __attribute__((noinline)) void bwd_pair(T * dst, const U * lhs_logit, const K * rhs_grad, const G * other_logit, ops_kind_t ops_kind, const OperationHandler) noexcept{
+    static void bwd_pair(T * dst, const U * lhs_logit, const K * rhs_grad, const G * other_logit, ops_kind_t ops_kind, const OperationHandler) noexcept{
 
         using namespace taxonomy;
 
@@ -279,7 +279,7 @@ namespace dg::network_tileops_host_poly::dispatcher{
     static void fwd_mono(void * __restrict__ dst, const void * __restrict__ src, ops_kind_t ops_kind, tile_kind_t tile_kind) noexcept{
 
         using namespace taxonomy;
-           
+
         switch (tile_kind){
             case uu_8_8:
                 ops_dispatcher::fwd_mono(dg::memult::start_lifetime_as_array<uint8_t>(dst, LOGIT_COUNT_PER_TILE), dg::memult::start_lifetime_as_array<uint8_t>(src, LOGIT_COUNT_PER_TILE), ops_opt, fwd_mono_ops_uu_8_8{});

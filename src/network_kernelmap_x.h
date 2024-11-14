@@ -17,33 +17,35 @@ namespace dg::network_kernelmap_x{
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 
-    inline dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface * volatile map_instance{};
+    inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface> map_instance{};
 
     void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
-
-        auto map_instance_uptr = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
-        map_instance = map_instance_uptr.get();
-        map_instance_uptr.release();
+        
+        stdx::memtransaction_guard transaction_guard;
+        map_instance = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
     }
 
     void deinit() noexcept{
         
-        delete map_instance;
+        stdx::memtransaction_guard transaction_guard;
         map_instance = nullptr;
     }
 
     auto map(fsys_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         return map_instance->map(ptr);
     }
 
     auto map_nothrow(fsys_ptr_t ptr) noexcept -> map_resource_handle_t{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         return dg::network_exception_handler::nothrow_log(network_kernelmap_x::map(ptr));
     }
 
     void map_release(map_resource_handle_t map_resource) noexcept{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         map_instance->unmap(map_resource);
     }
     
@@ -53,6 +55,7 @@ namespace dg::network_kernelmap_x{
 
     auto map_safe(fsys_ptr_t ptr) noexcept -> std::expected<dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>, exception_t>{
 
+        std::atomic_signal_fence(std::memory_order_acquire);
         auto map_rs = network_kernelmap_x::map(ptr);
 
         if (!map_rs.has_value()){

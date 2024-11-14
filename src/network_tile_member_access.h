@@ -36,7 +36,7 @@ namespace dg::network_tile_member_access::implementation{
             using self          = LeafAddressLookup;
             using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
 
-            static inline volatile uma_ptr_t head{}; 
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -190,7 +190,7 @@ namespace dg::network_tile_member_access::implementation{
             using self          = MonoAddressLookup;
             using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>; 
 
-            static inline volatile uma_ptr_t head{};
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -354,7 +354,7 @@ namespace dg::network_tile_member_access::implementation{
             using self          = UACMAddressLookup;
             using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
 
-            static inline volatile uma_ptr_t head{};
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -526,7 +526,7 @@ namespace dg::network_tile_member_access::implementation{
             using self          = PACMAddressLookup;
             using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
 
-            static inline volatile uma_ptr_t head{};
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -711,7 +711,7 @@ namespace dg::network_tile_member_access::implementation{
             using self = PairAddressLookup;
             using access_ins = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>; 
 
-            static inline volatile uma_ptr_t head{};
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -885,7 +885,7 @@ namespace dg::network_tile_member_access::implementation{
             using self = CritAddressLookup;
             using access_ins = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
 
-            static inline volatile uma_ptr_t head{}; 
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -1059,7 +1059,7 @@ namespace dg::network_tile_member_access::implementation{
             using self          = MsgrFwdAddressLookup;
             using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>; 
 
-            static inline volatile uma_ptr_t head{};
+            static inline uma_ptr_t head{};
 
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -1233,7 +1233,7 @@ namespace dg::network_tile_member_access::implementation{
             using self          = MsgrBwdAddressLookup;
             using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
 
-            static inline volatile uma_ptr_t head{};
+            static inline uma_ptr_t head{};
             
             static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
@@ -1412,13 +1412,15 @@ namespace dg::network_tile_member_access::implementation{
 
 namespace dg::network_tile_member_access{
 
-    //this implementation is to assume that the total memregion <= 1024 - to fit in L1 | at most L2 cache 
-    //assume the mean concurrency factor of 32
-    //then there's not a performance constraint
-    //otherwise it's better to use unordered_unstable_map for cache efficiency - this is an important note
-    //this cannot be told | measured without a hollistic view of the program
-    //if the designated core that accesses this is solely responsible for offloading to cuda - and all these (including other tables) fit in L1 cache - then everyone's happy - life moves on
-    //if the designated core that accesses this is responsible for doing the actual work - then cache thrashing happens and everyone's not happy - life does not move on
+    //there are evidently four ways to code
+    //first - never use global variables - everything works smoothly - you are protected by the std::atomic_thread_fence(std::memory_order_seq_cst) - in and out of concurrent transactions
+    //second - use global variables - the global variables that are responsible for concurrent usages are the caller's responsibility
+    //this is very buggy - because it's hard to tell whether a function is FOR concurrent usages or not - what's the official definition of FOR concurrent usages? is is lock_guard<> - what happened to designated areas that are never required to have a lock_guard to serialize access in the first place?
+    //third - the global variables that are responsible for concurrent usages are the callee's responsiblity - this is not good also - because the fences hinder optimizations + clutter code base - how tf am I supposed to know whether the thing is for concurrent usage or not???
+    //out of what's worse, I think it's better to stick with the latter
+    //really - there's a real reason for not using C and C++ - it's great at computing wrong results and sometimes returns SEGFAULT - for probably one thousand two hundreds and thirty four different reasons
+    //four - compile everything separately to hinder malicious optimizations and flush aliasing rules - not recommended
+    //the normal flow is to write things very correctly as if the entire program is inlinable - then split the code into different compilables after profiling - this way you are certain that the program is defined
 
     static_assert(sizeof(char) == 1);
     static_assert(CHAR_BIT == 8);
@@ -1593,6 +1595,8 @@ namespace dg::network_tile_member_access{
 
     void init(uma_ptr_t buf){
 
+        stdx::memtransaction_guard transaction_guard;
+
         uma_ptr_t cur                   = buf;
         uma_ptr_t first                 = buf;
         uma_ptr_t last                  = dg::memult::advance(first, get_memory_usage()); 
@@ -1662,6 +1666,7 @@ namespace dg::network_tile_member_access{
 
     void deinit() noexcept{
 
+        stdx::memtransaction_guard transaction_guard;
         resource = {};
     }
 
@@ -1873,7 +1878,9 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_leaf8_tile(id)){
             static_assert(noexcept(cb(leaf8_accessor_t{})));
@@ -1898,13 +1905,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         return get_leaf_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    constexpr void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_mono8_tile(id)){
             static_assert(noexcept(cb(mono8_accessor_t{})));
@@ -1929,13 +1938,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_mono_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    constexpr void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_pair8_tile(id)){
             static_assert(noexcept(cb(pair8_accessor_t{})));
@@ -1960,13 +1971,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_pair_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    constexpr void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_uacm8_tile(id)){
             static_assert(noexcept(cb(uacm8_accessor_t{})));
@@ -1991,13 +2004,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_uacm_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    constexpr void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_pacm8_tile(id)){
             static_assert(noexcept(cb(pacm8_accessor_t{})));
@@ -2022,13 +2037,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_pacm_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    constexpr void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_crit8_tile(id)){
             static_assert(noexcept(cb(crit8_accessor_t{})));
@@ -2053,13 +2070,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_crit_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     } 
 
     template <class CallBack>
-    constexpr void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_msgrfwd8_tile(id)){
             static_assert(noexcept(cb(msgrfwd8_accessor_t{})));
@@ -2084,13 +2103,15 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+    inline void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_msgrfwd_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    constexpr void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
 
         if (is_msgrbwd8_tile(id)){
             static_assert(noexcept(cb(msgrbwd8_accessor_t{})));
@@ -2115,7 +2136,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    constexpr void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr){
+    inline void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr){
 
         get_msgrbwd_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }

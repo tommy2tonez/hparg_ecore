@@ -12,15 +12,6 @@
 #include "stdx.h"
 
 namespace dg::network_tile_initialization::statix{
-    
-    //idk why people see concurrency as a hard thing to understand
-    //it's not - make sure that the compile control flows reach the fences in and out if you are in a concurrent transaction
-    //the function is not responsible for its arguments - but is responsible for concurrent_transaction_block seq_cst property - if the concurrent blk is induced by the function 
-    //if you assume that the function is not for concurrent usage - and there is no concurrent transaction induced by the function - see tile_member_get_setter - then it is not responsible for such
-    //that's it, it's that simple - make sure that the transaction is ((always_inline)), otherwise you are very very F
-    //usually that must be the lock_guard responsibility - always - but it's too tedious to change the thing now - let's leave that to the compiler
-    //the most important thing is to always use seq_cst - even if you have a perfect understanding of the thing - yeah - because seq_cst MUST emit a cpu fence to flush the buffer where other instructions do not
-    //don't try to be smart in C++, it's a broken language, driven by proven-to-be-working methods
 
     void init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id){
 
@@ -29,7 +20,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_leaf_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_leaf_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd(); //fences all the following in and out | reachable by compiler
+        stdx::memtransaction_guard transaction_grd;
 
         set_leaf_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_leaf_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -44,7 +35,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_mono_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_mono_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
 
         set_mono_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_mono_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -61,7 +52,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_pair_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_pair_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
 
         set_pair_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_pair_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -79,7 +70,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_uacm_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_uacm_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
 
         set_uacm_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_uacm_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -96,7 +87,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_pacm_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_pacm_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
         
         set_pacm_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_pacm_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -114,7 +105,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_crit_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_crit_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
         
         set_crit_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_crit_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -132,7 +123,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_msgrfwd_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_msgrfwd_rcu_addr_nothrow(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
         
         set_msgrfwd_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_msgrfwd_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -150,7 +141,7 @@ namespace dg::network_tile_initialization::statix{
         ptr                 = dg::network_tile_member_access::throwsafe_msgrbwd_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_msgrbwd_rcu_addr(ptr);
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd();
+        stdx::memtransaction_guard transaction_grd;
 
         set_msgrbwd_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
         set_msgrbwd_observer_nothrow(ptr, DEFAULT_OBSERVER);
@@ -599,6 +590,6 @@ namespace dg::network_tile_initialization::poly{
             }
         }
     }
-} 
+}
 
 #endif

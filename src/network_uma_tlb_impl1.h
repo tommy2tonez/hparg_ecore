@@ -284,7 +284,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                 }
 
                 {
-                    stdx::memtransaction_guard transaction_guard();
+                    stdx::memtransaction_guard transaction_grd;
                     device_id_t stealee_id = potential_stealee_id.value();
 
                     if (stealee_id != stealer_id){

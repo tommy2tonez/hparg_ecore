@@ -68,6 +68,7 @@ namespace dg::network_uma{
 
     void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, bool * is_proxy_arr, size_t n, std::unique_ptr<MemoryCopyAbstractDeviceInterface> memory_copy_device){
 
+        stdx::memtransaction_guard transaction_guard;
         InternalMemoryCopyDevice::init(std::move(memory_copy_device));
         direct_tlb_instance::init(uma_region_arr, vma_region_arr, device_id_arr, n);
         tlb_instance::init(uma_region_arr, vma_region_arr, device_id_arr, is_proxy_arr, n);
@@ -77,6 +78,7 @@ namespace dg::network_uma{
 
     void deinit() noexcept{
 
+        stdx::memtransaction_guard transaction_guard;
         metadata_getter::deinit();
         uma_ptr_access::deinit();
         tlb_instance::deinit();
@@ -86,11 +88,7 @@ namespace dg::network_uma{
 
     auto map_direct(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::expected<vma_ptr_t, exception_t>{
         
-        //the only reason that these require a atomic_signal_fence is because it might not be used in a concurrent block - but in a concurrent situation | such situation might not see the instantiation of the inline object - and the result is wrongly assumed and computed  
-        //in which scenrio, it is not protected by std::atomic_thread_fence(std::memory_order_seq_cst) and this is buggy. So it's important to fence up at solely at this line - because it might hinder compiler optimizations
-        //give user an option to promote to seq_cst - next iteration  
-
-        std::atomic_signal_fence(std::memory_order_acquire); //this is required as a replacement for volatile - if the calling function is not inlined - then everything works as expected - because the caller does not see the wrongly-assumed-not-yet-initialization
+        std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr); 
 
         if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
