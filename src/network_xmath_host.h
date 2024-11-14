@@ -29,7 +29,7 @@ namespace dg::network_xmath_host{
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true> 
     inline auto sign(T value) noexcept -> T{
         
-        return (value < 0) ? -1 : 1;
+        return (value > 0) - (value < 0);
     }
 
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
@@ -299,7 +299,7 @@ namespace dg::network_xmath_host{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     inline auto eqcmp_mul(T lcmp, T rcmp, T val) -> T{
 
-        return (lcmp == rcmp) * val;
+        return ((lcmp ^ rcmp) == 0u) * val;
     }
 } 
 

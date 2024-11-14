@@ -38,6 +38,7 @@ namespace dg::network_tile_metadata{
     using host_u16_t            = uint16_t;
     using host_u32_t            = uint32_t;
     using host_u64_t            = uint64_t;
+    using host_f8_t             = uint8_t;
     using host_f16_t            = std::bfloat16_t;
     using host_f32_t            = std::float32_t;
     using host_f64_t            = std::float64_t;
