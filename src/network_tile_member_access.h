@@ -13,6 +13,10 @@
 #include <array>
 #include "assert.h"
 #include "network_std_container.h"
+#include <new>
+#include "network_tile_metadata.h"
+#include <expected>
+#include "stdx.h"
 
 namespace dg::network_tile_member_access::implementation{
     
@@ -1412,90 +1416,55 @@ namespace dg::network_tile_member_access::implementation{
 
 namespace dg::network_tile_member_access{
 
-    //there are evidently four ways to code
-    //first - never use global variables - everything works smoothly - you are protected by the std::atomic_thread_fence(std::memory_order_seq_cst) - in and out of concurrent transactions
-    //second - use global variables - the global variables that are responsible for concurrent usages are the caller's responsibility
-    //this is very buggy - because it's hard to tell whether a function is FOR concurrent usages or not - what's the official definition of FOR concurrent usages? is is lock_guard<> - what happened to designated areas that are never required to have a lock_guard to serialize access in the first place?
-    //third - the global variables that are responsible for concurrent usages are the callee's responsiblity - this is not good also - because the fences hinder optimizations + clutter code base - how tf am I supposed to know whether the thing is for concurrent usage or not???
-    //out of what's worse, I think it's better to stick with the latter
-    //really - there's a real reason for not using C and C++ - it's great at computing wrong results and sometimes returns SEGFAULT - for probably one thousand two hundreds and thirty four different reasons
-    //four - compile everything separately to hinder malicious optimizations and flush aliasing rules - not recommended
-    //the normal flow is to write things very correctly as if the entire program is inlinable - then split the code into different compilables after profiling - this way you are certain that the program is defined
+    using namespace dg::network_tile_metadata;
+    using uma_ptr_t = dg::network_pointer::uma_ptr_t;
 
-    static_assert(sizeof(char) == 1);
-    static_assert(CHAR_BIT == 8);
+    static_assert(stdx::is_pow2(LOGIT_COUNT_PER_TILE));
+    static_assert(stdx::is_pow2(LOGIT_ALIGNMENT_SZ));
+    static_assert(stdx::is_pow2(GRAD_ALIGNMENT_SZ));
+    static_assert(stdx::is_pow2(MEMREGION_SZ));
+    static_assert(stdx::is_pow2(PACM_ACM_SZ));
+    static_assert(stdx::is_pow2(UACM_ACM_SZ));
+    static_assert(stdx::is_pow2(OBSERVER_ARRAY_SZ));
 
-    static inline constexpr size_t TILE_COUNT_LEAF_8        = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_LEAF_16       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_LEAF_32       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_LEAF_64       = size_t{1} << 20;
-    
-    static inline constexpr size_t TILE_COUNT_MONO_8        = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MONO_16       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MONO_32       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MONO_64       = size_t{1} << 20;
+    static_assert(stdx::is_pow2(sizeof(uma_ptr_t)));
+    static_assert(stdx::is_pow2(sizeof(tile_addr_t)));
+    static_assert(stdx::is_pow2(sizeof(init_status_t)));
+    static_assert(stdx::is_pow2(sizeof(observer_t)));
+    static_assert(stdx::is_pow2(sizeof(operatable_id_t)));
+    static_assert(stdx::is_pow2(sizeof(dispatch_control_t)));
+    static_assert(stdx::is_pow2(sizeof(pong_count_t)));
+    static_assert(stdx::is_pow2(sizeof(poly_8_t)));
+    static_assert(stdx::is_pow2(sizeof(poly_16_t)));
+    static_assert(stdx::is_pow2(sizeof(poly_32_t)));
+    static_assert(stdx::is_pow2(sizeof(poly_64_t)));
+    static_assert(stdx::is_pow2(sizeof(crit_kind_t)));
+    static_assert(stdx::is_pow2(sizeof(dst_info_t)));
+    static_assert(stdx::is_pow2(sizeof(timein_t)));
 
-    static inline constexpr size_t TILE_COUNT_UACM_8        = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_UACM_16       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_UACM_32       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_UACM_64       = size_t{1} << 20;
-    
-    static inline constexpr size_t TILE_COUNT_PACM_8        = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_PACM_16       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_PACM_32       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_PACM_64       = size_t{1} << 20;
+    static_assert(sizeof(uma_ptr_t) <= MEMREGION_SZ);
+    static_assert(sizeof(tile_addr_t) <= MEMREGION_SZ);
+    static_assert(sizeof(init_status_t) <= MEMREGION_SZ);
+    static_assert(sizeof(operatable_id_t) <= MEMREGION_SZ);
+    static_assert(sizeof(dispatch_control_t) <= MEMREGION_SZ);
+    static_assert(sizeof(pong_count_t) <= MEMREGION_SZ);
+    static_assert(sizeof(crit_kind_t) <= MEMREGION_SZ);
+    static_assert(sizeof(dst_info_t) <= MEMREGION_SZ);
+    static_assert(sizeof(timein_t) <= MEMREGION_SZ);
 
-    static inline constexpr size_t TILE_COUNT_PAIR_8        = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_PAIR_16       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_PAIR_32       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_PAIR_64       = size_t{1} << 20;  
-    
-    static inline constexpr size_t TILE_COUNT_CRIT_8        = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_CRIT_16       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_CRIT_32       = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_CRIT_64       = size_t{1} << 20;
+    static_assert(sizeof(observer_t) * OBSERVER_ARRAY_SZ <= MEMREGION_SZ);
+    static_assert(sizeof(tile_addr_t) * PACM_ACM_SZ <= MEMREGION_SZ);
+    static_assert(sizeof(tile_addr_t) * UACM_ACM_SZ <= MEMREGION_SZ);
+    static_assert(sizeof(logit_max_t) * LOGIT_COUNT_PER_TILE <= MEMREGION_SZ);
+    static_assert(sizeof(grad_max_t) * LOGIT_COUNT_PER_TILE <= MEMREGION_SZ);
+    static_assert(LOGIT_ALIGNMENT_SZ <= sizeof(logit_min_t) * LOGIT_COUNT_PER_TILE);
+    static_assert(GRAD_ALIGNMENT_SZ <= sizeof(grad_min_t) * LOGIT_COUNT_PER_TILE);
 
-    static inline constexpr size_t TILE_COUNT_MSGRFWD_8     = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MSGRFWD_16    = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MSGRFWD_32    = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MSGRFWD_64    = size_t{1} << 20;
-
-    static inline constexpr size_t TILE_COUNT_MSGRBWD_8     = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MSGRBWD_16    = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MSGRBWD_32    = size_t{1} << 20;
-    static inline constexpr size_t TILE_COUNT_MSGRBWD_64    = size_t{1} << 20; 
-
-    static inline constexpr size_t LOGIT_COUNT_PER_TILE     = size_t{1} << 8;
-    static inline constexpr size_t PADDING_SZ               = 0u;
-    static inline constexpr size_t MEMREGION_SZ             = size_t{1} << 20;
-    static inline constexpr size_t ID_MEMREGION_SZ          = size_t{1} << 10;
-    static inline constexpr size_t UACM_ACM_SZ              = size_t{1} << 5;
-    static inline constexpr size_t PACM_ACM_SZ              = size_t{1} << 5;
-    static inline constexpr size_t OBSERVER_ARRAY_SZ        = size_t{1} << 5;
-
+    using tile_polymorphic_id_t                             = polymorphic_header_t;
     static inline constexpr bool IS_SAFE_ACCESS_ENABLED     = true;
+    static inline constexpr size_t PADDING_SZ               = std::hardware_destructive_interference_size;
 
-    using uma_ptr_t             = dg::network_pointer::uma_ptr_t;
-    using tile_polymorphic_t    = uint8_t;
-    using init_status_t         = uint8_t;
-    using observer_t            = uint64_t;
-    using operatable_id_t       = uint64_t;
-    using dispatch_control_t    = uint64_t;
-    using pong_count_t          = uint64_t;
-    using addr_t                = uint64_t; 
-    using logit_8_t             = uint8_t;
-    using logit_16_t            = uint16_t;
-    using logit_32_t            = uint32_t;
-    using logit_64_t            = uint64_t;
-    using grad_8_t              = uint8_t;
-    using grad_16_t             = uint16_t;
-    using grad_32_t             = uint32_t;
-    using grad_64_t             = uint64_t;
-    using crit_kind_t           = uint8_t;
-    using dst_info_t            = std::array<char, 32>;
-    using timein_t              = uint64_t;
-
-    enum tile_polymorphic_option: tile_polymorphic_t{
+    enum tile_polymorphic_id_option: tile_polymorphic_id_t{
         id_leaf_8       = 0u,
         id_leaf_16      = 1u,
         id_leaf_32      = 2u,
@@ -1537,46 +1506,43 @@ namespace dg::network_tile_member_access{
     using leaf32_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
     using leaf64_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>; 
 
-    using mono8_accessor_t          = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using mono16_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using mono32_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using mono64_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using mono8_accessor_t          = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
+    using mono16_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
+    using mono32_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
+    using mono64_accessor_t         = dg::network_tile_member_access::implementation::MonoAddressLookup<network_tile_member_access_signature, TILE_COUNT_MONO_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
 
-    using pair8_accessor_t          = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t) , LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using pair16_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using pair32_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
-    using pair64_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t)>;
+    using pair8_accessor_t          = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t) , LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
+    using pair16_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
+    using pair32_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
+    using pair64_accessor_t         = dg::network_tile_member_access::implementation::PairAddressLookup<network_tile_member_access_signature, TILE_COUNT_PAIR_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t)>;
 
-    using uacm8_accessor_t          = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
-    using uacm16_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
-    using uacm32_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
-    using uacm64_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), UACM_ACM_SZ>;
+    using uacm8_accessor_t          = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), UACM_ACM_SZ>;
+    using uacm16_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), UACM_ACM_SZ>;
+    using uacm32_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), UACM_ACM_SZ>;
+    using uacm64_accessor_t         = dg::network_tile_member_access::implementation::UACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_UACM_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), UACM_ACM_SZ>;
 
-    using pacm8_accessor_t          = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
-    using pacm16_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
-    using pacm32_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
-    using pacm64_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), PACM_ACM_SZ>;
+    using pacm8_accessor_t          = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), PACM_ACM_SZ>;
+    using pacm16_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), PACM_ACM_SZ>;
+    using pacm32_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), PACM_ACM_SZ>;
+    using pacm64_accessor_t         = dg::network_tile_member_access::implementation::PACMAddressLookup<network_tile_member_access_signature, TILE_COUNT_PACM_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), PACM_ACM_SZ>;
 
-    using crit8_accessor_t          = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
-    using crit16_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
-    using crit32_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
-    using crit64_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(crit_kind_t)>;
+    using crit8_accessor_t          = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(crit_kind_t)>;
+    using crit16_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(crit_kind_t)>;
+    using crit32_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(crit_kind_t)>;
+    using crit64_accessor_t         = dg::network_tile_member_access::implementation::CritAddressLookup<network_tile_member_access_signature, TILE_COUNT_CRIT_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(crit_kind_t)>;
 
-    using msgrfwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
-    using msgrfwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
-    using msgrfwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
-    using msgrfwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t)>;
+    using msgrfwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t)>;
+    using msgrfwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t)>;
+    using msgrfwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_32, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t), LOGIT_COUNT_PER_TILE * sizeof(grad_32_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t)>;
+    using msgrfwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrFwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRFWD_64, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t), LOGIT_COUNT_PER_TILE * sizeof(grad_64_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t)>;
 
-    using msgrbwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),   LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),   sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-    using msgrbwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_16_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-    using msgrbwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_32_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-    using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
-
+    using msgrbwd8_accessor_t       = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),   LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),   sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd16_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_16_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_32_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
+    using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
 
     struct Resource{
-        dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_t> region_id_map;
-        std::unique_ptr<tile_polymorphic_t[]> region_id_table;
-        uma_ptr_t region_first;
+        dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_id_t> region_id_map;
     };
 
     inline Resource resource{};
@@ -1591,77 +1557,67 @@ namespace dg::network_tile_member_access{
                 +   crit8_accessor_t::buf_size() + crit16_accessor_t::buf_size() + crit32_accessor_t::buf_size() + crit64_accessor_t::buf_size()
                 +   msgrfwd8_accessor_t::buf_size() + msgrfwd16_accessor_t::buf_size() + msgrfwd32_accessor_t::buf_size() + msgrfwd64_accessor_t::buf_size()
                 +   msgrbwd8_accessor_t::buf_size() + msgrbwd16_accessor_t::buf_size() + msgrbwd32_accessor_t::buf_size() + msgrbwd64_accessor_t::buf_size();
-    } 
+    }
 
     void init(uma_ptr_t buf){
 
         stdx::memtransaction_guard transaction_guard;
 
-        uma_ptr_t cur                   = buf;
-        uma_ptr_t first                 = buf;
-        uma_ptr_t last                  = dg::memult::advance(first, get_memory_usage()); 
-        uma_ptr_t region_first          = dg::memult::region(first, std::integral_constant<size_t, MEMREGION_SZ>{});
-        uma_ptr_t region_last           = dg::memult::align(last, std::integral_constant<size_t, MEMREGION_SZ>{});
-        size_t table_sz                 = dg::memult::distance(region_first, region_last) / MEMREGION_SZ;
-        resource.region_id_table        = std::make_unique<tile_polymorphic_t[]>(table_sz);
-        resource.region_id_map          = {};
-        resource.region_first           = region_first;
+        uma_ptr_t cur           = buf;
+        resource.region_id_map  = {};
 
-        auto initializer = [&]<class Accessor>(const Accessor, uma_ptr_t cur, uma_ptr_t table_head, tile_polymorphic_t tile_polymorphic){
+        auto initializer = []<class Accessor>(const Accessor, uma_ptr_t cur, tile_polymorphic_id_t tile_polymorphic_id){
             Accessor::init(cur);
             uma_ptr_t head = Accessor::get_head();
 
             for (size_t i = 0u; i < Accessor::tile_size(); ++i){
-                uma_ptr_t id_ptr                        = Accessor::id_addr(dg::memult::advance(head, i));
-                uma_ptr_t id_region                     = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-                uma_ptr_t idd_region                    = dg::memult::region(id_ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
-                size_t table_idx                        = dg::memult::distance(table_head, id_region) / MEMREGION_SZ;
-                resource.region_id_map[idd_region]  = tile_polymorphic;
-                resource.region_id_table[table_idx] = tile_polymorphic;
+                uma_ptr_t id_ptr                    = Accessor::id_addr(dg::memult::advance(head, i));
+                uma_ptr_t id_region                 = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                resource.region_id_map[id_region]   = tile_polymorphic_id;
             }
 
             return dg::memult::advance(cur, Accessor::tile_size());
         };
-        
-        cur = initializer(leaf8_accessor_t{},  cur, region_first, id_leaf_8);
-        cur = initializer(leaf16_accessor_t{}, cur, region_first, id_leaf_16);
-        cur = initializer(leaf32_accessor_t{}, cur, region_first, id_leaf_32);
-        cur = initializer(leaf64_accessor_t{}, cur, region_first, id_leaf_64);
-        
-        cur = initializer(mono8_accessor_t{},  cur, region_first, id_mono_8);
-        cur = initializer(mono16_accessor_t{}, cur, region_first, id_mono_16);
-        cur = initializer(mono32_accessor_t{}, cur, region_first, id_mono_32);
-        cur = initializer(mono64_accessor_t{}, cur, region_first, id_mono_64);
 
-        cur = initializer(pair8_accessor_t{},  cur, region_first, id_pair_8);
-        cur = initializer(pair16_accessor_t{}, cur, region_first, id_pair_16);
-        cur = initializer(pair32_accessor_t{}, cur, region_first, id_pair_32);
-        cur = initializer(pair64_accessor_t{}, cur, region_first, id_pair_64);
-        
-        cur = initializer(uacm8_accessor_t{},  cur, region_first, id_uacm_8);
-        cur = initializer(uacm16_accessor_t{}, cur, region_first, id_uacm_16);
-        cur = initializer(uacm32_accessor_t{}, cur, region_first, id_uacm_32);
-        cur = initializer(uacm64_accessor_t{}, cur, region_first, id_uacm_64);
+        cur = initializer(leaf8_accessor_t{},  cur, id_leaf_8);
+        cur = initializer(leaf16_accessor_t{}, cur, id_leaf_16);
+        cur = initializer(leaf32_accessor_t{}, cur, id_leaf_32);
+        cur = initializer(leaf64_accessor_t{}, cur, id_leaf_64);
 
-        cur = initializer(pacm8_accessor_t{},  cur, region_first, id_pacm_8);
-        cur = initializer(pacm16_accessor_t{}, cur, region_first, id_pacm_16);
-        cur = initializer(pacm32_accessor_t{}, cur, region_first, id_pacm_32);
-        cur = initializer(pacm64_accessor_t{}, cur, region_first, id_pacm_64);
-        
-        cur = initializer(crit8_accessor_t{},  cur, region_first, id_crit_8);
-        cur = initializer(crit16_accessor_t{}, cur, region_first, id_crit_16);
-        cur = initializer(crit32_accessor_t{}, cur, region_first, id_crit_32);
-        cur = initializer(crit64_accessor_t{}, cur, region_first, id_crit_64);
-        
-        cur = initializer(msgrfwd8_accessor_t{},  cur, region_first, id_msgrfwd_8);
-        cur = initializer(msgrfwd16_accessor_t{}, cur, region_first, id_msgrfwd_16);
-        cur = initializer(msgrfwd32_accessor_t{}, cur, region_first, id_msgrfwd_32);
-        cur = initializer(msgrfwd64_accessor_t{}, cur, region_first, id_msgrfwd_64);
+        cur = initializer(mono8_accessor_t{},  cur, id_mono_8);
+        cur = initializer(mono16_accessor_t{}, cur, id_mono_16);
+        cur = initializer(mono32_accessor_t{}, cur, id_mono_32);
+        cur = initializer(mono64_accessor_t{}, cur, id_mono_64);
 
-        cur = initializer(msgrbwd8_accessor_t{},  cur, region_first, id_msgrbwd_8);
-        cur = initializer(msgrbwd8_accessor_t{},  cur, region_first, id_msgrbwd_16);
-        cur = initializer(msgrbwd16_accessor_t{}, cur, region_first, id_msgrbwd_32);
-        cur = initializer(msgrbwd32_accessor_t{}, cur, region_first, id_msgrbwd_64);
+        cur = initializer(pair8_accessor_t{},  cur, id_pair_8);
+        cur = initializer(pair16_accessor_t{}, cur, id_pair_16);
+        cur = initializer(pair32_accessor_t{}, cur, id_pair_32);
+        cur = initializer(pair64_accessor_t{}, cur, id_pair_64);
+
+        cur = initializer(uacm8_accessor_t{},  cur, id_uacm_8);
+        cur = initializer(uacm16_accessor_t{}, cur, id_uacm_16);
+        cur = initializer(uacm32_accessor_t{}, cur, id_uacm_32);
+        cur = initializer(uacm64_accessor_t{}, cur, id_uacm_64);
+
+        cur = initializer(pacm8_accessor_t{},  cur, id_pacm_8);
+        cur = initializer(pacm16_accessor_t{}, cur, id_pacm_16);
+        cur = initializer(pacm32_accessor_t{}, cur, id_pacm_32);
+        cur = initializer(pacm64_accessor_t{}, cur, id_pacm_64);
+
+        cur = initializer(crit8_accessor_t{},  cur, id_crit_8);
+        cur = initializer(crit16_accessor_t{}, cur, id_crit_16);
+        cur = initializer(crit32_accessor_t{}, cur, id_crit_32);
+        cur = initializer(crit64_accessor_t{}, cur, id_crit_64);
+
+        cur = initializer(msgrfwd8_accessor_t{},  cur, id_msgrfwd_8);
+        cur = initializer(msgrfwd16_accessor_t{}, cur, id_msgrfwd_16);
+        cur = initializer(msgrfwd32_accessor_t{}, cur, id_msgrfwd_32);
+        cur = initializer(msgrfwd64_accessor_t{}, cur, id_msgrfwd_64);
+
+        cur = initializer(msgrbwd8_accessor_t{},  cur, id_msgrbwd_8);
+        cur = initializer(msgrbwd8_accessor_t{},  cur, id_msgrbwd_16);
+        cur = initializer(msgrbwd16_accessor_t{}, cur, id_msgrbwd_32);
+        cur = initializer(msgrbwd32_accessor_t{}, cur, id_msgrbwd_64);
     }
 
     void deinit() noexcept{
@@ -1670,215 +1626,214 @@ namespace dg::network_tile_member_access{
         resource = {};
     }
 
-    constexpr auto is_leaf_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_leaf_8) || (id == id_leaf_16) || (id == id_leaf_32) || (id == id_leaf_64);
     }
 
-    constexpr auto is_mono_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_mono_8) || (id == id_mono_16) || (id == id_mono_32) || (id == id_mono_64);
     }
 
-    constexpr auto is_pair_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_pair_8) || (id == id_pair_16) || (id == id_pair_32) || (id == id_pair_64);
     }
 
-    constexpr auto is_uacm_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_uacm_8) || (id == id_uacm_16) || (id == id_uacm_32) || (id == id_uacm_64);
     } 
 
-    constexpr auto is_pacm_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_pacm_8) || (id == id_pacm_16) || (id == id_pacm_32) || (id == id_pacm_64);
     }
 
-    constexpr auto is_crit_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_crit_8) || (id == id_crit_16) || (id == id_crit_32) || (id == id_crit_64);
     }
 
-    constexpr auto is_msgrfwd_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_msgrfwd_8) || (id == id_msgrfwd_16) || (id == id_msgrfwd_32) || (id == id_msgrfwd_64);
     }
 
-    constexpr auto is_msgrbwd_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_msgrbwd_8) || (id == id_msgrbwd_16) || (id == id_msgrbwd_32) || (id == id_msgrbwd_64);
     }
 
-    constexpr auto is_leaf8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_8;
     }
 
-    constexpr auto is_mono8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_mono_8;
     }
 
-    constexpr auto is_pair8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pair_8;
     }
 
-    constexpr auto is_uacm8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_uacm_8;
     }
 
-    constexpr auto is_pacm8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pacm_8;
     }
 
-    constexpr auto is_crit8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_crit_8;
     }
 
-    constexpr auto is_msgrfwd8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrfwd_8;
     }
 
-    constexpr auto is_msgrbwd8_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrbwd_8;
     } 
 
-    constexpr auto is_leaf16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_16;
     }
 
-    constexpr auto is_mono16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_mono_16;
     }
 
-    constexpr auto is_pair16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pair_16;
     }
 
-    constexpr auto is_uacm16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_uacm_16;
     }
 
-    constexpr auto is_pacm16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pacm_16;
     }
 
-    constexpr auto is_crit16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit16_tile(tile_polymorphic_id_t id) noexcept -> bool{
         
         return id == id_crit_16;
     }
 
-    constexpr auto is_msgrfwd16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrfwd_16;
     }
 
-    constexpr auto is_msgrbwd16_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrbwd_16;
     }
 
-    constexpr auto is_leaf32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_32;
     }
 
-    constexpr auto is_mono32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_mono_32;
     }
 
-    constexpr auto is_pair32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pair_32;
     }
 
-    constexpr auto is_uacm32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_uacm_32;
     }
 
-    constexpr auto is_pacm32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pacm_32;
     }
 
-    constexpr auto is_crit32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_crit_32;
     }
 
-    constexpr auto is_msgrfwd32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrfwd_32;
     }
 
-    constexpr auto is_msgrbwd32_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd32_tile(tile_polymorphic_id_t id) noexcept -> bool{
         
         return id == id_msgrbwd_32;
     }
 
-    constexpr auto is_leaf64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_leaf64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_64;
     }
 
-    constexpr auto is_mono64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_mono64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_mono_64;
     }
 
-    constexpr auto is_pair64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pair64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pair_64;
     }
 
-    constexpr auto is_uacm64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_uacm64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_uacm_64;
     }
 
-    constexpr auto is_pacm64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_pacm64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_pacm_64;
     }
 
-    constexpr auto is_crit64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_crit64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_crit_64;
     }
 
-    constexpr auto is_msgrfwd64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrfwd64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrfwd_64;
     }
 
-    constexpr auto is_msgrbwd64_tile(tile_polymorphic_t id) noexcept -> bool{
+    constexpr auto is_msgrbwd64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_msgrbwd_64;
     }
 
-    inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_t{
-
-        std::atomic_signal_fence(std::memory_order_acquire);
-        size_t slot = dg::memult::distance(resource.region_first, ptr) / MEMREGION_SZ;
-        return resource.region_id_table[slot];
+    inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_id_t{
+        
+        std::atomic_signal_fence(std::memory_order_acquire); 
+        return resource.region_id_map.find(dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}))->second;
     }
 
     template <class CallBack>
-    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -1911,7 +1866,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -1944,7 +1899,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -1977,7 +1932,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -2010,7 +1965,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -2043,7 +1998,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -2076,7 +2031,7 @@ namespace dg::network_tile_member_access{
     } 
 
     template <class CallBack>
-    inline void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -2109,7 +2064,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_t id) noexcept{
+    inline void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         std::atomic_signal_fence(std::memory_order_acquire);
 
@@ -2141,153 +2096,377 @@ namespace dg::network_tile_member_access{
         get_msgrbwd_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
-    inline auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_leaf_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second; 
+
+        if (!is_leaf_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
+        } 
+
+        if (is_leaf8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_leaf16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_leaf32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_leaf64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+                return {};
+            } else{
+                std::unreachable();
+                return {};
+            }
         }
-        
-        return ptr;
     }
 
-    inline auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_mono_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+
+        if (!is_mono_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_mono8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+                return {};
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_pair_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        
+        if (!is_pair_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_pair8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_uacm_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+
+        if (!is_uacm_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_uacm8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_pacm_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+
+        if (!is_pacm_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_pacm8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+                return {};
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_crit_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second; 
+
+        if (!is_crit_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_crit8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_msgrfwd_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+
+        if (!is_msgrfwd_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_msgrfwd8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else {
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+                return {};
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (!is_msgrbwd_tile(map_ptr->second)){
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+
+        if (!is_msgrbwd_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        if (is_msgrbwd8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+                return {};
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, ID_MEMREGION_SZ>{});
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
         if (map_ptr == resource.region_id_map.end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        return ptr;
+        tile_polymorphic_id_t tile_kind = map_ptr->second;
+
+        if (is_leaf8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_leaf16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_leaf32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_leaf64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_mono64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_crit64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrfwd64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_msgrbwd64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pair64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_uacm64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm8_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm16_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm32_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else if (is_pacm64_tile(tile_kind)){
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+                return {};
+            } else{
+                std::unreachable();
+                return {};
+            }
+        }
     }
 
     auto safe_leaf_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -2299,7 +2478,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> uma`_ptr_t{
+    auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_mono_ptr_access(ptr));

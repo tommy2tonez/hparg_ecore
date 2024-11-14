@@ -193,6 +193,37 @@ namespace dg::network_exception{
         return rs;
     }
 
+    template <class T, class T1>
+    class expected_result_if_object{
+        
+        private:
+
+            bool evaluator;
+            T true_ret;
+            T1 false_ret; 
+
+        public:
+
+            constexpr expected_result_if_object(bool evaluator, T true_ret, T1 false_ret) noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<T1>): evaluator(evaluator),
+                                                                                                                                                                                         true_ret(std::move(true_ret)),
+                                                                                                                                                                                         false_ret(std::move(false_ret)){}
+            
+            template <class ...Args>
+            constexpr operator std::expected<Args...>() noexcept(std::is_nothrow_constructible_v<std::expected<Args...>, T&&> && std::is_nothrow_constructible_v<std::expected<Args...>, T1&&>){
+
+                if (this->evaluator){
+                    return std::expected<Args...>(std::move(this->true_ret));
+                } else{
+                    return std::expected<Args...>(std::move(this->false_ret));
+                }
+            }
+    };
+
+    template <class T, class T1>
+    constexpr auto expected_result_if(bool evaluator, T true_ret, T1 false_ret) noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_constructible_v<T1>) -> expected_result_if_object<T, T1>{
+
+        return expected_result_if_object<T, T1>(evaluator, std::move(true_ret), std::move(false_ret));
+    }
 }
 
 #endif
