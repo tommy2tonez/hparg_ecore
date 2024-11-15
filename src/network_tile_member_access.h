@@ -2113,13 +2113,13 @@ namespace dg::network_tile_member_access{
         } 
 
         if (is_leaf8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf8_accessor_t::get_head(), leaf8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_leaf16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf16_accessor_t::get_head(), leaf16_accessor_t::tile_size())) , ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_leaf32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf32_accessor_t::get_head(), leaf32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_leaf64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf64_accessor_t::get_head(), leaf64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2149,13 +2149,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_mono8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono8_accessor_t::get_head(), mono8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono16_accessor_t::get_head(), mono16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono32_accessor_t::get_head(), mono32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono64_accessor_t::get_head(), mono64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2185,13 +2185,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_pair8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair8_accessor_t::get_head(), pair8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair16_accessor_t::get_head(), pair16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair32_accessor_t::get_head(), pair32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair64_accessor_t::get_head(), pair64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2220,13 +2220,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_uacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm8_accessor_t::get_head(), uacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm16_accessor_t::get_head(), uacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm32_accessor_t::get_head(), uacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm64_accessor_t::get_head(), uacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2255,13 +2255,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_pacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm8_accessor_t::get_head(), pacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm16_accessor_t::get_head(), pacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm32_accessor_t::get_head(), pacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm64_accessor_t::get_head(), pacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2291,13 +2291,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_crit8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit8_accessor_t::get_head(), crit8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit16_accessor_t::get_head(), crit16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit32_accessor_t::get_head(), crit32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit64_accessor_t::get_head(), crit64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2326,13 +2326,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_msgrfwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd8_accessor_t::get_head(), msgrfwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd16_accessor_t::get_head(), msgrfwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd32_accessor_t::get_head(), msgrfwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd64_accessor_t::get_head(), msgrfwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else {
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2362,13 +2362,13 @@ namespace dg::network_tile_member_access{
         }
 
         if (is_msgrbwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd8_accessor_t::get_head(), msgrbwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd16_accessor_t::get_head(), msgrbwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd32_accessor_t::get_head(), msgrbwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd64_accessor_t::get_head(), msgrbwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2394,69 +2394,69 @@ namespace dg::network_tile_member_access{
         tile_polymorphic_id_t tile_kind = map_ptr->second;
 
         if (is_leaf8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf8_accessor_t::get_head(), leaf8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_leaf16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf16_accessor_t::get_head(), leaf16_accessor_t::tile_size())) , ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_leaf32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf32_accessor_t::get_head(), leaf32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_leaf64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_LEAF_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf64_accessor_t::get_head(), leaf64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono8_accessor_t::get_head(), mono8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono16_accessor_t::get_head(), mono16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono32_accessor_t::get_head(), mono32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_mono64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MONO_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono64_accessor_t::get_head(), mono64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit8_accessor_t::get_head(), crit8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit16_accessor_t::get_head(), crit16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit32_accessor_t::get_head(), crit32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_crit64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_CRIT_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit64_accessor_t::get_head(), crit64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd8_accessor_t::get_head(), msgrfwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd16_accessor_t::get_head(), msgrfwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd32_accessor_t::get_head(), msgrfwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrfwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRFWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd64_accessor_t::get_head(), msgrfwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd8_accessor_t::get_head(), msgrbwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd16_accessor_t::get_head(), msgrbwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd32_accessor_t::get_head(), msgrbwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_msgrbwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_MSGRBWD_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd64_accessor_t::get_head(), msgrbwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair8_accessor_t::get_head(), pair8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair16_accessor_t::get_head(), pair16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair32_accessor_t::get_head(), pair32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pair64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PAIR_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair64_accessor_t::get_head(), pair64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm8_accessor_t::get_head(), uacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm16_accessor_t::get_head(), uacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm32_accessor_t::get_head(), uacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_uacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_UACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm64_accessor_t::get_head(), uacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_8 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm8_accessor_t::get_head(), pacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_16 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm16_accessor_t::get_head(), pacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_32 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm32_accessor_t::get_head(), pacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else if (is_pacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less_equal(ptr, dg::memult::advance(id_region, TILE_COUNT_PACM_64 % MEMREGION_SZ)), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm64_accessor_t::get_head(), pacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));

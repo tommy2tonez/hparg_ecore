@@ -338,7 +338,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void adnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void addnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -427,8 +427,14 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        //boolean algebra - the backprop requires a statiscal model to approx gradient - it's literally a python project - just two pointers and map[i, j] -> gradient then find best fit function that involves the two pointers by using exhaustive search approach
-        //but these are important
+        //the problem is that this requires lhs and rhs logit_value in the backprop to estimate the gradient
+        //f(a, b) = a | b
+        //d f(a, b) / da = this requires a fuzzy approximation - some magic number by running best fit model over the curve - this is actually a python project - find the magic number and some multipliers + divisors + exp, that involves the variables a and b
+        //this is boolean algebra
+        //add(a, b) = add(mul(and(a, b), 2), xor(a, b))
+        //so and(a, b) and xor(a, b) are actually parts of the add logic - but with enhanced | specialized context
+        //we don't care about what this operation does or what it does not do - it's the a-star path problem
+        //what we care about - is to provide as many row-column combinatorial operations as possible - and push the thing to the optimization engine and let the A-Star figures things out
 
         static inline void ornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
