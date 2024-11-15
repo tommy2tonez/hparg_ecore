@@ -303,6 +303,8 @@ def approx_bitwise_xor_df_db(first: int, last: int) -> str:
 
 def main():
 
+    print(json.dumps(approx_bitwise_and_df_da(0, 256)))
     print(json.dumps(approx_bitwise_or_df_da(0, 256)))
+    print(json.dumps(approx_bitwise_xor_df_da(0, 256)))
 
 main()

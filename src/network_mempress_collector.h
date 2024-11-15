@@ -13,6 +13,24 @@
 
 namespace dg::network_mempress_collector{
 
+    //this is probably very crucial
+    //and VERY HARD to implement this right
+    //the common misconception about backprop is to saturate GPU flops
+    //yet its wasting GPU flops not to synchronize backprop
+    //assume that a tree of height n
+    //root needs to sync 2 ^ n before backprop completes
+    //its children needs to sync 2^(n - 1) before backprop completes
+    //the right scheduling algorithm reduces backprop complexity by a factor of 1000x (not neccesarily going to complete the backprop sooner - but allows room for another backprops to continue - such that GPU resource waste is NOT a concern) - if the allocation is perfect and the scheduling is correctly implemented
+    //the current issue with state of the art neural network is (1): path problem, (2): information problem
+    //such that a wrong output can be solved if the above problems are solved
+    //this requires a MASSIVE network of information - think of throwing every electrical signals on Earth at the network - and let optimizer engine figure out what person A going to do next
+    //every possible problems in computer science are: affinity problems, locality problems. If you got those problems right - then your program is running smoothly
+    //remember to always saturate GPU flops - CPU flops - maximize network bandwidth of 100Gb/s (at all time)
+    //and don't waste flops on backprops - by using correct allocation patterns
+    //always use kernelmap_x - even for raw RAM - it's fast - it's efficient - and there is nothing wrong with it
+    //most importantly - deprecate the usage of linear - use other type of <>_near - it's numerically stable - it's combinatorial and it's more efficient
+    //linear algebra is a scam - yeah - I said it - it has always been andnear, xornear and addnear
+
     using event_t   = dg::network_memcommit::virtual_mmeory_event_t;
 
     struct MempressRetranslatorInterface{
