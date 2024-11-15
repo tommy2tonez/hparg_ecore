@@ -164,6 +164,27 @@ namespace dg::network_xmath_host{
         return (lcmp == rcmp) * val;
     }
 
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto bitwise_or(T lhs, T rhs) noexcept -> T{
+
+        static_assert(std::numeric_limits<T>::has_quiet_NaN);
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto bitwise_and(T lhs, T rhs) noexcept -> T{
+
+        static_assert(std::numeric_limits<T>::has_quiet_NaN);
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto bitwise_xor(T lhs, T rhs) noexcept -> T{
+
+        static_assert(std::numeric_limits<T>::has_quiet_Nan);
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     inline auto sign(T value) noexcept -> T{
         
@@ -297,10 +318,29 @@ namespace dg::network_xmath_host{
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    inline auto eqcmp_mul(T lcmp, T rcmp, T val) -> T{
+    inline auto eqcmp_mul(T lcmp, T rcmp, T val) noexcept -> T{
 
         return ((lcmp ^ rcmp) == 0u) * val;
     }
-} 
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto bitwise_or(T lhs, T rhs) noexcept -> T{
+
+        return lhs | rhs;
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto bitwise_and(T lhs, T rhs) noexcept -> T{
+
+        return lhs & rhs;
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto bitwise_xor(T lhs, T rhs) noexcept -> T{
+
+        return lhs ^ rhs;
+    }
+
+}
 
 #endif
