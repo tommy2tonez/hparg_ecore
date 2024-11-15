@@ -325,7 +325,7 @@ namespace dg::network_tileops_host_static::templated_ops{
         static inline void linear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
-            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
             for (size_t j = 0; j < BLK_SZ; ++j){
                 for (size_t i = 0; i < BLK_SZ; ++i){
@@ -338,7 +338,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void add_combinatorial(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void adnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -411,7 +411,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void add_combinatorial(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void addnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -424,6 +424,57 @@ namespace dg::network_tileops_host_static::templated_ops{
                     }
                     dst[i * BLK_SZ + j] = total;
                 }
+            }
+        }
+
+        //boolean algebra - the backprop requires a statiscal model to approx gradient - it's literally a python project - just two pointers and map[i, j] -> gradient then find best fit function that involves the two pointers by using exhaustive search approach
+        //but these are important
+
+        static inline void ornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t j = 0; j < BLK_SZ; ++j){
+                for (size_t i = 0; i < BLK_SZ; ++i){
+                    casting_ops_t total{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        total = x_math::add(total, x_math::or(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
+                    }
+                }
+                dst[i * BLK_SZ + j] = total;
+            }
+        }
+
+        static inline void andnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t j = 0; j < BLK_SZ; ++j){
+                for (size_t i = 0; i < BLK_SZ; ++i){
+                    casting_ops_t total{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        total = x_math::add(total, x_math::and(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
+                    }
+                    dst[i * BLK_SZ + j] = total;
+                }
+            }
+        }
+
+        static inline void xornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t j = 0; j < BLK_SZ; ++j){
+                for (size_t i = 0; i < BLK_SZ; ++i){
+                    casting_ops_t total{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        total = x_math::add(total, x_math::xor(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
+                    }
+                }
+                dst[i * BLK_SZ + j] = total;
             }
         }
     };
@@ -575,6 +626,8 @@ namespace dg::network_tileops_host_static::templated_ops{
                 dst[i] = x_math::fma(src_grad[i], other[i], dst[i]);
             }
         }
+
+        //not bdr - ATC + CBT
 
         static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
             
