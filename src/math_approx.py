@@ -4,10 +4,6 @@ import math
 import json
 import random 
 
-#alright guys - things weren't perfect - let's try later 
-#let's introduce the concept of discrete function
-#after passing the unit tests for basic differentiables and invsqrt test
-
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
 
@@ -29,7 +25,13 @@ def operation_or(lhs: object, rhs: object) -> object:
 def operation_xor(lhs: object, rhs: object) -> object:
     return int(lhs) ^ int(rhs)
 
-def operation_exp(val: object) -> object:
+def operation_discrete(lhs: object, rhs: object) -> object:
+    if lhs < rhs:
+        return lhs 
+    
+    return 0
+
+def operation_exp(val) -> object:
     return math.exp(val)
 
 def operation_log(val: object) -> object:
@@ -45,7 +47,7 @@ def operation_inv(val: object) -> object:
     return 1 / val
 
 def operation_neg(val: object) -> object:
-    return -val
+    return -val 
 
 def self_to_pair_operation(operation: Callable[[object], object]) -> Callable[[object, object], object]:    
     return lambda a, b: operation(a)
@@ -62,10 +64,11 @@ def right_extract_operation() -> Callable[[object, object], object]:
 def const_operation(c: float) -> Callable[[object, object], object]:
     return lambda a, b: c 
 
+
 def bind_operation(operatable: Callable[[object, object], object], lhs: Callable[[object, object], object], rhs: Callable[[object, object], object]) -> Callable[[object, object], object]:
     return lambda a, b: operatable(lhs(a, b), rhs(a, b))
 
-operation_arr       = ["add", "sub", "mul", "div"]
+operation_arr       = ["add", "sub", "mul", "div", "dsc"]
 operation_dict      = {
     "add": operation_add,
     "sub": operation_sub,
@@ -79,11 +82,9 @@ operation_dict      = {
     "sin": operation_sin,
     "cos": operation_cos,
     "inv": operation_inv,
-    "neg": operation_neg
+    "neg": operation_neg,
+    "dsc": operation_discrete
 }
-
-self_transform_set          = {"exp", "log", "sin", "cos", "inv", "neg"}
-pair_transform_set          = {"add", "sub", "mul", "div", "and", "or", "xor"}
 
 OPS_TREE_KIND_LEFT_EXTRACT  = 0
 OPS_TREE_KIND_RIGHT_EXTRACT = 1
@@ -141,12 +142,12 @@ def pretty_print(root: OperationTree) -> str:
         return "%s(%s, %s)" % (root.pair_operation_name, pretty_print(root.left), pretty_print(root.right))
 
     return "0" 
-    
+
 def clone_tree(root: OperationTree) -> OperationTree:
 
     if (root == None):
         return None 
-    
+
     rs: OperationTree       = OperationTree()
     rs.left                 = clone_tree(root.left)
     rs.right                = clone_tree(root.right)
@@ -164,7 +165,7 @@ def operation_tree_count_ops(root: OperationTree) -> OperationTree:
     return operation_tree_count_ops(root.left) + operation_tree_count_ops(root.right) + 1 
 
 def operation_tree_node_at(root: OperationTree, idx: int) -> OperationTree:
-    
+
     if root == None:
         return None 
 
@@ -183,7 +184,7 @@ def operation_tree_node_at(root: OperationTree, idx: int) -> OperationTree:
 
     if (idx == 0):
         return root
-    
+
     return None
 
 def make_operation_tree(transformer_list: list[str], const_value_arr: list[float], operation_num: int) -> list[OperationTree]:
@@ -289,13 +290,15 @@ def immutable_mutate_tree_const(root: OperationTree, tree_idx: int, x: float) ->
     return new_root
 
 def approx(instrument: Callable[[float, float], float], first: float, last: float, transformer_list: list[str], operation_num: int, min_const_value: float, max_const_value: float, discretization_sz: int) -> str:
-
+    
     discrete_const_arr: list[float]             = discretize(min_const_value, max_const_value, discretization_sz)
     tree_list: list[OperationTree]              = make_operation_tree(transformer_list, discrete_const_arr, operation_num)
     data_pts: list[tuple[float, OperationTree]] = []
     first_cut_tree_list: list[OperationTree]    = []
     newton_optimization_step                    = 1024
-    newton_iteration_sz                         = 8
+    newton_iteration_sz                         = 16
+
+    print(len(tree_list))
 
     for tree in tree_list:
         callable    = operation_tree_to_callable(tree)
@@ -303,7 +306,7 @@ def approx(instrument: Callable[[float, float], float], first: float, last: floa
         data_pts    += [(deviation, tree)]
 
     data_pts.sort(key = lambda x: x[0])
-    first_cut_tree_list = [tree for (_, tree) in data_pts[:1234]]
+    first_cut_tree_list = [tree for (_, tree) in data_pts[:128]]
     data_pts = []
     
     if len(first_cut_tree_list) == 0:
@@ -377,9 +380,9 @@ def approx_bitwise_and_df_da(first: int, last: int) -> str:
     
     operation               = lambda a, b: bitwise_and_df_da(a, b)
     min_const_value         = 0
-    max_const_value         = 250
-    max_operation_num       = 3
-    discretization_sz       = 10
+    max_const_value         = 256
+    max_operation_num       = 8
+    discretization_sz       = 5
 
     return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
 
@@ -387,7 +390,7 @@ def approx_bitwise_and_df_db(first: int, last :int) -> str:
     
     operation               = lambda a, b: bitwise_and_df_da(b, a)
     min_const_value         = 0
-    max_const_value         = 250
+    max_const_value         = 256
     max_operation_num       = 3
     discretization_sz       = 10
 
@@ -397,7 +400,7 @@ def approx_bitwise_or_df_da(first: int, last: int) -> str:
     
     operation               = lambda a, b: bitwise_or_df_da(a, b)
     min_const_value         = 0
-    max_const_value         = 250
+    max_const_value         = 256
     max_operation_num       = 3
     discretization_sz       = 10
 
@@ -407,7 +410,7 @@ def approx_bitwise_or_df_db(first: int, last: int) -> str:
     
     operation               = lambda a, b: bitwise_or_df_da(b, a)
     min_const_value         = 0
-    max_const_value         = 250
+    max_const_value         = 256
     max_operation_num       = 3
     discretization_sz       = 10
 
@@ -417,7 +420,7 @@ def approx_bitwise_xor_df_da(first: int, last: int) -> str:
     
     operation               = lambda a, b: bitwise_xor_df_da(a, b)
     min_const_value         = 0
-    max_const_value         = 250
+    max_const_value         = 256
     max_operation_num       = 3
     discretization_sz       = 10
 
@@ -427,7 +430,7 @@ def approx_bitwise_xor_df_db(first: int, last: int) -> str:
     
     operation               = lambda a, b: bitwise_xor_df_da(b, a)
     min_const_value         = 0
-    max_const_value         = 250
+    max_const_value         = 256
     max_operation_num       = 3
     discretization_sz       = 10
 
@@ -435,9 +438,9 @@ def approx_bitwise_xor_df_db(first: int, last: int) -> str:
 
 def approx_sqrt(first: int, last: int) -> str:
 
-    operation               = lambda a, b: 1 / math.sqrt(a)
+    operation               = lambda a, b: math.sqrt(a)
     min_const_value         = 0
-    max_const_value         = 128
+    max_const_value         = 256
     max_operation_num       = 5
     discretization_sz       = 10
 
@@ -445,11 +448,10 @@ def approx_sqrt(first: int, last: int) -> str:
 
 def main():
     
-    #alright - now is the time for discrete functions - discrete function is a RELU activator function
+    #alright guys - let's take a break on data science today - I'll be back for A star + heuristic pruning tomorrow - goal is to able to approx heavy uint8_t and uint16_t operations (cos, sin, sqrt, etc.) + absolute accuracy for bitwise operators - within 15 operations - I hope - this is very very important
+    #because our network's gonna be bitwise for numerical stability
+    #we want to flops hard on the CPU - even though that's like the 1980 tech
 
-    # print(approx_bitwise_and_df_da(0, 256))
-    # print(approx_bitwise_or_df_da(0, 256))
-    # print(approx_bitwise_xor_df_da(0, 256))
-    print(approx_sqrt(0, 256))
+    print(approx_bitwise_and_df_da(0, 256)) 
 
 main()

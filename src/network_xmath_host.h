@@ -340,7 +340,6 @@ namespace dg::network_xmath_host{
 
         return lhs ^ rhs;
     }
-
 }
 
 #endif
