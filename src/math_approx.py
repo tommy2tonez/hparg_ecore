@@ -460,6 +460,30 @@ def main():
     #for every two char created by the encryption key - we reduce the possibility space by a factor of 256 ** 2, and so on.
     #fortunately, JWT is not uniform distribution, and JWT signing secret is usually < 256 char - so the cracking time is actually much faster (I'm taking about instant fast) - if appropriate methods are being applied
     #this is a brute force version of that - I don't recommend anyone to actually crack JWT with this algorithm lol - the right tool for the right job is the network
+    
+    #what brother desparately needs was the network_kernelmap_x and my flat_datastructure
+    #yeah brother - even on CPU - you need to contain the RAM usage - you don't let it CAP the RAM and die - that's the worst approach and irreversable approach EVER
+    #this is the reason you want to RAID your storage - not for ingestion speed - god damn it
+    #you want to allocate everything on the memregion - make sure that it's reachability is inside the memregion
+    #and locality of the immutable flat_datastructure
+    #best thing - you can dispatch to CUDA which runs the jobs for you
+    #that's the definition of MPP - not multithreading and concurrency
+    #multithreading and concurrency are premature optimizations - NEVER to be applicable in real life - only to be used for affined tasks (like draining kernel_network_buffer) and high latency IO tasks - other than that - NEVER use concurrency to boost your flops - that's what GPU is best at - and not CPU
+    #I don't have bad intentions or whatever - I tell you the optimizables that can 10x your sales - yeah - that Neo4j after you implemented this can NEVER EVER beat the benchmark
+    #truth is I dont know I spent 1 year to think about the optimizables that I could have for TigerGraph
+    #the moment you followed Spark and friends was a bad moment - MPP is always about GPUs
+    #I think about what you thought too - it's memregion locality - node collapses - this is actually a hard task that I haven't been able to solve yet
+    #the only thing that I thought of was lambda as a service - circle infected region (by running BFS algorithms and friends) - dispatch it to distributed lambdas 
+    #other non-heavy tasks like simple queries can be dispatched to the normal engine
+
+    #I, however, pursue an entire different radix of Graph. It's dg - derivative of gradients (acceleration, jerk, snap, crackle, pop, whatever) - this is some new stuff that I will spend the next 2-3 years to work on
+    #you might not see what I see yet it's always about time in this tensor transformation field
+    #you want to time the backprop
+    #you want to time the msgrbwd
+
+    #I thought what you thought too - why don't I just fucking use a counter on the tile and backprop it? It's actually going to bottleneck the future architecture of dynamic pathing - and affect locality of dispatching - if you backprop it immediately after counter reaches 0 - you risk bad locality
+    #the only way to solve the locality problem is to fatten the tile - which is what PyTorch has been doing - and yeah - I just reinvented PyTorch - yay
+    #so it's actually about timing and reducing LOGIT_COUNT_PER_TILE yet maintaining the GPU flops
 
     print(approx_bitwise_and_df_da(0, 256))
 
