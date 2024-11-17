@@ -68,7 +68,7 @@ def const_operation(c: float) -> Callable[[object, object], object]:
 def bind_operation(operatable: Callable[[object, object], object], lhs: Callable[[object, object], object], rhs: Callable[[object, object], object]) -> Callable[[object, object], object]:
     return lambda a, b: operatable(lhs(a, b), rhs(a, b))
 
-operation_arr       = ["add", "sub", "mul", "div", "dsc"]
+operation_arr       = ["add", "sub", "mul", "div", "dsc", "and", "or", "xor"]
 operation_dict      = {
     "add": operation_add,
     "sub": operation_sub,
@@ -452,6 +452,15 @@ def main():
     #because our network's gonna be bitwise for numerical stability
     #we want to flops hard on the CPU - even though that's like the 1980 tech
 
-    print(approx_bitwise_and_df_da(0, 256)) 
+    #alright - let's talk about asymmetric encryption | symmetric cracking methods
+    #we know for sure that, the output of the encryption key is at best uniform, at worst skewed
+    #uniform in the sense, or in the coordinate, that the output uniformly reduce the possibility space of the signing key 
+    #assume our symmetric encryption function is f(x) -> y - think JWT signing algorithms
+    #we are trying to model f(x) by approximating it - for every char created by the token - we are 1 char closer to estimating the token or reduce the possibility space by a factor of 256
+    #for every two char created by the encryption key - we reduce the possibility space by a factor of 256 ** 2, and so on.
+    #fortunately, JWT is not uniform distribution, and JWT signing secret is usually < 256 char - so the cracking time is actually much faster (I'm taking about instant fast) - if appropriate methods are being applied
+    #this is a brute force version of that - I don't recommend anyone to actually crack JWT with this algorithm lol - the right tool for the right job is the network
+
+    print(approx_bitwise_and_df_da(0, 256))
 
 main()
