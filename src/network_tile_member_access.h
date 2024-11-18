@@ -832,7 +832,7 @@ namespace dg::network_tile_member_access::implementation{
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr), std::integral_constant<size_t, ARR_IDX>{})));
+                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -917,9 +917,14 @@ namespace dg::network_tile_member_access::implementation{
                 return idx * LOGIT_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
             }
 
+            static constexpr auto offset_tile_clogit_addr(size_t idx) noexcept -> size_t{
+                
+                return idx * LOGIT_VALUE_SZ * dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
 
-                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+                return idx * GRAD_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_clogit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
             static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
@@ -1013,6 +1018,11 @@ namespace dg::network_tile_member_access::implementation{
 
                 return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
+
+            static inline auto tile_clogit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::advance(self::get_head(), self::offset_tile_clogit_addr(self::index(access_ins::access(ptr))));
+            } 
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
@@ -1828,14 +1838,14 @@ namespace dg::network_tile_member_access{
 
     inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_id_t{
         
-        std::atomic_signal_fence(std::memory_order_acquire); 
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         return resource.region_id_map.find(dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}))->second;
     }
 
     template <class CallBack>
     inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_leaf8_tile(id)){
             static_assert(noexcept(cb(leaf8_accessor_t{})));
@@ -1868,7 +1878,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_mono8_tile(id)){
             static_assert(noexcept(cb(mono8_accessor_t{})));
@@ -1901,7 +1911,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_pair_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_pair8_tile(id)){
             static_assert(noexcept(cb(pair8_accessor_t{})));
@@ -1934,7 +1944,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_uacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_uacm8_tile(id)){
             static_assert(noexcept(cb(uacm8_accessor_t{})));
@@ -1967,7 +1977,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_pacm_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_pacm8_tile(id)){
             static_assert(noexcept(cb(pacm8_accessor_t{})));
@@ -2000,7 +2010,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_crit_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_crit8_tile(id)){
             static_assert(noexcept(cb(crit8_accessor_t{})));
@@ -2033,7 +2043,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_msgrfwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_msgrfwd8_tile(id)){
             static_assert(noexcept(cb(msgrfwd8_accessor_t{})));
@@ -2066,7 +2076,7 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_msgrbwd_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
         if (is_msgrbwd8_tile(id)){
             static_assert(noexcept(cb(msgrbwd8_accessor_t{})));
@@ -2098,7 +2108,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2134,7 +2144,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2170,7 +2180,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2205,7 +2215,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2240,7 +2250,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2276,7 +2286,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2311,7 +2321,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2347,7 +2357,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 
@@ -2383,7 +2393,7 @@ namespace dg::network_tile_member_access{
 
     auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
         auto map_ptr            = resource.region_id_map.find(id_region);
 

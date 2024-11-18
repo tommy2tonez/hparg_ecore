@@ -22,6 +22,14 @@ import random
 #assume our incoming training data is z, f(z) -> p is not accurate
 #then there exists a way for the function to continue to be 100% accurate such is modeled by the if x == z then f(x) else p is applied - and the function continues to be 100% accurate
 
+#okay guys
+#I want yall to prove that if the smaller the possibility space of a f(x) -> y - the higher the intelligence of the f(x) -> y
+#possibility space can be briefly described as: 
+#given N logits, possibility(f(x, N) -> y) = K
+# 
+#hint, it's not attention. Attention is a part of dimensional reduction which limits the possibility space
+#I want yall to prove that if the new transformer with a small possibility space can achieve super intelligence 
+
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
 

@@ -6,28 +6,21 @@
 #include "network_memops_uma.h"
 #include "network_tile_member_access.h"
 #include "network_pointer.h"
+#include "network_tile_metadata.h"
 
 namespace dg::network_tile_member_getsetter{
 
+    static inline constexpr size_t OBSERVER_ARR_SZ = dg::network_tile_metadata::OBSERVER_ARRAY_SZ; 
+
     using uma_ptr_t             = dg::network_pointer::uma_ptr_t;
-    using tile_polymorphic_t    = uint8_t;
-    using init_status_t         = uint8_t;
-    using observer_t            = uint64_t;
-    using operatable_id_t       = uint64_t;
-    using dispatch_control_t    = uint64_t;
-    using pong_count_t          = uint64_t;
-    using addr_t                = uint64_t; 
-    using logit_8_t             = uint8_t;
-    using logit_16_t            = uint16_t;
-    using logit_32_t            = uint32_t;
-    using logit_64_t            = uint64_t;
-    using grad_8_t              = uint8_t;
-    using grad_16_t             = uint16_t;
-    using grad_32_t             = uint32_t;
-    using grad_64_t             = uint64_t;
-    using crit_kind_t           = uint8_t;
-    using dst_info_t            = std::array<char, 32>;
-    using timein_t              = uint64_t;
+    using init_status_t         = dg::network_tile_metadata::init_status_t;
+    using observer_t            = dg::network_tile_metadata::observer_t;
+    using operatable_id_t       = dg::network_tile_metadata::operatable_id_t;
+    using dispatch_control_t    = dg::network_tile_metadata::dispatch_control_t;
+    using pong_count_t          = dg::network_tile_metadata::pong_count_t;
+    using crit_kind_t           = dg::network_tile_metadata::crit_kind_t;
+    using dst_info_t            = dg::network_tile_metadata::dst_info_t;
+    using timein_t              = dg::network_tile_metadata::timein_t;
 
     void set_leaf_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
 
@@ -67,6 +60,25 @@ namespace dg::network_tile_member_getsetter{
     void set_leaf_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
 
         set_leaf_observer_nothrow(dg::network_tile_member_access::safethrow_leaf_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
+    }
+
+    void set_leaf_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_leaf_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_leaf_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_leaf_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_leaft_observer_nothrow(dg::network_tile_member_access::safethrow_leaf_ptr_access(ptr), arr);
     }
 
     void set_leaf_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
@@ -129,7 +141,7 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(operatable_id_t));
     }
 
-    void set_leaf_operatable_id(uma_ptr_t ptr, operatable_id operatable_id){
+    void set_leaf_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id){
 
         set_leaf_operatable_id_nothrow(dg::network_tile_member_access::safethrow_leaf_ptr_access(ptr), operatable_id);
     } 
@@ -193,6 +205,25 @@ namespace dg::network_tile_member_getsetter{
     void set_mono_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
 
         set_mono_observer_nothrow(dg::network_tile_member_access::safethrow_mono_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
+    }
+
+    void set_mono_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_mono_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_mono_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_mono_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_mono_observer_nothrow(dg::network_tile_member_access::safethrow_mono_ptr_access(ptr), arr);
     }
 
     void set_mono_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
@@ -350,6 +381,25 @@ namespace dg::network_tile_member_getsetter{
 
         set_pair_observer_nothrow(dg::network_tile_member_access::safethrow_pair_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     } 
+
+    void set_pair_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_pair_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_pair_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_pair_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_pair_observer_nothrow(dg::network_tile_member_access::safethrow_pair_ptr_access(ptr), arr);
+    }
 
     void set_pair_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
 
@@ -526,6 +576,25 @@ namespace dg::network_tile_member_getsetter{
         set_uacm_observer_nothrow(dg::network_tile_member_access::safethrow_uacm_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     }
 
+    void set_uacm_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_uacm_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_uacm_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_uacm_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_uacm_observer_nothrow(dg::network_tile_member_access::safethrow_uacm_ptr_access(ptr), arr);
+    }
+
     void set_uacm_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
 
         uma_ptr_t dst   = {};
@@ -682,6 +751,25 @@ namespace dg::network_tile_member_getsetter{
     void set_pacm_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
 
         set_pacm_observer_nothrow(dg::network_tile_member_access::safethrow_pacm_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
+    }
+
+    void set_pacm_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_pacm_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_pacm_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_pacm_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_pacm_observer_nothrow(dg::network_tile_member_access::safethrow_pacm_ptr_access(ptr), arr);
     }
 
     void set_pacm_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
@@ -863,6 +951,25 @@ namespace dg::network_tile_member_getsetter{
         set_crit_observer_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     } 
 
+    void set_crit_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ>) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_crit_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_crit_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_crit_observer_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), arr);
+    }
+
     void set_crit_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
 
         uma_ptr_t dst   = {};
@@ -880,6 +987,25 @@ namespace dg::network_tile_member_getsetter{
     void set_crit_logit(uma_ptr_t ptr, void * addr){
 
         set_crit_logit_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr);
+    }
+    
+    void set_crit_clogit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+
+        uma_ptr_t dst   = {};
+        void * src      = addr;
+        size_t cpy_sz   = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst     = Accessor::tile_clogit_addr(ptr);
+            cpy_sz  = Accessor::logit_group_size();
+        };
+
+        dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_crit_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
+    }
+
+    void set_crit_clogit(uma_ptr_t ptr, void * addr){
+        
+        set_crit_clogit_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr);
     }
 
     void set_crit_grad_nothrow(uma_ptr_t ptr, void * addr) noexcept{
@@ -1034,6 +1160,25 @@ namespace dg::network_tile_member_getsetter{
     void set_msgrfwd_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
 
         set_msgrfwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
+    }
+
+    void set_msgrfwd_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_msgrfwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrfwd_ptr_access(ptr));
+        dg::network_memops_uma::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_msgrfwd_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_msgrfwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), arr);
     }
 
     void set_msgrfwd_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
@@ -1209,6 +1354,25 @@ namespace dg::network_tile_member_getsetter{
     void set_msgrbwd_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
 
         set_msgrbwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
+    }
+
+    void set_msgrbwd_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        dg::network_tile_member_access::get_msgrbwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrbwd_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_msgrbwd_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_msgrbwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), arr);
     }
 
     void set_msgrbwd_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
@@ -1459,6 +1623,52 @@ namespace dg::network_tile_member_getsetter{
         set_tile_observer_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     }
 
+    void set_tile_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+
+        using namespace dg::network_tile_member_access;
+    
+        static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
+      
+        const auto id   = dg_typeid(safe_tile_ptr_access(ptr));
+        uma_ptr_t dst   = {};
+        void * src      = arr.data();
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            dst = Accessor::observer_addr(ptr, std::integral_constant<size_t, 0u>{});
+        };
+
+        if (is_leaf_tile(id)){
+            get_leaf_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_mono_tile(id)){
+            get_mono_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_uacm_tile(id)){
+            get_uacm_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_pacm_tile(id)){
+            get_pacm_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_pair_tile(id)){
+            get_pair_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_crit_tile(id)){
+            get_crit_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_msgrfwd_tile(id)){
+            get_msgrfwd_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_msgrbwd_tile(id)){
+            get_msgrbwd_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+            }
+        }
+
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
+    }
+
+    void set_tile_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+
+        set_tile_observer_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr), arr);
+    }
+
     void set_tile_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
 
         using namespace dg::network_tile_member_access; 
@@ -1689,6 +1899,22 @@ namespace dg::network_tile_member_getsetter{
     
     //
 
+    auto get_leaf_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_leaf_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_leaf_ptr_access(ptr));
+        
+        return rs;
+    }
+
+    auto get_leaf_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_leaf_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_leaf_ptr_access(ptr));
+    }
+
     auto get_leaf_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
         static_assert(std::is_trivially_copyable_v<init_status_t>);
@@ -1838,6 +2064,22 @@ namespace dg::network_tile_member_getsetter{
     }
 
     //
+
+    auto get_mono_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_mono_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_mono_ptr_access(ptr));
+        
+        return rs;
+    }
+
+    auto get_mono_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_mono_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_mono_ptr_access(ptr));
+    }
 
     auto get_mono_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
@@ -2012,6 +2254,22 @@ namespace dg::network_tile_member_getsetter{
         
     //
     
+    auto get_pair_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_pair_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_pair_ptr_access(ptr));
+        
+        return rs;
+    }
+
+    auto get_pair_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_pair_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_pair_ptr_access(ptr));
+    }
+
     auto get_pair_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
         static_assert(std::is_trivially_copyable_v<init_status_t>);
@@ -2206,6 +2464,22 @@ namespace dg::network_tile_member_getsetter{
 
     //
 
+    auto get_uacm_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_uacm_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_uacm_ptr_access(ptr));
+
+        return rs;
+    }
+
+    auto get_uacm_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_uacm_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_uacm_ptr_access(ptr));
+    }
+
     auto get_uacm_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
         static_assert(std::is_trivially_copyable_v<init_status_t>);
@@ -2379,6 +2653,22 @@ namespace dg::network_tile_member_getsetter{
     }
     
     //
+
+    auto get_pacm_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_pacm_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_pacm_ptr_access(ptr));
+
+        return rs;
+    }
+
+    auto get_pacm_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_pacm_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_pacm_ptr_access(ptr));
+    }
 
     auto get_pacm_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
@@ -2578,6 +2868,22 @@ namespace dg::network_tile_member_getsetter{
  
     //
 
+    auto get_crit_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_crit_ptr_access(ptr));
+
+        return rs;
+    }
+
+    auto get_crit_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_crit_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr));
+    }
+
     auto get_crit_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
         static_assert(std::is_trivially_copyable_v<init_status_t>);
@@ -2640,6 +2946,24 @@ namespace dg::network_tile_member_getsetter{
     void get_crit_logit(uma_ptr_t ptr, void * dst){
 
         get_crit_logit_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), dst);
+    }
+
+    void get_crit_clogit_nothrow(uma_ptr_t ptr, void * dst) noexcept{
+
+        uma_ptr_t src   = {};
+        size_t cpy_sz   = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            src     = Accessor::tile_clogit_addr(ptr);
+            cpy_sz  = Accessor::logit_group_size();
+        };
+
+        dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_crit_ptr_access(ptr));
+        dg::network_memops_umax::memcpy_uma_to_host_nothrow(dst, src, cpy_sz);
+    }
+
+    void get_crit_clogit(uma_ptr_t ptr, void * dst){
+
+        get_crit_clogit_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), dst);
     }
 
     void get_crit_grad_nothrow(uma_ptr_t ptr, void * dst) noexcept{
@@ -2749,6 +3073,22 @@ namespace dg::network_tile_member_getsetter{
     } 
 
     //
+
+    auto get_msgrfwd_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_msgrfwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrfwd_ptr_access(ptr));
+        
+        return rs;
+    }
+
+    auto get_msgrfwd_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_msgrfwd_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr));
+    }
 
     auto get_msgrfwd_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
@@ -2943,6 +3283,22 @@ namespace dg::network_tile_member_getsetter{
     }
 
     //
+
+    auto get_msgrbwd_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        uma_ptr_t rs    = {};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+        dg::network_tile_member_access::get_msgrbwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrbwd_ptr_access(ptr));
+        
+        return rs;
+    }
+
+    auto get_msgrbwd_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_msgrbwd_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr));
+    }
 
     auto get_msgrbwd_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
 
@@ -3159,6 +3515,51 @@ namespace dg::network_tile_member_getsetter{
     } 
 
     //
+
+    auto get_tile_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        using namespace dg::network_tile_member_access;
+
+        static_assert(std::is_trivially_copyable_v<init_status_t>);
+
+        const auto id   = dg_typeid(dg::network_tile_member_access::safe_tile_ptr_access(ptr));
+        auto rs         = uma_ptr_t{};
+        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
+            rs = Accessor::rcu_lock_addr(ptr);
+        };
+
+        if (is_leaf_tile(id)){
+            get_leaf_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_mono_tile(id)){
+            get_mono_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_uacm_tile(id)){
+            get_uacm_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_pacm_tile(id)){
+            get_pacm_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_pair_tile(id)){
+            get_pair_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_crit_tile(id)){
+            get_crit_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_msgrfwd_tile(id)){
+            get_msgrfwd_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else if (is_msgrbwd_tile(id)){
+            get_msgrbwd_static_polymorphic_accessor(cb_lambda, ptr, id);
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+            }
+        }
+
+        return rs;        
+    }
+
+    auto get_tile_rcu_addr(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return get_tile_rcu_addr_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr));
+    }
 
     auto get_tile_init_status_nothrow(uma_ptr_t ptr) noexcept -> init_status_t{
         

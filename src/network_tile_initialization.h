@@ -10,8 +10,19 @@
 #include "network_memops_uma.h"
 #include "network_tile_member_access.h"
 #include "stdx.h"
+#include "network_pointer.h"
 
 namespace dg::network_tile_initialization::statix{
+
+    using uma_ptr_t             = dg::network_pointer::uma_ptr_t; 
+    using operatable_id_t       = dg::network_tile_metadata::operatable_id_t;
+    using dispatch_control_t    = dg::network_tile_metadata::dispatch_control_t;
+    using crit_kind_t           = dg::network_tile_metadata::crit_kind_t;
+    using dst_info_t            = dg::network_tile_metadata::dst_info_t;
+    using timein_t              = dg::network_tile_metadata::timein_t;
+
+    static inline constexpr UACM_ACM_SZ = dg::network_tile_metadata::UACM_ACM_SZ;
+    static inline constexpr PACM_ACM_SZ = dg::network_tile_metadata::PACM_ACM_SZ;
 
     void init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id){
 
@@ -22,10 +33,10 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
 
-        set_leaf_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_leaf_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_leaf_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_leaf_operatable_id_nothrow(ptr, operatable_id);
-        set_leaf_pong_count_nothrow(ptr, DEFAULT_PONG_COUNT);
+        set_leaf_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
     }
 
     void init_mono(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
@@ -37,11 +48,11 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
 
-        set_mono_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_mono_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_mono_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_mono_dispatch_control_nothrow(ptr, dispatch_control_id);
         set_mono_operatable_id_nothrow(ptr, operatable_id);
-        set_mono_pong_count_nothrow(ptr, DEFAULT_PONG_COUNT);
+        set_mono_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_mono_descendant_nothrow(ptr, src);
     }
 
@@ -54,13 +65,13 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
 
-        set_pair_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_pair_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_pair_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_pair_operatable_id_nothrow(ptr, operatable_id);
         set_pair_dispatch_control_nothrow(ptr, dispatch_control_id);
-        set_pair_pong_count_nothrow(ptr, DEFAULT_PONG_COUNT);
-        set_pair_left_descendant_nothrow(ptr, DEFAULT_DESCENDANT);
-        set_pair_right_descendant_nothrow(ptr, DEFAULT_DESCENDANT);
+        set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        set_pair_left_descendant_nothrow(ptr, lhs);
+        set_pair_right_descendant_nothrow(ptr, rhs);
     }
 
     void init_uacm(uma_ptr_t ptr, std::array<uma_ptr_t, UACM_ACM_SZ> src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
@@ -72,11 +83,11 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
 
-        set_uacm_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_uacm_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_uacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_uacm_operatable_id_nothrow(ptr, operatable_id);
         set_uacm_dispatch_control_nothrow(ptr, dispatch_control_id);
-        set_uacm_pong_count_nothrow(ptr, DEFAULT_PONG_COUNT);
+        set_uacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_uacm_descendant_nothrow(ptr, src);
     }
 
@@ -89,11 +100,11 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
         
-        set_pacm_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_pacm_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_pacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_pacm_operatable_id_nothrow(ptr, operatable_id);
         set_pacm_dispatch_control_nothrow(ptr, dispatch_control_id);
-        set_pacm_pong_count_nothrow(ptr, DEFAULT_PACM_PONG_COUNT);
+        set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_pacm_left_descendant_nothrow(ptr, lhs);
         set_pacm_right_descendant_nothrow(ptr, rhs);
     }
@@ -107,15 +118,51 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
         
-        set_crit_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_crit_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_crit_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_crit_operatable_id_nothrow(ptr, operatable_id);
         set_crit_dispatch_control_nothrow(ptr, dispatch_control_id);
-        set_crit_pong_count_nothrow(ptr, DEFAULT_CRIT_PONG_COUNT);
+        set_crit_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_crit_descendant_nothrow(ptr, src);
         set_crit_kind_nothrow(ptr, crit_kind);
     }
 
+    //in the user's perspective - they have a pool of data - call x 
+    //they have a function F - which we call neural networks
+    //they want to inject the function F - from logit-database -> processing engine (core)
+    //they want to inject the x data -> processing engine (core)
+    //they wait for a certain period before timeout to retrieve msgrfwd tiles - maybe allow user to specify retries for msgr tiles - this is important
+
+    //in the allocation controller's perpective
+    //user opens a session with timeout
+    //controller allocates tiles
+    //user specify tile dependencies
+    //such dependencies are stored in shared_ptr<uma_ptr_t>
+    //user deallocate tiles
+    //user closes session
+    //shared_ptr tiles are session's property. They are deallocated as soon as session terminated (no leak) - or has no reference
+
+    //in the logit_database's perspective
+    //it is a distributed map - aimed for maximum storage
+    //the interface is similar to std::map or std::unordered_map
+
+    //in the ingestion_accelerator's perspective
+    //takes in ingestion requests from database -> processing engine | or from user -> database 
+    //open an ingestion session
+    //pull data from database
+    //push data to processing engine and wait for timeout
+    //retry serveral times before return err_code to user
+    //otherwise returns SUCCESS
+
+    //in the network training's perspective
+    //same as msgrfwd - the only minor change is msgrbwd forwarding to the ingestion accelerator - which ingests the data back to the database
+    //one of the possible ways to speed up the training is by having a linked-list of network instances
+    //where each of the instance's leafs clones the version of itself in the previous instance
+    //if the first instance in the linked_list is the next instance of the last instance - then we have a circular training network
+    //this circular network has no latency - user estimates the time to complete 1 training epoch - and just invoke the next training epoch by dispatching init requests to the output nodes of the next network instance    
+    //note that if the timing is synchronous - then everything is fine - we have a normal PyTorch training flow
+    //if the timing is not synchronous - then the training is still fine (in the sense that its gradient update information is guaranteed to be used, and never lost, after a certain number of hops) - yet it's chaotic training
+    
     void init_msgrfwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, dst_info_t dst_info){
 
         using namespace network_tile_member_getsetter;
@@ -125,11 +172,11 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
         
-        set_msgrfwd_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_msgrfwd_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_msgrfwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
         set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control_id);
-        set_msgrfwd_pong_count_nothrow(ptr, DEFAULT_MSGRFWD_PONG_COUNT);
+        set_msgrfwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_msgrfwd_descendant_nothrow(ptr, src);
         set_msgrfwd_dst_info_nothrow(ptr, dst_info);
     }
@@ -143,11 +190,11 @@ namespace dg::network_tile_initialization::statix{
         auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
         stdx::memtransaction_guard transaction_grd;
 
-        set_msgrbwd_init_status_nothrow(ptr, DEFAULT_INIT_STATUS);
-        set_msgrbwd_observer_nothrow(ptr, DEFAULT_OBSERVER);
+        set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_msgrbwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
         set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control_id);
-        set_msgrbwd_pong_count_nothrow(ptr, DEFAULT_MSGRBWD_PONG_COUNT);
+        set_msgrbwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_msgrbwd_descendant_nothrow(ptr, src);
         set_msgrbwd_dst_info_nothrow(ptr, dst_info);
         set_msgrbwd_timein_nothrow(ptr, timein);

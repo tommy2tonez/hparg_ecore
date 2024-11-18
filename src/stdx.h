@@ -405,22 +405,23 @@ namespace stdx{
             memtransaction_guard& operator =(memtransaction_guard&&) = delete;
     };
 
-    inline __attribute__((always_inline)) void atomic_optional_thread_fence() noexcept{
+    inline __attribute__((always_inline)) void atomic_optional_thread_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+            std::atomic_thread_fence(order)
         } else{
-            (void) IS_SAFE_INTEGER_CONVERSION_ENABLED;
+            (void) order;
         }
     }
 
-    //alright - thank yall
-    //after all the comments from the community - we have put together a working version
-    //the proof is virtualization fence -> dispatch_table -> launder pointer - and a seq_cst before and after to hinder vtable inlinability (which is rare, but exists) - so there's no switch (dispatch_code): case uint64_t: caller(std::assume_aligned<alignof(uint64_t)>(...)), etc.
-    //this behavior is defined after speaking to the committees
-    //because launder_pointer turns a maybe-compiled-time determistic void * -> a run-time deterministic void * which is equally, uniformly aliased to char *, int8_t *, uint8_t *, uint16_t *, etc - right after the std::launder() but before the .ptr() invoke
-    //assume that the compiler does not carry the information associated with the vtable dispatch_code post the dispatch - then the equally, uniformly aliased property is carried post the invoke
-    //assume that the compiler carries the information associated with the vtable dispatch_code post the dispatch - then only const void * and void * work 
+    inline __attribute__((always_inline)) void atomic_optional_signal_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
+
+        if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
+            std::atomic_signal_fence(order);
+        } else{
+            (void) order;
+        }
+    } 
 
     template <class T>
     inline __attribute__((always_inline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{

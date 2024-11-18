@@ -760,7 +760,23 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+        static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void ornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void xornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+
+        } 
+
+        static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
             
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
@@ -769,7 +785,7 @@ namespace dg::network_tileops_host_static::templated_ops{
                 for (size_t j = 0; j < BLK_SZ; ++j){
                     casting_ops_t dot_sum{}; 
                     for (size_t z = 0; z < BLK_SZ; ++z){
-                        dot_sum = x_math::add(dot_sum, x_math::mul(src_grad[i * BLK_SZ + z], other[j * BLK_SZ + z]));
+                        dot_sum = x_math::add(dot_sum, x_math::mul(src_grad[i * BLK_SZ + z], other_logit[j * BLK_SZ + z]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], dot_sum);
                 }
@@ -800,6 +816,38 @@ namespace dg::network_tileops_host_static::templated_ops{
 
             for (size_t i = 0; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::mul(x_math::pow(other_logit[i], dst_logit[i]), x_math::log(other_logit[i])), dst[i]);
+            }
+        }
+
+        static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void ornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void xornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+            
+        }
+
+        static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+
+        }
+
+        static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t dot_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        dot_sum = x_math::add(dot_sum, x_math::mul(other[z * BLK_SZ + i], src_grad[z * BLK_SZ + j]));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], dot_sum);
+                }
             }
         }
     };
