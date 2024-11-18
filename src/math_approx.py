@@ -26,9 +26,13 @@ import random
 #I want yall to prove that if the smaller the possibility space of a f(x) -> y - the higher the intelligence of the f(x) -> y
 #possibility space can be briefly described as: 
 #given N logits, possibility(f(x, N) -> y) = K
-# 
 #hint, it's not attention. Attention is a part of dimensional reduction which limits the possibility space
 #I want yall to prove that if the new transformer with a small possibility space can achieve super intelligence 
+
+#next thing I want yall to prove is uniform distribution of logit influence is important in scaling network 
+#such that a logit influence on another is uniform distributed among all pairs
+#hint - this could be achieve by one dimensional x 2 dimensional linear
+#yet the possibility space is too high - this results in memorization rather than intelligence
 
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
