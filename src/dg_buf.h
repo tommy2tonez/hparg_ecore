@@ -713,12 +713,6 @@ namespace dg::dgbuf::datastructure{
                 return this->end();
             }
 
-            template <class ...Args>
-            constexpr auto operator[](Args&& ...args) const noexcept -> decltype(auto){
-
-                return (*this->get(std::forward<Args>(args)...)).second;
-            }
-
             template <class Reflector>
             constexpr void dg_reflect(const Reflector& reflector) const noexcept{
 
