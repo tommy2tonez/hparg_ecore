@@ -6,8 +6,21 @@ import random
 
 #this is a trillion dollar answer that I want yall to reflect on
 #I want yall to prove that this method can actually approximate any function (continuous and non-continuous) to the absolute accuracy with sufficient number of hops
-#I want yall to find the difference between THIS and the current state of the art transformer - which is I call gradient retarded - because it's impossible to estimate the function accurately
+#I want yall to find the difference between THIS and the current state of the art transformer - which I call gradient retarded - because it's impossible to estimate the function accurately
 #I want yall to figure out the way to throw every electrical signals at the network and make this predict everything to the absolute accuracy - yes - it's possible - but it requires crazy number of flops
+
+#current transformer
+#proof by induction:
+#assume that our network is perfect, f(x) -> y, y is 100% accurate
+#assume our incoming training data is z, f(z) -> p is not accurate
+#in order for p to be accurate - p needs to reflect on all the tensors that it passes through, if the hops is 32 - then there are 32 layers of tensors that need to be mutated
+#the possibility that the f(x) -> y ziggled just for the input z is near 0 - if it ziggles, then it has to ziggle for more than just z - which contradicts with the f(x) -> y is 100% in the beginning
+
+#new transformer:
+#proof by induction
+#assume that our network is perfect, f(x) -> y is 100% accurate
+#assume our incoming training data is z, f(z) -> p is not accurate
+#then there exists a way for the function to continue to be 100% accurate such is modeled by the if x == z then f(x) else p is applied - and the function continues to be 100% accurate
 
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
@@ -68,7 +81,6 @@ def right_extract_operation() -> Callable[[object, object], object]:
 
 def const_operation(c: float) -> Callable[[object, object], object]:
     return lambda a, b: c 
-
 
 def bind_operation(operatable: Callable[[object, object], object], lhs: Callable[[object, object], object], rhs: Callable[[object, object], object]) -> Callable[[object, object], object]:
     return lambda a, b: operatable(lhs(a, b), rhs(a, b))
