@@ -774,7 +774,6 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         }
 
-        //A = CBT
         static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
