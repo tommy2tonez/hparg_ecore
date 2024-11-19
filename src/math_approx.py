@@ -400,8 +400,8 @@ def approx_bitwise_or_df_da(first: int, last: int) -> str:
     operation               = lambda a, b: bitwise_or_df_da(a, b)
     min_const_value         = 0
     max_const_value         = 256
-    max_operation_num       = 3
-    discretization_sz       = 10
+    max_operation_num       = 7
+    discretization_sz       = 5
 
     return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
 
@@ -420,8 +420,8 @@ def approx_bitwise_xor_df_da(first: int, last: int) -> str:
     operation               = lambda a, b: bitwise_xor_df_da(a, b)
     min_const_value         = 0
     max_const_value         = 256
-    max_operation_num       = 3
-    discretization_sz       = 10
+    max_operation_num       = 7
+    discretization_sz       = 5
 
     return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
 
@@ -440,17 +440,16 @@ def approx_sqrt(first: int, last: int) -> str:
     operation               = lambda a, b: math.sqrt(a)
     min_const_value         = 0
     max_const_value         = 256
-    max_operation_num       = 5
-    discretization_sz       = 10
+    max_operation_num       = 7
+    discretization_sz       = 5
 
     return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
 
 def main():
 
-    #alright guys - this problem is too time-consuming and actually needs time to contemplate on - I'll be back - but for now - 7 operations should suffice for most of the host_static use cases
-    #this is a very hard problem - so hard that people that crack this problem can open the portal to another world - really
-    #the frame is turing complete
-
     print(approx_bitwise_and_df_da(0, 256))
+    print(approx_bitwise_or_df_da(0, 256))
+    print(approx_bitwise_xor_df_da(0, 256))
+    print(approx_sqrt(0, 256))
 
 main()

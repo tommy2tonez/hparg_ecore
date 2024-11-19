@@ -10,6 +10,7 @@
 #include <bit>
 #include "network_tile_metadata.h"
 #include <memory>
+#include <stdfloat>
 
 namespace dg::network_tileops_host_static::templated_ops{
 
@@ -165,6 +166,148 @@ namespace dg::network_tileops_host_static::templated_ops{
         static inline auto bitwise_xor(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
             return network_xmath_host::bitwise_xor(lhs, rhs);
+        }
+    };
+
+    struct base_bitwise_gradient{
+
+        static inline auto bitwise_and(uint8_t wrt, uint8_t other) noexcept -> uint8_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_and(uint16_t wrt, uint16_t other) noexcept -> uint16_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_and(uint32_t wrt, uint32_t other) noexcept -> uint32_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_and(uint64_t wrt, uint64_t other) noexcept -> uint64_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_and(std::float16_t wrt, std::float16_t other) noexcept -> std::float16_t{
+
+            return std::numeric_limits<std::float16_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_and(std::bfloat16_t wrt, std::bfloat16_t other) noexcept -> std::bfloat16_t{
+
+            return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_and(std::float32_t wrt, std::float32_t other) noexcept -> std::float32_t{
+
+            return std::numeric_limits<std::float32_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_and(std::float64_t wrt, std::float64_t other) noexcept -> std::float64_t{
+
+            return std::numeric_limits<std::float64_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_or(uint8_t wrt, uint8_t other) noexcept -> uint8_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_or(uint16_t wrt, uint16_t other) noexcept -> uint16_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_or(uint32_t wrt, uint32_t other) noexcept -> uint32_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_or(uint64_t wrt, uint64_t other) noexcept -> uint64_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_or(std::float16_t wrt, std::float16_t other) noexcept -> std::float16_t{
+
+            return std::numeric_limits<std::float16_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_or(std::bfloat16_t wrt, std::bfloat16_t other) noexcept -> std::bfloat16_t{
+
+            return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_or(std::float32_t wrt, std::float32_t other) noexcept -> std::float32_t{
+
+            return std::numeric_limits<std::float32_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_or(std::float64_t wrt, std::float64_t other) noexcept -> std::float64_t{
+
+            return std::numeric_limits<std::float64_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_xor(uint8_t wrt, uint8_t other) noexcept -> uint8_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_xor(uint16_t wrt, uint16_t other) noexcept -> uint16_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_xor(uint32_t wrt, uint32_t other) noexcept -> uint32_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_xor(uint64_t wrt, uint64_t other) noexcept -> uint64_t{
+
+            return {}; //TODOs
+        }
+
+        static inline auto bitwise_xor(std::float16_t wrt, std::float16_t other) noexcept -> std::float16_t{
+
+            return std::numeric_limits<std::float16_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_xor(std::bfloat16_t wrt, std::bfloat16_t other) noexcept -> std::bfloat16_t{
+
+            return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_xor(std::float32_t wrt, std::float32_t other) noexcept -> std::float32_t{
+
+            return std::numeric_limits<std::float32_t>::quiet_NaN();
+        }
+
+        static inline auto bitwise_xor(std::float64_t wrt, std::float64_t other) noexcept -> std::float64_t{
+
+            return std::numeric_limits<std::float64_t>::quiet_NaN();
+        }
+    };
+
+    template <class arithmetic_ops_t>
+    struct coerced_bitwise_gradient{
+
+        static inline auto bitwise_and(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
+
+            return base_bitwise_gradient::bitwise_and(lhs, rhs);
+        }
+
+        static inline auto bitwise_or(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
+
+            return base_bitwise_gradient::bitwise_or(lhs, rhs);
+        }
+
+        static inline auto bitwise_xor(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
+
+            return base_bitwise_gradient::bitwise_xor(lhs, rhs);
         }
     };
 
@@ -713,7 +856,8 @@ namespace dg::network_tileops_host_static::templated_ops{
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
     struct bwd_pair_lhs_unaligned_ops{
 
-        using x_math = coerced_x_math<casting_ops_t>; 
+        using x_math            = coerced_x_math<casting_ops_t>; 
+        using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>; 
 
         static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
@@ -752,29 +896,76 @@ namespace dg::network_tileops_host_static::templated_ops{
         
         static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_and(dst_logit[i], other_logit[i])));
+            }
         }
 
         static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_or(dst_logit[i], other_logit[i])));
+            }
         }
 
         static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_xor(dst_logit[i], other_logit[i])));
+            }
         }
 
-        static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t and_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        and_sum = x_math::add(and_sum, x_math::mul(src_grad[i * BLK_SZ + z], bitwise_gradient::bitwise_and(dst_logit[j * BLK_SZ + z], other_logit[j * BLK_SZ + z])));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], and_sum);
+                }
+            }
         }
 
-        static inline void ornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void ornear(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t or_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        or_sum = x_math::add(or_sum, x_math::mul(src_grad[i * BLK_SZ + z], bitwise_gradient::bitwise_or(dst_logit[j * BLK_SZ + z], other_logit[j * BLK_SZ + z])));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], or_sum);
+                }
+            }
         }
 
-        static inline void xornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void xornear(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t xor_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        xor_sum = x_math::add(xor_sum, x_math::mul(src_grad[i * BLK_SZ + z], bitwise_gradient::bitwise_xor(dst_logit[j * BLK_SZ + z], other_logit[j * BLK_SZ + z])));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], xor_sum);
+                }
+            }
         }
 
         static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+
+            //this is the most important in Machine Learning - unsurprisingly
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -812,7 +1003,8 @@ namespace dg::network_tileops_host_static::templated_ops{
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
     struct bwd_pair_rhs_unaligned_ops{
 
-        using x_math = coerced_x_math<casting_ops_t>; 
+        using x_math            = coerced_x_math<casting_ops_t>; 
+        using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>; 
 
         static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
@@ -849,32 +1041,76 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_and(dst_logit[i], other_logit[i])));
+            }
         }
 
-        static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_or(dst_logit[i], other_logit[i])));
+            }
         }
 
-        static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_xor(dst_logit[i], other_logit[i])));
+            }
         }
 
-        static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t and_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        and_sum = x_math::add(and_sum, x_math::mul(bitwise_gradient::bitwise_and(dst_logit[z * BLK_SZ + i], other_logit[z * BLK_SZ + i]), src_grad[z * BLK_SZ + j]));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], and_sum);
+                }
+            }
         }
 
-        static inline void ornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void ornear(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t or_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        or_sum = x_math::add(or_sum, x_math::mul(bitwise_gradient::bitwise_or(dst_logit[z * BLK_SZ + i], other_logit[z * BLK_SZ + i]), src_grad[z * BLK_SZ + j]));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], or_sum);
+                }
+            }
         }
 
-        static inline void xornear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+        static inline void xornear(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    casting_ops_t xor_sum{};
+                    for (size_t z = 0; z < BLK_SZ; ++z){
+                        xor_sum = x_math::add(xor_sum, x_math::mul(bitwise_gradient::bitwise_xor(dst_logit[z * BLK_SZ + i], other_logit[z * BLK_SZ + i]), src_grad[z * BLK_SZ + j]));
+                    }
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], xor_sum);
+                }
+            }
         }
 
-        //B = ATC, A = 1
-        static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+        static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
@@ -892,8 +1128,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        //B = ATC
-        static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+        static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -902,7 +1137,7 @@ namespace dg::network_tileops_host_static::templated_ops{
                 for (size_t j = 0; j < BLK_SZ; ++j){
                     casting_ops_t dot_sum{};
                     for (size_t z = 0; z < BLK_SZ; ++z){
-                        dot_sum = x_math::add(dot_sum, x_math::mul(other[z * BLK_SZ + i], src_grad[z * BLK_SZ + j]));
+                        dot_sum = x_math::add(dot_sum, x_math::mul(other_logit[z * BLK_SZ + i], src_grad[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], dot_sum);
                 }
@@ -1027,6 +1262,8 @@ namespace dg::network_tileops_host_static::templated_ops{
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
+        //TODOs:
+        
         static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
             
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
@@ -1342,8 +1579,8 @@ namespace dg::network_tileops_host_static::templated_ops{
 
 namespace dg::network_tileops_host_static{
 
-    static inline constexpr size_t LOGIT_COUNT_PER_TILE = dg::network_tile_metadata::LOGIT_COUNT_PER_TILE;
-    static inline constexpr size_t ALIGNMENT_SZ         = std::min(dg::network_tile_metadata::LOGIT_ALIGNMENT_SZ, dg::network_tile_metadata::GRAD_ALIGNMENT_SZ); 
+    static inline constexpr size_t LOGIT_COUNT_PER_TILE             = dg::network_tile_metadata::LOGIT_COUNT_PER_TILE;
+    static inline constexpr size_t ALIGNMENT_SZ                     = std::min(dg::network_tile_metadata::LOGIT_ALIGNMENT_SZ, dg::network_tile_metadata::GRAD_ALIGNMENT_SZ); 
 
     using tile_u8_t                                                 = dg::network_tile_metadata::host_u8_t;
     using tile_u16_t                                                = dg::network_tile_metadata::host_u16_t;
