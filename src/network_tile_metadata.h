@@ -114,19 +114,19 @@ namespace dg::network_tile_metadata{
     // using dst_info_t            = std::array<char, 32>;
     // using timein_t              = uint64_t;
 
-    static inline constexpr init_status_t TILE_INIT_STATUS_EMPTY                                    = 0u;
-    static inline constexpr init_status_t TILE_INIT_STATUS_DECAYED                                  = 1u;
-    static inline constexpr init_status_t TILE_INIT_STATUS_INITIALIZED                              = 2u;
-    static inline constexpr init_status_t TILE_INIT_STATUS_DEFAULT                                  = TILE_INIT_STATUS_EMPTY;
+    static inline constexpr init_status_t TILE_INIT_STATUS_EMPTY                                        = 0u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_DECAYED                                      = 1u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_INITIALIZED                                  = 2u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_DEFAULT                                      = TILE_INIT_STATUS_EMPTY;
 
-    static inline constexpr uma_ptr_t TILE_OBSERVER_DEFAULT                                         = {};
-    static inline constexpr std::array<uma_ptr_t, OBSERVER_ARRAY_SZ> TILE_OBSERVER_ARRAY_DEFAULT    = {};
-    static inline constexpr operatable_id_t TILE_OPERATABLE_ID_DEFAULT                              = {};
-    static inline constexpr dispatch_control_t TILE_DISPATCH_CONTROL_DEFAULT                        = {};
-    static inline constexpr pong_count_t TILE_PONG_COUNT_DEFAULT                                    = {};
-    static inline constexpr crit_kind_t TILE_CRIT_KIND_DEFAULT                                      = {};
-    static inline constexpr dst_info_t TILE_DST_INFO_DEFAULT                                        = {};
-    static inline constexpr uma_ptr_t TILE_DESCENDANT_DEFAULT                                       = {};
+    static inline constexpr tile_addr_t TILE_OBSERVER_DEFAULT                                           = {};
+    static inline constexpr std::array<tile_addr_t, OBSERVER_ARRAY_SZ> TILE_OBSERVER_ARRAY_DEFAULT      = {};
+    static inline constexpr operatable_id_t TILE_OPERATABLE_ID_DEFAULT                                  = {};
+    static inline constexpr dispatch_control_t TILE_DISPATCH_CONTROL_DEFAULT                            = {};
+    static inline constexpr pong_count_t TILE_PONG_COUNT_DEFAULT                                        = {};
+    static inline constexpr crit_kind_t TILE_CRIT_KIND_DEFAULT                                          = {};
+    static inline constexpr dst_info_t TILE_DST_INFO_DEFAULT                                            = {};
+    static inline constexpr tile_addr_t TILE_DESCENDANT_DEFAULT                                         = {};
     
 }
 

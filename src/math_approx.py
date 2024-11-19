@@ -3,6 +3,7 @@ from collections.abc import Callable
 import math 
 import json
 import random 
+from queue import PriorityQueue
 
 #this is a trillion dollar answer that I want yall to reflect on
 #I want yall to prove that this method can actually approximate any function (continuous and non-continuous) to the absolute accuracy with sufficient number of hops
@@ -22,17 +23,25 @@ import random
 #assume our incoming training data is z, f(z) -> p is not accurate
 #then there exists a way for the function to continue to be 100% accurate such is modeled by the if x == z then f(x) else p is applied - and the function continues to be 100% accurate
 
-#okay guys
 #I want yall to prove that if the smaller the possibility space of a f(x) -> y - the higher the intelligence of the f(x) -> y
 #possibility space can be briefly described as: 
 #given N logits, possibility(f(x, N) -> y) = K
 #hint, it's not attention. Attention is a part of dimensional reduction which limits the possibility space
 #I want yall to prove that if the new transformer with a small possibility space can achieve super intelligence 
 
-#next thing I want yall to prove is uniform distribution of logit influence is important in scaling network 
-#such that a logit influence on another is uniform distributed among all pairs
-#hint - this could be achieve by one dimensional x 2 dimensional linear
-#yet the possibility space is too high - this results in memorization rather than intelligence
+#next thing to think about is Green's theorem
+#we have a circular ring of leaf logits - which is called an artifical brain
+#when we talk about brain - we talk about forward and backward - not just forward - the brain that only does forward is retarded - such that it does not do real-time update of events
+#a brain can become retarded after a certain period of real-time training (when it becomes saturated - we want to prevent this by using discrete switches - this is called transistor in electrical engineering)
+
+#this circular ring of leaf logits guarantees that user A, B, C, D ... information is pushed the brain after maximum 1 brain frequency - brain frequency == adjecent_synchronous_time * len(ring)
+#each leaf logit (tile) has it's own ring - where the each element of the ring is a different version of the same tile
+#right - this brain of 3 billion devices - cannot have the worst case of take adjecent_synchronous_time * len(ring) to be updated
+#what we want to do is to split the big ring into smaller rings 
+#and do coin flip for the ring_master_node to either continue in the ring - or pulling from another random ring
+
+def operation_nil(lhs: object, rhs: object) -> object:
+    return type(lhs)()
 
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
@@ -112,7 +121,8 @@ operation_dict      = {
     "cos": operation_cos,
     "inv": operation_inv,
     "neg": operation_neg,
-    "dsc": operation_discrete
+    "dsc": operation_discrete,
+    "nil": operation_nil
 }
 
 OPS_TREE_KIND_LEFT_EXTRACT  = 0
@@ -128,6 +138,16 @@ class OperationTree:
         self.pair_operation_name    = pair_operation_name
         self.const_value            = const_value
 
+
+    def __lt__(self, other):
+        return False 
+    
+    def __eq__(self, other):
+        return False 
+    
+    def __gt__(self, other):
+        return False 
+    
 def operation_tree_to_callable(root: OperationTree) -> Callable[[float, float], float]:
 
     if root == None:
@@ -216,24 +236,23 @@ def operation_tree_node_at(root: OperationTree, idx: int) -> OperationTree:
 
     return None
 
-def make_operation_tree(transformer_list: list[str], const_value_arr: list[float], operation_num: int) -> list[OperationTree]:
+def make_operation_tree(operation_num: int) -> list[OperationTree]:
     
     if operation_num == 0:
         return []
 
     possible_root_arr: list[OperationTree]  = []
-    
-    for transformer in transformer_list:
-        possible_root_arr += [OperationTree(None, None, OPS_TREE_KIND_PAIR_OPS, transformer, None)] 
+    possible_root_arr += [OperationTree(None, None, OPS_TREE_KIND_PAIR_OPS, "nil", None)] 
+    possible_root_arr += [OperationTree(None, None, OPS_TREE_KIND_PAIR_OPS, "dsc", None)]
 
     operation_num                           -= 1
-    left_root_arr: list[OperationTree]      = make_operation_tree(transformer_list, const_value_arr, operation_num)
+    left_root_arr: list[OperationTree]      = make_operation_tree(operation_num)
     rs: list[OperationTree]                 = []
 
     for i in range(len(left_root_arr)):
         left_operation_sz                   = operation_tree_count_ops(left_root_arr[i])
         right_operation_sz                  = operation_num - left_operation_sz
-        right_root_arr: list[OperationTree] = make_operation_tree(transformer_list, const_value_arr, right_operation_sz)
+        right_root_arr: list[OperationTree] = make_operation_tree(right_operation_sz)
 
         for j in range(len(right_root_arr)):
             for z in range(len(possible_root_arr)):
@@ -242,12 +261,7 @@ def make_operation_tree(transformer_list: list[str], const_value_arr: list[float
                 new_tree.right          = clone_tree(right_root_arr[j])
                 rs                      += [new_tree]
 
-    for const_value in const_value_arr:
-        rs += [OperationTree(None, None, OPS_TREE_KIND_CONST_EXTRACT, None, const_value)]
-
-    rs  += [OperationTree(None, None, OPS_TREE_KIND_LEFT_EXTRACT, None, None)]
-    rs  += [OperationTree(None, None, OPS_TREE_KIND_RIGHT_EXTRACT, None, None)]
-
+    rs += [OperationTree(None, None, OPS_TREE_KIND_CONST_EXTRACT, None, float(0.0))]
     return rs
 
 def discretize(first: float, last: float, discretization_sz: int) -> list[float]:
@@ -318,50 +332,109 @@ def immutable_mutate_tree_const(root: OperationTree, tree_idx: int, x: float) ->
 
     return new_root
 
-def approx(instrument: Callable[[float, float], float], first: float, last: float, transformer_list: list[str], operation_num: int, min_const_value: float, max_const_value: float, discretization_sz: int) -> str:
+def immutable_mutate_tree_kind(root: OperationTree, tree_idx: int, kind: object) -> OperationTree:
+
+    new_root            = clone_tree(root)
+    node                = operation_tree_node_at(new_root, tree_idx)
+    node.kind           = kind 
+
+    return new_root 
+
+def immutable_mutate_tree_operation(root: OperationTree, tree_idx: int, operation_name: object) -> OperationTree:
+
+    new_root                    = clone_tree(root)
+    node                        = operation_tree_node_at(new_root, tree_idx)
+    node.pair_operation_name    = operation_name
+
+    return new_root 
+
+def randomize(arr: list[object]) -> object:
+
+    if len(arr) == 0:
+        raise Exception()
+    
+    idx = random.randrange(0, len(arr))
+    return arr[idx]
+
+def approx(instrument: Callable[[float, float], float], first: float, last: float, transformer_list: list[str], operation_num: int, optimization_step: int, min_const_value: float, max_const_value: float, discretization_sz: int) -> str:
     
     discrete_const_arr: list[float]             = discretize(min_const_value, max_const_value, discretization_sz)
-    tree_list: list[OperationTree]              = make_operation_tree(transformer_list, discrete_const_arr, operation_num)
-    data_pts: list[tuple[float, OperationTree]] = []
-    first_cut_tree_list: list[OperationTree]    = []
-    newton_optimization_step                    = 1024
-    newton_iteration_sz                         = 16
-
-    print(len(tree_list))
+    tree_list: list[OperationTree]              = make_operation_tree(operation_num)
+    newton_iteration_sz                         = 8
+    newton_sampling_sz                          = 32
+    randomization_factor                        = 32
+    max_search_size                             = 1 << 15
+    pq: PriorityQueue                           = PriorityQueue()
+    min_deviation: float                        = 1 << 50
+    rs_tree: OperationTree                      = None  
+    visited_map: dict[str, int]                 = dict()
 
     for tree in tree_list:
-        callable    = operation_tree_to_callable(tree)
-        deviation   = calc_deviation(instrument, callable, first, last, discretization_sz)
-        data_pts    += [(deviation, tree)]
+        callable: Callable[[float, float], float] = operation_tree_to_callable(tree)
+        deviation: float = calc_deviation(instrument, callable, first, last, discretization_sz) 
+        pq.put((2.0, tree))
 
-    data_pts.sort(key = lambda x: x[0])
-    first_cut_tree_list = [tree for (_, tree) in data_pts[:128]]
-    data_pts = []
-    
-    if len(first_cut_tree_list) == 0:
-        raise Exception()
+    for iter in range(optimization_step):        
+        print(iter)
 
-    for _ in range(newton_optimization_step):
-        tree_idx: int               = random.randrange(0, len(first_cut_tree_list)) 
-        cur_tree: OperationTree     = first_cut_tree_list[tree_idx]
-        tree_sz: int                = operation_tree_count_ops(cur_tree)
-        tree_idx: int               = random.randrange(0, tree_sz)
-        tree_node: OperationTree    = operation_tree_node_at(cur_tree, tree_idx)
-        
-        if (tree_node.const_value == None):
+        if (pq.empty()):
+            break
+
+        (deviation, tree) = pq.get()
+        representable = json.dumps(pretty_print(tree))
+
+        if (representable not in visited_map):
+            visited_map[representable] = 0
+
+        if (visited_map[representable] == 10):
             continue 
+
+        visited_map[representable] += 1
+        tree_sz = operation_tree_count_ops(tree)
+
+        if (min_deviation > deviation):
+            min_deviation = deviation
+            rs_tree = tree
+
+        for __ in range(newton_sampling_sz):
+            tree_idx = random.randrange(0, tree_sz)
+            tree_node: OperationTree = operation_tree_node_at(tree, tree_idx)
+
+            if (tree_node.kind == OPS_TREE_KIND_LEFT_EXTRACT):
+                pass
+            elif (tree_node.kind == OPS_TREE_KIND_RIGHT_EXTRACT):
+                pass
+            elif (tree_node.kind == OPS_TREE_KIND_CONST_EXTRACT):
+                f: Callable[[float], float] = lambda x: calc_deviation(instrument, operation_tree_to_callable(immutable_mutate_tree_const(tree, tree_idx, x)), first, last, discretization_sz)
+                approx_x        = newton_approx(f, newton_iteration_sz, tree_node.const_value)
+                new_tree        = immutable_mutate_tree_const(tree, tree_idx, approx_x)
+                new_deviation   = calc_deviation(instrument, operation_tree_to_callable(new_tree), first, last, discretization_sz)
+                pq.put((new_deviation, new_tree))
+            elif (tree_node.kind == OPS_TREE_KIND_PAIR_OPS):
+                pass
+            else:
+                raise Exception()
         
-        func                        = lambda x: calc_deviation(instrument, operation_tree_to_callable(immutable_mutate_tree_const(cur_tree, tree_idx, x)), first, last, discretization_sz)
-        approx_x                    = newton_approx(func, newton_iteration_sz, tree_node.const_value)
-        tree_node.const_value       = approx_x
+        for __ in range(randomization_factor):
+            tree_idx = random.randrange(0, tree_sz)
+            tree_node: OperationTree = operation_tree_node_at(tree, tree_idx)
 
-    for tree in first_cut_tree_list:
-        callable    = operation_tree_to_callable(tree)
-        deviation   = calc_deviation(instrument, callable, first, last, discretization_sz)
-        data_pts    += [(deviation, tree)]
+            if (tree_node.kind == OPS_TREE_KIND_LEFT_EXTRACT or tree_node.kind == OPS_TREE_KIND_RIGHT_EXTRACT or tree_node.kind == OPS_TREE_KIND_CONST_EXTRACT):
+                new_tree        = immutable_mutate_tree_kind(tree, tree_idx, randomize([OPS_TREE_KIND_LEFT_EXTRACT, OPS_TREE_KIND_RIGHT_EXTRACT, OPS_TREE_KIND_CONST_EXTRACT]))
+                new_tree        = immutable_mutate_tree_const(new_tree, tree_idx, randomize(discrete_const_arr))
+                new_deviation   = calc_deviation(instrument, operation_tree_to_callable(new_tree), first, last, discretization_sz)
+                pq.put((new_deviation, new_tree))
+            elif (tree_node.kind == OPS_TREE_KIND_PAIR_OPS):
+                if (tree_node.pair_operation_name == "dsc"):
+                    pass 
+                else:
+                    new_tree        = immutable_mutate_tree_operation(tree, tree_idx, randomize(transformer_list))
+                    new_deviation   = calc_deviation(instrument, operation_tree_to_callable(new_tree), first, last, discretization_sz)
+                    pq.put((new_deviation, new_tree))
+            else:
+                raise Exception()
 
-    score, tree = min(data_pts, key = lambda x: x[0])
-    return score, pretty_print(tree)
+    return min_deviation, pretty_print(rs_tree)  
 
 def bitwise_or_df_da(a: int, b: int, r: int = 5) -> float:
         
@@ -405,22 +478,22 @@ def bitwise_xor_df_da(a: int, b: int, r: int = 4) -> float:
     
     return total / r
  
-def approx_bitwise_and_df_da(first: int, last: int) -> str:
+def approx_bitwise_and_df_da(first: int, last: int, optimization_step: int) -> str:
     
     operation               = lambda a, b: bitwise_and_df_da(a, b)
     min_const_value         = 0
     max_const_value         = 256
-    max_operation_num       = 8
+    max_operation_num       = 15
     discretization_sz       = 5
 
-    return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
+    return approx(operation, first, last, operation_arr, max_operation_num, optimization_step, min_const_value, max_const_value, discretization_sz)
 
 def approx_bitwise_and_df_db(first: int, last :int) -> str:
     
     operation               = lambda a, b: bitwise_and_df_da(b, a)
     min_const_value         = 0
     max_const_value         = 256
-    max_operation_num       = 3
+    max_operation_num       = 10
     discretization_sz       = 10
 
     return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
@@ -465,31 +538,18 @@ def approx_bitwise_xor_df_db(first: int, last: int) -> str:
 
     return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
 
-def approx_sqrt(first: int, last: int) -> str:
+def approx_sqrt(first: int, last: int, optimization_step: int) -> str:
 
     operation               = lambda a, b: math.sqrt(a)
     min_const_value         = 0
     max_const_value         = 256
-    max_operation_num       = 5
+    max_operation_num       = 10
     discretization_sz       = 10
 
-    return approx(operation, first, last, operation_arr, max_operation_num, min_const_value, max_const_value, discretization_sz)
+    return approx(operation, first, last, operation_arr, max_operation_num, optimization_step, min_const_value, max_const_value, discretization_sz)
 
 def main():
     
-    #alright guys - let's take a break on data science today - I'll be back for A star + heuristic pruning tomorrow - goal is to able to approx heavy uint8_t and uint16_t operations (cos, sin, sqrt, etc.) + absolute accuracy for bitwise operators - within 15 operations - I hope - this is very very important
-    #because our network's gonna be bitwise for numerical stability
-    #we want to flops hard on the CPU - even though that's like the 1980 tech
-
-    #alright - let's talk about asymmetric encryption | symmetric cracking methods
-    #we know for sure that, the output of the encryption key is at best uniform, at worst skewed
-    #uniform in the sense, or in the coordinate, that the output uniformly reduce the possibility space of the signing key 
-    #assume our symmetric encryption function is f(x) -> y - think JWT signing algorithms
-    #we are trying to model f(x) by approximating it - for every char created by the token - we are 1 char closer to estimating the token or reduce the possibility space by a factor of 256
-    #for every two char created by the encryption key - we reduce the possibility space by a factor of 256 ** 2, and so on.
-    #fortunately, JWT is not uniform distribution, and JWT signing secret is usually < 256 char - so the cracking time is actually much faster (I'm taking about instant fast) - if appropriate methods are being applied
-    #this is a brute force version of that - I don't recommend anyone to actually crack JWT with this algorithm lol - the right tool for the right job is the network
-    
-    print(approx_bitwise_and_df_da(0, 256))
+    print(approx_sqrt(0, 256, 4096))
 
 main()

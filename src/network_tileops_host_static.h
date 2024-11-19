@@ -711,7 +711,7 @@ namespace dg::network_tileops_host_static::templated_ops{
     };
 
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
-    struct bwd_pair_bdr_unaligned_ops{
+    struct bwd_pair_lhs_unaligned_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
@@ -728,27 +728,6 @@ namespace dg::network_tileops_host_static::templated_ops{
                 dst[i] = x_math::fma(src_grad[i], other[i], dst[i]);
             }
         }
-    };
-
-    //what I was taught about physics is that all the things are moving in circle guys - and it's actually not moving forward - it's being propagated forward 
-    //maybe not formalized but I think dimensional shrink and expansion is real
-    //dimensional shrink described in the Heisenberg's uncertainty
-    //you could think of the dimensional shrink and expansion as discrete resolution - and round-up solution
-    //dimensional shrink was described in relativity by Einstein
-    //dimensional shrink happens when you move towards the limits of a physical property (this is an observation, not a statement)
-    //let's say you move towards c - speed of light - the dimensional reduction shrinks to a point
-    //let's say you passes through an absolute small crack - the dimensional reduction shrinks to a point and photon can appear anywhere
-    //let's say you approach an absolute mass - then the dimensional reduction shrinks to a point
-    //it's like it's all connected - all the dimensions and the physical properties - in a strange but beautiful way
-    
-    //now let's twist things a little - what happen if you pass through an absolute small crack - yeah - you don't happen to be anywhere - right?
-    //just like you move at the speed of light - you don't happen to be anywhere
-    //it's perspective - dimensional differentiation and friends - don't get into this - this is quantum - it's about dimensional differentiation - not physical properties - and you might have just traveled into a new dimension
-
-    template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
-    struct bwd_pair_lhs_unaligned_ops: bwd_pair_bdr_unaligned_ops<dst_logit_value_t, dst_grad_value_t, other_logit_value_t, src_grad_value_t, casting_ops_t, SZ>{
-
-        using x_math = coerced_x_math<casting_ops_t>; 
 
         static inline void sub(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
@@ -770,6 +749,18 @@ namespace dg::network_tileops_host_static::templated_ops{
                 dst[i] = x_math::fma(src_grad[i], x_math::mul(other_logit[i], x_math::pow(dst_logit[i], x_math::sub(other_logit[i], 1))), dst[i]);
             }
         }
+        
+        static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+
+        }
+
+        static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+
+        }
+
+        static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+
+        }
 
         static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
 
@@ -783,9 +774,24 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         }
 
+        //A = CBT
         static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-        } 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
+
+            for (size_t i = 0; i < BLK_SZ; ++i){
+                casting_ops_t row_sum{};
+                
+                for (size_t z = 0; z < BLK_SZ; ++z){
+                    row_sum = x_math::add(row_sum, src_grad[i * BLK_SZ + z]);
+                }
+
+                for (size_t j = 0; j < BLK_SZ; ++j){
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], row_sum);
+                }
+            }
+        }
 
         static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
             
@@ -805,9 +811,23 @@ namespace dg::network_tileops_host_static::templated_ops{
     };
 
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
-    struct bwd_pair_rhs_unaligned_ops: bwd_pair_bdr_unaligned_ops<dst_logit_value_t, dst_grad_value_t, other_logit_value_t, src_grad_value_t, casting_ops_t, SZ>{
+    struct bwd_pair_rhs_unaligned_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
+
+        static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
+
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::add(dst[i], src_grad[i]);
+            }
+        }
+
+        static inline void mul(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+
+            for (size_t i = 0; i < SZ; ++i){
+                dst[i] = x_math::fma(src_grad[i], other[i], dst[i]);
+            }
+        }
 
         static inline void sub(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
@@ -830,6 +850,18 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
+        static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
+        static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+        }
+
         static inline void andnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
 
         }
@@ -842,10 +874,26 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         }
 
+        //B = ATC, A = 1
         static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
 
+            static_assert(templated_ops::is_pow2(SZ));
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
+
+            for (size_t j = 0; j < BLK_SZ; ++j){
+                casting_ops_t col_sum{};
+
+                for (size_t z = 0; z < BLK_SZ; ++z){
+                    col_sum = x_math::add(col_sum, src_grad[z * BLK_SZ + j]);
+                }
+
+                for (size_t i = 0; i < BLK_SZ; ++i){
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], col_sum);
+                }
+            }
         }
 
+        //B = ATC
         static inline void linear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
@@ -1017,9 +1065,44 @@ namespace dg::network_tileops_host_static::templated_ops{
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
+        static __attribute__((flatten)) void bitwise_or(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+            
+            base::bitwise_or(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void bitwise_and(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::bitwise_and(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void bitwise_xor(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::bitwise_xor(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
         static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void addnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::addnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void ornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::ornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void andnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void xornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::xornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
     };
 
@@ -1130,11 +1213,6 @@ namespace dg::network_tileops_host_static::templated_ops{
             base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
-
-            base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
-        }
-
         static __attribute__((flatten)) void sub(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
@@ -1148,6 +1226,46 @@ namespace dg::network_tileops_host_static::templated_ops{
         static __attribute__((flatten)) void pow(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void bitwise_and(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::bitwise_and(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void bitwise_or(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::bitwise_or(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void bitwise_xor(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::bitwise_xor(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void andnear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void ornear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::ornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void xornear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::xornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void addnear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
     };
 
@@ -1166,11 +1284,6 @@ namespace dg::network_tileops_host_static::templated_ops{
             base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
 
-        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
-
-            base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
-        }
-
         static __attribute__((flatten)) void sub(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
@@ -1184,6 +1297,46 @@ namespace dg::network_tileops_host_static::templated_ops{
         static __attribute__((flatten)) void pow(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void bitwise_and(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::bitwise_and(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void bitwise_or(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::bitwise_or(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void bitwise_xor(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::bitwise_xor(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void andnear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void ornear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::ornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void xornear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::xornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
+        static __attribute__((flatten)) void addnear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::addnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+        
+        static __attribute__((flatten)) void linear(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
         }
     };
 }

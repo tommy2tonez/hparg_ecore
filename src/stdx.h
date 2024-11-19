@@ -284,7 +284,7 @@ namespace stdx{
     using double_const_launderer    = const_launderer<double>; 
     using void_const_launderer      = const_launderer<void>;
 
-    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = true;
+    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = false;
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
 
     template <class Lock>
@@ -408,7 +408,7 @@ namespace stdx{
     inline __attribute__((always_inline)) void atomic_optional_thread_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_thread_fence(order)
+            std::atomic_thread_fence(order); 
         } else{
             (void) order;
         }
@@ -417,11 +417,11 @@ namespace stdx{
     inline __attribute__((always_inline)) void atomic_optional_signal_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_signal_fence(order);
+            std::atomic_signal_fence(order); //this does sounds greedy to me - because std::atomic_thread_fence should be fencing the global const access interface | but it hinders tons of optimizations - for a cause that is very very unlikely to happen
         } else{
             (void) order;
         }
-    } 
+    }
 
     template <class T>
     inline __attribute__((always_inline)) auto launder_pointer(void * volatile ptr) noexcept -> T *{
@@ -453,6 +453,12 @@ namespace stdx{
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
         return rs;
+    }
+
+    template <class T>
+    inline __attribute__((always_inline)) auto to_const_reference(T& obj) noexcept -> const T&{
+
+        return static_cast<const T&>(obj);
     }
 
     template <class Destructor>

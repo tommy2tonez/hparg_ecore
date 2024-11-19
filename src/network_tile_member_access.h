@@ -1838,8 +1838,10 @@ namespace dg::network_tile_member_access{
 
     inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_id_t{
         
-        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
-        return resource.region_id_map.find(dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}))->second;
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire);
+        uma_ptr_t id_region = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+
+        return stdx::to_const_reference(resource.region_id_map).find(id_region)->second;
     }
 
     template <class CallBack>
@@ -2110,9 +2112,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2146,9 +2148,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2182,9 +2184,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2217,9 +2219,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2252,9 +2254,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2288,9 +2290,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2323,9 +2325,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2359,9 +2361,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
@@ -2395,9 +2397,9 @@ namespace dg::network_tile_member_access{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = resource.region_id_map.find(id_region);
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
 
-        if (map_ptr == resource.region_id_map.end()){
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
