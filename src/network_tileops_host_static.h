@@ -22,18 +22,18 @@ namespace dg::network_tileops_host_static::templated_ops{
     static constexpr auto log2(size_t val) noexcept -> size_t{
 
         return static_cast<size_t>(sizeof(size_t) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
-    } 
+    }
  
     static constexpr auto sqrt(size_t val) noexcept -> size_t{
 
-        return pow2(log2(val) >> 1);
+        return templated_ops::pow2(templated_ops::log2(val) >> 1);
     }
 
     static constexpr auto is_pow2(size_t val) noexcept -> bool{
 
-        return val != 0u && (val & (val - 1)) == 0u;
+        return val != 0u && (val & (val - 1u)) == 0u;
     }
-
+  
     template <class arithmetic_ops_t>
     struct coerced_x_math{
 
@@ -292,22 +292,22 @@ namespace dg::network_tileops_host_static::templated_ops{
         }
     };
 
-    template <class arithmetic_ops_t>
+    template  <class arithmetic_ops_t>
     struct coerced_bitwise_gradient{
 
-        static inline auto bitwise_and(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
+        static inline auto bitwise_and(arithmetic_ops_t wrt, arithmetic_ops_t other) noexcept -> arithmetic_ops_t{
 
-            return base_bitwise_gradient::bitwise_and(lhs, rhs);
+            return base_bitwise_gradient::bitwise_and(wrt, other);
         }
 
-        static inline auto bitwise_or(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
+        static inline auto bitwise_or(arithmetic_ops_t wrt, arithmetic_ops_t other) noexcept -> arithmetic_ops_t{
 
-            return base_bitwise_gradient::bitwise_or(lhs, rhs);
+            return base_bitwise_gradient::bitwise_or(wrt, other);
         }
 
-        static inline auto bitwise_xor(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
+        static inline auto bitwise_xor(arithmetic_ops_t wrt, arithmetic_ops_t other) noexcept -> arithmetic_ops_t{
 
-            return base_bitwise_gradient::bitwise_xor(lhs, rhs);
+            return base_bitwise_gradient::bitwise_xor(wrt, other);
         }
     };
 
@@ -318,86 +318,86 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline void exp(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::exp(src[i]);
             }
         } 
 
         static inline void log(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::log(src[i]);
             }
         }
 
         static inline void clone(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = static_cast<casting_ops_t>(src[i]);
             }
         } 
 
         static inline void negative(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::negative(src[i]);
             }
         }
 
         static inline void inverse(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::div(1, src[i]);
             }
         }
 
         static inline void abs(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::abs(src[i]);
             }    
         }
 
         static inline void cos(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::cos(src[i]);
-            }        
+            }
         }
 
         static inline void acos(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::acos(src[i]);
-            }            
+            }
         }
 
         static inline void sin(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sin(src[i]);
-            }        
+            }
         }
 
         static inline void asin(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
             
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::asin(src[i]);
-            }      
+            }
         }
 
         static inline void tan(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::tan(src[i]);
-            }      
+            }
         }
 
         static inline void atan(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::atan(src[i]);
-            }          
+            }
         }
 
         static inline void transpose(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
@@ -405,8 +405,8 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     dst[i * BLK_SZ + j] = static_cast<casting_ops_t>(src[j * BLK_SZ + i]);
                 }
             }
@@ -420,24 +420,26 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline void max(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
-                dst[i]  = x_math::max(dst[i], src[i]);
+            for (size_t i = 0u; i < SZ; ++i){
+                dst[i] = x_math::max(dst[i], src[i]);
             }
         }
 
         static inline void min(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
-                dst[i]  = x_math::min(dst[i], src[i]);
+            for (size_t i = 0u; i < SZ; ++i){
+                dst[i] = x_math::min(dst[i], src[i]);
             }
         }
 
         static inline void sum(dst_logit_value_t * dst, const src_logit_value_t * src) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src[i]);
             }
-        }        
+        }
+
+        //avg is actually not uacm - but sum / constant - this is achievable by using uacm + pair
     };
 
     template <class dst_logit_value_t, class lhs_logit_value_t, class rhs_logit_value_t, class casting_ops_t, size_t SZ>
@@ -447,56 +449,56 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::add(lhs[i], rhs[i]));
             }
         }
 
         static inline void sub(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::sub(lhs[i], rhs[i]));
-            }    
+            }
         }
 
         static inline void mul(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(lhs[i], rhs[i]));
-            }            
+            }
         }
 
         static inline void div(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(lhs[i], rhs[i]));
-            }    
+            }
         }
 
         static inline void pow(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::pow(lhs[i], rhs[i]));
-            }    
+            }
         }
         
         static inline void bitwise_or(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::bitwise_or(lhs[i], rhs[i]));
             }
         }
 
         static inline void bitwise_and(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::bitwise_and(lhs[i], rhs[i]));
             }
         }
 
         static inline void bitwise_xor(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::bitwise_xor(lhs[i], rhs[i]));
             }
         }
@@ -506,13 +508,13 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
-                    casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
-                        total = x_math::add(total, x_math::mul(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
+                    casting_ops_t dot_sum{};
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
+                        dot_sum = x_math::add(dot_sum, x_math::mul(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
-                    dst[i * BLK_SZ + j] = x_math::add(total, dst[i * BLK_SZ + j]);
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], dot_sum);
                 }
             }
         }
@@ -522,13 +524,13 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::add(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
-                    dst[i * BLK_SZ + j] = x_math::add(total, dst[i * BLK_SZ + j]);
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], total);
                 }
             }
         }
@@ -538,13 +540,13 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::bitwise_or(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
-                    dst[i * BLK_SZ + j] = x_math::add(total, dst[i * BLK_SZ + j]);
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], total);
                 }
             }
         }
@@ -554,13 +556,13 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::bitwise_and(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
-                    dst[i * BLK_SZ + j] = x_math::add(total, dst[i * BLK_SZ + j]);
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], total);
                 }
             }
         }
@@ -570,13 +572,13 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::bitwise_xor(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
-                    dst[i * BLK_SZ + j] = x_math::add(total, dst[i * BLK_SZ + j]);
+                    dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], total);
                 }
             }
         }
@@ -589,56 +591,56 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(lhs[i], rhs[i]);
             }
         }
 
         static inline void sub(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(lhs[i], rhs[i]);
-            }    
+            }
         }
 
         static inline void mul(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::mul(lhs[i], rhs[i]);
-            }            
+            }
         }
 
         static inline void div(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::div(lhs[i], rhs[i]);
-            }    
+            }
         }
 
         static inline void pow(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::pow(lhs[i], rhs[i]);
-            }    
+            }
         }
 
         static inline void bitwise_or(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::bitwise_or(lhs[i], rhs[i]);
             }
         }
 
         static inline void bitwise_and(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::bitwise_and(lhs[i], rhs[i]);
             }
         }
 
         static inline void bitwise_xor(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::bitwise_xor(lhs[i], rhs[i]);
             }
         }
@@ -646,12 +648,12 @@ namespace dg::network_tileops_host_static::templated_ops{
         static inline void linear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
-            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
+            constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::mul(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = total;
@@ -664,10 +666,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::add(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = total;
@@ -680,10 +682,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::bitwise_or(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = total;
@@ -696,10 +698,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::bitwise_and(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = total;
@@ -712,10 +714,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
-                for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     casting_ops_t total{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         total = x_math::add(total, x_math::bitwise_xor(lhs[i * BLK_SZ + z], rhs[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = total;
@@ -727,99 +729,115 @@ namespace dg::network_tileops_host_static::templated_ops{
     template <class dst_logit_value_t, class dst_grad_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
     struct bwd_mono_unaligned_ops{
 
-        using x_math = coerced_x_math<casting_ops_t>; 
+        using x_math = coerced_x_math<casting_ops_t>;
 
+        //de^x/ dx = e^x
         static inline void exp(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::exp(dst_logit[i]), dst[i]);
             }
         }
 
+        //dln(x)/dx = 1/x
         static inline void log(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], dst_logit[i]));
             }
         }
 
+        //dx/dx = 1
         static inline void clone(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
+        //d-x/dx = -1
         static inline void negative(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], src_grad[i]);
             }
         }
 
+        //d1/x/dx = d-1/x^2
+        //dst - grad/x^2
         static inline void inverse(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::div(src_grad[i], x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})));
             }
         }
-
+        
+        //dabs(x)/dx = 1, x > 0
+        //dabs(x)/dx = -1, x < 0
+        //dabs(x)/dx = 0, x = 0
         static inline void abs(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::sign(dst_logit[i]), dst[i]);
             }
         }
 
+        //dcos(x)/dx = -sin(x)
         static inline void cos(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::mul(src_grad[i], x_math::sin(dst_logit[i])));
             }
         }
 
+        //d acos(x)/dx = -(1-x^2) ^ (-1/2)
         static inline void acos(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::div(src_grad[i], x_math::sqrt(x_math::sub(1, x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})))));
             }
         } 
 
+        //dsin(x)/dx = cos(x)
         static inline void sin(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::cos(dst_logit[i]), dst[i]);
             }
         }
 
+        //dasin(x)/dx = (1-x^2) ^ (-1/2)
         static inline void asin(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], x_math::sqrt(x_math::sub(1, x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})))));
             }
         }
 
+        //dtan(x)/dx = 1/cos^2(x)
         static inline void tan(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], x_math::pow(x_math::cos(dst_logit[i]), std::integral_constant<size_t, 2>{})));
             }
         }
 
+        //datan(x)/dx = (1+x^2) ^ -1
         static inline void atan(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], x_math::add(x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{}), 1)));
             }
         }
 
         static inline void transpose(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad) noexcept{
-            
+
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            //adjecent write is faster than adjecent read
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], src_grad[j * BLK_SZ + i]);
                 }
             }
@@ -833,21 +851,21 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline void max(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const src_logit_value_t * src_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::eqcmp_mul(dst_logit[i], src_logit[i], src_grad[i]));
             }
         }
 
         static inline void min(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const src_logit_value_t * src_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::eqcmp_mul(dst_logit[i], src_logit[i], src_grad[i]));
             }
         }
 
         static inline void sum(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const src_logit_value_t *) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
@@ -859,58 +877,63 @@ namespace dg::network_tileops_host_static::templated_ops{
         using x_math            = coerced_x_math<casting_ops_t>; 
         using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>; 
 
+        //d(a + b)/ da = 1
         static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
-        static inline void mul(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+        //d(a * b)/ da = b
+        static inline void mul(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
-                dst[i] = x_math::fma(src_grad[i], other[i], dst[i]);
+            for (size_t i = 0u; i < SZ; ++i){
+                dst[i] = x_math::fma(src_grad[i], other_logit[i], dst[i]);
             }
         }
 
+        //d(a - b)/ da = 1
         static inline void sub(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
+        //d(a / b)/ da = 1 / b
         static inline void div(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(src_grad[i], other_logit[i]));
             }
         }
 
+        //d(a^b)/ da = b*a^(b-1)
         static inline void pow(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::mul(other_logit[i], x_math::pow(dst_logit[i], x_math::sub(other_logit[i], 1))), dst[i]);
             }
         }
         
         static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_and(dst_logit[i], other_logit[i])));
             }
         }
 
         static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_or(dst_logit[i], other_logit[i])));
             }
         }
 
         static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_xor(dst_logit[i], other_logit[i])));
             }
         }
@@ -920,10 +943,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t and_sum{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         and_sum = x_math::add(and_sum, x_math::mul(src_grad[i * BLK_SZ + z], bitwise_gradient::bitwise_and(dst_logit[j * BLK_SZ + z], other_logit[j * BLK_SZ + z])));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], and_sum);
@@ -936,8 +959,8 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t or_sum{};
                     for (size_t z = 0; z < BLK_SZ; ++z){
                         or_sum = x_math::add(or_sum, x_math::mul(src_grad[i * BLK_SZ + z], bitwise_gradient::bitwise_or(dst_logit[j * BLK_SZ + z], other_logit[j * BLK_SZ + z])));
@@ -952,8 +975,8 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t xor_sum{};
                     for (size_t z = 0; z < BLK_SZ; ++z){
                         xor_sum = x_math::add(xor_sum, x_math::mul(src_grad[i * BLK_SZ + z], bitwise_gradient::bitwise_xor(dst_logit[j * BLK_SZ + z], other_logit[j * BLK_SZ + z])));
@@ -965,19 +988,17 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline void addnear(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            //this is the most important in Machine Learning - unsurprisingly
-
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
                 casting_ops_t row_sum{};
                 
-                for (size_t z = 0; z < BLK_SZ; ++z){
+                for (size_t z = 0u; z < BLK_SZ; ++z){
                     row_sum = x_math::add(row_sum, src_grad[i * BLK_SZ + z]);
                 }
 
-                for (size_t j = 0; j < BLK_SZ; ++j){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], row_sum);
                 }
             }
@@ -988,10 +1009,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t dot_sum{}; 
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         dot_sum = x_math::add(dot_sum, x_math::mul(src_grad[i * BLK_SZ + z], other_logit[j * BLK_SZ + z]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], dot_sum);
@@ -1003,61 +1024,61 @@ namespace dg::network_tileops_host_static::templated_ops{
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
     struct bwd_pair_rhs_unaligned_ops{
 
-        using x_math            = coerced_x_math<casting_ops_t>; 
-        using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>; 
+        using x_math            = coerced_x_math<casting_ops_t>;
+        using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>;
 
         static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], src_grad[i]);
             }
         }
 
-        static inline void mul(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other) noexcept{
+        static inline void mul(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
-                dst[i] = x_math::fma(src_grad[i], other[i], dst[i]);
+            for (size_t i = 0u; i < SZ; ++i){
+                dst[i] = x_math::fma(src_grad[i], other_logit[i], dst[i]);
             }
         }
 
         static inline void sub(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], src_grad[i]);
             }
         }
 
         static inline void div(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
-            
-            for (size_t i = 0; i < SZ; ++i){
+
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::sub(dst[i], x_math::mul(src_grad[i], x_math::div(other_logit[i], x_math::pow(dst_logit[i], std::integral_constant<size_t, 2>{})))); 
             }
         }
 
         static inline void pow(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::fma(src_grad[i], x_math::mul(x_math::pow(other_logit[i], dst_logit[i]), x_math::log(other_logit[i])), dst[i]);
             }
         }
 
         static inline void bitwise_and(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_and(dst_logit[i], other_logit[i])));
             }
         }
 
         static inline void bitwise_or(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_or(dst_logit[i], other_logit[i])));
             }
         }
 
         static inline void bitwise_xor(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
 
-            for (size_t i = 0; i < SZ; ++i){
+            for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(src_grad[i], bitwise_gradient::bitwise_xor(dst_logit[i], other_logit[i])));
             }
         }
@@ -1067,10 +1088,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t and_sum{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         and_sum = x_math::add(and_sum, x_math::mul(bitwise_gradient::bitwise_and(dst_logit[z * BLK_SZ + i], other_logit[z * BLK_SZ + i]), src_grad[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], and_sum);
@@ -1083,10 +1104,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t or_sum{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         or_sum = x_math::add(or_sum, x_math::mul(bitwise_gradient::bitwise_or(dst_logit[z * BLK_SZ + i], other_logit[z * BLK_SZ + i]), src_grad[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], or_sum);
@@ -1099,10 +1120,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t xor_sum{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         xor_sum = x_math::add(xor_sum, x_math::mul(bitwise_gradient::bitwise_xor(dst_logit[z * BLK_SZ + i], other_logit[z * BLK_SZ + i]), src_grad[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], xor_sum);
@@ -1115,14 +1136,14 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ); 
 
-            for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t j = 0u; j < BLK_SZ; ++j){
                 casting_ops_t col_sum{};
 
-                for (size_t z = 0; z < BLK_SZ; ++z){
+                for (size_t z = 0u; z < BLK_SZ; ++z){
                     col_sum = x_math::add(col_sum, src_grad[z * BLK_SZ + j]);
                 }
 
-                for (size_t i = 0; i < BLK_SZ; ++i){
+                for (size_t i = 0u; i < BLK_SZ; ++i){
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], col_sum);
                 }
             }
@@ -1133,10 +1154,10 @@ namespace dg::network_tileops_host_static::templated_ops{
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
 
-            for (size_t i = 0; i < BLK_SZ; ++i){
-                for (size_t j = 0; j < BLK_SZ; ++j){
+            for (size_t i = 0u; i < BLK_SZ; ++i){
+                for (size_t j = 0u; j < BLK_SZ; ++j){
                     casting_ops_t dot_sum{};
-                    for (size_t z = 0; z < BLK_SZ; ++z){
+                    for (size_t z = 0u; z < BLK_SZ; ++z){
                         dot_sum = x_math::add(dot_sum, x_math::mul(other_logit[z * BLK_SZ + i], src_grad[z * BLK_SZ + j]));
                     }
                     dst[i * BLK_SZ + j] = x_math::add(dst[i * BLK_SZ + j], dot_sum);
@@ -1209,6 +1230,11 @@ namespace dg::network_tileops_host_static::templated_ops{
 
             base::atan(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
         }
+
+        static __attribute__((flatten)) void transpose(dst_logit_value_t * __restrict__ dst, const src_logit_value_t * __restrict__ src) noexcept{
+
+            base::transpose(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(src));
+        }
     };
 
     template <class dst_logit_value_t, class src_logit_value_t, class casting_ops_t, size_t ALIGNMENT_SZ, size_t SZ>
@@ -1262,11 +1288,44 @@ namespace dg::network_tileops_host_static::templated_ops{
             base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        //TODOs:
-        
+        static __attribute__((flatten)) void bitwise_or(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::bitwise_or(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void bitwise_and(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::bitwise_and(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void bitwise_xor(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::bitwise_xor(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
         static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
             
             base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void addnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::addnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void ornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::ornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void andnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
+        static __attribute__((flatten)) void xornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::xornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
     };
 
