@@ -159,9 +159,15 @@ namespace dg::network_xmath_host{
     }
 
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
-    inline auto eqcmp_mul(T lcmp, T rcmp, T val) -> T{
+    inline auto eqcmp_mul(T lcmp, T rcmp, T val) noexcept -> T{
 
         return (lcmp == rcmp) * val;
+    }
+
+    template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
+    inline auto lesscmp_mul(T lcmp, T rcmp, T val) noexcept -> T{
+
+        return (lcmp < rcmp) * val;
     }
 
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
@@ -325,6 +331,12 @@ namespace dg::network_xmath_host{
     inline auto eqcmp_mul(T lcmp, T rcmp, T val) noexcept -> T{
 
         return ((lcmp ^ rcmp) == 0u) * val;
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto lesscmp_mul(T lcmp, T rcmp, T val) noexcept -> T{
+
+        return (lcmp < rcmp) * val;
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>

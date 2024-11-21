@@ -33,7 +33,7 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         return val != 0u && (val & (val - 1u)) == 0u;
     }
-  
+
     template <class arithmetic_ops_t>
     struct coerced_x_math{
 
@@ -152,6 +152,11 @@ namespace dg::network_tileops_host_static::templated_ops{
 
             return network_xmath_host::eqcmp_mul(lcmp, rcmp, val);
         }
+
+        static inline auto lesscmp_mul(arithmetic_ops_t lcmp, arithmetic_ops_t rcmp, arithmetic_ops_t val) noexcept -> arithmetic_ops_t{
+
+            return network_xmath_host::lesscmp_mul(lcmp, rcmp, val);
+        } 
 
         static inline auto bitwise_or(arithmetic_ops_t lhs, arithmetic_ops_t rhs) noexcept -> arithmetic_ops_t{
 
@@ -592,6 +597,13 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
+        static inline void act(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+
+            for (size_t i = 0u; i < SZ; ++i){
+                dst[i] = x_math::lesscmp_mul(lhs[i], rhs[i], lhs[i]);
+            }
+        }
+
         static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
             
             for (size_t i = 0u; i < SZ; ++i){
@@ -877,8 +889,15 @@ namespace dg::network_tileops_host_static::templated_ops{
     template <class dst_logit_value_t, class dst_grad_value_t, class other_logit_value_t, class src_grad_value_t, class casting_ops_t, size_t SZ>
     struct bwd_pair_lhs_unaligned_ops{
 
-        using x_math            = coerced_x_math<casting_ops_t>; 
-        using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>; 
+        using x_math            = coerced_x_math<casting_ops_t>;
+        using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>;
+
+        static inline void act(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const other_logit_value_t * other_logit) noexcept{
+
+            for (size_t i = 0u; i < SZ; ++i){
+                dst[i] = x_math::lesscmp_mul(dst_logit[i], other_logit[i], src_grad[i]);
+            }
+        }
 
         //d(a + b)/ da = 1
         static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
@@ -1029,6 +1048,11 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math            = coerced_x_math<casting_ops_t>;
         using bitwise_gradient  = coerced_bitwise_gradient<casting_ops_t>;
+
+        static inline void act(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t *, const other_logit_value_t *) noexcept{
+
+            (void) dst;
+        }
 
         static inline void add(dst_grad_value_t * dst, const dst_logit_value_t *, const src_grad_value_t * src_grad, const other_logit_value_t *) noexcept{
 

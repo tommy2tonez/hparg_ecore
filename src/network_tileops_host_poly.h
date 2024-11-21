@@ -9,7 +9,7 @@
 #include "network_memult.h"
 #include <limits.h>
 #include "dense_hash_map/dense_hash_map.hpp"
-#include "network_log.h"
+// #include "network_log.h"
 #include "network_exception.h"
 
 namespace dg::network_tileops_host_poly::enum_code{
@@ -3173,7 +3173,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::fwd_mono_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3192,7 +3192,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::fwd_uacm_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3211,7 +3211,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::fwd_pacm_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3230,7 +3230,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::fwd_pair_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3249,7 +3249,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::bwd_mono_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3268,7 +3268,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::bwd_uacm_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3287,7 +3287,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::bwd_pair_lhs_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3306,7 +3306,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::bwd_pair_rhs_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3325,7 +3325,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::bwd_pacm_lhs_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
@@ -3344,7 +3344,7 @@ namespace dg::network_tileops_host_poly{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (map_ptr == stdx::to_const_reference(dg::network_tileops_host_poly::dispatch::bwd_pacm_rhs_dispatch_table).end()){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
