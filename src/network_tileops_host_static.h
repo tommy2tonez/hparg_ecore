@@ -198,7 +198,8 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline auto bitwise_and(std::bfloat16_t wrt, std::bfloat16_t other) noexcept -> std::bfloat16_t{
 
-            return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
+            return {};
+            // return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
         }
 
         static inline auto bitwise_and(std::float32_t wrt, std::float32_t other) noexcept -> std::float32_t{
@@ -238,7 +239,8 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline auto bitwise_or(std::bfloat16_t wrt, std::bfloat16_t other) noexcept -> std::bfloat16_t{
 
-            return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
+            return {};
+            // return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
         }
 
         static inline auto bitwise_or(std::float32_t wrt, std::float32_t other) noexcept -> std::float32_t{
@@ -278,7 +280,8 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         static inline auto bitwise_xor(std::bfloat16_t wrt, std::bfloat16_t other) noexcept -> std::bfloat16_t{
 
-            return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
+            return {};
+            // return std::numeric_limits<std::bfloat16_t>::quiet_NaN();
         }
 
         static inline auto bitwise_xor(std::float32_t wrt, std::float32_t other) noexcept -> std::float32_t{
@@ -447,63 +450,63 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
-        static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::add(lhs[i], rhs[i]));
             }
         }
 
-        static inline void sub(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_sub(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::sub(lhs[i], rhs[i]));
             }
         }
 
-        static inline void mul(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_mul(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::mul(lhs[i], rhs[i]));
             }
         }
 
-        static inline void div(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_div(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::div(lhs[i], rhs[i]));
             }
         }
 
-        static inline void pow(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_pow(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::pow(lhs[i], rhs[i]));
             }
         }
         
-        static inline void bitwise_or(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_bitwise_or(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::bitwise_or(lhs[i], rhs[i]));
             }
         }
 
-        static inline void bitwise_and(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_bitwise_and(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::bitwise_and(lhs[i], rhs[i]));
             }
         }
 
-        static inline void bitwise_xor(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_bitwise_xor(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(dst[i], x_math::bitwise_xor(lhs[i], rhs[i]));
             }
         }
 
-        static inline void linear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_linear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -519,7 +522,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void addnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_addnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -535,7 +538,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void ornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_ornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -551,7 +554,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void andnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_andnear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -567,7 +570,7 @@ namespace dg::network_tileops_host_static::templated_ops{
             }
         }
 
-        static inline void xornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
+        static inline void accum_xornear(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
 
             static_assert(templated_ops::is_pow2(SZ));
             constexpr size_t BLK_SZ = templated_ops::sqrt(SZ);
@@ -590,7 +593,7 @@ namespace dg::network_tileops_host_static::templated_ops{
         using x_math = coerced_x_math<casting_ops_t>; 
 
         static inline void add(dst_logit_value_t * dst, const lhs_logit_value_t * lhs, const rhs_logit_value_t * rhs) noexcept{
-
+            
             for (size_t i = 0u; i < SZ; ++i){
                 dst[i] = x_math::add(lhs[i], rhs[i]);
             }
@@ -1263,69 +1266,69 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = fwd_pacm_unaligned_ops<dst_logit_value_t, lhs_logit_value_t, rhs_logit_value_t, casting_ops_t, SZ>;
 
-        static __attribute__((flatten)) void add(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_add(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void sub(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_sub(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_sub(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void mul(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_mul(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_mul(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void div(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_div(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::div(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_div(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void pow(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_pow(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_pow(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void bitwise_or(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_bitwise_or(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::bitwise_or(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_bitwise_or(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void bitwise_and(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_bitwise_and(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::bitwise_and(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_bitwise_and(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void bitwise_xor(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_bitwise_xor(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::bitwise_xor(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_bitwise_xor(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_linear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
             
-            base::linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_linear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void addnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_addnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::addnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_addnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void ornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_ornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::ornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_ornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void andnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_andnear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_andnear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
 
-        static __attribute__((flatten)) void xornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+        static __attribute__((flatten)) void accum_xornear(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
-            base::xornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+            base::accum_xornear(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
         }
     };
 

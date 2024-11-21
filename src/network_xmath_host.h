@@ -167,22 +167,26 @@ namespace dg::network_xmath_host{
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
     inline auto bitwise_or(T lhs, T rhs) noexcept -> T{
 
-        static_assert(std::numeric_limits<T>::has_quiet_NaN);
-        return std::numeric_limits<T>::quiet_NaN();
+        // static_assert(std::numeric_limits<T>::has_quiet_NaN);
+        // return std::numeric_limits<T>::quiet_NaN();
+        return {};
     }
 
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
     inline auto bitwise_and(T lhs, T rhs) noexcept -> T{
 
-        static_assert(std::numeric_limits<T>::has_quiet_NaN);
-        return std::numeric_limits<T>::quiet_NaN();
+        // static_assert(std::numeric_limits<T>::has_quiet_NaN);
+        // return std::numeric_limits<T>::quiet_NaN();
+        return {};
     }
 
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
     inline auto bitwise_xor(T lhs, T rhs) noexcept -> T{
 
-        static_assert(std::numeric_limits<T>::has_quiet_Nan);
-        return std::numeric_limits<T>::quiet_NaN();
+        // static_assert(std::numeric_limits<T>::has_quiet_Nan);
+        // return std::numeric_limits<T>::quiet_NaN();
+    
+        return {};
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>

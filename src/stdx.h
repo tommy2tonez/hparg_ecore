@@ -15,6 +15,7 @@
 #include <functional>
 #include <chrono>
 #include "network_raii_x.h"
+#include <stdfloat>
 
 namespace stdx{
 
@@ -428,7 +429,9 @@ namespace stdx{
 
         static_assert(std::disjunction_v<std::is_same<T, uint8_t>, std::is_same<T, uint16_t>, std::is_same<T, uint32_t>, std::is_same<T, uint64_t>,
                                          std::is_same<T, int8_t>, std::is_same<T, int16_t>, std::is_same<T, int32_t>, std::is_same<T, int64_t>,
-                                         std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>>);
+                                         std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>,
+                                         std::is_same<T, std::float16_t>, std::is_same<T, std::bfloat16_t>, std::is_same<T, std::float32_t>, 
+                                         std::is_same<T, std::float64_t>>);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         launderer<void> launder_machine{};
@@ -444,7 +447,9 @@ namespace stdx{
 
         static_assert(std::disjunction_v<std::is_same<T, uint8_t>, std::is_same<T, uint16_t>, std::is_same<T, uint32_t>, std::is_same<T, uint64_t>,
                                          std::is_same<T, int8_t>, std::is_same<T, int16_t>, std::is_same<T, int32_t>, std::is_same<T, int64_t>,
-                                         std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>>);
+                                         std::is_same<T, float>, std::is_same<T, double>, std::is_same<T, void>, std::is_same<T, char>,
+                                         std::is_same<T, std::float16_t>, std::is_same<T, std::bfloat16_t>, std::is_same<T, std::float32_t>, 
+                                         std::is_same<T, std::float64_t>>);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         const_launderer<void> launder_machine{};
