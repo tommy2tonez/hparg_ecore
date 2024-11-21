@@ -24,13 +24,16 @@ namespace dg::network_tile_initialization::statix{
     static inline constexpr UACM_ACM_SZ = dg::network_tile_metadata::UACM_ACM_SZ;
     static inline constexpr PACM_ACM_SZ = dg::network_tile_metadata::PACM_ACM_SZ;
 
+    //this needs clang compiler to maximize optimization - I'm talking about 30-40x faster
+    //I dont know why gnu heuristics does not like optimizing dispatch table - it's clearly capable of doing so 
+
     void init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
 
         ptr                 = dg::network_tile_member_access::throwsafe_leaf_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_leaf_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
+        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr); // I admit the lock semantics need to be changed - to adapt with the implementation. Not the implementation to be changed to adapt with the lock semantics
         stdx::memtransaction_guard transaction_grd;
 
         set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
@@ -126,42 +129,6 @@ namespace dg::network_tile_initialization::statix{
         set_crit_descendant_nothrow(ptr, src);
         set_crit_kind_nothrow(ptr, crit_kind);
     }
-
-    //in the user's perspective - they have a pool of data - call x 
-    //they have a function F - which we call neural networks
-    //they want to inject the function F - from logit-database -> processing engine (core)
-    //they want to inject the x data -> processing engine (core)
-    //they wait for a certain period before timeout to retrieve msgrfwd tiles - maybe allow user to specify retries for msgr tiles - this is important
-
-    //in the allocation controller's perpective
-    //user opens a session with timeout
-    //controller allocates tiles
-    //user specify tile dependencies
-    //such dependencies are stored in shared_ptr<uma_ptr_t>
-    //user deallocate tiles
-    //user closes session
-    //shared_ptr tiles are session's property. They are deallocated as soon as session terminated (no leak) - or has no reference
-
-    //in the logit_database's perspective
-    //it is a distributed map - aimed for maximum storage
-    //the interface is similar to std::map or std::unordered_map
-
-    //in the ingestion_accelerator's perspective
-    //takes in ingestion requests from database -> processing engine | or from user -> database 
-    //open an ingestion session
-    //pull data from database
-    //push data to processing engine and wait for timeout
-    //retry serveral times before return err_code to user
-    //otherwise returns SUCCESS
-
-    //in the network training's perspective
-    //same as msgrfwd - the only minor change is msgrbwd forwarding to the ingestion accelerator - which ingests the data back to the database
-    //one of the possible ways to speed up the training is by having a linked-list of network instances
-    //where each of the instance's leafs clones the version of itself in the previous instance
-    //if the first instance in the linked_list is the next instance of the last instance - then we have a circular training network
-    //this circular network has no latency - user estimates the time to complete 1 training epoch - and just invoke the next training epoch by dispatching init requests to the output nodes of the next network instance    
-    //note that if the timing is synchronous - then everything is fine - we have a normal PyTorch training flow
-    //if the timing is not synchronous - then the training is still fine (in the sense that its gradient update information is guaranteed to be used, and never lost, after a certain number of hops) - yet it's chaotic training
     
     void init_msgrfwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, dst_info_t dst_info){
 

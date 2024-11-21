@@ -137,7 +137,23 @@ namespace dg::network_xmath_host{
     template <class T, size_t RHS_VALUE, std::enable_if_t<is_std_float_v<T>, bool> = true>
     inline auto pow(T lhs, const std::integral_constant<size_t, RHS_VALUE>) noexcept -> T{
 
-        return std::pow(lhs, RHS_VALUE);
+        if constexpr(RHS_VALUE == 0u){
+            return 1;
+        } else if constexpr(RHS_VALUE == 1u){
+            return lhs;
+        } else{
+            T rs = lhs;
+
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                (
+                    [&](const size_t){
+                        rs *= lhs;
+                    }(IDX), ...
+                );
+            }(std::make_index_sequence<RHS_VALUE - 1u>{});
+
+            return rs;
+        }
     }
 
     template <class T, std::enable_if_t<is_std_float_v<T>, bool> = true>
@@ -306,7 +322,23 @@ namespace dg::network_xmath_host{
     template <class T, size_t RHS_VALUE, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     inline auto pow(T lhs, const std::integral_constant<size_t, RHS_VALUE>) noexcept -> T{
 
-        return std::pow(lhs, RHS_VALUE);
+        if constexpr(RHS_VALUE == 0u){
+            return 1;
+        } else if constexpr(RHS_VALUE == 1u){
+            return lhs;
+        } else{
+            T rs = lhs;
+            
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                (
+                    [&](const size_t){
+                        rs *= lhs;
+                    }(IDX), ...
+                );
+            }(std::make_index_sequence<RHS_VALUE - 1u>{});
+
+            return rs;
+        }
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
@@ -330,7 +362,7 @@ namespace dg::network_xmath_host{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     inline auto eqcmp_mul(T lcmp, T rcmp, T val) noexcept -> T{
 
-        return ((lcmp ^ rcmp) == 0u) * val;
+        return (lcmp == rcmp) * val; //better for GCC - worse for clang - most likely syntax error
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>

@@ -13,20 +13,20 @@
 #include "network_std_container.h"
 
 namespace dg::network_kernelmap_x{
-    
+
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 
     inline std::unique_ptr<dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface> map_instance{};
 
     void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
-        
+
         stdx::memtransaction_guard transaction_guard;
         map_instance = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
     }
 
     void deinit() noexcept{
-        
+
         stdx::memtransaction_guard transaction_guard;
         map_instance = nullptr;
     }
@@ -48,7 +48,7 @@ namespace dg::network_kernelmap_x{
         std::atomic_signal_fence(std::memory_order_acquire);
         map_instance->unmap(map_resource);
     }
-    
+
     static inline auto map_release_lambda = [](map_resource_handle_t map_resource) noexcept{
         network_kernelmap_x::map_release(map_resource);
     };
@@ -63,7 +63,7 @@ namespace dg::network_kernelmap_x{
         }
 
         return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
-    } 
+    }
 
     auto map_nothrow_safe(fsys_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 

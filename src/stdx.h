@@ -744,7 +744,8 @@ namespace stdx{
         public:
 
             static inline auto get() noexcept -> T&{
-
+                
+                std::atomic_signal_fence(std::memory_order_acquire);
                 return obj;
             }
     };

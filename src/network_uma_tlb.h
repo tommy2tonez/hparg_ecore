@@ -156,7 +156,6 @@ namespace dg::network_uma_tlb::interface{
             T::safe_access(host_ptr);
         }
     };
-
 }
 
 namespace dg::network_uma_tlb::rec_lck{
@@ -206,10 +205,9 @@ namespace dg::network_uma_tlb::rec_lck{
 
             static auto map(key_t key) noexcept -> std::optional<value_t>{
 
-                auto& map   = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
-                auto ptr    = map.find(key);
+                const auto& map = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
+                auto ptr        = map.find(key);
 
-                //optimizable
                 if (ptr == map.end()){
                     return std::nullopt;
                 }
@@ -356,17 +354,34 @@ namespace dg::network_uma_tlb::access{
 
             static auto device_count(uma_ptr_t host_ptr) noexcept -> size_t{
 
-                uma_ptr_t region = dg::memult::region(host_ptr, MEMREGION_SZ);
-                return region_device_map[region].size();
+                uma_ptr_t region    = dg::memult::region(host_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                auto map_ptr        = stdx::to_const_reference(region_device_map).find(region);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == stdx::to_const_reference(region_device_map).end()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                return map_ptr->second.size();
             }
 
             static auto device_at(uma_ptr_t host_ptr, size_t idx) noexcept -> device_id_t{
 
-                uma_ptr_t region = dg::memult::region(host_ptr, MEMREGION_SZ);
-                return region_device_map[region][idx];
+                uma_ptr_t region    = dg::memult::region(host_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                auto map_ptr        = stdx::to_const_reference(region_device_map).find(region);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == stdx::to_const_reference(region_device_map).end()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                } 
+
+                return map_ptr->second[idx];
             }
     };
-
 
     template <class ID, class UMAPtrType, class DeviceIdType, size_t MEMREGION_SZ>
     class StdSafeRegionAccess: public SafePtrAccessInterface<StdSafeRegionAccess<ID, UMAPtrType, DeviceIdType, MEMREGION_SZ>>{
@@ -401,7 +416,7 @@ namespace dg::network_uma_tlb::access{
                 
                 auto region_ptr = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
                 
-                if (!umadevice_hash_set.contains(std::make_pair(ptr, id))){ [[unlikely]]
+                if (!stdx::to_const_reference(umadevice_hash_set).contains(std::make_pair(ptr, id))){
                     return dg::network_exception::BAD_ACCESS;
                 }
 
@@ -412,7 +427,7 @@ namespace dg::network_uma_tlb::access{
                 
                 auto region_ptr = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
 
-                if (!uma_hash_set.contains(ptr)){ [[unlikely]]
+                if (!stdx::to_const_reference(uma_hash_set).contains(ptr)){
                     return dg::network_exception::BAD_ACCESS;
                 }
 

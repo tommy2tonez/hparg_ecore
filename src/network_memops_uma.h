@@ -20,6 +20,7 @@ namespace dg::network_memops_uma{
     //this is inconsistent, compared to other apis - should reconsider next iteration
     auto memlock_guard(uma_ptr_t ptr) noexcept{
 
+        std::atomic_thread_fence(std::memory_order_acquire);
         return dg::network_memlock_utility::recursive_lock_guard(uma_lock_instance{}, ptr);
     } 
     
@@ -27,11 +28,12 @@ namespace dg::network_memops_uma{
     template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same<Args, uma_ptr_t>...>, bool> = true>
     auto memlock_many_guard(Args... args) noexcept{
 
+        std::atomic_thread_fence(std::memory_order_acquire);
         return dg::network_memlock_utility::recursive_lock_guard_many(uma_lock_instance{}, args...);
     }
 
     auto memcpy_uma_to_vma(vma_ptr_t dst, uma_ptr_t src, size_t n) noexcept -> exception_t{
-        
+
         auto src_map_rs = dg::network_uma::map_wait_safe(src);
 
         if (!src_map_rs.has_value()){

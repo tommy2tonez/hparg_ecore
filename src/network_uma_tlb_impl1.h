@@ -194,55 +194,50 @@ namespace dg::network_uma_tlb_impl1::translation_table_impl{
 
             using self              = UMATranslationTable;
             using virtual_ptr_t     = typename dg::ptr_info<>::max_unsigned_t;
-            using base              = TranslationTable<self, virtual_ptr_t, vma_ptr_t, MEMREGION_SZ>;
 
-            static inline size_t max_byte_width_per_device{};
-
-            static auto to_virtual_ptr(uma_ptr_t ptr, size_t device_id) noexcept -> virtual_ptr_t{
-
-                using uma_uptr_t = typename dg::ptr_info<uma_ptr_t>::max_unsigned_t;
-                return dg::pointer_cast<virtual_ptr_t>(max_byte_width_per_device * device_id + dg::pointer_cast<uma_uptr_t>(ptr)); //fma
-            }
+            static inline dg::unordered_unstable_map<std::pair<uma_ptr_t, device_id_t>, vma_ptr_t> translation_table{};
 
         public:
 
+            static_assert(stdx::is_pow2(MEMREGION_SZ));
             static_assert(std::numeric_limits<device_id_t>::is_integer);
 
-            static void init(uma_ptr_t * uma_ptr_arr, vma_ptr_t * vma_ptr_arr, device_id_t * device_id_arr, size_t n){
-
-                using uma_uptr_t    = typename dg::ptr_info<uma_ptr_t>::max_unsigned_t;
-                using max_uptr_t    = typename dg::ptr_info<>::max_unsigned_t; 
-
-                if (n == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                auto virtual_ptr_arr                = std::make_unique<virtual_ptr_t[]>(n);
-                size_t _max_byte_width_per_device   = dg::pointer_cast<max_uptr_t>(dg::memult::advance(*std::max_element(uma_ptr_arr, uma_ptr_arr + n, dg::memult::ptrcmpless_lambda), MEMREGION_SZ));
+            static void init(uma_ptr_t * uma_region_arr, vma_ptr_t * vma_region_arr, device_id_t * device_id_arr, size_t n){
 
                 for (size_t i = 0u; i < n; ++i){
-                    if (device_id_arr[i] < 0){
+                    if (!dg::memult::is_region(uma_region_arr[i], std::integral_constant<size_t, MEMREGION_SZ>{})){
                         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
 
-                    virtual_ptr_arr[i] = dg::pointer_cast<virtual_ptr_t>(_max_byte_width_per_device * stdx::safe_integer_cast<size_t>(device_id_arr[i]) + dg::pointer_cast<uma_uptr_t>(uma_ptr_arr[i])); //each memory region is at least 10MB in length - so memory pollution is not gonna be a problem - as long as it does not have cache issues - which can be solved by reordering segments 
-                }
+                    if (!dg::memult::is_region(vma_region_arr[i], std::integral_constant<size_t, MEMREGION_SZ>{})){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
 
-                base::init(virtual_ptr_arr.get(), vma_ptr_arr, n);
-                max_byte_width_per_device = _max_byte_width_per_device;
+                    translation_table[std::make_pair(uma_region_arr[i], device_id_arr[i])] = vma_region_arr[i];
+                }
             }
 
             static void deinit() noexcept{
 
-                base::deinit();
+                translation_table = {};
             }
 
             static auto translate(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
-                return base::translate(to_virtual_ptr(ptr, stdx::safe_integer_cast<size_t>(device_id)));
+                auto map_key    = std::make_pair(dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}), device_id);
+                auto map_ptr    = stdx::to_const_reference(translation_table).find(map_key);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == stdx::to_const_reference(translation_table).end()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                return dg::memult::advance(map_ptr->second, dg::memult::region_offset(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}));
             }
     };
-} 
+}
 
 namespace dg::network_uma_tlb_impl1::exclusive{
 

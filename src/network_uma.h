@@ -15,6 +15,12 @@
 
 namespace dg::network_uma{
 
+    //alright - let's stop treating the compiler like it's regarded - and give some room for optimizations - I think it's decent enough by fencing initializations - unless you are accessing local variables
+    //alright guys - after fact-checking - compiler is actually regarded and std::atomic_signal_fence(std::memory_order_acquire) is NOT OPTIONAL to access static inline class members or inline global variables if you are compiling this from different translation units
+    //atomic_signal_fence is NOT used for fencing atomic in this case - but to force a read of the global variable and flush any previous assumptions in the local translation unit
+    //where to put the atomic_signal_fence is the developer's choice - the atomic_signal_fence is not supposed to be there - because it's the compiler responsibility to volatile the shared_addr inline variables - but we cannot count on the compiler to do that - because that's undefined behavior
+    //the ONLY thing that we can count on is the static inline class member and inline global member to have one address across multiple translation units - and their compiler-assumed values during unit compilations are as if we are in a concurrent context - which is precisely why std::atomic_singal_fence(std::memory_order_acquire) is used
+
     using device_id_t                                   = dg::network_pointer::device_id_t;
     using uma_ptr_t                                     = dg::network_pointer::uma_ptr_t;
     using vma_ptr_t                                     = dg::network_pointer::vma_ptr_t;
@@ -91,7 +97,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr); 
 
-        if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
+        if (dg::network_exception::is_failed(ptrchk)){
             return std::unexpected(ptrchk);
         }
 
@@ -103,7 +109,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr);
 
-        if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
+        if (dg::network_exception::is_failed(ptrchk)){
             return std::unexpected(ptrchk);
         }
 
@@ -115,7 +121,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(device_id, ptr);
 
-        if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
+        if (dg::network_exception::is_failed(ptrchk)){
             return std::unexpected(ptrchk);
         }
 
@@ -127,14 +133,14 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(ptr);
 
-        if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
+        if (dg::network_exception::is_failed(ptrchk)){
             return std::unexpected(ptrchk);
         } 
 
         while (true){
             size_t random_value     = dg::network_randomizer::randomize_xrange(std::integral_constant<size_t, MAX_PROXY_PER_REGION>{}); 
             size_t device_sz        = metadata_getter::device_count(ptr);
-            size_t idx              = random_value % device_sz;
+            size_t idx              = random_value % device_sz; //
             device_id_t device_id   = metadata_getter::device_at(ptr, idx);
 
             if (auto rs = tlb_instance::map_try(device_id, ptr); rs.has_value()){
@@ -170,7 +176,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         auto map_rs = network_uma::map_wait(device_id, ptr); 
 
-        if (!map_rs.has_value()){ [[unlikely]]
+        if (!map_rs.has_value()){
             return std::unexpected(map_rs.error());
         }
 
@@ -182,7 +188,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         auto map_rs = network_uma::map_wait(ptr);
 
-        if (!map_rs.has_value()){ [[unlikely]]
+        if (!map_rs.has_value()){
             return std::unexpected(map_rs.error());
         }
 
@@ -232,7 +238,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(ptr);
 
-        if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
+        if (dg::network_exception::is_failed(ptrchk)){
             return std::unexpected(ptrchk);
         }
 
@@ -244,7 +250,7 @@ namespace dg::network_uma{
         std::atomic_signal_fence(std::memory_order_acquire);
         exception_t ptrchk = uma_ptr_access::safecthrow_access(ptr);
 
-        if (dg::network_exception::is_failed(ptrchk)){ [[unlikely]]
+        if (dg::network_exception::is_failed(ptrchk)){
             return std::unexpected(ptrchk);
         }
 

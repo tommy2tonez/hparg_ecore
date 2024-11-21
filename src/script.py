@@ -55,13 +55,13 @@ def launder_script(var_name: str, tile_type: str):
 
 def main():
 
-    arr = combinatorial_zip([["u8",  "u16", "f16"], ["u8",  "u16", "f16"], ["u8", "u16", "f16"], ["accum_add", "accum_sub", "accum_mul", "accum_div", "accum_pow", "accum_bitwise_and", "accum_bitwise_or", "accum_bitwise_xor", "accum_andnear", "accum_ornear", "accum_xornear", "accum_addnear", "accum_linear"]])
+    arr = combinatorial_zip([["u8",  "u16", "f16"], ["u8",  "u16", "f16"], ["u8", "u16", "f16"], ["act"]])
     dispatch_arr = []
 
     for  left_t, right_t, casting_t, func_name in arr:
         lhs             = "rs[make_dispatch_code(%s%s%s_%s_%s_%s, ops_%s)]" % (left_t[0], right_t[0], casting_t[0], left_t[1:], right_t[1:], casting_t[1:], func_name)
-        rhs             = "[](void * __restrict__ dst, const void * __restrict__ lhs, const void * __restrict__ rhs) noexcept{dg::network_tileops_host_static::fwd_pacm_ops_%s_%s_%s_%s::%s(%s, %s, %s);}" % (left_t, right_t, right_t, casting_t, func_name, launder_script("dst", left_t), launder_script("lhs", right_t), launder_script("rhs", right_t))
-        init_script     = "%s\t\t= %s" % (fill_empty(lhs, 60), rhs)
+        rhs             = "[](void * __restrict__ dst, const void * __restrict__ dst_logit, const void * __restrict__ src_grad, const void * __restrict__ other_logit) noexcept{dg::network_tileops_host_static::bwd_pair_rhs_ops_%s_%s_%s_%s_%s::%s(%s, %s, %s, %s);}" % (right_t, right_t, right_t, left_t, casting_t, func_name, launder_script("dst", right_t), launder_script("dst_logit", right_t), launder_script("src_grad", left_t), launder_script("other_logit", right_t))
+        init_script     = "%s\t\t= %s" % (fill_empty(lhs, 70), rhs)
         dispatch_arr    += [init_script]
 
     print(len(dispatch_arr))

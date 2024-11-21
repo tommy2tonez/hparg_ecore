@@ -1362,6 +1362,11 @@ namespace dg::network_tileops_host_static::templated_ops{
         using base      = fwd_pair_unaligned_ops<dst_logit_value_t, lhs_logit_value_t, rhs_logit_value_t, casting_ops_t, SZ>;
         using x_math    = coerced_x_math<casting_ops_t>;
 
+        static __attribute__((flatten)) void act(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
+
+            base::act(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
+        }
+
         static __attribute__((flatten)) void add(dst_logit_value_t * __restrict__ dst, const lhs_logit_value_t * __restrict__ lhs, const rhs_logit_value_t * __restrict__ rhs) noexcept{
 
             base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(lhs), std::assume_aligned<ALIGNMENT_SZ>(rhs));
@@ -1525,6 +1530,11 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using base = bwd_pair_lhs_unaligned_ops<dst_logit_value_t, dst_grad_value_t, other_logit_value_t, src_grad_value_t, casting_ops_t, SZ>; 
 
+        static __attribute__((flatten)) void act(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::act(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
+
         static __attribute__((flatten)) void add(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 
             base::add(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
@@ -1595,6 +1605,11 @@ namespace dg::network_tileops_host_static::templated_ops{
     struct bwd_pair_rhs_restrict_aligned_ops{
 
         using base = bwd_pair_rhs_unaligned_ops<dst_logit_value_t, dst_grad_value_t, other_logit_value_t, src_grad_value_t, casting_ops_t, SZ>;
+
+        static __attribute__((flatten)) void act(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
+
+            base::act(std::assume_aligned<ALIGNMENT_SZ>(dst), std::assume_aligned<ALIGNMENT_SZ>(dst_logit), std::assume_aligned<ALIGNMENT_SZ>(src_grad), std::assume_aligned<ALIGNMENT_SZ>(other_logit));
+        }
 
         static __attribute__((flatten)) void add(dst_grad_value_t * __restrict__ dst, const dst_logit_value_t * __restrict__ dst_logit, const src_grad_value_t * __restrict__ src_grad, const other_logit_value_t * __restrict__ other_logit) noexcept{
 

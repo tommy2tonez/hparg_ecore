@@ -32,6 +32,12 @@ namespace dg::memult{
     }
 
     template <class ptr_t>
+    constexpr auto is_region(ptr_t ptr, size_t memregion_sz) noexcept -> bool{
+
+        return {}; //TODOs:
+    }
+
+    template <class ptr_t>
     constexpr auto region(ptr_t ptr, size_t memregion_sz) noexcept -> ptr_t{
 
         return {}; //TODOs:
