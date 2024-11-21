@@ -142,17 +142,13 @@ namespace dg::network_xmath_host{
         } else if constexpr(RHS_VALUE == 1u){
             return lhs;
         } else{
-            T rs = lhs;
+            T rs = pow(lhs, std::integral_constant<size_t, RHS_VALUE / 2u>{});
 
-            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
-                (
-                    [&](const size_t){
-                        rs *= lhs;
-                    }(IDX), ...
-                );
-            }(std::make_index_sequence<RHS_VALUE - 1u>{});
-
-            return rs;
+            if constexpr(RHS_VALUE % 2u == 0u){
+                return rs * rs;
+            } else{
+                return lhs * rs * rs;
+            }
         }
     }
 
@@ -327,17 +323,13 @@ namespace dg::network_xmath_host{
         } else if constexpr(RHS_VALUE == 1u){
             return lhs;
         } else{
-            T rs = lhs;
-            
-            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
-                (
-                    [&](const size_t){
-                        rs *= lhs;
-                    }(IDX), ...
-                );
-            }(std::make_index_sequence<RHS_VALUE - 1u>{});
+            T rs = pow(lhs, std::integral_constant<size_t, RHS_VALUE / 2u>{});
 
-            return rs;
+            if constexpr(RHS_VALUE % 2u == 0u){
+                return rs * rs;
+            } else{
+                return lhs * rs * rs;
+            }
         }
     }
 

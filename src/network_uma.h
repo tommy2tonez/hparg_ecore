@@ -14,12 +14,19 @@
 #include <atomic>
 
 namespace dg::network_uma{
+    
+    //static inline class members and inline global variables are the TOUGHEST thing to get right in C++ - even if you think you've gotten it right - you are wrong
+    //static inline class members and inline global variables have a unique address space assigned to each of them - it's not unified memory address space
+    //but during compilation time - compiler is able to assume the values of those global variables - so the problem is with the compiler internal buffer and optimization techniques - not a runtime error - a poor man can say that he expects the program to work correctly if there is absolutely no optimizations enabled
+    //in this case - inline static variables can be seen as a "concurrent" variable - "concurrent" in the context of multiple translation units - not concurrent in the context of runtime concurrency - "concurrent" requires std::atomic_signal_fence() - concurrent requires std::atomic_thread_fence()
+    //this is the compiler implementation as per gcc-14 - not GUARANTEED to be continued in future - this is precisely why version control is important in programming
+    //and this is most likely compliers' bugs - so std::atomic_thread_fence(std::memory_order_acquire) is syntactically(std) optional and compiler-specific-implementation mandatory
+    //the beauty of static inline variables is that - it's external linkage but it does not feel like external linkage - you can avoid that 40 runtime flops to look up the function pointers and access the variables in instant time
+    //I suggest people not to get into C++ for this very reason - you have to master literally every aspect of the C++ - it's a messy language - compiled by an ever-changing-non-std-compliant compiler. The battle between the compilers and the language is literally endless
+    //the perfect example is constexpr inline auto foo(self& obj, args...) const volatile noexcept && -> size_t [[no_discard]]]{}
 
-    //alright - let's stop treating the compiler like it's regarded - and give some room for optimizations - I think it's decent enough by fencing initializations - unless you are accessing local variables
-    //alright guys - after fact-checking - compiler is actually regarded and std::atomic_signal_fence(std::memory_order_acquire) is NOT OPTIONAL to access static inline class members or inline global variables if you are compiling this from different translation units
-    //atomic_signal_fence is NOT used for fencing atomic in this case - but to force a read of the global variable and flush any previous assumptions in the local translation unit
-    //where to put the atomic_signal_fence is the developer's choice - the atomic_signal_fence is not supposed to be there - because it's the compiler responsibility to volatile the shared_addr inline variables - but we cannot count on the compiler to do that - because that's undefined behavior
-    //the ONLY thing that we can count on is the static inline class member and inline global member to have one address across multiple translation units - and their compiler-assumed values during unit compilations are as if we are in a concurrent context - which is precisely why std::atomic_singal_fence(std::memory_order_acquire) is used
+    //(*) "concurrent" is when a developer is afraid that the value of variables are wrongly assumed by the compiler - either actually in a concurrent context - or multiple translation units
+    //concurrent is when a developer is actually in a concurrent context
 
     using device_id_t                                   = dg::network_pointer::device_id_t;
     using uma_ptr_t                                     = dg::network_pointer::uma_ptr_t;

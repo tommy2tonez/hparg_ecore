@@ -17,6 +17,7 @@
 #include "network_type_traits_x.h" 
 #include "network_uma_tlb.h" 
 #include "stdx.h"
+#include "dense_hash_map/dense_hash_map.hpp" 
 
 namespace dg::network_uma_tlb_impl1::interface{
 
@@ -83,7 +84,8 @@ namespace dg::network_uma_tlb_impl1::interface{
 
 namespace dg::network_uma_tlb_impl1::translation_table_impl{
 
-    static inline constexpr bool IS_SAFE_ACCESS_ENABLED = true;
+    static inline constexpr bool IS_SAFE_ACCESS_ENABLED     = true;
+    static inline constexpr size_t DG_MAX_DEVICE            = 128;
 
     template <class ID, class SrcPtrType, class DstPtrType, size_t MEMREGION_SZ>
     class TranslationTable{
@@ -195,7 +197,12 @@ namespace dg::network_uma_tlb_impl1::translation_table_impl{
             using self              = UMATranslationTable;
             using virtual_ptr_t     = typename dg::ptr_info<>::max_unsigned_t;
 
-            static inline dg::unordered_unstable_map<std::pair<uma_ptr_t, device_id_t>, vma_ptr_t> translation_table{};
+            static inline jg::dense_hash_map<virtual_ptr_t, vma_ptr_t> translation_table{};
+
+            static inline auto to_virtual_region(uma_ptr_t region, device_id_t device_id) noexcept -> virtual_ptr_t{
+
+                return dg::memult::advance(dg::pointer_cast<virtual_ptr_t>(dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(region) * DG_MAX_DEVICE), stdx::safe_integer_cast<size_t>(device_id) * MEMREGION_SZ);
+            }
 
         public:
 
@@ -213,7 +220,11 @@ namespace dg::network_uma_tlb_impl1::translation_table_impl{
                         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                     }
 
-                    translation_table[std::make_pair(uma_region_arr[i], device_id_arr[i])] = vma_region_arr[i];
+                    if (device_id_arr[i] < 0){
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    translation_table[to_virtual_region(uma_region_arr[i], device_id_arr[i])] = vma_region_arr[i];
                 }
             }
 
@@ -224,7 +235,7 @@ namespace dg::network_uma_tlb_impl1::translation_table_impl{
 
             static auto translate(device_id_t device_id, uma_ptr_t ptr) noexcept -> vma_ptr_t{
 
-                auto map_key    = std::make_pair(dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}), device_id);
+                auto map_key    = to_virtual_region(dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{}), device_id);
                 auto map_ptr    = stdx::to_const_reference(translation_table).find(map_key);
 
                 if constexpr(DEBUG_MODE_FLAG){

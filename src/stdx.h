@@ -347,23 +347,6 @@ namespace stdx{
             xlock_guard& operator =(xlock_guard&&) = delete;
     };
 
-    //this is for deprecating volatile * (not to worry for now)
-    //though std::add_volatile_t<std::add_pointer_t<T>> is more appropriate and accurate 
-    
-    //assume that memory fence only works if the compiler flow control reaches the fence statement - we call this consume - every variables + optimizables that in the tmp compiler buffer have to be flushed before/after the statement
-    //this is not the assumption but it is actually how it works as of gcc-14 but not documented by the std
-    
-    //call an arbitrary concurrent tranaction __transaction__
-    //within this __transaction__: radix all statements as - inline-ables and not inline-ables
-
-    //inlineables: fine - covered by stdx::xlock_guard<polymorphic_lock_type>
-    //not inlinables:   - stateless:    - depends solely on the arguments (we can assume that self is also an argument - python) - guaranteed to be covered as if we are referencing object * volatile
-    //                  - stateful:     - stateful (reference inline global variables) but the states are not for concurrent usages - volatiles are not required
-    //                                                                                         states are for concurrent usages - volatiles are required  
-    //with volatile deprecating - seq_cst_transaction is the only suitable replacement
-
-    //programs that adhere to the above rules are guaranteed to be defined by GCC-14
-
     class seq_cst_guard{
 
         public:
@@ -418,7 +401,7 @@ namespace stdx{
     inline __attribute__((always_inline)) void atomic_optional_signal_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
-            std::atomic_signal_fence(order); //this does sounds greedy to me - because std::atomic_thread_fence should be fencing the global const access interface | but it hinders tons of optimizations - for a cause that is very very unlikely to happen
+            std::atomic_signal_fence(order);
         } else{
             (void) order;
         }
@@ -436,7 +419,7 @@ namespace stdx{
         std::atomic_signal_fence(std::memory_order_seq_cst);
         launderer<void> launder_machine{};
         launder_machine.value = ptr;
-        T * rs = static_cast<T *>(std::launder(&launder_machine)->ptr());
+        T * rs = static_cast<T *>(std::launder(&launder_machine)->ptr()); //any sane compiler MUST read the polymorphic header - this is due to the definition given by STD - so it is clean right after launder() - because the function is aliased to all arithmetic_t
         std::atomic_signal_fence(std::memory_order_seq_cst);
         
         return rs;
@@ -454,7 +437,7 @@ namespace stdx{
         std::atomic_signal_fence(std::memory_order_seq_cst);
         const_launderer<void> launder_machine{};
         launder_machine.value = ptr;
-        const T * rs = static_cast<const T *>(std::launder(&launder_machine)->ptr());
+        const T * rs = static_cast<const T *>(std::launder(&launder_machine)->ptr()); //any sane compiler MUST read the polymorphic header - this is due to the definition given by STD - so it is clean right after launder() - because the function is aliased to all arithmetic_t
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
         return rs;
