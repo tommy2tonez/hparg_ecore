@@ -37,6 +37,12 @@
 //what is intellect - it is compression, my friend - and a good intellect has a compression rate of around 0.01% - we will get there some day 
 //after our brain is sufficiently smart - we want to deploy our concurrent brain to 3 billion devices globally - and real-time synchronous update (back-propagation) by using cyclic leafs
 
+//how do we train our data? we are doing f(x) -> x with middle layer compression ratio of 99%, such that the midway input transformation is 99% the size of the original input, and the maximum size of the leaf tensors is 99% of the training data
+//assume our f(x) is f(g(x)) -> x
+//we take the g(x) make it an input of the next network
+//so on and so forth
+//our last network (the one that cannot further compress the data) - then has the most intellect - according to our "compression is intellect" theorem
+
 template <class T>
 void quicksort(T * first, T * last){
 
