@@ -205,10 +205,10 @@ namespace dg::network_uma_tlb::rec_lck{
 
             static auto map(key_t key) noexcept -> std::optional<value_t>{
 
-                const auto& map = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
-                auto ptr        = map.find(key);
+                const auto& map_ins = singleton_object::get()[dg::network_concurrency::this_thread_idx()];
+                auto ptr            = map_ins.find(key);
 
-                if (ptr == map.end()){
+                if (ptr == map_ins.end()){
                     return std::nullopt;
                 }
 

@@ -28,6 +28,23 @@ namespace dg::network_uma{
     //(*) "concurrent" is when a developer is afraid that the value of variables are wrongly assumed by the compiler - either actually in a concurrent context - or multiple translation units
     //concurrent is when a developer is actually in a concurrent context
 
+    //Today, we talk about writing language compilers
+    //well, writing a compiler is not easy - it requires a bunch of if-else - and proof of result
+    //proof of result is equivalent transformation of f(x) -> x
+    //with a github repository of billion lines of code - we want to train our neural networks to the absolute accuracy - such that the quality of code is not polluted by bad code
+    //neural networks are precisely that - people (neural networks) dont really care about outputs - they just wanna see if it is correct (SUCCESS) - before offoad the work to other legacy techniques - or other networks
+    //that should be the BASELINE of every neural network - mathematical equivalent transformations as part of the f(x) output
+    //the traditional mathematical transformations aren't sufficient - this is where statistical methods come in - random sticks - and deviation calculation - if the approximation is reasonably correct for 100 samples - then the chances are they are "statistically equivalent" and not "mathematically equivalent"
+    //let's say I want to optimize this computation tree of f(x) -> y, where x is the sorting list, and y is the sorted list
+    //hmm - this sounds bad - what if someone throws a random if to mess up the code? - it's statistically right - but functionally incorrect
+    //well this is actually about discrete math and continuous math - the above assumption might be correct for continuous math - but is incorrect for discrete math
+    //the proof of discrete math is mathematically equivalent discretes and statistically equivalent continuous functions
+    //Without loss of generality, let's say we want to turn a selection sort - quicksort
+    //
+    
+    //right - the world as we know aren't perfect - "statistically equivalent" - or "too rare to be wrong" are good enough
+    //stay with me guys - we'll get through the lectures and build something that helps humanity for eternity
+
     using device_id_t                                   = dg::network_pointer::device_id_t;
     using uma_ptr_t                                     = dg::network_pointer::uma_ptr_t;
     using vma_ptr_t                                     = dg::network_pointer::vma_ptr_t;
