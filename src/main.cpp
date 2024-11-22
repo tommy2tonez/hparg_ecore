@@ -29,6 +29,12 @@
 //until the smaller discretes are a perfect match - then continuous function fuzzy match is used to check whether the two inputs are equivalent - if they are equivalents - then their outputs must also be equivalents - which formed a group of equivalent community
 //I want yall to reflect on the above solution
 
+//What does this mean?
+//It means we want to train our model to 100% accuracy - by using billions | trillions of activations - no intellect
+//then we want to dump that model to optimization engines - or to "turn insertion sort to quicksort" - minimize activation nodes + minimize possibility space - there is a sweet spot between the possibility space and the loss rate
+//what is the optimization engine? well that is a cluster of GPUs trying to "collapse" computation nodes
+//after our brain is sufficiently smart - we want to deploy our concurrent brain to 3 billion devices globally - and real-time synchronous update (back-propagation) by using cyclic leafs
+
 template <class T>
 void quicksort(T * first, T * last){
 
