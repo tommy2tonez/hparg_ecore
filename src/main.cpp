@@ -30,9 +30,11 @@
 //I want yall to reflect on the above solution
 
 //What does this mean?
-//It means we want to train our model to 100% accuracy - by using billions | trillions of activations - no intellect
+//It means we want to train our model to 100% accuracy - by using billions | trillions of activations - no intellect - what does this sound like? it sounds like a database - well - you are right
 //then we want to dump that model to optimization engines - or to "turn insertion sort to quicksort" - minimize activation nodes + minimize possibility space - there is a sweet spot between the possibility space and the loss rate
 //what is the optimization engine? well that is a cluster of GPUs trying to "collapse" computation nodes
+//what does this sound like? it sounds like compression - right - you are, again, right
+//what is intellect - it is compression, my friend - and a good intellect has a compression rate of around 0.01% - we will get there some day 
 //after our brain is sufficiently smart - we want to deploy our concurrent brain to 3 billion devices globally - and real-time synchronous update (back-propagation) by using cyclic leafs
 
 template <class T>
