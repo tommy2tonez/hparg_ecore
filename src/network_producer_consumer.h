@@ -62,7 +62,7 @@ namespace dg::network_producer_consumer{
 
                 while (rem_sz != 0u){
                     size_t submitting_sz = dg::network_genult::safe_posint_access(std::min(rem_sz, this->base->capacity()));
-                    dg::network_concurrency_infretry_x::ExecutableWrapper exe([&]() noexcept{return this->base->push(cur, submitting_sz)});
+                    dg::network_concurrency_infretry_x::ExecutableWrapper exe([&]() noexcept{return this->base->push(cur, submitting_sz);});
                     this->executor->exec(exe);
                     std::advance(cur, submitting_sz);
                     rem_sz -= submitting_sz;
@@ -108,6 +108,10 @@ namespace dg::network_producer_consumer{
 
         handle->deliverable_arr[handle->deliverable_sz++] = std::move(event);
     }
+
+    static inline auto delvrsrv_deliver_lambda = []<class event_t>(DeliveryHandle<event_t> * handle, event_t event) noexcept{
+        delvrsrv_deliver(handle, event);
+    };
 
     template <class event_t>
     auto delvrsrv_close_handle(DeliveryHandle<event_t> * handle) noexcept{

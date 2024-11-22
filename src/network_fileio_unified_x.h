@@ -30,7 +30,7 @@ namespace dg::network_fileio_unified_x{
     };
 
     static inline std::string METADATA_SUFFIX               = "DGFSYS_UNIFIED_X_METADATA";
-    static inline std::string METADATA_EXT                  = "bin";
+    static inline std::string METADATA_EXT                  = "data";
     static inline constexpr size_t MIN_DATAPATH_SIZE        = 2;
     static inline constexpr size_t MAX_METADATA_SIZE        = size_t{1} << 10;
 

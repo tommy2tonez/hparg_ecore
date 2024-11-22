@@ -48,7 +48,7 @@ namespace dg::network_mempress{
         private:
 
             const size_t _memregion_sz;
-            const volatile uma_ptr_t _first;
+            const uma_ptr_t _first;
             const uma_ptr_t _last;
             const size_t max_submit_size_per_region;
             std::vector<RegionBucket> region_vec; 

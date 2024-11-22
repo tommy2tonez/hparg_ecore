@@ -10,163 +10,288 @@
 #include "network_concurrency.h" 
 #include "network_randomizer.h"
 #include "network_std_container.h"
+#include "stdx.h"
+#include <functional>
+#include <memory>
 
 namespace dg::network_mempress_collector{
 
-    //this is probably very crucial
-    //and VERY HARD to implement this right
-    //the common misconception about backprop is to saturate GPU flops
-    //yet its wasting GPU flops not to synchronize backprop
-    //assume that a tree of height n
-    //root needs to sync 2 ^ n before backprop completes
-    //its children needs to sync 2^(n - 1) before backprop completes
-    //the right scheduling algorithm reduces backprop complexity by a factor of 1000x (not neccesarily going to complete the backprop sooner - but allows room for another backprops to continue - such that GPU resource waste is NOT a concern) - if the allocation is perfect and the scheduling is correctly implemented
-    //the current issue with state of the art neural network is (1): path problem, (2): information problem
-    //such that a wrong output can be solved if the above problems are solved
-    //this requires a MASSIVE network of information - think of throwing every electrical signals on Earth at the network - and let optimizer engine figure out what person A going to do next
-    //every possible problems in computer science are: affinity problems, locality problems. If you got those problems right - then your program is running smoothly
-    //remember to always saturate GPU flops - CPU flops - maximize network bandwidth of 100Gb/s (at all time)
-    //and don't waste flops on backprops - by using correct allocation patterns
-    //always use kernelmap_x - even for raw RAM - it's fast - it's efficient - and there is nothing wrong with it
-    //most importantly - deprecate the usage of linear - use other type of <>_near - it's numerically stable - it's combinatorial and it's more efficient
-    //linear algebra is a scam - yeah - I said it - it has always been andnear, xornear and addnear
+    using event_t = dg::network_memcommit::virtual_mmeory_event_t;
 
-    using event_t   = dg::network_memcommit::virtual_mmeory_event_t;
-
-    struct MempressRetranslatorInterface{
-        virtual ~MempressRetranslatorInterface() noexcept = default;
+    struct RangePressInterface{
+        virtual ~RangePressInterface() noexcept = default;
         virtual auto size() noexcept -> size_t = 0;
-        virtual auto get(size_t, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
+        virtual auto get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
     };
 
-    class MempressRetranslator: public virtual MempressRetranslatorInterface{
+    class MemoryRangePress: public virtual RangePressInterface{
 
         private:
 
-            std::vector<uma_ptr_t> idx_map;
+            std::vector<uma_ptr_t> region_table;
             std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress;
         
         public:
 
-            MempressRetranslator(std::vector<uma_ptr_t> idx_map,
-                                 std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress) noexcept: idx_map(std::move(idx_map)),
-                                                                                                                 mempress(std::move(mempress)){}
+            MemoryRangePress(std::vector<uma_ptr_t> region_table,
+                             std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress) noexcept: region_table(std::move(region_table)),
+                                                                                                             mempress(std::move(mempress)){}
 
             auto size() noexcept -> size_t{
 
-                return this->idx_map.size()
+                return this->region_table.size()
             }
 
             auto get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
-                uma_ptr_t region = this->idx_map[idx];
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->region_table.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                uma_ptr_t region = this->region_table[idx];
                 this->mempress->collect(region, dst, dst_sz, dst_cap);
             }
     };
 
-    class TemporalCollector: public virtual dg::network_concurrency::WorkerInterface{
+    class Collector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::unique_ptr<MempressRetranslatorInterface> mempress;
+            std::unique_ptr<RangePressInterface> range_press;
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer;
-            std::unique_ptr<event_t[]> event_buf; //fine - refactorables
-            size_t event_buf_cap; //fine - refactorables
-            std::chrono::nanoseconds last;
-            std::chrono::nanoseconds diff;
-
+            std::chrono::nanoseconds last_updated;
+            const std::chrono::nanoseconds update_interval;
+            const size_t collect_cap;
+            const size_t delivery_cap;
+            
         public:
 
-            TemporalCollector(std::unique_ptr<MempressRetranslatorInterface>  mempress,
-                              std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                              std::unique_ptr<event_t[]> event_buf,
-                              size_t event_buf_cap,
-                              std::chrono::nanoseconds last,
-                              std::chrono::nanoseconds diff) noexcept: mempress(std::move(mempress)),
-                                                                       consumer(std::move(consumer)),
-                                                                       event_buf(std::move(event_buf)),
-                                                                       event_buf_cap(event_buf_cap),
-                                                                       last(last),
-                                                                       diff(diff){}
+            Collector(std::unique_ptr<RangePressInterface>  range_press,
+                      std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                      std::chrono::nanoseconds last_updated,
+                      std::chrono::nanoseconds update_interval,
+                      size_t collect_cap,
+                      size_t delivery_cap) noexcept: range_press(std::move(range_press)),
+                                                     consumer(std::move(consumer)),
+                                                     last_updated(last_updated),
+                                                     update_interval(update_interval),
+                                                     collect_cap(collect_cap),
+                                                     delivery_cap(delivery_cap){}
             
             auto run_one_epoch() noexcept -> bool{
 
-                std::chrono::nanoseconds now        = dg::network_genult::unix_timestamp();
-                std::chrono::nanoseconds last_diff  = dg::network_genult::timelapsed(this->last, now); 
+                std::chrono::nanoseconds now    = stdx::unix_timestamp();
+                std::chrono::nanoseconds diff   = now - this->last_updated;
 
-                if (last_diff < this->diff){
+                if (diff < this->update_interval){
                     return false;
                 }
 
-                for (size_t i = 0u; i < this->mempress->size(); ++i){
-                    size_t event_buf_sz{};
-                    this->mempress->get(i, this->event_buf.get(), event_buf_sz, this->event_buf_cap);
-                    this->consumer->push(this->event_buf.get(), event_buf_sz);
+                auto delivery_handle    = dg::network_producer_consumer::delvrsrv_open_handle(this->consumer.get(), this->delivery_cap);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return false;
                 }
 
-                this->last = dg::network_genult::unix_timestamp();
+                auto event_arr          = std::make_unique<event_t[]>(this->collect_cap);
+                size_t event_arr_sz     = 0u;
+                size_t range_size       = this->range_press->size();
+
+                for (size_t i = 0u; i < range_size; ++i){
+                    this->range_press->get(i, event_arr.get(), event_arr_sz, this->collect_cap);
+                    std::for_each(event_arr.get(), event_arr.get() + event_arr_sz, std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+                }
+
+                this->last_updated = stdx::unix_timestamp();
                 return true;
             }
     };
 
-    class HalfLifeCollector: public virtual dg::network_concurrency::WorkerInterface{
+    struct ClockData{
+        std::chrono::nanoseconds last_updated;
+        std::chrono::nanoseconds update_interval;
+    };
+
+    class ClockCollector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
             
-            std::unique_ptr<MempressRetranslatorInterface> mempress;
+            std::unique_ptr<RangePressInterface> range_press;
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer;
-            std::unique_ptr<event_t[]> event_buf;
-            size_t event_buf_cap;
-            std::chrono::nanoseconds last;
-            std::chrono::nanoseconds diff;
-            double halflife;
+            std::chrono::nanoseconds last_updated;
+            const std::chrono::nanoseconds update_interval;
+            std::vector<ClockData> clock_data_table;
+            const size_t collect_cap;
+            const size_t delivery_cap;
         
         public:
 
-            HalfLifeCollector(std::unique_ptr<MempressRetranslatorInterface> mempress,
-                              std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                              std::unique_ptr<event_t[]> event_buf,
-                              size_t event_buf_cap,
-                              std::chrono::nanoseconds last,
-                              std::chrono::nanoseconds diff,
-                              double halflife) noexcept: mempress(std::move(mempress)),
-                                                         consumer(std::move(consumer)),
-                                                         event_buf(std::move(event_buf)),
-                                                         event_buf_cap(event_buf_cap),
-                                                         last(last),
-                                                         diff(diff),
-                                                         halflife(halflife){}
+            ClockCollector(std::unique_ptr<RangePressInterface> range_press,
+                           std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                           std::chrono::nanoseconds last_updated,
+                           std::chrono::nanoseconds update_interval,
+                           std::vector<ClockData> clock_data_table,
+                           size_t collect_cap,
+                           size_t delivery_cap) noexcept: range_press(std::move(range_press)),
+                                                          consumer(std::move(consumer)),
+                                                          last_updated(last_updated),
+                                                          update_interval(update_interval),
+                                                          clock_data_table(std::move(clock_data_table)),
+                                                          collect_cap(collect_cap),
+                                                          delivery_cap(delivery_cap){}
 
             auto run_one_epoch() noexcept -> bool{
 
-                std::chrono::nanoseconds now        = dg::network_genult::unix_timestamp();
-                std::chrono::nanoseconds last_diff  = dg::network_genult::timelapsed(this->last, now);
+                std::chrono::nanoseconds now    = stdx::unix_timestamp();
+                std::chrono::nanoseconds diff   = now - this->last_updated;
 
-                if (last_diff < diff){
+                if (diff < this->update_interval){
                     return false;
                 }
 
-                size_t nxt_chk_pt = this->mempress->size() * this->halflife;
+                auto delivery_handle    = dg::network_producer_consumer::delvrsrv_open_handle(this->consumer.get(), this->delivery_cap);
 
-                for (size_t i = 0u; i < this->mempress->size(); ++i){
-                    if (i == nxt_chk_pt){
-                        bool coin_flip = dg::network_randomizer::randomize_bool();
-
-                        if (coin_flip){
-                            break;
-                        }
-
-                        nxt_chk_pt += (this->mempress->size() - i) * this->halflife;
-                    }
-
-                    size_t event_buf_sz{};
-                    this->mempress->get(i, this->event_buf.get(), event_buf_sz, this->event_buf_cap);
-                    this->consumer->push(this->event_buf.get(), event_buf_sz);
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return false;
                 }
 
-                this->last = dg::network_genult::unix_timestamp();
+                auto event_arr          = std::make_unique<event_t[]>(this->collect_cap);
+                size_t event_arr_sz     = 0u;
+                size_t range_size       = this->range_press->size(); 
+
+                for (size_t i = 0u; i < range_size; ++i){
+                    std::chrono::nanoseconds local_now  = stdx::unix_low_resolution_timestamp();
+                    std::chrono::nanoseconds local_diff = local_now - this->clock_data_table[i].last_updated;
+
+                    if (local_diff < this->clock_data_table[i].update_interval){
+                        continue;
+                    }
+
+                    this->range_press->get(i, event_arr.get(), event_arr_sz, this->collect_cap);
+                    std::for_each(event_arr.get(), event_arr.get() + event_arr_sz, std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+                    this->clock_data_table[i].last_updated = stdx::unix_low_resolution_timestamp();
+                }
+
+                this->last_updated = stdx::unix_timestamp();
                 return true;
             }
+    };
+
+    struct Factory{
+
+        static auto spawn_range_press(std::shared_ptr<dg::network_mempress::MemoryPressInterface> mem_press) -> std::unique_ptr<RangePressInterface>{
+            
+            if (mem_press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::vector<uma_ptr_t> region_vec{};
+
+            for (auto region = mem_press->first(); region != mem_press->last(); region = dg::memult::advance(region, mem_press->memregion_size())){
+                region_vec.push_back(region);
+            }
+
+            return std::make_unique<MemoryRangePress>(std::move(region_vec), std::move(mem_press));
+        }
+ 
+        static auto spawn_collector(std::shared_ptr<RangePressInterface> range_press, 
+                                    std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                    std::chrono::nanoseconds update_interval,
+                                    size_t collect_cap,
+                                    size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+            
+            const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
+            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+            const size_t MIN_COLLECT_CAP                        = 1u;
+            const size_t MAX_COLLECT_CAP                        = size_t{1} << 30;
+            const size_t MIN_DELIVERY_CAP                       = 1u;
+            const size_t MAX_DELIVERY_CAP                       = size_t{1} << 30;
+
+            if (range_press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (consumer == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(update_interval, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(collect_cap, MIN_COLLECT_CAP, MAX_COLLECT_CAP) != collect_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(delivery_cap, MIN_DELIVERY_CAP, MAX_DELIVERY_CAP) != delivery_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<Collector>(range_press,
+                                               consumer,
+                                               stdx::unix_timestamp(),
+                                               update_interval,
+                                               collect_cap,
+                                               delivery_cap);
+        }
+
+        static auto spawn_clock_collector(std::shared_ptr<RangePressInterface> range_press, 
+                                          std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                          std::chrono::nanoseconds update_interval,
+                                          std::vector<std::chrono::nanoseconds> update_interval_table,
+                                          size_t collect_cap,
+                                          size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+            
+            const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
+            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+            const size_t MIN_COLLECT_CAP                        = 1u;
+            const size_t MAX_COLLECT_CAP                        = size_t{1} << 30;
+            const size_t MIN_DELIVERY_CAP                       = 1u;
+            const size_t MAX_DELIVERY_CAP                       = size_t{1} << 30; 
+
+            if (range_press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (consumer == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(update_interval, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (range_press->size() != update_interval_table.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(collect_cap, MIN_COLLECT_CAP, MAX_COLLECT_CAP) != collect_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(delivery_cap, MIN_DELIVERY_CAP, MAX_DELIVERY_CAP) != delivery_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::vector<ClockData> clock_data_table{};
+
+            for (std::chrono::nanoseconds update_interval_entry: update_interval_table){
+                clock_data_table.push_back(ClockData{stdx::unix_low_resolution_timestamp(), update_interval_entry});
+            }
+
+            return std::make_unique<ClockCollector>(range_press,
+                                                    consumer,
+                                                    stdx::unix_timestamp(),
+                                                    update_interval,
+                                                    std::move(clock_data_table),
+                                                    collect_cap,
+                                                    delivery_cap);
+        }
     };
 }
 

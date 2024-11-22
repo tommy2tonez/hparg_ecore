@@ -29,7 +29,7 @@ namespace dg::network_fileio_chksum_x{
     };
 
     static inline std::string METADATA_SUFFIX   = "DGFSYS_CHKSUM_X_METADATA"; 
-    static inline std::string METADATA_EXT      = "bin";
+    static inline std::string METADATA_EXT      = "data";
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
 

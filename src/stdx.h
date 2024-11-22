@@ -633,6 +633,11 @@ namespace stdx{
         return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
     }
     
+    auto unix_low_resolution_timestamp() noexcept -> std::chrono::nanoseconds{
+
+        return {};
+    }
+    
     auto timestamp_conversion_wrap(std::chrono::nanoseconds dur) noexcept -> safe_timestamp_cast_wrapper{
 
         return safe_timestamp_cast_wrapper(dur);
