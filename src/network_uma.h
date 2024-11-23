@@ -15,20 +15,6 @@
 
 namespace dg::network_uma{
     
-    //static inline class members and inline global variables are the TOUGHEST thing to get right in C++ - even if you think you've gotten it right - you are wrong
-    //static inline class members and inline global variables have a unique address space assigned to each of them - it's not unified memory address space
-    //but during compilation time - compiler is able to assume the values of those global variables - so the problem is with the compiler internal buffer and optimization techniques - not a runtime error - a poor man can say that he expects the program to work correctly if there is absolutely no optimizations enabled
-    //in this case - inline static variables can be seen as a "concurrent" variable - "concurrent" in the context of multiple translation units - not concurrent in the context of runtime concurrency - "concurrent" requires std::atomic_signal_fence() - concurrent requires std::atomic_thread_fence()
-    //this is the compiler implementation as per gcc-14 - not GUARANTEED to be continued in future - this is precisely why version control is important in programming
-    //and this is most likely compliers' bugs - so std::atomic_thread_fence(std::memory_order_acquire) is syntactically(std) optional and compiler-specific-implementation mandatory
-    //the beauty of static inline variables is that - it's external linkage but it does not feel like external linkage - you can avoid that 40 runtime flops to look up the function pointers and access the variables in instant time
-    //I suggest people not to get into C++ for this very reason - you have to master literally every aspect of the C++ - it's a messy language - compiled by an ever-changing-non-std-compliant compiler. The battle between the compilers and the language is literally endless
-    //the perfect example is constexpr inline auto foo(self& obj, args...) const volatile noexcept && -> size_t [[no_discard]]]{}
-
-    //(*) "concurrent" is when a developer is afraid that the value of variables are wrongly assumed by the compiler - either actually in a concurrent context - or multiple translation units
-    //concurrent is when a developer is actually in a concurrent context
-
-
     using device_id_t                                   = dg::network_pointer::device_id_t;
     using uma_ptr_t                                     = dg::network_pointer::uma_ptr_t;
     using vma_ptr_t                                     = dg::network_pointer::vma_ptr_t;

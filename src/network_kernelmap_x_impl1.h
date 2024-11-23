@@ -372,13 +372,13 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                 auto map_id = this->map_distributor->id(ptr);
 
-                if (!map_id.has_value()){
+                if (!map_id.has_value()) [[unlikely]]{
                     return std::unexpected(map_id.error());
                 }
 
                 auto resource = this->map_table[map_id.value()]->map(ptr);
                 
-                if (!resource.has_value()){
+                if (!resource.has_value()) [[unlikely]]{
                     return std::unexpected(resource.error());
                 }
 

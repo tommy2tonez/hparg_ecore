@@ -287,6 +287,11 @@ namespace stdx{
 
     static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = false;
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
+    static inline constexpr bool IS_ATOMIC_FLAG_AS_SPINLOCK         = true;
+
+    using spin_lock_t = std::conditional_t<IS_ATOMIC_FLAG_AS_SPINLOCK,
+                                           std::atomic_flag,
+                                           std::mutex>; 
 
     template <class Lock>
     class xlock_guard{};
@@ -300,23 +305,25 @@ namespace stdx{
 
         public:
 
-            __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
+            using self = xlock_guard;
+
+            inline __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
                 this->mtx->test_and_set();
                 std::atomic_thread_fence(std::memory_order_seq_cst);
            }
 
-            xlock_guard(const xlock_guard&) = delete;
-            xlock_guard(xlock_guard&&) = delete;
+            xlock_guard(const self&) = delete;
+            xlock_guard(self&&) = delete;
 
-            __attribute__((always_inline)) ~xlock_guard() noexcept{
+            inline __attribute__((always_inline)) ~xlock_guard() noexcept{
 
                 std::atomic_thread_fence(std::memory_order_seq_cst);
                 this->mtx->clear();
             }
 
-            xlock_guard& operator =(const xlock_guard&) = delete;
-            xlock_guard& operator =(xlock_guard&&) = delete;
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
     };
 
     template <>
@@ -328,23 +335,86 @@ namespace stdx{
         
         public:
 
-            __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
+            using self = xlock_guard;
+
+            inline __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
 
                 this->mtx->lock();
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             }
 
-            xlock_guard(const xlock_guard&) = delete;
-            xlock_guard(xlock_guard&&) = delete;
+            xlock_guard(const self&) = delete;
+            xlock_guard(self&&) = delete;
 
-            __attribute__((always_inline)) ~xlock_guard() noexcept{
+            inline __attribute__((always_inline)) ~xlock_guard() noexcept{
 
                 std::atomic_thread_fence(std::memory_order_seq_cst);
                 this->mtx->unlock();
             }
 
-            xlock_guard& operator =(const xlock_guard&) = delete;
-            xlock_guard& operator =(xlock_guard&&) = delete;
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
+    };
+
+    template <class Lock>
+    class unlock_guard{};
+
+    template <>
+    class unlock_guard<std::mutex>{
+
+        private:
+
+            std::mutex * volatile mtx; 
+        
+        public:
+
+            using self = unlock_guard; 
+
+            inline __attribute__((always_inline)) unlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            unlock_guard(const self&) = delete;
+            unlock_guard(self&&) = delete;
+
+            inline __attribute__((always_inline)) ~unlock_guard() noexcept{
+                
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                this->mtx->unlock();
+            }
+
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
+    };
+
+    template <>
+    class unlock_guard<std::atomic_flag>{
+
+        private:
+
+            std::atomic_flag * volatile mtx; 
+        
+        public:
+
+            using self = unlock_guard; 
+
+            __attribute__((always_inline)) unlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            unlock_guard(const self&) = delete;
+            unlock_guard(self&&) = delete;
+
+            __attribute__((always_inline)) ~unlock_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+                this->mtx->clear();
+            }
+
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
     };
 
     class seq_cst_guard{
@@ -389,6 +459,14 @@ namespace stdx{
             memtransaction_guard& operator =(memtransaction_guard&&) = delete;
     };
 
+    inline __attribute__((always_inline)) auto try_lock(std::atomic_flag& mtx) noexcept -> bool{
+        return mtx.test_and_set();
+    }
+    
+    inline __attribute__((always_inline)) auto try_lock(std::mutex& mtx) noexcept -> bool{
+        return mtx.try_lock();
+    }
+
     inline __attribute__((always_inline)) void atomic_optional_thread_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
 
         if constexpr(IS_SAFE_MEMORY_ORDER_ENABLED){
@@ -405,6 +483,16 @@ namespace stdx{
         } else{
             (void) order;
         }
+    }
+
+    template <class T>
+    inline __attribute__((always_inline)) auto safe_ptr_access(T * ptr) noexcept -> T *{
+
+        if (!ptr) [[unlikely]]{
+            std::abort();
+        }
+
+        return ptr;
     }
 
     template <class T>

@@ -69,7 +69,7 @@ public:
         }
     }
 
-    constexpr auto current_node_index() const -> node_index_type { return current_node_index_; }
+    constexpr auto current_node_index() const noexcept -> node_index_type { return current_node_index_; }
 
 private:
     nodes_container_type* nodes_container;

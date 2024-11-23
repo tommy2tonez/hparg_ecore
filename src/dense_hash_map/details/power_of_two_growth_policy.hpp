@@ -16,15 +16,15 @@ struct power_of_two_growth_policy
     private:
 
         template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-        static constexpr auto ulog2(T val) noexcept -> size_t{
-
+        static constexpr auto ulog2(T val) noexcept -> size_t
+        {
             return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
         }
 
         template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-        static constexpr auto least_pow2_greater_equal_than(T val) noexcept -> T{
-
-            if (val == 0u){ [[unlikely]]
+        static constexpr auto least_pow2_greater_equal_than(T val) noexcept -> T
+        {
+            if (val == 0u) [[unlikely]]{
                 return 1u;
             }
 

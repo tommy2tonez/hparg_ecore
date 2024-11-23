@@ -4,41 +4,50 @@
 #include <cassert>
 #include <cstddef>
 #include <limits>
+#include <bit>
+#include <type_traits>
 
 namespace jg::details
 {
 
 struct power_of_two_growth_policy
 {
-    static constexpr auto compute_index(std::size_t hash, std::size_t capacity) -> std::size_t
-    {
-        return hash & (capacity - 1);
-    }
 
-    static constexpr auto compute_closest_capacity(std::size_t min_capacity) -> std::size_t
-    {
-        // We didn't see that trick yet.
+    private:
 
-        constexpr auto highest_capacity =
-            (std::size_t{1} << (std::numeric_limits<std::size_t>::digits - 1));
-
-        if (min_capacity > highest_capacity)
+        template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+        static constexpr auto ulog2(T val) noexcept -> size_t
         {
-            assert(false && "Maximum capacity for the dense_hash_map reached.");
-            return highest_capacity;
+            return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
         }
 
-        --min_capacity;
-
-        for (auto i = 1; i < std::numeric_limits<std::size_t>::digits; i *= 2)
+        template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+        static constexpr auto least_pow2_greater_equal_than(T val) noexcept -> T
         {
-            min_capacity |= min_capacity >> i;
+            if (val == 0u) [[unlikely]]{
+                return 1u;
+            }
+
+            size_t max_log2     = ulog2(val);
+            size_t min_log2     = std::countr_zero(val);
+            size_t cand_log2    = max_log2 + ((max_log2 ^ min_log2) != 0u);
+
+            return T{1u} << cand_log2;
+        } 
+
+    public:
+
+        static constexpr auto compute_index(std::size_t hash, std::size_t capacity) -> std::size_t
+        {
+            return hash & (capacity - std::size_t{1});
         }
 
-        return ++min_capacity;
-    }
+        static constexpr auto compute_closest_capacity(std::size_t min_capacity) -> std::size_t
+        {
+            return least_pow2_greater_equal_than(min_capacity);
+        }
 
-    static constexpr auto minimum_capacity() -> std::size_t { return 8u; }
+        static constexpr auto minimum_capacity() -> std::size_t { return 8u; }
 };
 
 } // namespace jg::details

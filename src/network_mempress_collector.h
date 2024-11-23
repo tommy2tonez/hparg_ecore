@@ -16,12 +16,14 @@
 
 namespace dg::network_mempress_collector{
 
-    using event_t = dg::network_memcommit::virtual_mmeory_event_t;
+    using uma_ptr_t = dg::network_pointer::uma_ptr_t;
+    using event_t   = uint64_t;
 
     struct RangePressInterface{
         virtual ~RangePressInterface() noexcept = default;
-        virtual auto size() noexcept -> size_t = 0;
-        virtual auto get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
+        virtual auto size() const noexcept -> size_t = 0;
+        virtual auto try_get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool = 0;
+        virtual void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
     };
 
     class MemoryRangePress: public virtual RangePressInterface{
@@ -37,12 +39,12 @@ namespace dg::network_mempress_collector{
                              std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress) noexcept: region_table(std::move(region_table)),
                                                                                                              mempress(std::move(mempress)){}
 
-            auto size() noexcept -> size_t{
+            auto size() const noexcept -> size_t{
 
-                return this->region_table.size()
+                return this->region_table.size();
             }
 
-            auto get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
+            auto try_get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (idx >= this->region_table.size()){
@@ -51,7 +53,20 @@ namespace dg::network_mempress_collector{
                     }
                 }
 
-                uma_ptr_t region = this->region_table[idx];
+                uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
+                return this->mempress->try_collect(region, dst, dst_sz, dst_cap);
+            } 
+
+            void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->region_table.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
                 this->mempress->collect(region, dst, dst_sz, dst_cap);
             }
     };
@@ -60,7 +75,7 @@ namespace dg::network_mempress_collector{
 
         private:
 
-            std::unique_ptr<RangePressInterface> range_press;
+            std::shared_ptr<RangePressInterface> range_press;
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer;
             std::chrono::nanoseconds last_updated;
             const std::chrono::nanoseconds update_interval;
@@ -69,7 +84,7 @@ namespace dg::network_mempress_collector{
             
         public:
 
-            Collector(std::unique_ptr<RangePressInterface>  range_press,
+            Collector(std::shared_ptr<RangePressInterface>  range_press,
                       std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
                       std::chrono::nanoseconds last_updated,
                       std::chrono::nanoseconds update_interval,
@@ -80,7 +95,7 @@ namespace dg::network_mempress_collector{
                                                      update_interval(update_interval),
                                                      collect_cap(collect_cap),
                                                      delivery_cap(delivery_cap){}
-            
+
             auto run_one_epoch() noexcept -> bool{
 
                 std::chrono::nanoseconds now    = stdx::unix_timestamp();
@@ -90,7 +105,7 @@ namespace dg::network_mempress_collector{
                     return false;
                 }
 
-                auto delivery_handle    = dg::network_producer_consumer::delvrsrv_open_handle(this->consumer.get(), this->delivery_cap);
+                auto delivery_handle    = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->consumer.get(), this->delivery_cap);
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -102,8 +117,9 @@ namespace dg::network_mempress_collector{
                 size_t range_size       = this->range_press->size();
 
                 for (size_t i = 0u; i < range_size; ++i){
-                    this->range_press->get(i, event_arr.get(), event_arr_sz, this->collect_cap);
-                    std::for_each(event_arr.get(), event_arr.get() + event_arr_sz, std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+                    if (this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap)){
+                        std::for_each(event_arr.get(), event_arr.get() + event_arr_sz, std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+                    }
                 }
 
                 this->last_updated = stdx::unix_timestamp();
@@ -119,18 +135,18 @@ namespace dg::network_mempress_collector{
     class ClockCollector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
-            
-            std::unique_ptr<RangePressInterface> range_press;
+
+            std::shared_ptr<RangePressInterface> range_press;
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer;
             std::chrono::nanoseconds last_updated;
             const std::chrono::nanoseconds update_interval;
             std::vector<ClockData> clock_data_table;
             const size_t collect_cap;
             const size_t delivery_cap;
-        
+
         public:
 
-            ClockCollector(std::unique_ptr<RangePressInterface> range_press,
+            ClockCollector(std::shared_ptr<RangePressInterface> range_press,
                            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
                            std::chrono::nanoseconds last_updated,
                            std::chrono::nanoseconds update_interval,
@@ -153,7 +169,7 @@ namespace dg::network_mempress_collector{
                     return false;
                 }
 
-                auto delivery_handle    = dg::network_producer_consumer::delvrsrv_open_handle(this->consumer.get(), this->delivery_cap);
+                auto delivery_handle    = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->consumer.get(), this->delivery_cap);
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -185,7 +201,7 @@ namespace dg::network_mempress_collector{
     struct Factory{
 
         static auto spawn_range_press(std::shared_ptr<dg::network_mempress::MemoryPressInterface> mem_press) -> std::unique_ptr<RangePressInterface>{
-            
+
             if (mem_press == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -204,7 +220,7 @@ namespace dg::network_mempress_collector{
                                     std::chrono::nanoseconds update_interval,
                                     size_t collect_cap,
                                     size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-            
+
             const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
             const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
             const size_t MIN_COLLECT_CAP                        = 1u;
@@ -246,7 +262,7 @@ namespace dg::network_mempress_collector{
                                           std::vector<std::chrono::nanoseconds> update_interval_table,
                                           size_t collect_cap,
                                           size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-            
+
             const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
             const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
             const size_t MIN_COLLECT_CAP                        = 1u;
