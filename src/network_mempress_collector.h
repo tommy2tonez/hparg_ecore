@@ -84,7 +84,7 @@ namespace dg::network_mempress_collector{
             
         public:
 
-            Collector(std::shared_ptr<RangePressInterface>  range_press,
+            Collector(std::shared_ptr<RangePressInterface> range_press,
                       std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
                       std::chrono::nanoseconds last_updated,
                       std::chrono::nanoseconds update_interval,

@@ -18,9 +18,6 @@ namespace dg::network_tileops_handler{
     using namespace dg::network_tileops_poly::taxonomy;
     using dispatch_t = poly_t;
     
-    //open a hackathon son, see who could exploit hardware built-in malware first
-    //then software built-in malware by sandboxing the environment and observe the virtual machine
-
     auto forward_mono(uma_ptr_t dst) noexcept -> bool{
         
         using namespace dg::network_tile_member_getsetter;

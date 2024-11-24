@@ -25,6 +25,7 @@ namespace dg::network_memcommit_factory{
     static inline constexpr size_t VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5; 
 
     using namespace dg::network_memcommit_taxonomy;
+    
     using uma_ptr_t                 = uint64_t;
     using virtual_memory_event_t    = std::array<char, VIRTUAL_EVENT_BUFFER_SZ>;
 

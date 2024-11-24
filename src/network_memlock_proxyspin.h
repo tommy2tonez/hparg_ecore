@@ -139,7 +139,6 @@ namespace dg::network_memlock_proxyspin{
                     return std::nullopt;
                 }
 
-                stdx::atomic_optional_thread_fence();
                 return cur_proxy;
             }
 
@@ -154,13 +153,11 @@ namespace dg::network_memlock_proxyspin{
 
             static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id) noexcept{
                 
-                stdx::atomic_optional_thread_fence();
                 lck_table[table_idx].exchange(controller::make(new_proxy_id, controller::REFERENCE_EMPTY_VALUE), std::memory_order_release);
             }
             
             static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id, const increase_reference_tag){
 
-                stdx::atomic_optional_thread_fence();
                 lck_table[table_idx].exchange(controller::make(new_proxy_id, 1), std::memory_order_release);
             }
 
@@ -178,7 +175,6 @@ namespace dg::network_memlock_proxyspin{
 
                 lock_state_t nxt    = controller::make(expected_proxy_id, controller::refcount(cur) + 1);
                 bool rs             = lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_acq_rel);
-                stdx::atomic_optional_thread_fence();
 
                 return rs;
             }
@@ -190,7 +186,6 @@ namespace dg::network_memlock_proxyspin{
 
             static void internal_reference_release(size_t table_idx) noexcept{
                 
-                stdx::atomic_optional_thread_fence();
                 lck_table[table_idx].fetchSub(1u, std::memory_order_release);
             }
 

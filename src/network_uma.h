@@ -305,7 +305,7 @@ namespace dg::network_uma{
             uma_ptr_access::safe_access(args[i].first, args[i].second);
         }
 
-        return dg::network_uma_tlb::rec_lck::recursive_lockmap_try_many(tlb_instance{}, args);
+        return dg::network_uma_tlb::rec_lck::recursive_lockmap_try_many(tlb_instance{}, args); 
     }
 
     template <size_t SZ>
@@ -317,7 +317,7 @@ namespace dg::network_uma{
             uma_ptr_access::safe_access(args[i].first, args[i].second);
         }
 
-        return dg::network_uma_tlb::rec_lck::recursive_lockmap_wait_many(tlb_instance{}, args);
+        return dg::network_uma_tlb::rec_lck::recursive_lockmap_wait_many(tlb_instance{}, args); 
     }
     
     auto device_count_nothrow(uma_ptr_t ptr) noexcept -> size_t{

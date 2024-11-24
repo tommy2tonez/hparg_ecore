@@ -3610,7 +3610,7 @@ namespace dg::network_tile_member_getsetter{
     }
 
     template <size_t ARR_IDX>
-    auto get_observer_nothrow(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
+    auto get_tile_observer_nothrow(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
         
         using namespace dg::network_tile_member_access;
 
@@ -3654,9 +3654,9 @@ namespace dg::network_tile_member_getsetter{
     }
 
     template <size_t ARR_IDX>
-    auto get_observer(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) -> uma_ptr_t{
+    auto get_tile_observer(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) -> uma_ptr_t{
 
-        return get_observer_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr), std::integral_constant<size_t, ARR_IDX>{});
+        return get_tile_observer_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr), std::integral_constant<size_t, ARR_IDX>{});
     }
 
     void get_tile_logit_nothrow(uma_ptr_t ptr, void * dst) noexcept{

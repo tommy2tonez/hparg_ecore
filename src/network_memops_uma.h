@@ -7,30 +7,56 @@
 #include "network_exception_handler.h"
 #include <atomic>
 #include "stdx.h"
+#include "network_pointer.h"
 
 namespace dg::network_memops_uma{
 
-    using uma_lock_instance = dg::network_memlock_host::Lock<signature_dg_network_uma, std::integral_constant<size_t, MEMREGION_SZ>, uma_ptr_t>; 
- 
-    void init(){ //weird - yet it's anti-pattern otherwise - all memory operation should be global for bridge + join problems
+    struct signature_dg_network_memops_uma; 
 
+    using uma_ptr_t         = dg::network_pointer::uma_ptr_t;
+    using uma_lock_instance = dg::network_memlock_impl1::Lock<signature_dg_network_memops_uma, std::integral_constant<size_t, dg::network_pointer::MEMREGION_SZ>, uma_ptr_t>; 
+
+    void init(uma_ptr_t first, uma_ptr_t last){
+
+        stdx::memtransaction_guard grd;
+        uma_lock_instance::init(first, last);
     }
 
-    //assume(valid(ptr)) - too compilated for memlock_guard to return exception_t - user should do external check - undefined if reqs aren't met 
-    //this is inconsistent, compared to other apis - should reconsider next iteration
-    auto memlock_guard(uma_ptr_t ptr) noexcept{
+    void deinit() noexcept{
 
-        std::atomic_thread_fence(std::memory_order_acquire);
-        return dg::network_memlock_utility::recursive_lock_guard(uma_lock_instance{}, ptr);
-    } 
-    
-    //assume(valid(args...))
-    template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same<Args, uma_ptr_t>...>, bool> = true>
-    auto memlock_many_guard(Args... args) noexcept{
-
-        std::atomic_thread_fence(std::memory_order_acquire);
-        return dg::network_memlock_utility::recursive_lock_guard_many(uma_lock_instance{}, args...);
+        stdx::memtransaction_guard grd;
+        uma_lock_instance::deinit();
     }
+
+    template <class ...Args>
+    class memlock_guard{
+
+        private:
+
+            decltype(dg::network_memlock::recursive_lock_guard_many(uma_lock_instance{}, std::declval<Args>()...)) resource;
+        
+        public:
+
+            using self = memlock_guard;
+
+            inline __attribute__((always_inline)) memlock_guard(Args ...args) noexcept{
+
+                std::atomic_signal_fence(std::memory_order_acquire);
+                this->resource = dg::network_memlock::recursive_lock_guard_many(uma_lock_instance{}, args...);
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            inline __attribute__((always_inline)) ~memlock_guard() noexcept{
+
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            }
+
+            memlock_guard(const self&) = delete;
+            memlock_guard(self&&) = delete;
+
+            memlock_guard& operator =(const self&) = delete;
+            memlock_guard& operator =(self&&) = delete;
+    };
 
     auto memcpy_uma_to_vma(vma_ptr_t dst, uma_ptr_t src, size_t n) noexcept -> exception_t{
 
@@ -66,16 +92,48 @@ namespace dg::network_memops_uma{
         dg::network_exception_handler::nothrow_log(memcpy_vma_to_uma(dst, src, n));
     }
 
-    auto memcpy_vma_to_uma_directall_bypass_qualifier_nothrow(uma_ptr_t dst, vma_ptr_t src, size_t n) noexcept{
+    //this function does not guarantee atomicity - such that a failed operation leave the writing uma_ptr_t in an undefined state 
+    auto memcpy_vma_to_uma_directall(uma_ptr_t dst, vma_ptr_t src, size_t n) noexcept -> exception_t{
 
-        size_t dc = dg::network_uma::device_count_nothrow(dst); 
+        std::expected<size_t, exception_t> device_range = dg::network_uma::device_count(dst);
 
-        for (size_t i = 0; i < dc; ++i){
-            auto id             = dg::network_uma::device_at_nothrow(dst, i) 
+        if (!device_range.has_value()){
+            return device_range.error();
+        } 
+
+        for (size_t i = 0u; i < device_range.value(); ++i){
+            std::expected<device_id_t, exception_t> device_id = dg::network_uma::device_at(dst, i);
+
+            if (!device_id.has_value()){
+                return device_id.error();
+            }
+
+            std::expected<vma_ptr_t, exception_t> dst_vptr = dg::network_uma::map_direct(device_id.value(), dst);
+
+            if (!dst_vptr.has_value()){
+                return dst_vptr.error();
+            }
+
+            exception_t memcpy_err = dg::network_memops_virt::memcpy(dst_vptr.value(), src, n);
+
+            if (dg::network_exception::is_failed(memcpy_err)){
+                return memcpy_err;
+            }
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    void memcpy_vma_to_uma_directall_nothrow(uma_ptr_t dst, vma_ptr_t src, size_t n) noexcept{
+
+        size_t device_range = dg::network_uma::device_count_nothrow(dst);
+
+        for (size_t i = 0u; i < device_range; ++i){
+            device_id_t id      = dg::network_uma::device_at_nothrow(dst, i);
             vma_ptr_t dst_vptr  = dg::network_uma::map_direct_nothrow(id, dst);
             dg::network_memops_virt::memcpy_nothrow(dst_vptr, src, n);
         }
-    }
+    } 
 
     auto memset(uma_ptr_t dst, int c, size_t n) noexcept -> exception_t{
 
@@ -94,12 +152,44 @@ namespace dg::network_memops_uma{
         dg::network_exception_handler::nothrow_log(memset(dst, c, n));
     }
 
-    void memset_directall_bypass_qualifier_nothrow(uma_ptr_t dst, int c, size_t n) noexcept{
+    //this function does not guarantee atomicity - such that a failed operation leave the writing uma_ptr_t in an undefined state 
+    auto memset_directall(uma_ptr_t dst, int c, size_t n) noexcept -> exception_t{
+        
+        std::expected<size_t, exception_t> device_range = dg::network_uma::device_count(dst);
 
-        size_t dc = dg::network_uma::device_count_nothrow(dst);
+        if (!device_range.has_value()){
+            return device_range.error();
+        }
 
-        for (size_t i = 0; i < dc; ++i){
-            auto id             = dg::network_uma::device_at_nothrow(dst, i);
+        for (size_t i = 0u; i < device_range.value(); ++i){
+            std::expected<device_id_t, exception_t> device_id = dg::network_uma::device_at(dst, i);
+
+            if (!device_id.has_value()){
+                return device_id.error();
+            }
+
+            std::expected<vma_ptr_t, exception_t> dst_vptr = dg::network_uma::map_direct(device_id.value(), dst);
+
+            if (!dst_vptr.has_value()){
+                return dst_vptr.error();
+            } 
+
+            exception_t memset_err = dg::network_memops_virt::memset(dst_vptr.value(), c, n);
+
+            if (dg::network_exception::is_failed(memset_err)){
+                return memset_err;
+            }
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    void memset_directall_nothrow(uma_ptr_t dst, int c, size_t n) noexcept{
+
+        size_t device_range = dg::network_uma::device_count_nothrow(dst);
+
+        for (size_t i = 0u; i < device_range; ++i){
+            device_id_t id      = dg::network_uma::device_at_nothrow(dst, i);
             vma_ptr_t dst_vptr  = dg::network_uma::map_direct_nothrow(id, dst);
             dg::network_memops_virt::memset_nothrow(dst_vptr, c, n);
         }
@@ -110,30 +200,38 @@ namespace dg::network_memops_umax{
 
     auto memcpy_uma_to_host(void * dst, uma_ptr_t src, size_t n) noexcept -> exception_t{
 
-        vma_ptr_t dst_vptr = dg::network_virtual_device::virtualize_host_ptr(dst, dg::network_virtual_device::HOST_MAIN_ID); 
+        vma_ptr_t dst_vptr = dg::network_virtual_device::virtualize_host_ptr(dst); 
         return dg::network_memops_uma::memcpy_uma_to_vma(dst_vptr, src, n);
     }
 
     void memcpy_uma_to_host_nothrow(void * dst, uma_ptr_t src, size_t n) noexcept{
 
-        dg::network_exception_handler::nothrow_log(memcpy_uma_to_host(dst, src, n));
+        vma_ptr_t dst_vptr = dg::network_virtual_device::virtualize_host_ptr(dst); 
+        dg::network_memops_uma::memcpy_uma_to_vma_nothrow(dst_vptr, src, n);
     }
 
     auto memcpy_host_to_uma(uma_ptr_t dst, void * src, size_t n) noexcept -> exception_t{ //remove constness for now - next iteration 
 
-        vma_ptr_t src_vptr = dg::network_virtual_device::virtualize_host_ptr(src, dg::network_virtual_device::HOST_MAIN_ID);
+        vma_ptr_t src_vptr = dg::network_virtual_device::virtualize_host_ptr(src);
         return dg::network_memops_uma::memcpy_vma_to_uma(dst, src_vptr, n);
     }
 
     void memcpy_host_to_uma_nothrow(uma_ptr_t dst, void * src, size_t n) noexcept{
 
-        dg::network_exception_handler::nothrow_log(memcpy_host_to_uma(dst, src, n));
+        vma_ptr_t src_vptr = dg::network_virtual_device::virtualize_host_ptr(src);
+        dg::network_memops_uma::memcpy_vma_to_uma_nothrow(dst, src_vptr, n);
     }
 
-    void memcpy_host_to_uma_directall_bypass_qualifier_nothrow(uma_ptr_t dst, void * src, size_t n) noexcept{ //remove constness for now - next iteration
+    auto memcpy_host_to_uma_directall(uma_ptr_t dst, void * src, size_t n) noexcept -> exception_t{ //remove constness for now - next iteration
 
-        vma_ptr_t src_vptr  = dg::network_virtual_device::virtualize_host_ptr(src, dg::network_virtual_device::HOST_MAIN_ID);
-        dg::network_memops_uma::memcpy_vma_to_uma_directall_bypass_qualifier_nothrow(dst, src_vptr, n);
+        vma_ptr_t src_vptr = dg::network_virtual_device::virtualize_host_ptr(src);
+        return dg::network_memops_uma::memcpy_vma_to_uma_directall(dst, src_vptr, n);
+    }
+
+    void memcpy_host_to_uma_directall_nothrow(uma_ptr_t dst, void * src, size_t n) noexcept{
+
+        vma_ptr_t src_vptr = dg::network_virtual_device::virtualize_host_ptr(src);
+        dg::network_memops_uma::memcpy_vma_to_uma_directall_nothrow(dst, src_vptr, n);
     }
 }
 

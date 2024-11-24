@@ -16,6 +16,7 @@ namespace dg::network_rest_frame::model{
     using ticket_id_t   = uint64_t;
     using clock_id_t    = uint64_t;
     
+    //
     struct Request{
         dg::string uri;
         dg::string requestor;
@@ -107,6 +108,7 @@ namespace dg::network_rest_frame::client{
         virtual void close_ticket(model::ticket_id_t) noexcept = 0; 
     };
     
+    //
     struct ClockControllerInterface{
         virtual ~ClockControllerInterface() noexcept = default;
         virtual auto register_clock(std::chrono::nanoseconds) noexcept -> std::expected<model::clock_id_t, exception_t> = 0;
@@ -122,6 +124,7 @@ namespace dg::network_rest_frame::client{
         virtual void close(model::ticket_id_t) noexcept = 0;
     };
 
+    //
     struct TicketClockMapInterface{
         virtual ~TicketClockMapInterface() noexcept = default;
         virtual auto insert(model::ticket_id_t, model::clock_id_t) noexcept -> exception_t = 0;

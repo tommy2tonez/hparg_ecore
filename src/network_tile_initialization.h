@@ -33,10 +33,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_leaf_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_leaf_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr); // I admit the lock semantics need to be changed - to adapt with the implementation. Not the implementation to be changed to adapt with the lock semantics
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr); // I admit the lock semantics need to be changed - to adapt with the implementation. Not the implementation to be changed to adapt with the lock semantics
 
-        set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_leaf_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_leaf_operatable_id_nothrow(ptr, operatable_id);
         set_leaf_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -48,10 +47,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_mono_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_mono_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
-
-        set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+        
+        set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_mono_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_mono_dispatch_control_nothrow(ptr, dispatch_control_id);
         set_mono_operatable_id_nothrow(ptr, operatable_id);
@@ -65,10 +63,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_pair_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_pair_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
-        set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_pair_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_pair_operatable_id_nothrow(ptr, operatable_id);
         set_pair_dispatch_control_nothrow(ptr, dispatch_control_id);
@@ -83,10 +80,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_uacm_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_uacm_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
-        set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_uacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_uacm_operatable_id_nothrow(ptr, operatable_id);
         set_uacm_dispatch_control_nothrow(ptr, dispatch_control_id);
@@ -100,10 +96,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_pacm_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_pacm_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
         
-        set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_pacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_pacm_operatable_id_nothrow(ptr, operatable_id);
         set_pacm_dispatch_control_nothrow(ptr, dispatch_control_id);
@@ -118,10 +113,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_crit_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_crit_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
         
-        set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_crit_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_crit_operatable_id_nothrow(ptr, operatable_id);
         set_crit_dispatch_control_nothrow(ptr, dispatch_control_id);
@@ -136,10 +130,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_msgrfwd_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_msgrfwd_rcu_addr_nothrow(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
         
-        set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_msgrfwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
         set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control_id);
@@ -154,10 +147,9 @@ namespace dg::network_tile_initialization::statix{
 
         ptr                 = dg::network_tile_member_access::throwsafe_msgrbwd_ptr_access(ptr);
         uma_ptr_t rcu_addr  = get_msgrbwd_rcu_addr(ptr);
-        auto lck_grd        = dg::network_memops_uma::memlock_guard(rcu_addr);
-        stdx::memtransaction_guard transaction_grd;
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
-        set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_DEFAULT);
+        set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_msgrbwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
         set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control_id);
