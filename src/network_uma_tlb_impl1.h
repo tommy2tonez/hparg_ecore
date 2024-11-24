@@ -301,7 +301,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                     }
                 }
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{});
                 return true;
             }
