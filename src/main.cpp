@@ -45,4 +45,20 @@ int main(){
     //a synchronous brain across 3 billion devices - by using cyclic leafs
     //we don't want a big, giant brain, we want a concurrent synchronous small brain
     //Green's theorem - by reducing one big giant ring to geographically conditional open-close rings
+
+    //after this lecture you'll be able to:
+    //crack all current asymmetric encoding methods and finally get some Bitcoin for thyself - legally
+    //crack all current symmetric encoding methods
+    //understand the mechanics of the universe
+    //modern human brain enhancement - by using brain wave interference injection - think of brain wave as collector
+    //we want to radix + group the things that fire together as scheduled tile
+    //we want nano techs (input | output interface) - something that parasites the human brain - we need the help of smarter guys to do this
+
+    //able to explain 3 theoretical physic questions:
+    //betweenness centrality + tensor saturation and Heisenberg's uncertainty
+    //massful objects as stationary objects in an arbitrary dimension
+    //communication between objects - synchronization issue - flip flop issue - centrality issue - saturated tensor issue
+    //circular ring of massful objects
+    //is the universe really expanding? - Heisenberg's uncertainty
+
 }
