@@ -4,12 +4,44 @@
 
 int main(){
 
-    //most of the time - you MUST use mutual exclusive lock to do current transactions - because the current STD does not guarantee defined behaviors for your program if you decide to "invent your own atomic operations" - it's silly - the entire memory ordering thing - like it's written by some high-schooler on heroin or sth
-    //and your mutual exclusive lock operation (try_lock, acquire_lock, release_lock) is relaxed with respect to the calling function
-    //and post the mutual excluive lock - you want std::atomic_thread_fence(std::memory_order_seq_cst)
-    //and pre releasing the lock - you also want std::atomic_thread_fence(std::memory_order_seq_cst)
-    //and the std::atomic_thread_fence() must be able to see (force_inline) your concurrent block transaction - otherwise - you are, again, not protected by the compiler-std, but protected by the std-std
-    //this is what 20 years of atomic operations summarized for you guys - yeah - it's that - implement things that is proven to work
-    //you will be surprised by the number of softwares that invoke undefined behaviors by "simply trying to be smart" - even guys at big techs
-    //you are smart, you adhere to the std-std - but there is more to life than that - there is also a compiler-std and it has a completely different set of rules and duct tapes
+    //alright guys - this is going to be a hard task that we want to focus on this week
+    //we want to 
+    //(1):
+    //isolate the resolutor cache (affined) to solely work on its designated tasks
+    //ping signal, pong request, pong_signal, gpu dispatch init + gpu dispatch backward - need to fit in the core (or thread) L1 cache and branch prediction state machines
+    //we don't want to thrash branch prediction
+    //the cost of ping/pong + gpu dispatch is exactly < 5 CPU flops/ dispatch - this needs a LOT of magic to happen - given our abstraction of work - few people that can do this cleanly
+
+    //(2): allow the program to run on solely atomic infrastructure (modern intel core guarantees this) to offset the cost of seq_cst (which is a necessity - otherwise you risk UB - or performance constraint which are equally bad)
+    //(3): external tiles are the most expensive - in the sense that we need to serialize the tile + sequential access + forward it to a foreign machine
+    //(4): implement transfer functionality for kernelmap_x
+
+    //next week, we want to focus on
+    //offset the cost of ping-pong by doing concurrent forward transactions
+    //such that we offset the "synchronization" cost by making more transactions
+    //because ping-pong are actually not expensive (in the sense of flops) - they are time-consuming
+    //the ultimate goal of utilizing a machine is that - you want to utilize the flops
+    //calibrate the socket performance by using a calibration network - this is getting recursive
+    //rebuild cuda dispatch machine - cuda leaves us a very few options to do this
+    //allow polymorphic buffer for internal allocation - buffer traits are specified to achieve sequential locality
+
+    //polymorphic buffer choices: - fast_buffer (intended to be deallocated quickly, right after consumer's consumption) 
+    //                            - persistent_buffer
+    //                            - slow_buffer
+
+    //internal allocation responsibility: WLOG, radix fast_buffer   -> fast_long_buffer + fast_short_buffer
+    //                                          radix slow_buffer   -> slow_long_buffer + slow_short_buffer
+
+    //each of these guy is allocated on a different dg_heap - which guarantees the allocation to be fragmentation-free + optiomal cyclic reuse of pages (need to specify the page_size statistical deviation - in the sense that the time it takes to get through a page is the allocation lifetime)
+
+    //next next week, we want to focus on:
+    //build a ring of f(g(x)) -> x
+    //talk about transforming paths (floyed) + optimization methods + discrete math + proof of work + turing completeness of the language
+    //modern encryption cracking methods by using f(g(x)) -> x
+    //modern brain wave interference injection
+
+    //next next next week, we want to focus on:
+    //a synchronous brain across 3 billion devices - by using cyclic leafs
+    //we don't want a big, giant brain, we want a concurrent synchronous small brain
+    //Green's theorem - by reducing one big giant ring to geographically conditional open-close rings
 }

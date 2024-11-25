@@ -106,7 +106,7 @@ namespace dg::network_memcommit_resolutor{
         T content;
     };
 
-    class ExternalForwardPingSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
+    class DstExternalForwardPingSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
 
         private:
 
@@ -117,13 +117,13 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ExternalForwardPingSignalResolutor(std::unique_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
-                                               std::unique_ptr<HostIPRetrieverInterface> host_ip_retriever,
-                                               std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<external_virtual_memory_commit_t>> request_box,
-                                               size_t delivery_capacity): uma_ip_retriever(std::move(uma_ip_retriever)),
-                                                                          host_ip_retriever(std::move(host_ip_retriever)),
-                                                                          request_box(std::move(request_box)),
-                                                                          delivery_capacity(delivery_capacity){}
+            DstExternalForwardPingSignalResolutor(std::unique_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
+                                                  std::unique_ptr<HostIPRetrieverInterface> host_ip_retriever,
+                                                  std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<external_virtual_memory_commit_t>> request_box,
+                                                  size_t delivery_capacity): uma_ip_retriever(std::move(uma_ip_retriever)),
+                                                                             host_ip_retriever(std::move(host_ip_retriever)),
+                                                                             request_box(std::move(request_box)),
+                                                                             delivery_capacity(delivery_capacity){}
 
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
 
@@ -138,9 +138,9 @@ namespace dg::network_memcommit_resolutor{
 
             void internal_resolve(uma_ptr_t requestee, dg::network_producer_consumer::DeliveryHandle<external_virtual_memory_commit_t> * handle) noexcept{
 
-                uma_ptr_t requestee_rcu_addr = dg::network_tile_member_getsetter::get_extclone_rcu_addr_nothrow(requestee);
+                uma_ptr_t requestee_rcu_addr = dg::network_tile_member_getsetter::get_dstextclone_rcu_addr_nothrow(requestee);
                 dg::network_memops_uma::memlock_guard mem_guard(requestee_rcu_addr);
-                init_status_t init_status = dg::network_tile_member_getsetter::get_extclone_init_status_nothrow(requestee);
+                init_status_t init_status = dg::network_tile_member_getsetter::get_dstextclone_init_status_nothrow(requestee);
 
                 switch (init_status){
                     case INIT_STATUS_ORPHANED:
@@ -157,7 +157,7 @@ namespace dg::network_memcommit_resolutor{
                     }
                     case INIT_STATUS_EMPTY:
                     {
-                        uma_ptr_t requestor     = dg::network_tile_member_getsetter::get_extclone_src_addr_nothrow(requestee);
+                        uma_ptr_t requestor     = dg::network_tile_member_getsetter::get_dstextclone_src_addr_nothrow(requestee);
                         Address requestor_ip    = this->uma_ip_retriever->ip(src_addr);
                         Address requestee_ip    = this->host_ip_retriever->ip();
                         Request<external_virtual_memory_commit_t> ping_request{requestor_ip, requestee_ip, dg::network_external_memcommit_factory::make_event_external_forward_ping_signal(requestor)};
@@ -187,29 +187,29 @@ namespace dg::network_memcommit_resolutor{
 
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> ordinary_ping_resolutor;
             const size_t ordinary_ping_dispatch_sz;
-            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> external_ping_resolutor;
-            const size_t external_ping_dispatch_sz;
+            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> dst_external_ping_resolutor;
+            const size_t dst_external_ping_dispatch_sz;
 
         public:
 
             ForwardPingSignalResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> ordinary_ping_resolutor,
                                        size_t ordinary_ping_dispatch_sz,
-                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> external_ping_resolutor,
-                                       size_t external_ping_dispatch_sz) noexcept: ordinary_ping_resolutor(std::move(ordinary_ping_resolutor)),
-                                                                                   ordinary_ping_dispatch_sz(ordinary_ping_dispatch_sz),
-                                                                                   external_ping_resolutor(std::move(external_ping_resolutor)),
-                                                                                   external_ping_dispatch_sz(external_ping_dispatch_sz){}
-            
+                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> dst_external_ping_resolutor,
+                                       size_t dst_external_ping_dispatch_sz) noexcept: ordinary_ping_resolutor(std::move(ordinary_ping_resolutor)),
+                                                                                       ordinary_ping_dispatch_sz(ordinary_ping_dispatch_sz),
+                                                                                       dst_external_ping_resolutor(std::move(dst_external_ping_resolutor)),
+                                                                                       dst_external_ping_dispatch_sz(dst_external_ping_dispatch_sz){}
+
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
 
-                auto ordinary_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->ordinary_ping_resolutor.get(), this->ordinary_ping_dispatch_sz));
-                auto external_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->external_ping_resolutor.get(), this->external_ping_dispatch_sz));
+                auto ordinary_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->ordinary_ping_resolutor.get(), this->ordinary_ping_dispatch_sz));
+                auto dst_external_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->dst_external_ping_resolutor.get(), this->dst_external_ping_dispatch_sz));
 
                 for (size_t i = 0u; i < sz; ++i){
                     tile_kind_t tile_kind = dg::network_tile_member_safe_getsetter::get_tile_kind_nothrow(std::get<0>(ptr_arr[i])); 
 
-                    if (tile_kind == TILE_KIND_EXTERNAL_CLONE){
-                        dg::network_producer_consumer::delvrsrv_deliver(external_delivery_handle.get(), ptr_arr[i]);
+                    if (tile_kind == TILE_KIND_DST_EXTERNAL_CLONE){
+                        dg::network_producer_consumer::delvrsrv_deliver(dst_external_delivery_handle.get(), ptr_arr[i]);
                     } else{
                         dg::network_producer_consumer::delvrsrv_deliver(ordinary_delivery_handle.get(), ptr_arr[i]);
                     }
@@ -286,7 +286,7 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
-    class ForwardPongSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>>{
+    class ForwardPongSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
 
         private:
 
@@ -299,18 +299,18 @@ namespace dg::network_memcommit_resolutor{
                                        size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
                                                                            delivery_capacity(delivery_capacity){}
 
-            void push(std::tuple<uma_ptr_t, uma_ptr_t> * ptr_arr, size_t sz) noexcept{
+            void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
 
                 auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    this->internal_resolve(std::get<0>(ptr_arr[i]), std::get<1>(ptr_arr[i]), delivery_handle.get());
+                    this->internal_resolve(std::get<0>(ptr_arr[i]), delivery_handle.get());
                 }
             }
 
         private:
 
-            void internal_resolve(uma_ptr_t signalee, uma_ptr_t signaler, dg::network_producer_consumer::DeliveryHandle<virtual_memory_commit_t> * delivery_handle) noexcept{
+            void internal_resolve(uma_ptr_t signalee, dg::network_producer_consumer::DeliveryHandle<virtual_memory_commit_t> * delivery_handle) noexcept{
 
                 uma_ptr_t signalee_rcu_addr         = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(signalee);
                 dg::network_memops_uma::memlock_guard mem_grd(signalee_rcu_addr);
@@ -412,7 +412,7 @@ namespace dg::network_memcommit_resolutor{
                     observer_arr_sz = dg::network_tile_member_getsetter::get_tile_observer_size_nothrow(ptr);
              
                     for (size_t i = 0u; i < observer_arr_sz; ++i){
-                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i], ptr);
+                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
                         dg::network_producer_consumer::delvrsrv_deliver(handle, std::move(request));
                     }
                 }
@@ -425,13 +425,13 @@ namespace dg::network_memcommit_resolutor{
 
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box;
             const size_t delivery_capacity;
-        
+
         public:
 
             CritForwardInitSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box,
                                            size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
                                                                                delivery_capacity(delivery_capacity){}
-            
+
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
 
                 auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
@@ -440,7 +440,7 @@ namespace dg::network_memcommit_resolutor{
                     this->internal_resolve(std::get<0>(ptr_arr[i]), delivery_handle.get());
                 }
             }
-        
+
         private:
 
             void internal_resolve(uma_ptr_t ptr, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * handle) noexcept{
@@ -451,10 +451,10 @@ namespace dg::network_memcommit_resolutor{
                     return;
                 }
 
-                uma_ptr_t ptr_lock_addr                                     = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(ptr);
-                std::array<uma_ptr_t, OBSERVER_ARR_CAP> observer_arr        = {};
-                size_t observer_arr_sz                                      = {};
-                init_status_t init_status                                   = {};
+                uma_ptr_t ptr_lock_addr                                 = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(ptr);
+                std::array<uma_ptr_t, OBSERVER_ARR_CAP> observer_arr    = {};
+                size_t observer_arr_sz                                  = {};
+                init_status_t init_status                               = {};
 
                 {
                     dg::network_memops_uma::memlock_guard mem_grd(ptr_lock_addr);
@@ -468,7 +468,7 @@ namespace dg::network_memcommit_resolutor{
                     observer_arr_sz     = dg::network_tile_member_getsetter::get_crit_observer_size_nothrow(ptr);
 
                     for (size_t i = 0u; i < observer_arr_sz; ++i){
-                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i], ptr);
+                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
                         dg::network_producer_consumer::delvrsrv_deliver(handle, std::move(request));
                     }
 
@@ -478,22 +478,135 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
-    class ExternalForwardInitSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
+    class SrcExternalForwardInitSignalResolutor: public virtual dg::network_producer_consumer::ConsuemrInterface<std::tuple<uma_ptr_t>>{
+
+        private:
+
+            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_commit_t>>> request_box;
+            std::unique_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever;
+            std::unique_ptr<HostIPRetrieverInterface> host_ip_retriever;
+            const size_t delivery_capacity;
+
+        public:
+
+            SrcExternalForwardInitSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box,
+                                                  std::unique_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
+                                                  std::unique_ptr<HostIPRetrieverInterface> host_ip_retriever,
+                                                  size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
+                                                                                      uma_ip_retriever(std::move(uma_ip_retriever)),
+                                                                                      host_ip_retriever(std::move(host_ip_retriever)),
+                                                                                      delivery_capacity(delivery_capacity){}
+
+            void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
+
+                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->internal_resolve(std::get<0>(ptr_arr[i]), delivery_handle.get());
+                }
+            }
+
+        private:
+
+            void internal_resolve(uma_ptr_t ptr, dg::network_producer_consumer::DeliveryHandle<virtual_memory_commit_t> * handle) noexcept{
+
+                bool forward_status = dg::network_tileops_host_handler::forward_srcextclone(ptr);
+
+                if (!forward_status){
+                    return;
+                }
+
+                uma_ptr_t ptr_rcu_addr      = dg::network_tile_member_getsetter::get_srcextclone_rcu_addr_nothrow(ptr);
+                init_status_t init_status   = {};
+                uma_ptr_t dst_addr          = {}; 
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(ptr_rcu_addr);
+                    init_status = dg::network_tile_member_getsetter::get_srcexclone_init_status_nothrow(ptr);
+
+                    if (init_status != TILE_INIT_STATUS_INITIALIZED){
+                        return;
+                    }
+
+                    dst_addr = dg::network_tile_member_getsetter::get_srcexclone_dst_addr_nothrow(ptr);
+                    //
+                }
+            }
+    };
+
+    class DstExternalForwardInitSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
 
         private:
 
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box;
             std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter;
             const size_t delivery_capacity;
+
+        public:
+
+            DstExternalForwardInitSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box,
+                                                  std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter,
+                                                  size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
+                                                                                      alias_getter(std::move(alias_getter)),
+                                                                                      delivery_capacity(delivery_capacity){}
+
+            void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
+
+                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->internal_resolve(std::get<0>(ptr_arr[i]), delivery_handle.get());
+                }
+            }
+
+        private:
+
+            void internal_resolve(uma_ptr_t ptr, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * handle) noexcept{
+
+                uma_ptr_t alias     = this->alias_getter->alias(ptr);
+                bool forward_status = dg::network_tileops_host_handler::forward_dstextclone(ptr, alias);
+
+                if (!forward_status){
+                    return;
+                }
+
+                uma_ptr_t ptr_lock_addr                                 = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(ptr);
+                std::array<uma_ptr_t, OBSERVER_ARR_CAP> observer_arr    = {};
+                size_t observer_arr_sz                                  = {};
+                init_status_t init_status                               = {};
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(ptr_lock_addr);
+                    init_status = dg::network_tile_member_getsetter::get_dstextclone_init_status_nothrow(ptr);
+
+                    if (init_status != TILE_INIT_STATUS_INITIALIZED){
+                        return;
+                    }
+
+                    observer_arr    = dg::network_tile_member_getsetter::get_dstextclone_observer_nothrow(ptr);
+                    observer_arr_sz = dg::network_tile_member_getsetter::get_dstextclone_observer_size_nothrow(ptr);
+
+                    for (size_t i = 0u; i < observer_arr_sz; ++i){
+                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
+                        dg::network_producer_consumer::delvrsrv_deliver(handle, std::move(request));
+                    }
+                }
+            }
+    };
+
+    class MsgrFwdForwardInitSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
+
+        private:
+
+            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box;
+            const size_t delivery_capacity;
         
         public:
 
-            ExternalForwardInitSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box,
-                                               std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter,
-                                               size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
-                                                                                   alias_getter(std::move(alias_getter)),
-                                                                                   delivery_capacity(delivery_capacity){}
-            
+            MsgrFwdForwardInitSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_commit_t>> request_box,
+                                              size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
+                                                                                  delivery_capacity(delivery_capacity){}
+
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
 
                 auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
@@ -507,34 +620,37 @@ namespace dg::network_memcommit_resolutor{
 
             void internal_resolve(uma_ptr_t ptr, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * handle) noexcept{
 
-                uma_ptr_t alias     = this->alias_getter->alias(ptr);
-                bool forward_status = dg::network_tileops_host_handler::forward_extclone(ptr, alias);
+                bool forward_status = dg::network_tileops_host_handler::forward_msgrfwd(ptr);
 
                 if (!forward_status){
                     return;
                 }
 
-                uma_ptr_t ptr_lock_addr                                 = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(ptr);
+                uma_ptr_t ptr_lock_addr                                 = dg::network_tile_member_get_setter::get_tile_rcu_addr_nothrow(ptr);
                 std::array<uma_ptr_t, OBSERVER_ARR_CAP> observer_arr    = {};
                 size_t observer_arr_sz                                  = {};
                 init_status_t init_status                               = {};
+                dst_info_t dst_info                                     = {};
 
                 {
                     dg::network_memops_uma::memlock_guard mem_grd(ptr_lock_addr);
-                    init_status = dg::network_tile_member_getsetter::get_extclone_init_status_nothrow(ptr);
+                    init_status = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
 
                     if (init_status != TILE_INIT_STATUS_INITIALIZED){
                         return;
                     }
 
-                    observer_arr    = dg::network_tile_member_getsetter::get_extclone_observer_nothrow(ptr);
-                    observer_arr_sz = dg::network_tile_member_getsetter::get_extclone_observer_size_nothrow(ptr);
+                    observer_arr    = dg::network_tile_member_getsetter::get_msgrfwd_observer_nothrow(ptr);
+                    observer_arr_sz = dg::network_tile_member_getsetter::get_msgrfwd_observer_size_nothrow(ptr);
+                    dst_info        = dg::network_tile_member_getsetter::get_msgrfwd_dst_info_nothrow(ptr);
 
                     for (size_t i = 0u; i < observer_arr_sz; ++i){
-                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i], ptr);
+                        virtual_memory_commit_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
                         dg::network_producer_consumer::delvrsrv_deliver(handle, std::move(request));
                     }
-                }
+
+
+                } 
             }
     };
 
@@ -548,6 +664,8 @@ namespace dg::network_memcommit_resolutor{
             const size_t crit_dispatch_sz;
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> external_forwardinit_resolutor;
             const size_t external_dispatch_sz;
+            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> msgrfwd_forwardinit_resolutor;
+            const size_t msgrfwd_dispatch_sz;
 
         public:
 
@@ -555,27 +673,36 @@ namespace dg::network_memcommit_resolutor{
                                        size_t ordinary_dispatch_sz,
                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> crit_forwardinit_resolutor,
                                        size_t crit_dispatch_sz,
-                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> external_forwardinit_resolutor),
-                                       size_t external_dispatch_sz noexcept: ordinary_forwardinit_resolutor(std::move(ordinary_forwardinit_resolutor)),
+                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> external_forwardinit_resolutor,
+                                       size_t external_dispatch_sz,
+                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> msgrfwd_forwardinit_resolutor,
+                                       size_t msgrfwd_dispatch_sz) noexcept: ordinary_forwardinit_resolutor(std::move(ordinary_forwardinit_resolutor)),
                                                                              ordinary_dispatch_sz(ordinary_dispatch_sz),
                                                                              crit_forwardinit_resolutor(std::move(crit_forwardinit_resolutor)),
                                                                              crit_dispatch_sz(crit_dispatch_sz), 
                                                                              external_forwardinit_resolutor(std::move(external_forwardinit_resolutor)),
-                                                                             external_dispatch_sz(external_dispatch_sz){}
+                                                                             external_dispatch_sz(external_dispatch_sz),
+                                                                             msgrfwd_forwardinit_resolutor(std::move(msgrfwd_forwardinit_resolutor)),
+                                                                             msgrfwd_dispatch_sz(msgrfwd_dispatch_sz){}
             
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
                 
                 auto ordinary_fwdinit_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->ordinary_forwardinit_resolutor.get(), this->ordinary_dispatch_sz));
                 auto crit_fwdinit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->crit_forwardinit_resolutor.get(), this->crit_dispatch_sz));
                 auto external_fwdinit_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->external_forwardinit_resolutor.get(), this->external_dispatch_sz)); 
+                auto msgrfwd_fwdinit_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->msgrfwd_forwardinit_resolutor.get(), this->msgrfwd_dispatch_sz)); 
 
                 for (size_t i = 0u; i < sz; ++i){
                     tile_kind_t tile_kind = dg::network_tile_member_safe_getsetter::get_tile_kind_nothrow(std::get<0>(ptr_arr[i]));
+
+                    //optimizables - distrust compiler
 
                     if (tile_kind == TILE_KIND_EXTERNAL_CLONE){
                         dg::network_producer_consumer::delvrsrv_deliver(external_fwdinit_delivery_handle.get(), ptr_arr[i]);
                     } else if (tile_kind == TILE_KIND_CRIT){
                         dg::network_producer_consumer::delvrsrv_deliver(crit_fwdinit_delivery_handle.get(), ptr_arr[i]);
+                    } else if (tile_kind == TILE_KIND_MSGRFWD){
+                        dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_fwdinit_delivery_handle.get(), ptr_arr[i]);
                     } else{
                         dg::network_producer_consumer::delvrsrv_deliver(ordinary_fwdinit_delivery_handle.get(), ptr_arr[i]);
                     }
@@ -706,7 +833,7 @@ namespace dg::network_memcommit_resolutor{
                 }
             }
     };
-
+    
     class BackwardDoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
 
         private:
