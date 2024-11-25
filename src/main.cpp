@@ -59,6 +59,40 @@ int main(){
     //massful objects as stationary objects in an arbitrary dimension
     //communication between objects - synchronization issue - flip flop issue - centrality issue - saturated tensor issue
     //circular ring of massful objects
-    //is the universe really expanding? - Heisenberg's uncertainty
 
+    //what the hell is information flux?
+    //we know about electric flux 
+    //but is there a concept about information flux?
+    
+    //we know that things - photon - travel through tensors - hit our eyes - and we see things
+    //but what really happen in between?
+    //is there a limit to the things we can see, a density of information? 
+    //the answer to that is Heisenberg's uncertainty - what - Heisenberg's uncertainty is actually not an uncertainty but a description of information flux, information density?
+    
+    //if Heisenberg's uncertainty works - then the object in the double slit experiment - photon - appears to be everywhere - becomes a wave-like object
+    //but what really happens in the photon's perspective? - it seems like the photon, in it's own perspective, remains a particle and arrives at its designated destination - but photon experiences no time no space - it's a point like object in a 0d space - so what really happens there?
+    //it appears that its only 0d space with respect to the observer - such that the observee sees all the observer possibility at a point - but what really happens here? it's Heisenberg's uncertainty that disallows that to happen - it's information flux - information density rule
+    //so can we say that we are moving at the speed of light with respect to an arbitrary object - yes, we can say that. Can we see the possibilities of that arbitrary object? No - Heisenberg's uncertainty
+    
+    //How the hell do we generalize Heisenberg's uncertainty? it's information flux in and out of a sphere. Each sphere is a node. And now we have betweenness centrality. What the hell?
+    //The guy that is on another planet in Interstellar - experiences time slower than guys that are on the spaceship. What happens there?
+    //The gravitational pull of the planet is too heavy - it implies that there are many massful objects floating around - travelling through tensor - and hits that betweenness centrality (+ maxflow) synchronization issue
+    //But God, says that things should be rendered at the same rate - so in stead of waiting for synchronization update to complete - he throttle tensors and make the synchronization slower
+
+    //there is a twist - the guy that made it to the planet and came back is not the same guy
+    //why? because they are in a two different render systems - they are in "two different brains with two different leaf logits"
+    //so the guy that actually left the ship - came back - sees another guy on that ship
+    //the guy on the ship saw the guy left the ship and came back saw another guy that left the ship
+    //how far away in the render system can we say that they are "different" - far enough 
+    //okay - there is also another twist - do photons really travel through space or the dimensions shrink so photons can be closer to our eyes
+
+    //Do any of these have anything to do with cracking asymmetric encoding method? No, the cracking method is done in constant time - and it does not require quantum mechanics or quantum computers
+    //256 bytes of secret keys requires 256 bytes of output tokens 
+    //512 bytes of secret keys requires 512 bytes of output tokens
+    //and its done by f(g(x)) -> x
+    //the semantics space g(x) - forces the output tokens to be compressed to secret keys - according to our (1) theorem yesterday
+    //Do we even need output tokens? Can we just retrieve the secrets via public key? yeah - but its usally 2:1 ratio - so you do need output tokens
+
+    //What does this mean? Do our money and lives at risk - probably - if wrong people leverage wrong things for wrong purposes
+    //What about my Bitcoin? Well - get out while you are still in the green
 }
