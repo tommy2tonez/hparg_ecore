@@ -19,7 +19,7 @@
 #include "stdx.h"
 
 namespace dg::network_tile_member_access::implementation{
-    
+
     using uma_ptr_t = dg::network_pointer::uma_ptr_t;
 
     static constexpr auto dg_align(size_t alignment_sz, size_t blk_sz) noexcept -> size_t{
@@ -113,10 +113,10 @@ namespace dg::network_tile_member_access::implementation{
                 return TILE_COUNT;
             }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto init_status_size() -> size_t{
 
-                return OBSERVER_ARRAY_SZ;
-            }
+                return INIT_STATUS_SZ;
+            } 
 
             static consteval auto logit_group_size() -> size_t{
 
@@ -126,6 +126,31 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            } 
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -271,10 +296,10 @@ namespace dg::network_tile_member_access::implementation{
 
                 return TILE_COUNT;
             }
+            
+            static consteval auto init_status_size() -> size_t{
 
-            static consteval auto observer_arr_size() -> size_t{
-
-                return OBSERVER_ARRAY_SZ;
+                return INIT_STATUS_SZ;
             }
 
             static consteval auto logit_group_size() -> size_t{
@@ -287,6 +312,31 @@ namespace dg::network_tile_member_access::implementation{
                 return GRAD_VALUE_SZ;
             }
 
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+            
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -1422,6 +1472,167 @@ namespace dg::network_tile_member_access::implementation{
                 return self::rcu_lock_addr(ptr);
             }
     };
+
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t COUNTERPART_SZ>
+    struct ExtnSrcAddressLookup{
+
+        public:
+
+            static void init(){
+
+            }
+
+            static void deinit() noexcept{
+
+            }
+
+            static consteval auto buf_size() -> size_t{
+
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+            }
+
+            static consteval auto logit_group_size() -> size_t{
+
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto id_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto init_status_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto tile_logit_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto tile_grad_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto operatable_id_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto dispatch_control_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto pong_count_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto descendant_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto counterpart_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            } 
+
+            static inline auto notification_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto rcu_lock_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+    };
+
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t COUNTERPART_SZ>
+    struct ExtnDstAddressLookup{
+
+        public:
+
+            static void init(){
+
+            }
+
+            static void deinit() noexcept{
+
+            }
+
+            static consteval auto buf_size() -> size_t{
+
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+            }
+
+            static consteval auto observer_arr_size() -> size_t{
+
+            }
+
+            static consteval auto logit_group_size() -> size_t{
+
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto id_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto init_status_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            template <size_t ARR_IDX>
+            static inline auto observer_addr(uma_ptr_t, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
+
+            } 
+
+            static inline auto tile_logit_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto tile_grad_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto operatable_id_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto dispatch_control_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto pong_count_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto counterpart_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto notification_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+
+            static inline auto rcu_lock_addr(uma_ptr_t) noexcept -> uma_ptr_t{
+
+            }
+    };
 }
 
 namespace dg::network_tile_member_access{
@@ -1495,18 +1706,26 @@ namespace dg::network_tile_member_access{
         id_msgrbwd_16   = 17u,
         id_msgrbwd_32   = 18u,
         id_msgrbwd_64   = 19u,
-        id_pair_8       = 20u,
-        id_pair_16      = 21u,
-        id_pair_32      = 22u,
-        id_pair_64      = 23u,
-        id_uacm_8       = 24u,
-        id_uacm_16      = 25u,
-        id_uacm_32      = 26u,
-        id_uacm_64      = 27u,
-        id_pacm_8       = 28u,
-        id_pacm_16      = 29u,
-        id_pacm_32      = 30u,
-        id_pacm_64      = 31u,
+        id_extnsrc_8    = 20u,
+        id_extnsrc_16   = 21u,
+        id_extnsrc_32   = 22u,
+        id_extnsrc_64   = 23u,
+        id_extndst_8    = 24u,
+        id_extndst_16   = 25u,
+        id_extndst_32   = 26u,
+        id_extndst_64   = 27u,
+        id_pair_8       = 28u,
+        id_pair_16      = 29u,
+        id_pair_32      = 30u,
+        id_pair_64      = 31u,
+        id_uacm_8       = 32u,
+        id_uacm_16      = 33u,
+        id_uacm_32      = 34u,
+        id_uacm_64      = 35u,
+        id_pacm_8       = 36u,
+        id_pacm_16      = 37u,
+        id_pacm_32      = 38u,
+        id_pacm_64      = 39u,
     };
 
     struct network_tile_member_access_signature{}; 
@@ -1841,7 +2060,7 @@ namespace dg::network_tile_member_access{
         stdx::atomic_optional_signal_fence(std::memory_order_acquire);
         uma_ptr_t id_region = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
 
-        return stdx::to_const_reference(resource.region_id_map).find(id_region)->second;
+        return stdx::to_const_reference(resource.region_id_map).at(id_region);
     }
 
     template <class CallBack>

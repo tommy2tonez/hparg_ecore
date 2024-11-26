@@ -7,34 +7,31 @@
 #include "network_trivial_serializer.h" 
 #include <array>
 
-namespace dg::network_memcommit_taxonomy{
-
-    using memory_event_taxonomy_t = uint8_t;
-
-    enum memory_event_option: memory_event_taxonomy_t{
-        forward_ping_signal             = 0u,
-        forward_pong_request            = 1u,
-        forward_pong_signal             = 2u,
-        forward_do_signal               = 3u,
-        backward_do_signal              = 4u,
-    };
-}
-
 namespace dg::network_memcommit_factory{
+
+    using memory_event_kind_t = uint8_t;
+
+    enum enum_memory_event_kind: memory_event_kind_t{
+        event_kind_forward_ping_signal      = 0u,
+        event_kind_forward_pong_request     = 1u,
+        event_kind_forward_pong_signal      = 2u,
+        event_kind_forward_do_signal        = 3u,
+        event_kind_backward_do_signal       = 4u,
+    };
 
     static inline constexpr size_t VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5; 
 
     using namespace dg::network_memcommit_taxonomy;
-    
+
     using uma_ptr_t                 = uint64_t;
     using virtual_memory_event_t    = std::array<char, VIRTUAL_EVENT_BUFFER_SZ>;
 
     auto make_event_forward_ping_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
 
-        constexpr size_t SERILIAZATION_SZ = dg::network_trivial_serializer::size(memory_event_taxonomy_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t>{}); 
+        constexpr size_t SERILIAZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t>{}); 
         static_assert(SERILIAZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
         virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), forward_ping_signal);
+        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_ping_signal);
         char * nnxt = dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
 
         return rs;
@@ -42,10 +39,10 @@ namespace dg::network_memcommit_factory{
 
     auto make_event_forward_pong_request(uma_ptr_t requestee, uma_ptr_t requestor) noexcept -> virtual_memory_event_t{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_taxonomy_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
+        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
         static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
         virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), forward_pong_request);
+        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_pong_request);
         char * nnxt = dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(requestee, requestor));
 
         return rs; 
@@ -54,10 +51,10 @@ namespace dg::network_memcommit_factory{
 
     auto make_event_forward_pong_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_taxonomy_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
+        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
         static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
         virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), forward_pong_signal);
+        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_pong_signal);
         char * nnxt = dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
 
         return rs;
@@ -65,10 +62,10 @@ namespace dg::network_memcommit_factory{
 
     auto make_event_forward_do_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_taxonomy_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t>{});
+        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t>{});
         static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);;
         virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), forward_do_signal);
+        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_do_signal);
         char * nnxt = dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
 
         return rs;
@@ -76,18 +73,26 @@ namespace dg::network_memcommit_factory{
 
     auto make_event_backward_do_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_taxonomy_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
+        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
         static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
         virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), backward_do_signal);
+        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_backward_do_signal);
         char * nnxt = dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
 
         return rs;
     }
 
+    auto read_event_kind(virtual_memory_event_t event) noexcept -> memory_event_kind_t{
+
+        memory_event_kind_t rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.data());
+        
+        return rs;
+    } 
+
     auto read_event_forward_ping_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
 
-        const char * buf = event.data() + dg::network_trivial_serializer::size(memory_event_taxonomy_t{});
+        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
         std::tuple<uma_ptr_t> rs{};
         dg::network_trivial_serializer::deserialize_into(rs, buf); 
 
@@ -96,7 +101,7 @@ namespace dg::network_memcommit_factory{
 
     auto read_event_forward_pong_request(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t, uma_ptr_t>{
 
-        const char * buf = event.data() + dg::network_trivial_serializer::size(memory_event_taxonomy_t{});
+        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
         std::tuple<uma_ptr_t, uma_ptr_t> rs{};
         dg::network_trivial_serializer::deserialize_into(rs, buf);
 
@@ -105,7 +110,7 @@ namespace dg::network_memcommit_factory{
 
     auto read_event_forward_pong_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
 
-        const char * buf = event.data() + dg::network_trivial_serializer::size(memory_event_taxonomy_t{});
+        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
         std::tuple<uma_ptr_t> rs{};
         dg::network_trivial_serializer::deserialize_into(rs, buf);
 
@@ -114,7 +119,7 @@ namespace dg::network_memcommit_factory{
 
     auto read_event_forward_do_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
 
-        const char * buf = event.data() + dg::network_trivial_serializer::size(memory_event_taxonomy_t{});
+        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
         std::tuple<uma_ptr_t> rs{};
         dg::network_trivial_serializer::deserialize_into(rs, buf);
 
@@ -123,7 +128,7 @@ namespace dg::network_memcommit_factory{
 
     auto read_event_backward_do_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t, uma_ptr_t>{
 
-        const char * buf = event.data() + dg::network_trivial_serializer::size(memory_event_taxonomy_t{});
+        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
         std::tuple<uma_ptr_t, uma_ptr_t> rs{};
         dg::network_trivial_serializer::deserialize_into(rs, buf);
 
