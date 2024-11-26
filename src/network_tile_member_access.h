@@ -27,11 +27,13 @@ namespace dg::network_tile_member_access::implementation{
         assert(stdx::is_pow2(alignment_sz));
 
         size_t bit_mask     = ~static_cast<size_t>(alignment_sz - 1);  
-        size_t fwd_blk_sz   = blk_sz + alignment_sz - 1;
+        size_t fwd_blk_sz   = blk_sz + alignment_sz - 1u;
 
         return fwd_blk_sz & bit_mask;
     }
 
+    //updating the leafs is another fling I haven't thought of yet
+    //maybe that's backward do on leaf - I'm against the usage of AdamW + Adam + SGD + etc - I think it's a duct tape for gradient update - it's always been path issues
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ>
     struct LeafAddressLookup{
 
@@ -133,7 +135,7 @@ namespace dg::network_tile_member_access::implementation{
                 return OBSERVER_VALUE_SZ;
             } 
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto observer_array_size() -> size_t{
 
                 return OBSERVER_ARRAY_SZ;
             }
@@ -317,7 +319,7 @@ namespace dg::network_tile_member_access::implementation{
                 return OBSERVER_VALUE_SZ;
             }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto observer_array_size() -> size_t{
 
                 return OBSERVER_ARRAY_SZ;
             }
@@ -335,6 +337,11 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto pong_count_size() -> size_t{
 
                 return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
             }
             
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -487,14 +494,9 @@ namespace dg::network_tile_member_access::implementation{
                 return TILE_COUNT;
             }
 
-            static consteval auto observer_arr_size() -> size_t{
-
-                return OBSERVER_ARRAY_SZ;
-            }
-
-            static consteval auto accum_size() -> size_t{
-
-                return ACM_SZ;
+            static consteval auto init_status_size() -> size_t{
+                
+                return INIT_STATUS_SZ;
             }
 
             static consteval auto logit_group_size() -> size_t{
@@ -505,6 +507,41 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+            
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+
+            static consteval auto accum_size() -> size_t{
+
+                return ACM_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -665,14 +702,9 @@ namespace dg::network_tile_member_access::implementation{
                 return TILE_COUNT;
             }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto init_status_size() -> size_t{
 
-                return OBSERVER_ARRAY_SZ;
-            }
-
-            static consteval auto accum_size() -> size_t{
-
-                return ACM_SZ;
+                return INIT_STATUS_SZ;
             }
 
             static consteval auto logit_group_size() -> size_t{
@@ -683,6 +715,41 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            } 
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+
+            static consteval auto accum_size() -> size_t{
+
+                return ACM_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -848,9 +915,9 @@ namespace dg::network_tile_member_access::implementation{
                 return TILE_COUNT;
             }
 
-            static consteval auto observer_arr_size() ->  size_t{
+            static consteval auto init_status_size() -> size_t{
 
-                return OBSERVER_ARRAY_SZ;
+                return INIT_STATUS_SZ;
             }
 
             static consteval auto logit_group_size() -> size_t{
@@ -861,6 +928,36 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() ->  size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -1027,10 +1124,10 @@ namespace dg::network_tile_member_access::implementation{
                 return TILE_COUNT;
             }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto init_status_size() -> size_t{
 
-                return OBSERVER_ARRAY_SZ;
-            } 
+                return INIT_STATUS_SZ;
+            }
 
             static consteval auto logit_group_size() -> size_t{
 
@@ -1040,6 +1137,41 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+
+            static consteval auto crit_kind_size() -> size_t{
+
+                return CRIT_KIND_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -1115,6 +1247,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //I think msgr is a neccessity - fwd and bwd - fwd is to extract - bwd is for storage
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ>
     struct MsgrFwdAddressLookup{
 
@@ -1206,10 +1339,10 @@ namespace dg::network_tile_member_access::implementation{
                 return TILE_COUNT;
             }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto init_status_size() -> size_t{
 
-                return OBSERVER_ARRAY_SZ;
-            } 
+                return INIT_STATUS_SZ;
+            }
 
             static consteval auto logit_group_size() -> size_t{
 
@@ -1219,6 +1352,41 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+
+            static consteval auto dst_info_size() -> size_t{
+
+                return DST_INFO_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -1289,6 +1457,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //msgrbwd needs to retain gradient in a different variable - an accumulatable gradient - there is also the need for a bool gradient flag - to not waste time zero out the gradients
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_VALUE_SZ, size_t GRAD_VALUE_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ, size_t TIMEIN_SZ>
     struct MsgrBwdAddressLookup{
 
@@ -1383,11 +1552,11 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto tile_size() -> size_t{
 
                 return TILE_COUNT;
-            } 
+            }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto init_status_size() -> size_t{
 
-                return OBSERVER_ARRAY_SZ;
+                return INIT_STATUS_SZ;
             }
 
             static consteval auto logit_group_size() -> size_t{
@@ -1398,6 +1567,46 @@ namespace dg::network_tile_member_access::implementation{
             static consteval auto grad_group_size() -> size_t{
 
                 return GRAD_VALUE_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+
+            static consteval auto dst_info_size() -> size_t{
+
+                return DST_INFO_SZ;
+            }
+
+            static consteval auto timein_size() -> size_t{
+
+                return TIMEIN_SZ;
             }
 
             static inline auto get_head() noexcept -> uma_ptr_t{
@@ -1572,7 +1781,7 @@ namespace dg::network_tile_member_access::implementation{
 
             }
 
-            static consteval auto observer_arr_size() -> size_t{
+            static consteval auto observer_array_size() -> size_t{
 
             }
 

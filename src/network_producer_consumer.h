@@ -178,7 +178,7 @@ namespace dg::network_producer_consumer{
                     return false;
                 }
 
-                this->vec.insert(this->vec.end(), event_arr, event_arr + sz);
+                this->vec.insert(this->vec.end(), event_arr, std::next(event_arr, sz));
                 return true;
             }
 
@@ -187,7 +187,10 @@ namespace dg::network_producer_consumer{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 dst_sz          = std::min(dst_cap, this->vec.size());
                 size_t new_sz   = this->vec.size() - dst_sz;
-                std::copy(this->vec.begin() + new_sz, this->vec.end(), dst);
+                auto first_it   = std::next(this->vec.begin(), new_sz);
+                auto last_it    = this->vec.end(); 
+
+                std::copy(first_it, last_it, dst);
                 this->vec.resize(new_sz);
             }
 
@@ -303,7 +306,7 @@ namespace dg::network_raii_producer_consumer{
                 }
 
                 size_t new_sz       = vec.size() - extracting_sz;
-                auto vec_it_first   = vec.begin() + new_sz;
+                auto vec_it_first   = std::next(vec.begin(), new_sz);
                 auto vec_it_last    = vec.end(); 
                 auto rs             = dg::vector<EventType>(std::make_move_iterator(vec_it_first), std::make_move_iterator(vec_it_last));
                 vec.resize(new_sz);
@@ -427,7 +430,7 @@ namespace dg::network_raii_producer_consumer{
 
                 size_t extracting_sz    = std::min(extract_cap, this->vec.size());
                 size_t new_vec_sz       = this->vec.size() - extracting_sz;
-                auto vec_it_first       = this->vec.begin() + new_vec_sz;
+                auto vec_it_first       = std::next(this->vec.begin(), new_vec_sz);
                 auto vec_it_last        = this->vec.end();
                 auto rs                 = dg::vector<EventType>(std::make_move_iterator(vec_it_first), std::make_move_iterator(vec_it_last));
                 this->vec.resize(new_vec_sz);

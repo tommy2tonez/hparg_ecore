@@ -695,7 +695,7 @@ namespace dg::network_memcommit_resolutor{
 
                 {
                     dg::network_memops_uma::memlock_guard mem_grd(ptr_lock_addr);
-                    init_status = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
+                    init_status     = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
 
                     if (init_status != TILE_INIT_STATUS_INITIALIZED){
                         return;
@@ -801,6 +801,10 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             }
+    };
+
+    class LeafBackwardDoSignalResolutor: public virtual dg;:network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
+
     };
 
     class DstExternalBackwardDoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
@@ -1124,6 +1128,11 @@ namespace dg::network_memcommit_resolutor{
                     return false;
                 }
 
+                if (!fwd_pong_signal_delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(fwd_pong_signal_delivery_handle.error()));
+                    return false;
+                }
+
                 if (!fwd_do_delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(fwd_do_delivery_handle.error()));
                     return false;
@@ -1134,9 +1143,9 @@ namespace dg::network_memcommit_resolutor{
                     return false;
                 }
 
-                auto virtual_memory_event_arr   = std::make_unique<virtual_memory_event_t>(this->producer_consumer_capacity);
+                auto virtual_memory_event_arr   = std::make_unique<virtual_memory_event_t>(this->producer_consume_capacity);
                 size_t virtual_memory_event_sz  = {};
-                this->producer->get(virtual_memory_event_arr.get(), virtual_memory_event_sz, this->producer_consumer_capacity);
+                this->producer->get(virtual_memory_event_arr.get(), virtual_memory_event_sz, this->producer_consume_capacity);
 
                 for (size_t i = 0u; i < virtual_memory_event_sz; ++i){
                     memory_event_kind_t event_kind = read_event_kind(virtual_memory_event_arr[i]);

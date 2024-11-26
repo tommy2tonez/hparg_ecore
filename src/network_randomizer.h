@@ -70,7 +70,7 @@ namespace dg::network_randomizer{
 
         static_assert(RANGE_SZ != 0u);
 
-        constexpr size_t BIT_SIZE = stdx::ulog2(RANGE_SZ); 
+        constexpr size_t BIT_SIZE = stdx::ulog2(RANGE_SZ) + 1u;
         uint64_t rs = BitRandomizer::randomize_bit(std::integral_constant<size_t, BIT_SIZE>{});
 
         if constexpr(stdx::is_pow2(RANGE_SZ)){

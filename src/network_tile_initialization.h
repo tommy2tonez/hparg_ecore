@@ -24,9 +24,6 @@ namespace dg::network_tile_initialization::statix{
     static inline constexpr UACM_ACM_SZ = dg::network_tile_metadata::UACM_ACM_SZ;
     static inline constexpr PACM_ACM_SZ = dg::network_tile_metadata::PACM_ACM_SZ;
 
-    //this needs clang compiler to maximize optimization - I'm talking about 30-40x faster
-    //I dont know why gnu heuristics does not like optimizing dispatch table - it's clearly capable of doing so 
-
     void init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
@@ -39,9 +36,10 @@ namespace dg::network_tile_initialization::statix{
         set_leaf_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_leaf_operatable_id_nothrow(ptr, operatable_id);
         set_leaf_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        set_leaf_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
 
-    void init_mono(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
+    void init_mono(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
 
@@ -51,13 +49,14 @@ namespace dg::network_tile_initialization::statix{
         
         set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_mono_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
-        set_mono_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_mono_dispatch_control_nothrow(ptr, dispatch_control);
         set_mono_operatable_id_nothrow(ptr, operatable_id);
         set_mono_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_mono_descendant_nothrow(ptr, src);
+        set_mono_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
 
-    void init_pair(uma_ptr_t ptr, uma_ptr_t lhs, uma_ptr_t rhs, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
+    void init_pair(uma_ptr_t ptr, uma_ptr_t lhs, uma_ptr_t rhs, dispatch_control_t dispatch_control, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
 
@@ -68,13 +67,14 @@ namespace dg::network_tile_initialization::statix{
         set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_pair_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_pair_operatable_id_nothrow(ptr, operatable_id);
-        set_pair_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_pair_dispatch_control_nothrow(ptr, dispatch_control);
         set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_pair_left_descendant_nothrow(ptr, lhs);
         set_pair_right_descendant_nothrow(ptr, rhs);
+        set_pair_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
 
-    void init_uacm(uma_ptr_t ptr, std::array<uma_ptr_t, UACM_ACM_SZ> src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
+    void init_uacm(uma_ptr_t ptr, std::array<uma_ptr_t, UACM_ACM_SZ> src, dispatch_control_t dispatch_control, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
 
@@ -85,12 +85,13 @@ namespace dg::network_tile_initialization::statix{
         set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_uacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_uacm_operatable_id_nothrow(ptr, operatable_id);
-        set_uacm_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_uacm_dispatch_control_nothrow(ptr, dispatch_control);
         set_uacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_uacm_descendant_nothrow(ptr, src);
+        set_uacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
 
-    void init_pacm(uma_ptr_t ptr, std::array<uma_ptr_t, PACM_ACM_SZ> lhs, std::array<uma_ptr_t, PACM_ACM_SZ> rhs, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id){
+    void init_pacm(uma_ptr_t ptr, std::array<uma_ptr_t, PACM_ACM_SZ> lhs, std::array<uma_ptr_t, PACM_ACM_SZ> rhs, dispatch_control_t dispatch_control, operatable_id_t operatable_id){
 
         using namespace network_tile_member_getsetter;
 
@@ -101,13 +102,14 @@ namespace dg::network_tile_initialization::statix{
         set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_pacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_pacm_operatable_id_nothrow(ptr, operatable_id);
-        set_pacm_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_pacm_dispatch_control_nothrow(ptr, dispatch_control);
         set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_pacm_left_descendant_nothrow(ptr, lhs);
         set_pacm_right_descendant_nothrow(ptr, rhs);
+        set_pacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
 
-    void init_crit(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, crit_kind_t crit_kind){
+    void init_crit(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, crit_kind_t crit_kind){
 
         using namespace network_tile_member_getsetter;
 
@@ -118,13 +120,14 @@ namespace dg::network_tile_initialization::statix{
         set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_crit_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_crit_operatable_id_nothrow(ptr, operatable_id);
-        set_crit_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_crit_dispatch_control_nothrow(ptr, dispatch_control);
         set_crit_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_crit_descendant_nothrow(ptr, src);
         set_crit_kind_nothrow(ptr, crit_kind);
+        set_crit_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
-    
-    void init_msgrfwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, dst_info_t dst_info){
+
+    void init_msgrfwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, dst_info_t dst_info){
 
         using namespace network_tile_member_getsetter;
 
@@ -135,13 +138,14 @@ namespace dg::network_tile_initialization::statix{
         set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_msgrfwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
-        set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control);
         set_msgrfwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_msgrfwd_descendant_nothrow(ptr, src);
         set_msgrfwd_dst_info_nothrow(ptr, dst_info);
+        set_msgrfwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
     }
 
-    void init_msgrbwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control_id, operatable_id_t operatable_id, timein_t timein, dst_info_t dst_info){
+    void init_msgrbwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, timein_t timein, dst_info_t dst_info){
 
         using namespace network_tile_member_getsetter;
 
@@ -152,11 +156,166 @@ namespace dg::network_tile_initialization::statix{
         set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_msgrbwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
         set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
-        set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control_id);
+        set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control);
         set_msgrbwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         set_msgrbwd_descendant_nothrow(ptr, src);
         set_msgrbwd_dst_info_nothrow(ptr, dst_info);
         set_msgrbwd_timein_nothrow(ptr, timein);
+        set_msgrbwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+    }
+
+    void init_srcextclone(uma_ptr_t ptr, uma_ptr_t src, uma_ptr_t counterpart, dispatch_control_t dispatch_control, operatable_id_t operatable_id){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_srcextclone_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_srcextclone_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_srcextclone_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        set_srcextclone_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_srcextclone_operatable_id_nothrow(ptr, operatable_id);
+        set_srcextclone_dispatch_control_nothrow(ptr, dispatch_control);
+        set_srcextclone_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        set_srcextclone_descendant_nothrow(ptr, src);
+        set_srcextclone_counterpart_nothrow(ptr, counterpart);
+        set_srcextclone_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+    }
+
+    void init_dstextclone(uma_ptr_t ptr, uma_ptr_t counterpart, dispatch_control_t dispatch_control, operatable_id_t operatable_id){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_dstextclone_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_dstextclone_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_dstextclone_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        set_dstextclone_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_dstextclone_operatable_id_nothrow(ptr, operatable_id);
+        set_dstextclone_dispatch_control_nothrow(ptr, dispatch_control);
+        set_dstextclone_counterpart_nothrow(ptr, counterpart);
+    }
+
+    void orphan_leaf(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_leaf_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_leaf_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED); 
+    }
+
+    void orphan_mono(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_mono_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_mono_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_pair(uma_ptr_t ptr){
+        
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_pair_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_pair_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_uacm(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_uacm_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_uacm_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_pacm(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_pacm_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_pacm_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_crit(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_crit_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_crit_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_msgrfwd(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_msgrfwd_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_msgrfwd_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_msgrbwd(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_msgrbwd_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_msgrbwd_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_srcextclone(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_srcextclone_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_srcextclone_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_srcextclone_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan_dstextclone(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_dstextclone_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_dstextclone_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_dstextclone_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
+    }
+
+    void orphan(uma_ptr_t ptr){
+
+        using namespace network_tile_member_getsetter;
+
+        ptr                 = dg::network_tile_member_access::throwsafe_tile_ptr_access(ptr);
+        uma_ptr_t rcu_addr  = get_tile_rcu_addr(ptr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+
+        set_tile_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ORPHANED);
     }
 }
 
