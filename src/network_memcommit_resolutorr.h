@@ -285,7 +285,7 @@ namespace dg::network_memcommit_resolutor{
                         size_t observer_arr_idx                                 = observer_arr_sz % OBSERVER_ARRAY_SZ;
                         std::array<uma_ptr_t, OBSERVER_ARR_CAP> observer_arr    = dg::network_tile_member_getsetter::get_tile_observer_nothrow(requestee);
                         observer_arr[observer_arr_idx]                          = requestor;
-                        size_t new_observer_arr_sz                              = observer_arr_idx + 1;
+                        size_t new_observer_arr_sz                              = observer_arr_idx + 1; //this needs to be an ordered_set - 
 
                         dg::network_tile_member_getsetter::set_tile_observer_nothrow(requestee, observer_arr);
                         dg::network_tile_member_getsetter::set_tile_observer_size_nothrow(requestee, new_observer_arr_sz);
@@ -803,8 +803,25 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
-    class LeafBackwardDoSignalResolutor: public virtual dg;:network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
+    class LeafBackwardDoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
 
+        private:    
+
+            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+        
+        public:
+
+            LeafBackwardDoSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                          size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
+                                                                              delivery_capacity(delivery_capacity){}
+            
+            void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
+                
+                for (size_t i = 0u; i < sz; ++i){
+                    dg::network_tileops_handler::backward_leaf(std::get<0>(ptr_arr[i]));
+                }
+            }
     };
 
     class DstExternalBackwardDoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>{
@@ -871,7 +888,7 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 for (size_t i = 0u; i < sz; ++i){
-                    internal_resolve(std::get<0>(ptr_arr[i]), delivery_handle->get());
+                    this->internal_resolve(std::get<0>(ptr_arr[i]), delivery_handle->get());
                 }
             }
 
