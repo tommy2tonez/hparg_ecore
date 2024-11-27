@@ -819,7 +819,7 @@ namespace dg::network_memcommit_resolutor{
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
                 
                 for (size_t i = 0u; i < sz; ++i){
-                    dg::network_tileops_handler::backward_leaf(std::get<0>(ptr_arr[i]));
+                    dg::network_tileops_handler::backward_leaf(std::get<0>(ptr_arr[i])); 
                 }
             }
     };
@@ -1026,6 +1026,8 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
+            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> leaf_backward_resolutor;
+            size_t leaf_backward_dispatch_sz;
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> src_external_backward_resolutor;
             const size_t src_external_backward_dispatch_sz;
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> dst_external_backward_resolutor;
@@ -1035,12 +1037,16 @@ namespace dg::network_memcommit_resolutor{
         
         public:
 
-            BackwardDoSignalResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> src_external_backward_resolutor,
+            BackwardDoSignalResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> leaf_backward_resolutor,
+                                      size_t leaf_backward_dispatch_sz,
+                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> src_external_backward_resolutor,
                                       size_t src_external_backward_dispatch_sz,
                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> dst_external_backward_resolutor,
                                       size_t dst_external_backward_dispatch_sz,
                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t>>> ordinary_backward_resolutor,
-                                      size_t ordinary_backward_dispatch_sz) noexcept: src_external_backward_resolutor(std::move(src_external_backward_resolutor)),
+                                      size_t ordinary_backward_dispatch_sz) noexcept: leaf_backward_resolutor(std::move(leaf_backward_resolutor)),
+                                                                                      leaf_backward_dispatch_sz(leaf_backward_dispatch_sz),
+                                                                                      src_external_backward_resolutor(std::move(src_external_backward_resolutor)),
                                                                                       src_external_backward_dispatch_sz(src_external_backward_dispatch_sz),
                                                                                       dst_external_backward_resolutor(std::move(dst_external_backward_resolutor)),
                                                                                       dst_external_backward_dispatch_sz(dst_external_backward_dispatch_sz),
@@ -1048,10 +1054,16 @@ namespace dg::network_memcommit_resolutor{
                                                                                       ordinary_backward_dispatch_sz(ordinary_backward_dispatch_sz){}
 
             void push(std::tuple<uma_ptr_t> * ptr_arr, size_t sz) noexcept{
-
+                    
+                auto leaf_delivery_handle           = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->leaf_backward_resolutor.get(), this->leaf_backward_dispatch_sz);
                 auto src_external_delivery_handle   = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->src_external_backward_resolutor.get(), this->src_external_backward_dispatch_sz);
                 auto dst_external_delivery_handle   = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->dst_external_backward_resolutor.get(), this->dst_external_backward_dispatch_sz);
                 auto ordinary_delivery_handle       = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->ordinary_backward_resolutor.get(), this->ordinary_backward_dispatch_sz);
+
+                if (!leaf_delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(leaf_delivery_handle.error()));
+                    return;
+                }
 
                 if (!src_external_delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(src_external_delivery_handle.error()));
@@ -1071,7 +1083,10 @@ namespace dg::network_memcommit_resolutor{
                 for (size_t i = 0u; i < sz; ++i){
                     tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(std::get<0>(ptr_arr[i]));
 
-                    if (tile_kind == TILE_KIND_SRCEXTCLONE){
+                    
+                    if (tile_kind == TILE_KIND_LEAF){
+                        dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), std::get<0>(ptr_arr[i]));
+                    } else if (tile_kind == TILE_KIND_SRCEXTCLONE){
                         dg::network_producer_consumer::delvrsrv_deliver(src_external_delivery_handle->get(), std::get<0>(ptr_arr[i]));
                     } else if (tile_kind == TILE_KIND_DSTEXTCLONE){
                         dg::network_producer_consumer::delvrsrv_deliver(dst_external_delivery_handle->get(), std::get<0>(ptr_arr[i]));

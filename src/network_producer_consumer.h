@@ -266,6 +266,25 @@ namespace dg::network_raii_producer_consumer{
         virtual auto capcity() const noexcept -> size_t = 0; 
     };
 
+    template <class EventType, class Lambda>
+    class LambdaWrappedConsumer: public virtual ConsumerInterface<EventType>{
+
+        private:
+
+            Lambda lambda;
+        
+        public:
+
+            static_assert(std::is_nothrow_destructible_v<Lambda>);
+
+            LambdaWrappedConsumer(Lambda lambda) noexcept(std::is_nothrow_move_constructible_v<Lambda>): lambda(std::move(lambda)){}
+
+            void push(dg::vector<EventType> event_vec) noexcept(std::is_nothrow_invocable_v<Lambda, dg::vector<EventType>&&>){
+
+                this->lambda(std::move(event_vec));
+            }
+    };
+
     template <class EventType>
     class LimitConsumerToConsumerWrapper: public virtual ConsumerInterface<EventType>{
 

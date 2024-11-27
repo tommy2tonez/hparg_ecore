@@ -26,7 +26,7 @@ namespace dg::network_tile_member_access::implementation{
 
         assert(stdx::is_pow2(alignment_sz));
 
-        size_t bit_mask     = ~static_cast<size_t>(alignment_sz - 1);  
+        size_t bit_mask     = ~static_cast<size_t>(alignment_sz - 1u);  
         size_t fwd_blk_sz   = blk_sz + alignment_sz - 1u;
 
         return fwd_blk_sz & bit_mask;
@@ -2036,7 +2036,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ>
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ>
     struct ImmuAddressLookup{
 
         private:
@@ -2077,11 +2077,6 @@ namespace dg::network_tile_member_access::implementation{
                 return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
             }
 
-            static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
-
-                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
-            }
-
         public:
 
             static void init(){
@@ -2097,7 +2092,7 @@ namespace dg::network_tile_member_access::implementation{
 
             static consteval auto buf_size() -> size_t{
 
-                return self::offset_dispatch_control_addr(TILE_COUNT) + ALIGNMENT_SZ - 1u;
+                return self::offset_operatable_id_addr(TILE_COUNT) + ALIGNMENT_SZ - 1u;
             }
 
             static consteval auto tile_size() -> size_t{
@@ -2130,11 +2125,6 @@ namespace dg::network_tile_member_access::implementation{
                 return OPERATABLE_ID_SZ;
             }
 
-            static consteval auto dispatch_control_size() -> size_t{
-
-                return DISPATCH_CONTROL_SZ;
-            }
-
             static inline auto get_head() noexcept -> uma_ptr_t{
 
                 return self::head;
@@ -2164,11 +2154,6 @@ namespace dg::network_tile_member_access::implementation{
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
                 return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
-            }
-
-            static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
-
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
