@@ -35,7 +35,7 @@ namespace dg::network_tile_lifetime::statix{
         }
 
         uma_ptr_t rcu_addr = get_leaf_rcu_addr_nothrow(ptr);
-        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
+        dg::network_memops_uma::memlock_guard lck_grd(rcu_addr); //this has to be a spinlock - and memory region needs to be large enough to avoid collision
         size_t pointing_logit_sz = get_leaf_logit_group_size_nothrow(ptr); 
 
         if (pointing_logit_sz != logit_value_sz) [[unlikely]]{
@@ -44,7 +44,7 @@ namespace dg::network_tile_lifetime::statix{
 
         set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
         set_leaf_logit_nothrow(ptr, logit_value);
-        set_leaf_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_leaf_observer_array_size_nothrow(ptr, 0u);
         set_leaf_operatable_id_nothrow(ptr, operatable_id);
         set_leaf_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
@@ -63,9 +63,9 @@ namespace dg::network_tile_lifetime::statix{
 
         uma_ptr_t rcu_addr = get_mono_rcu_addr_nothrow(ptr);
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
-        
+
         set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_mono_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_mono_observer_array_size_nothrow(ptr, 0u);
         set_mono_dispatch_control_nothrow(ptr, dispatch_control);
         set_mono_operatable_id_nothrow(ptr, operatable_id);
         set_mono_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -89,7 +89,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
         set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_pair_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_pair_observer_array_size_nothrow(ptr, 0u);
         set_pair_operatable_id_nothrow(ptr, operatable_id);
         set_pair_dispatch_control_nothrow(ptr, dispatch_control);
         set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -114,7 +114,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
         set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_uacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_uacm_observer_array_size_nothrow(ptr, 0u);
         set_uacm_operatable_id_nothrow(ptr, operatable_id);
         set_uacm_dispatch_control_nothrow(ptr, dispatch_control);
         set_uacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -138,7 +138,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
         
         set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_pacm_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_pacm_observer_array_size_nothrow(ptr, 0u);
         set_pacm_operatable_id_nothrow(ptr, operatable_id);
         set_pacm_dispatch_control_nothrow(ptr, dispatch_control);
         set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -169,7 +169,7 @@ namespace dg::network_tile_lifetime::statix{
 
         set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         set_crit_clogit_nothrow(ptr, clogit_value);
-        set_crit_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_crit_observer_array_size_nothrow(ptr, 0u);
         set_crit_operatable_id_nothrow(ptr, operatable_id);
         set_crit_dispatch_control_nothrow(ptr, dispatch_control);
         set_crit_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -194,7 +194,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
         
         set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_msgrfwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_msgrfwd_observer_array_size_nothrow(ptr, 0u);
         set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
         set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control);
         set_msgrfwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -219,7 +219,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
         set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_msgrbwd_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_msgrbwd_observer_array_size_nothrow(ptr, 0u);
         set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
         set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control);
         set_msgrbwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -245,7 +245,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
         set_srcextclone_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_srcextclone_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_srcextclone_observer_array_size_nothrow(ptr, 0u);
         set_srcextclone_operatable_id_nothrow(ptr, operatable_id);
         set_srcextclone_dispatch_control_nothrow(ptr, dispatch_control);
         set_srcextclone_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
@@ -270,7 +270,7 @@ namespace dg::network_tile_lifetime::statix{
         dg::network_memops_uma::memlock_guard lck_grd(rcu_addr);
 
         set_dstextclone_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_dstextclone_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_dstextclone_observer_array_size_nothrow(ptr, 0u);
         set_dstextclone_operatable_id_nothrow(ptr, operatable_id);
         set_dstextclone_dispatch_control_nothrow(ptr, dispatch_control);
         set_dstextclone_counterpart_nothrow(ptr, counterpart);
@@ -298,7 +298,7 @@ namespace dg::network_tile_lifetime::statix{
 
         set_immu_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
         set_immu_logit_nothrow(ptr, logit_value);
-        set_immu_observer_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
+        set_immu_observer_array_size_nothrow(ptr, 0u);
         set_immu_operatable_id_nothrow(ptr, operatable_id);
 
         return dg::network_exception::SUCCESS;
@@ -1509,191 +1509,191 @@ namespace dg::network_tile_lifetime::poly{
 
     void load_virtual_payload_arr(VirtualPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        auto init_leaf_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_leaf_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitLeafPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){ //optimizables - this is skewed load - this is bad - this is precisely why I dont want to init_leaf with heavy logit_value
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_leaf_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_leaf_payload(std::move(cur_payload));
             }
         };
 
-        auto init_mono_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_mono_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitMonoPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_mono_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_mono_payload(std::move(cur_payload));
             }
         };
 
-        auto init_pair_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_pair_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitPairPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_pair_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_pair_payload(std::move(cur_payload));
             }
         };
 
-        auto init_uacm_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_uacm_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitUACMPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_uacm_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_uacm_payload(std::move(cur_payload));
             }
         };
 
-        auto init_pacm_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_pacm_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitPACMPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_pacm_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_pacm_payload(std::move(cur_payload));
             }
         };
 
-        auto init_crit_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_crit_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitCritPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_crit_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_crit_payload(std::move(cur_payload));
             }
         };
 
-        auto init_msgrfwd_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_msgrfwd_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitMsgrFwdPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_msgrfwd_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_msgrfwd_payload(std::move(cur_payload));
             }
         };
 
-        auto init_msgrbwd_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_msgrbwd_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitMsgrBwdPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_msgrbwd_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_msgrbwd_payload(std::move(cur_payload));
             }
         };
 
-        auto init_srcextclone_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_srcextclone_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitSrcExtClonePayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_srcextclone_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_srcextclone_payload(std::move(cur_payload));
             }
         };
 
-        auto init_dstextclone_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_dstextclone_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitDstExtClonePayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_dstextclone_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_dstextclone_payload(std::move(cur_payload));
             }
         };
 
-        auto init_immu_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto init_immu_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             InitImmuPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_init_immu_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_init_immu_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_leaf_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_leaf_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanLeafPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_leaf_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_leaf_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_mono_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_mono_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanMonoPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_mono_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_mono_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_pair_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_pair_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanPairPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_pair_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_pair_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_uacm_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_uacm_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanUACMPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_uacm_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_uacm_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_pacm_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_pacm_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanPACMPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_pacm_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_pacm_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_crit_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_crit_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanCritPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_crit_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_crit_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_msgrfwd_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_msgrfwd_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanMsgrFwdPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_msgrfwd_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_msgrfwd_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_msgrbwd_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_msgrbwd_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanMsgrBwdPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_msgrbwd_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_msgrbwd_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_srcextclone_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_srcextclone_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanSrcExtClonePayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_srcextclone_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_srcextclone_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_dstextclone_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_dstextclone_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanDstExtClonePayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_dstextclone_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_dstextclone_payload(std::move(cur_payload));
             }
         };
 
-        auto orphan_immu_dispatcher = [](dg::vector<VirtualPayLoad> vec) noexcept{
+        auto orphan_immu_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             OrphanImmuPayLoad cur_payload{};
-            for (const auto& virt_payload: vec){
-                dg::network_compact_serializer::deserialize_into(cur_payload, virt_payload.payload_content.data());
-                load_orphan_immu_payload(std::move(cur_payload));
+            for (const auto& vec_pair: vec){
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                *vec_pair.second = load_orphan_immu_payload(std::move(cur_payload));
             }
         };
 
-        auto deinit_leaf_dispatcher = []{};
-        auto deinit_mono_dispatcher = []{};
-        auto deinit_pair_dispatcher = []{};
-        auto deinit_uacm_dispatcher = []{};
-        auto deinit_crit_dispatcher = []{};
-        auto deinit_msgrfwd_dispatcher = []{};
-        auto deinit_msgrbwd_dispatcher = []{};
-        auto deinit_srcextclone_dispatcher = []{};
-        auto deinit_dstextclone_dispatcher = []{};
+        auto deinit_leaf_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_mono_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_pair_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_uacm_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_crit_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_msgrfwd_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_msgrbwd_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_srcextclone_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
+        auto deinit_dstextclone_dispatcher = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{};
         auto deinit_immu_dispatcher = []{};
 
         dg::network_raii_producer_consumer::LambdaWrappedConsumer<VirtualPayLoad, decltype(init_leaf_dispatcher)> init_leaf_consumer(std::move(init_leaf_dispatcher));
@@ -1727,113 +1727,115 @@ namespace dg::network_tile_lifetime::poly{
         });
 
         for (size_t i = 0u; i < sz; ++i){
-            auto payload_kind = payload_arr[i];
+            auto payload_kind                   = payload_arr[i].kind;
+            VirtualPayLoad dispatching_payload  = payload_arr[i];
+            exception_t * cur_exception         = std::next(exception_arr, i);
 
             switch (payload_kind){
                 case payload_kind_init_leaf:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_leaf_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_leaf_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_mono:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_mono_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_mono_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_pair:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_pair_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_pair_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_uacm:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_uacm_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_uacm_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_pacm:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_pacm_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_pacm_delivery_handle)->get(), sstd::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_crit:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_crit_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_crit_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_msgrfwd:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_msgrfwd_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_msgrfwd_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_msgrbwd:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_msgrbwd_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_msgrbwd_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_srcextclone:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_srcextclone_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_srcextclone_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_dstextclone:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_dstextclone_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_dstextclone_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_init_immu:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_immu_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(init_immu_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_leaf:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_leaf_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_leaf_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_mono:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_mono_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_mono_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_pair:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_pair_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_pair_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_uacm:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_uacm_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_uacm_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_pacm:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_pacm_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_pacm_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_crit:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_crit_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_crit_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_msgrfwd:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_msgrfwd_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_msgrfwd_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_msgrbwd:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_msgrbwd_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_msgrbwd_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_srcextclone:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_srcextclone_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_srcextclone_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_dstextclone:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_dstextclone_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_dstextclone_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan_immu:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_immu_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_immu_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_orphan:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(orphan_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_leaf:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_leaf_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_leaf_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_mono:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_mono_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_mono_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_pair:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_oair_delivery_hanlde)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_oair_delivery_hanlde)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_uacm:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_uacm_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_uacm_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_pacm:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_pacm_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_pacm_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_crit:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_crit_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_crit_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_msgrfwd:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_msgrfwd_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_msgrfwd_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_msgrbwd:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_msgrbwd_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_msgrbwd_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_srcextclone:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_srcextclone_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_srcextclone_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_dstextclone:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_dstextclone_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_dstextclone_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit_immu:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_immu_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_immu_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 case payload_kind_deinit:
-                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_delivery_handle)->get(), std::make_pair(std::move(payload_arr[i]), i));
+                    dg::network_producer_consumer::delvrsrv_deliver(stdx::to_const_reference(deinit_delivery_handle)->get(), std::make_pair(std::move(dispatching_payload), cur_exception));
                     break;
                 default:
                     if constexpr(DEBUG_MODE_FLAG){

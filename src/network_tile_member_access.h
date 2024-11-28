@@ -2597,7 +2597,7 @@ namespace dg::network_tile_member_access{
         stdx::atomic_optional_signal_fence(std::memory_order_acquire);
         uma_ptr_t id_region = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
 
-        return stdx::to_const_reference(resource.region_id_map).at(id_region);
+        return stdx::to_const_reference(resource.region_id_map).at(id_region); //this is very important - compiler needs to be able to see the constness of vector - the at has to be a memory read of a vector - to avoid duplicate memory reads and group of table dispatchs - shall dg_typeid appears multiple times in a block
     }
 
     template <class CallBack>

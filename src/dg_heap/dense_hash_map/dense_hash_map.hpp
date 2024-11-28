@@ -522,12 +522,12 @@ public:
 
     constexpr auto at(const key_type& key) -> T&
     {
-        return exist_find(key)->second;
+        return exist_find(key)->second; //
     }
 
     constexpr auto at(const key_type& key) const -> const T&
     {
-        return exist_find(key)->second;
+        return exist_find(key)->second; // this needs to be a const vector find + const vector read + attribute((flatten)) to able to propagate at(const key&) constness
     }
 
     constexpr auto operator[](const key_type& key) -> T&
@@ -719,7 +719,7 @@ public:
         count = std::max(count, static_cast<size_type>(size() / max_load_factor()));
 
         count = compute_closest_capacity(count);
-        
+            
         assert(count > 0 && "The computed rehash size must be greater than 0.");
 
         if (count == buckets_.size())

@@ -281,14 +281,14 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_ADOPTED:
                     case TILE_INIT_STATUS_DECAYED:
                     {
-                        size_t observer_arr_sz                                  = dg::network_tile_member_getsetter::get_tile_observer_size_nothrow(requestee);
+                        size_t observer_arr_sz                                  = dg::network_tile_member_getsetter::get_tile_observer_array_size_nothrow(requestee);
                         size_t observer_arr_idx                                 = observer_arr_sz % OBSERVER_ARRAY_SZ;
                         std::array<uma_ptr_t, OBSERVER_ARR_CAP> observer_arr    = dg::network_tile_member_getsetter::get_tile_observer_nothrow(requestee);
                         observer_arr[observer_arr_idx]                          = requestor;
                         size_t new_observer_arr_sz                              = observer_arr_idx + 1; //this needs to be an ordered_set - 
 
                         dg::network_tile_member_getsetter::set_tile_observer_nothrow(requestee, observer_arr);
-                        dg::network_tile_member_getsetter::set_tile_observer_size_nothrow(requestee, new_observer_arr_sz);
+                        dg::network_tile_member_getsetter::set_tile_observer_array_size_nothrow(requestee, new_observer_arr_sz);
                         break;
                     }
                     case TILE_INIT_STATUS_INITIALIZED:
@@ -445,7 +445,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     observer_arr    = dg::network_tile_member_getsetter::get_tile_observer_nothrow(ptr);
-                    observer_arr_sz = dg::network_tile_member_getsetter::get_tile_observer_size_nothrow(ptr);
+                    observer_arr_sz = dg::network_tile_member_getsetter::get_tile_observer_array_size_nothrow(ptr);
 
                     for (size_t i = 0u; i < observer_arr_sz; ++i){
                         virtual_memory_event_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
@@ -506,7 +506,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     observer_arr        = dg::network_tile_member_getsetter::get_crit_observer_nothrow(ptr);
-                    observer_arr_sz     = dg::network_tile_member_getsetter::get_crit_observer_size_nothrow(ptr);
+                    observer_arr_sz     = dg::network_tile_member_getsetter::get_crit_observer_array_size_nothrow(ptr);
 
                     for (size_t i = 0u; i < observer_arr_sz; ++i){
                         virtual_memory_event_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
@@ -640,7 +640,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     observer_arr    = dg::network_tile_member_getsetter::get_dstextclone_observer_nothrow(ptr);
-                    observer_arr_sz = dg::network_tile_member_getsetter::get_dstextclone_observer_size_nothrow(ptr);
+                    observer_arr_sz = dg::network_tile_member_getsetter::get_dstextclone_observer_array_size_nothrow(ptr);
 
                     for (size_t i = 0u; i < observer_arr_sz; ++i){
                         virtual_memory_event_t request = dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]);
@@ -702,7 +702,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     observer_arr    = dg::network_tile_member_getsetter::get_msgrfwd_observer_nothrow(ptr);
-                    observer_arr_sz = dg::network_tile_member_getsetter::get_msgrfwd_observer_size_nothrow(ptr);
+                    observer_arr_sz = dg::network_tile_member_getsetter::get_msgrfwd_observer_array_size_nothrow(ptr);
                     dst_info        = dg::network_tile_member_getsetter::get_msgrfwd_dst_info_nothrow(ptr);
 
                     for (size_t i = 0u; i < observer_arr_sz; ++i){

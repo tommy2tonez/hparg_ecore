@@ -816,7 +816,7 @@ private:
         auto previous_next = &buckets_[bindex];
         while (*previous_next != position)
         {
-            previous_next = &nodes_[*previous_next].next;
+            previous_next = &nodes_[*previous_next].next; //wait he is using the prison cell technique here?
         }
 
         return previous_next;
