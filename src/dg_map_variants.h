@@ -1,11 +1,12 @@
-#ifndef __DG_FLAT_MAP_H__
-#define __DG_FLAT_MAP_H__
+#ifndef __DG_MAP_VARIANTS_H__
+#define __DG_MAP_VARIANTS_H__
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
 #include <unordered_map>
-#include <limits.h>
+#include <limits>
+#include <climits>
 #include <utility>
 
 namespace dg::map_variants{
@@ -30,6 +31,12 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
+    //out of 100000s problems that C++ has, I don't think const Key is ever one of them 
+    //I mean it prevents users from shooting their feets - but we are in a C++ world - the world of free-will - from malloc to free to memory barrier to type-puning to compiler error to volatile - why assume the user is stupid enough to mutate the Key?
+    //dont ask me about constexpr and this->, and why programmer should pass self& as an argument like python 
+    //I dont know - I dont care - it's the compiler programmers' decision and I object those decisions
+    //it's stupid because it would impose overloading (ambiguous) issues with legacy library - this-> is to precisely prevent that - and it is NOT part of the constexpr - the language is just too stupid and crazy
+
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>>
     class unordered_unstable_map{
 
@@ -37,14 +44,12 @@ namespace dg::map_variants{
 
             std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>> node_vec;
             std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>> bucket_vec;
-            Hasher hasher;
+            Hasher _hasher;
             Pred pred;
             Allocator allocator;
 
             using bucket_iterator               = typename std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>>::iterator;
             using bucket_const_iterator         = typename std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>>::const_iterator;
-            using bucket_reverse_iterator       = typename std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>>::reverse_iterator;
-            using bucket_const_reverse_iterator = typename std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>>::const_reverse_iterator;
 
             static inline constexpr SizeType null_virtual_addr      = std::numeric_limits<SizeType>::max() - 1;
             static inline constexpr SizeType orphaned_virtual_addr  = std::numeric_limits<SizeType>::max();
@@ -65,6 +70,13 @@ namespace dg::map_variants{
             using key_type                      = Key;
             using value_type                    = std::pair<Key, Mapped>; 
             using mapped_type                   = Mapped;
+            using hasher                        = Hasher;
+            using key_equal                     = Pred; 
+            using allocator_type                = Allocator;
+            using reference                     = value_type&;
+            using const_reference               = const value_type&;
+            using pointer                       = typename std::allocator_traits<Allocator>::pointer; 
+            using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
             using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator; 
             using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator; 
             using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
@@ -74,38 +86,38 @@ namespace dg::map_variants{
             using self                          = unordered_unstable_map;
 
             constexpr unordered_unstable_map(): node_vec(), 
-                                                bucket_vec(min_capacity() + 1, null_virtual_addr),
-                                                hasher(),
+                                                bucket_vec(self::min_capacity() + 1, null_virtual_addr),
+                                                _hasher(),
                                                 pred(),
                                                 allocator(){}
 
             constexpr explicit unordered_unstable_map(size_type bucket_count, 
-                                                      const Hasher& hasher = Hasher(), 
+                                                      const Hasher& _hasher = Hasher(), 
                                                       const Pred& pred = Pred(), 
                                                       const Allocator& allocator = Allocator()): node_vec(allocator),
-                                                                                                 bucket_vec(std::max(min_capacity(), least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
-                                                                                                 hasher(hasher),
+                                                                                                 bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
+                                                                                                 _hasher(_hasher),
                                                                                                  pred(pred),
                                                                                                  allocator(allocator){}
 
             constexpr unordered_unstable_map(size_type bucket_count, 
                                              const Allocator& allocator): node_vec(allocator),
-                                                                          bucket_vec(std::max(min_capacity(), least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
-                                                                          hasher(),
+                                                                          bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
+                                                                          _hasher(),
                                                                           pred(),
                                                                           allocator(allocator){}
 
             constexpr unordered_unstable_map(size_type bucket_count, 
-                                             const Hasher& hasher, 
+                                             const Hasher& _hasher, 
                                              const Allocator& allocator): node_vec(allocator),
-                                                                          bucket_vec(std::max(min_capacity(), least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
-                                                                          hasher(hasher),
+                                                                          bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
+                                                                          _hasher(_hasher),
                                                                           pred(),
                                                                           allocator(allocator){}
 
             constexpr explicit unordered_unstable_map(const Allocator& allocator): node_vec(allocator),
                                                                                    bucket_vec(min_capacity() + 1, null_virtual_addr, allocator),
-                                                                                   hasher(),
+                                                                                   _hasher(),
                                                                                    pred(),
                                                                                    allocator(allocator){}
 
@@ -113,11 +125,11 @@ namespace dg::map_variants{
             constexpr unordered_unstable_map(InputIt first, 
                                              InputIt last, 
                                              size_type bucket_count, 
-                                             const Hasher& hasher = Hasher(), 
+                                             const Hasher& _hasher = Hasher(), 
                                              const Pred& pred = Pred(), 
-                                             const Allocator& allocator = Allocator()): unordered_unstable_map(bucket_count, hasher, pred, allocator){
+                                             const Allocator& allocator = Allocator()): unordered_unstable_map(bucket_count, _hasher, pred, allocator){
                 
-                this->insert(first, last);
+                insert(first, last);
             }
 
             template <class InputIt>
@@ -132,138 +144,138 @@ namespace dg::map_variants{
 
             constexpr unordered_unstable_map(std::initializer_list<value_type> init_list, 
                                              size_type bucket_count, 
-                                             const Hasher& hash, 
-                                             const Allocator& allocator): unordered_unstable_map(init_list.begin(), init_list.end(), bucket_count, hash, allocator){}
+                                             const Hasher& _hasher, 
+                                             const Allocator& allocator): unordered_unstable_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
             template <class KeyLike>
-            constexpr auto exist_find(const KeyLike& key) noexcept(noexcept(this->bucket_exist_find(std::declval<const KeyLike&>()))) -> iterator{
+            constexpr auto exist_find(const KeyLike& key) noexcept(noexcept(bucket_exist_find(std::declval<const KeyLike&>()))) -> iterator{
 
-                return std::next(this->node_vec.begin(), *this->bucket_exist_find(key));
+                return std::next(node_vec.begin(), *bucket_exist_find(key));
             }
 
             template <class KeyLike>
-            constexpr auto exist_find(const KeyLike& key) const noexcept(noexcept(this->bucket_exist_find(std::declval<const KeyLike&>()))) -> const_iterator{
+            constexpr auto exist_find(const KeyLike& key) const noexcept(noexcept(bucket_exist_find(std::declval<const KeyLike&>()))) -> const_iterator{
 
-                return std::next(this->node_vec.begin(), *this->bucket_exist_find(key));
+                return std::next(node_vec.begin(), *bucket_exist_find(key));
             }
 
             template <class KeyLike>
-            constexpr auto find(const KeyLike& key) noexcept(noexcept(this->bucket_find(std::declval<const KeyLike&>()))) -> iterator{
+            constexpr auto find(const KeyLike& key) noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> iterator{
 
-                size_type virtual_addr = *this->bucket_find(key);
+                size_type virtual_addr = *bucket_find(key);
 
                 if (virtual_addr == null_virtual_addr){
-                    return this->end();
+                    return end();
                 }
 
-                return std::next(this->node_vec.begin(), virtual_addr);
+                return std::next(node_vec.begin(), virtual_addr);
             }
 
             template <class KeyLike>
-            constexpr auto find(const KeyLike& key) const noexcept(noexcept(this->bucket_find(std::declval<const KeyLike&>()))) -> const_iterator{
+            constexpr auto find(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> const_iterator{
 
-                size_type virtual_addr = *this->bucket_find(key);
+                size_type virtual_addr = *bucket_find(key);
 
                 if (virtual_addr == null_virtual_addr){
-                    return this->end();
+                    return end();
                 }
 
-                return std::next(this->node_vec.begin(), virtual_addr);
+                return std::next(node_vec.begin(), virtual_addr);
             }
 
             constexpr void clear() noexcept{
 
-                std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), null_virtual_addr);
-                this->node_vec.clear();
+                std::fill(bucket_vec.begin(), bucket_vec.end(), null_virtual_addr);
+                node_vec.clear();
             }
 
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
-                return this->internal_insert_or_assign(value_type(std::forward<Args>(args)...));
+                return internal_insert_or_assign(value_type(std::forward<Args>(args)...));
             }
 
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...)));
+                return internal_insert(value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...)));
             }
 
-            template <class ValueLike>
+            template <class ValueLike = value_type> //the only problem we were trying to solve was adding implicit initialization of value_type - so this should solve it
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(std::forward<ValueLike>(value));
+                return internal_insert(std::forward<ValueLike>(value));
             }
 
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
                 for (auto it = first; it != last; ++it){
-                    this->insert(*it);
+                    insert(*it);
                 }
             }
 
             constexpr void insert(std::initializer_list<value_type> init_list){
 
-                this->insert(init_list.begin(), init_list.end());
+                insert(init_list.begin(), init_list.end());
             }
 
             template <class KeyLike>
             constexpr auto insert_or_assign(KeyLike&& key, mapped_type&& mapped) -> std::pair<iterator, bool>{
 
-                return this->internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<mapped_type>(mapped)));
+                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<mapped_type>(mapped)));
             }
 
             constexpr auto erase(const_iterator it) noexcept -> iterator{
 
-                return this->internal_erase(it);
+                return internal_erase(it);
             }
 
             template <class KeyLike>
-            constexpr auto erase(const KeyLike& key) noexcept(noexcept(this->internal_erase(std::declval<const KeyLike&>()))) -> size_t{
+            constexpr auto erase(const KeyLike& key) noexcept(noexcept(internal_erase(std::declval<const KeyLike&>()))) -> size_t{
 
-                return this->internal_erase(key);
+                return internal_erase(key);
             }
 
             template <class KeyLike>
-            constexpr auto at(const KeyLike& key) const noexcept(noexcept(this->exist_find(std::declval<const KeyLike&>()))) -> const mapped_type&{
+            constexpr auto at(const KeyLike& key) const noexcept(noexcept(exist_find(std::declval<const KeyLike&>()))) -> const mapped_type&{
 
-                return this->exist_find(key)->second;
+                return exist_find(key)->second;
             }
 
             template <class KeyLike>
-            constexpr auto at(const KeyLike& key) noexcept(noexcept(this->exist_find(std::declval<const KeyLike&>()))) -> mapped_type&{
+            constexpr auto at(const KeyLike& key) noexcept(noexcept(exist_find(std::declval<const KeyLike&>()))) -> mapped_type&{
 
-                return this->exist_find(key)->second;
+                return exist_find(key)->second;
             }
 
             template <class KeyLike>
             constexpr auto operator[](KeyLike&& key) -> mapped_type&{
 
-                return this->internal_find_or_default(std::forward<KeyLike>(key)).first->second;
+                return internal_find_or_default(std::forward<KeyLike>(key)).first->second;
             }
 
             template <class KeyLike>
-            constexpr auto contains(const KeyLike& key) const noexcept(this->bucket_find(std::declval<const KeyLike&>())) -> bool{
+            constexpr auto contains(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> bool{
 
-                return *this->bucket_find(key) != null_virtual_addr;
+                return *bucket_find(key) != null_virtual_addr;
             }
 
             template <class KeyLike>
-            constexpr auto count(const KeyLike& key) const noexcept(this->bucket_find(std::declval<const KeyLike&>())) -> size_type{
+            constexpr auto count(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> size_type{
 
-                return *this->bucket_find(key) != null_virtual_addr;
+                return *bucket_find(key) != null_virtual_addr;
             }
 
             constexpr void reserve(size_type new_sz){
  
-                if (new_sz <= this->node_vec.size()){
+                if (new_sz <= node_vec.size()){
                     return;
                 }
 
-                self proxy = self(this->estimate_capacity(new_sz), std::move(this->hasher), std::move(this->pred), std::move(this->allocator));
+                self proxy = self(estimate_capacity(new_sz), std::move(_hasher), std::move(pred), std::move(allocator));
 
-                for (auto& node: this->node_vec){
+                for (auto& node: node_vec){
                     proxy.internal_noexist_insert(std::move(node));
                 }
 
@@ -272,13 +284,13 @@ namespace dg::map_variants{
 
             constexpr void rehash(size_type tentative_new_cap){
 
-                if (tentative_new_cap < this->bucket_vec.size()){
+                if (tentative_new_cap < bucket_vec.size()){
                     return;
                 }
 
-                self proxy = self(tentative_new_cap, std::move(this->hasher), std::move(this->pred), std::move(this->allocator));
+                self proxy = self(tentative_new_cap, std::move(_hasher), std::move(pred), std::move(allocator));
 
-                for (auto& node: this->node_vec){
+                for (auto& node: node_vec){
                     proxy.internal_noexist_insert(std::move(node));
                 }
 
@@ -287,7 +299,7 @@ namespace dg::map_variants{
 
             constexpr auto empty() const noexcept -> bool{
 
-                return this->node_vec.empty();
+                return node_vec.empty();
             }
 
             constexpr auto min_capacity() noexcept -> size_type{
@@ -297,7 +309,7 @@ namespace dg::map_variants{
 
             constexpr auto size() const noexcept -> size_type{
 
-                return this->node_vec.size();
+                return node_vec.size();
             }
 
             constexpr auto max_size() const noexcept -> size_type{
@@ -307,115 +319,115 @@ namespace dg::map_variants{
 
             constexpr auto hash_function() const & noexcept -> const Hasher&{
 
-                return this->hasher;
+                return _hasher;
             }
 
             constexpr auto key_eq() const & noexcept -> const Pred&{
 
-                return this->pred;
+                return pred;
             }
 
             constexpr auto hash_function() && noexcept -> Hasher&&{
 
-                return static_cast<Hasher&&>(this->hasher);
+                return static_cast<Hasher&&>(_hasher);
             }
 
             constexpr auto key_eq() && noexcept -> Pred&&{
 
-                return static_cast<Pred&&>(this->pred);
+                return static_cast<Pred&&>(pred);
             }
 
             constexpr auto load_factor() const noexcept -> double{
 
-                return this->node_vec.size() / static_cast<double>(this->bucket_vec.size() - 1);
+                return node_vec.size() / static_cast<double>(bucket_vec.size() - 1);
             }
 
-            consteval auto max_load_factor() const noexcept -> double{
+            static consteval auto max_load_factor() noexcept -> double{
 
                 return 0.875;
             }
 
             constexpr auto begin() noexcept -> iterator{
 
-                return this->node_vec.begin();
+                return node_vec.begin();
             }
 
             constexpr auto begin() const noexcept -> const_iterator{
 
-                return this->node_vec.begin();
+                return node_vec.begin();
             }
 
             constexpr auto begin(size_type off) noexcept -> iterator{
 
-                return std::next(this->node_vec.begin(), off);
+                return std::next(node_vec.begin(), off);
             }
 
             constexpr auto begin(size_type off) const noexcept -> const_iterator{
 
-                return std::next(this->node_vec.begin(), off);
+                return std::next(node_vec.begin(), off);
             }
 
             constexpr auto cbegin() noexcept -> reverse_iterator{
 
-                return this->node_vec.cbegin();
+                return node_vec.cbegin();
             }
 
             constexpr auto cbegin() const noexcept -> const_reverse_iterator{
 
-                return this->node_vec.cbegin();
+                return node_vec.cbegin();
             }
 
             constexpr auto cbegin(size_type off) noexcept -> reverse_iterator{
 
-                return std::next(this->node_vec.cbegin(), off);
+                return std::next(node_vec.cbegin(), off);
             }
 
             constexpr auto cbegin(size_type off) const noexcept -> const_reverse_iterator{
 
-                return std::next(this->node_vec.cbegin(), off);
+                return std::next(node_vec.cbegin(), off);
             }
 
             constexpr auto end() noexcept -> iterator{
 
-                return this->node_vec.end();
+                return node_vec.end();
             }
 
             constexpr auto end() const noexcept -> const_iterator{
 
-                return this->node_vec.end();
+                return node_vec.end();
             }
 
             constexpr auto cend() noexcept -> reverse_iterator{
 
-                return this->node_vec.cend();
+                return node_vec.cend();
             }
 
             constexpr auto cend() const noexcept -> const_reverse_iterator{
 
-                return this->node_vec.cend();
+                return node_vec.cend();
             }
 
         private:
 
             constexpr void check_for_rehash(){
 
-                if (this->estimate_capacity(this->node_vec.size()) < this->bucket_vec.size()){
+                if (estimate_capacity(node_vec.size()) < bucket_vec.size()){
                     return;
                 }
 
-                size_type new_cap = (this->bucket_vec.size() - 1) * 2;
-                this->rehash(new_cap);
+                size_type new_cap = (bucket_vec.size() - 1) * 2;
+                rehash(new_cap);
             }
 
             constexpr void force_uphash(){
 
-                size_type new_cap = (this->bucket_vec.size() - 1) * 2;
-                this->rehash(new_cap);
+                size_type new_cap = (bucket_vec.size() - 1) * 2;
+                rehash(new_cap);
             }
 
             constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
 
-                return sz / this->max_load_factor();
+                return sz / self::max_load_factor();
             }
 
             constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
@@ -427,10 +439,10 @@ namespace dg::map_variants{
             constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
                                                                           && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(this->bucket_vec.begin(), this->to_bucket_index(this->hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (*it != orphaned_virtual_addr && this->pred(this->node_vec[*it].first, key)){
+                    if (*it != orphaned_virtual_addr && pred(static_cast<const Key&>(node_vec[*it].first), key)){
                         return it;
                     }
 
@@ -442,10 +454,10 @@ namespace dg::map_variants{
             constexpr auto bucket_exist_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                                  && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                auto it = std::next(this->bucket_vec.begin(), this->to_bucket_index(this->hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (*it != orphaned_virtual_addr && this->pred(this->node_vec[*it].first, key)){
+                    if (*it != orphaned_virtual_addr && pred(node_vec[*it].first, key)){
                         return it;
                     }
 
@@ -457,10 +469,10 @@ namespace dg::map_variants{
             constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
                                                                     && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(this->bucket_vec.begin(), this->to_bucket_index(this->hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (*it == null_virtual_addr || (*it != orphaned_virtual_addr && this->pred(this->node_vec[*it].first, key))){ 
+                    if (*it == null_virtual_addr || (*it != orphaned_virtual_addr && pred(static_cast<const Key&>(node_vec[*it].first), key))){
                         return it;
                     }
 
@@ -472,10 +484,10 @@ namespace dg::map_variants{
             constexpr auto bucket_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                           && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                auto it = std::next(this->bucket_vec.begin(), this->to_bucket_index(this->hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (*it == null_virtual_addr || (*it != orphaned_virtual_addr && this->pred(this->node_vec[*it].first, key))){
+                    if (*it == null_virtual_addr || (*it != orphaned_virtual_addr && pred(node_vec[*it].first, key))){
                         return it;
                     }
 
@@ -486,10 +498,10 @@ namespace dg::map_variants{
             template <class KeyLike>
             constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(this->bucket_vec.begin(), this->to_bucket_index(this->hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (this->is_insertable(*it)){
+                    if (is_insertable(*it)){
                         return it;
                     }
 
@@ -500,70 +512,70 @@ namespace dg::map_variants{
             template <class ValueLike>
             constexpr auto internal_noexist_insert(ValueLike&& value) -> iterator{
 
-                this->check_for_rehash();
+                check_for_rehash();
 
                 while (true){
-                    bucket_iterator it = this->bucket_ifind(value.first);
+                    bucket_iterator it = bucket_ifind(value.first);
 
-                    if (it != std::prev(this->bucket_vec.end())){
-                        size_type addr = this->node_vec.size();
-                        this->node_vec.push_back(std::forward<ValueLike>(value));
+                    if (it != std::prev(bucket_vec.end())){
+                        size_type addr = node_vec.size();
+                        node_vec.push_back(std::forward<ValueLike>(value));
                         *it = addr;
-                        return std::prev(this->node_vec.end());
+                        return std::prev(node_vec.end());
                     }
 
-                    this->force_uphash();
+                    force_uphash();
                 }
             } 
 
             template <class ValueLike>
             constexpr auto internal_insert_or_assign(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                bucket_iterator it = this->bucket_find(value.first);
+                bucket_iterator it = bucket_find(value.first);
 
                 if (*it != null_virtual_addr){
-                    iterator rs = std::next(this->node_vec.begin(), *it);
+                    iterator rs = std::next(node_vec.begin(), *it);
                     *rs = std::forward<ValueLike>(value);
                     return std::make_pair(rs, false);
                 }
 
-                return std::make_pair(this->internal_noexist_insert(std::forward<ValueLike>(value)), true);
+                return std::make_pair(internal_noexist_insert(std::forward<ValueLike>(value)), true);
             }
 
             template <class ValueLike>
             constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                bucket_iterator it = this->bucket_find(value.first);
+                bucket_iterator it = bucket_find(value.first);
 
                 if (*it != null_virtual_addr){
-                    return std::make_pair(std::next(this->node_vec.begin(), *it), false);
+                    return std::make_pair(std::next(node_vec.begin(), *it), false);
                 }
 
-                return std::make_pair(this->internal_noexist_insert(std::forward<ValueLike>(value)), true);
+                return std::make_pair(internal_noexist_insert(std::forward<ValueLike>(value)), true);
             }
 
-            template <class KeyLike, class Arg = mapped_type, std::enable_if_t<std::is_default_constructible_v<mapped_type>, bool> = true>
+            template <class KeyLike, class Arg = mapped_type, std::enable_if_t<std::is_default_constructible_v<Arg>, bool> = true>
             constexpr auto internal_find_or_default(KeyLike&& key, Arg * compiler_hint = nullptr) -> std::pair<iterator, bool>{
 
-                bucket_iterator it = this->bucket_find(key);
+                bucket_iterator it = bucket_find(key);
 
                 if (*it != null_virtual_addr){
-                    return std::make_pair(std::next(this->node_vec.begin(), *it), false);
+                    return std::make_pair(std::next(node_vec.begin(), *it), false);
                 }
 
-                return std::make_pair(this->internal_noexist_insert(value_type(std::forward<KeyLike>(key), mapped_type())), true);
+                return std::make_pair(internal_noexist_insert(value_type(std::forward<KeyLike>(key), mapped_type())), true);
             }
 
             template <class KeyLike>
             constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> size_type{
 
-                bucket_iterator erasing_bucket_it       = this->bucket_find(key);
+                bucket_iterator erasing_bucket_it       = bucket_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
 
                 if (erasing_bucket_virtual_addr != null_virtual_addr){
-                    bucket_iterator swapee_bucket_it = this->bucket_exist_find(this->node_vec.back().first); 
-                    std::iter_swap(std::next(this->node_vec.begin(), erasing_bucket_virtual_addr), std::prev(this->node_vec.end()));
-                    this->node_vec.pop_back();
+                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first); 
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    node_vec.pop_back();
                     *swapee_bucket_it   = erasing_bucket_virtual_addr;
                     *erasing_bucket_it  = orphaned_virtual_addr;
 
@@ -576,29 +588,29 @@ namespace dg::map_variants{
             template <class KeyLike>
             constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))){
 
-                bucket_iterator erasing_bucket_it       = this->bucket_exist_find(key);
+                bucket_iterator erasing_bucket_it       = bucket_exist_find(key);
                 size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, orphaned_virtual_addr);
-                bucket_iterator swapee_bucket_it        = this->bucket_exist_find(this->node_vec.back().first);
+                bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
 
-                std::iter_swap(std::next(this->node_vec.begin(), erasing_bucket_virtual_addr), std::prev(this->node_vec.end()));
-                this->node_vec.pop_back();
+                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                node_vec.pop_back();
                 *swapee_bucket_it = erasing_bucket_virtual_addr;
             }
 
             constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
 
-                if (it == this->node_vec.end()){
+                if (it == node_vec.end()){
                     return it;
                 }
 
-                auto dif = std::distance(this->node_vec.begin(), it);
-                this->internal_exist_erase(it->first);
+                auto dif = std::distance(node_vec.begin(), it);
+                internal_exist_erase(it->first);
 
-                if (dif == this->node_vec.size()){
-                    return this->node_vec.begin();
+                if (dif == node_vec.size()){
+                    return node_vec.begin();
                 }
 
-                return std::next(this->node_vec.begin(), dif);
+                return std::next(node_vec.begin(), dif);
             }
     };
 }
