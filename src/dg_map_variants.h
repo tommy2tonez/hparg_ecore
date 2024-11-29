@@ -35,7 +35,7 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class EraseFactor = std::ratio<4, 1>>
+    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
     class unordered_unstable_map{
 
         private:
@@ -61,8 +61,10 @@ namespace dg::map_variants{
 
         public:
 
-            static constexpr inline double MIN_MAX_LOAD_FACTOR = 0.05;
-            static constexpr inline double MAX_MAX_LOAD_FACTOR = 0.95; 
+            static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
+            static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
+            static constexpr inline double MIN_MAX_INSERT_FACTOR    = 1;
+            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 32; 
 
             static_assert(std::is_unsigned_v<SizeType>);
             static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
@@ -89,14 +91,20 @@ namespace dg::map_variants{
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_map;
             using load_factor_ratio             = typename LoadFactor::type; 
-            using erase_factor_ratio            = typename EraseFactor::type;
+            using insert_factor_ratio           = typename InsertFactor::type;
 
             static consteval auto max_load_factor() noexcept -> double{
 
                 return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
             }
 
+            static consteval auto max_insert_factor() noexcept -> double{
+
+                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
+            static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
 
             constexpr unordered_unstable_map(): node_vec(), 
                                                 bucket_vec(self::min_capacity() + 1, NULL_VIRTUAL_ADDR),
@@ -389,7 +397,12 @@ namespace dg::map_variants{
 
             constexpr auto load_factor() const noexcept -> double{
 
-                return node_vec.size() / static_cast<double>(bucket_vec.size() - 1);
+                return size() / static_cast<double>(capacity());
+            }
+
+            constexpr auto insert_factor() const noexcept -> double{
+
+                return (size() + erase_count) / static_cast<double>(capacity());
             }
 
             constexpr auto begin() noexcept -> iterator{
@@ -439,7 +452,7 @@ namespace dg::map_variants{
                 if (((size() + erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
                     return;
                 } else{
-                    if (estimate_capacity(node_vec.size()) < bucket_vec.size() && erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
+                    if (estimate_capacity(node_vec.size()) < bucket_vec.size() && (size() + erase_count <= estimate_insert_capacity(capacity()))) [[likely]]{
                         return;
                     } else [[unlikely]]{
                         if (estimate_capacity(node_vec.size()) < bucket_vec.size()){
@@ -469,9 +482,9 @@ namespace dg::map_variants{
                 return sz * load_factor_ratio::num / load_factor_ratio::den;
             }
 
-            constexpr auto estimate_max_erase_count(size_type cap) const noexcept -> size_type{
+            constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
 
-                return cap * erase_factor_ratio::num / erase_factor_ratio::den;
+                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
@@ -653,10 +666,10 @@ namespace dg::map_variants{
                 auto dif = std::distance(node_vec.begin(), it);
                 internal_exist_erase(it->first);
 
-                if (dif == node_vec.size()) [[unlikely]]{
-                    return node_vec.begin();
-                } else [[likely]]{
+                if (dif != node_vec.size()) [[likely]]{
                     return std::next(node_vec.begin(), dif);
+                } else [[unlikely]]{
+                    return node_vec.begin();
                 }
             }
     };
@@ -664,7 +677,9 @@ namespace dg::map_variants{
     //alright guys - this is prolly the fastest I can come up with - I think it's close to the fastest implementation - within the margin of 15%-20%
     //the hardest part is probably make find() const to be const propagatable - like vector
     //because it would allow compiler to not double lookup and hinder optimizations that are VERY VERY CRUCIAL - look network_tilemember_access without std::vector<> - there would be no table inline
-    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class EraseFactor = std::ratio<4, 1>>
+    //alright - lets write test cases
+
+    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
     class unordered_unstable_fast_map{
 
         private:
@@ -697,8 +712,10 @@ namespace dg::map_variants{
             // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
             static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
 
-            static constexpr inline double MIN_MAX_LOAD_FACTOR = 0.05;
-            static constexpr inline double MAX_MAX_LOAD_FACTOR = 0.95; 
+            static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
+            static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
+            static constexpr inline double MIN_MAX_INSERT_FACTOR    = 1;
+            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 32; 
 
             using key_type                      = Key;
             using value_type                    = std::pair<Key, Mapped>; 
@@ -718,14 +735,20 @@ namespace dg::map_variants{
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_fast_map;
             using load_factor_ratio             = typename LoadFactor::type; 
-            using erase_factor_ratio            = typename EraseFactor::type;
+            using insert_factor_ratio           = typename InsertFactor::type;
 
             static consteval auto max_load_factor() noexcept -> double{
 
                 return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
             }
 
+            static consteval auto max_insert_factor() noexcept -> double{
+
+                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
+            static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
 
             constexpr unordered_unstable_fast_map(): node_vec(), 
                                                      bucket_vec(self::min_capacity() + 1, NULL_VIRTUAL_ADDR),
@@ -1022,10 +1045,15 @@ namespace dg::map_variants{
 
                 return static_cast<Pred&&>(pred);
             }
-
+            
             constexpr auto load_factor() const noexcept -> double{
 
                 return size() / static_cast<double>(capacity());
+            }
+
+            constexpr auto insert_factor() const noexcept -> double{
+
+                return (size() + erase_count) / static_cast<double>(capacity());
             }
 
             constexpr auto begin() noexcept -> iterator{
@@ -1075,7 +1103,7 @@ namespace dg::map_variants{
                 if (((size() + erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
                     return;
                 } else{
-                    if (estimate_capacity(size()) <= capacity() && erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
+                    if (estimate_capacity(size()) <= capacity() && (size() + erase_count <= estimate_insert_capacity(capacity()))) [[likely]]{
                         return;
                     } else [[unlikely]]{
                         if (estimate_capacity(size()) <= capacity()){
@@ -1105,9 +1133,9 @@ namespace dg::map_variants{
                 return sz * load_factor_ratio::num / load_factor_ratio::den;
             }
 
-            constexpr auto estimate_max_erase_count(size_type cap) const noexcept -> size_type{
+            constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
 
-                return cap * erase_factor_ratio::num / erase_factor_ratio::den;
+                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
@@ -1321,10 +1349,10 @@ namespace dg::map_variants{
                 auto dif = std::distance(node_vec.begin(), it);
                 internal_exist_erase(it->first);
 
-                if (dif == node_vec.size()) [[unlikely]]{
-                    return std::next(node_vec.begin());
-                } else [[likely]]{
+                if (dif != node_vec.size()) [[likely]]{
                     return std::next(node_vec.begin(), dif);
+                } else [[unlikely]]{
+                    return std::next(node_vec.begin());
                 }
             }
     };
