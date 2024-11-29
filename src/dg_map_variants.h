@@ -52,7 +52,7 @@ namespace dg::map_variants{
 
             static inline constexpr SizeType NULL_VIRTUAL_ADDR          = std::numeric_limits<SizeType>::max();
             static inline constexpr SizeType ORPHANED_VIRTUAL_ADDR      = std::numeric_limits<SizeType>::max() - 1;
-            static inline constexpr size_t REHASH_CHK_MODULO            = 16u;
+            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u;
 
             static constexpr auto is_insertable(SizeType virtual_addr) noexcept -> bool{
 
@@ -69,6 +69,7 @@ namespace dg::map_variants{
             static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
+            static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
 
             using key_type                      = Key;
             using value_type                    = std::pair<Key, Mapped>; 
@@ -181,21 +182,6 @@ namespace dg::map_variants{
                 node_vec.clear();
             }
 
-            constexpr void reserve(size_type new_sz){
- 
-                if (new_sz <= node_vec.size()){
-                    return;
-                }
-
-                self proxy = self(estimate_capacity(new_sz), std::move(_hasher), std::move(pred), std::move(allocator));
-
-                for (auto& node: node_vec){
-                    proxy.internal_noexist_insert(std::move(node));
-                }
-
-                *this = std::move(proxy);
-            }
-
             constexpr void rehash(size_type tentative_new_cap){
 
                 if (tentative_new_cap < bucket_vec.size()){
@@ -209,6 +195,15 @@ namespace dg::map_variants{
                 }
 
                 *this = std::move(proxy);
+            }
+
+            constexpr void reserve(size_type new_sz){
+ 
+                if (new_sz <= node_vec.size()){
+                    return;
+                }
+
+                rehash(estimate_capacity(new_sz));
             }
 
             constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
@@ -441,10 +436,10 @@ namespace dg::map_variants{
 
             constexpr void maybe_check_for_rehash(){
 
-                if (((this->size() + this->erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
+                if (((size() + erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
                     return;
                 } else{
-                    if (estimate_capacity(node_vec.size()) < bucket_vec.size() && this->erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
+                    if (estimate_capacity(node_vec.size()) < bucket_vec.size() && erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
                         return;
                     } else [[unlikely]]{
                         if (estimate_capacity(node_vec.size()) < bucket_vec.size()){
@@ -669,7 +664,6 @@ namespace dg::map_variants{
     //alright guys - this is prolly the fastest I can come up with - I think it's close to the fastest implementation - within the margin of 15%-20%
     //the hardest part is probably make find() const to be const propagatable - like vector
     //because it would allow compiler to not double lookup and hinder optimizations that are VERY VERY CRUCIAL - look network_tilemember_access without std::vector<> - there would be no table inline
-    //the correct optimization would be += !pred(key, key_like) for 3 times - and check if the pointing tile is the result [[likely]] - and return the result immediately
     template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class EraseFactor = std::ratio<4, 1>>
     class unordered_unstable_fast_map{
 
@@ -687,7 +681,7 @@ namespace dg::map_variants{
 
             static inline constexpr SizeType ORPHANED_VIRTUAL_ADDR      = std::numeric_limits<SizeType>::min();
             static inline constexpr SizeType NULL_VIRTUAL_ADDR          = std::numeric_limits<SizeType>::max();
-            static inline constexpr size_t REHASH_CHK_MODULO            = 16u;
+            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u;
 
             static constexpr auto is_insertable(SizeType virtual_addr) noexcept -> bool{
 
@@ -701,6 +695,7 @@ namespace dg::map_variants{
             static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
+            static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
 
             static constexpr inline double MIN_MAX_LOAD_FACTOR = 0.05;
             static constexpr inline double MAX_MAX_LOAD_FACTOR = 0.95; 
@@ -823,21 +818,6 @@ namespace dg::map_variants{
                 node_vec.resize(1u);
             }
 
-            constexpr void reserve(size_type new_sz){
- 
-                if (new_sz < node_vec.size()){
-                    return;
-                }
-
-                self proxy = self(estimate_capacity(new_sz), std::move(_hasher), std::move(pred), std::move(allocator));
-
-                for (size_t i = 1u; i < node_vec.size(); ++i){
-                    proxy.internal_noexist_insert(std::move(node_vec[i]));
-                }
-
-                *this = std::move(proxy);
-            }
-
             constexpr void rehash(size_type tentative_new_cap){
 
                 if (tentative_new_cap < bucket_vec.size()){
@@ -851,6 +831,15 @@ namespace dg::map_variants{
                 }
 
                 *this = std::move(proxy);
+            }
+
+            constexpr void reserve(size_type new_sz){
+ 
+                if (new_sz < node_vec.size()){
+                    return;
+                }
+
+                rehash(estimate_capacity(new_sz));
             }
 
             constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
@@ -1083,13 +1072,13 @@ namespace dg::map_variants{
 
             constexpr void maybe_check_for_rehash(){
 
-                if (((this->size() + this->erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
+                if (((size() + erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
                     return;
                 } else{
-                    if (estimate_capacity(size()) < bucket_vec.size() && this->erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
+                    if (estimate_capacity(size()) <= capacity() && erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
                         return;
                     } else [[unlikely]]{
-                        if (estimate_capacity(size()) < bucket_vec.size()){
+                        if (estimate_capacity(size()) <= capacity()){
                             size_type new_cap = capacity() * 2;
                             rehash(new_cap);
                         } else{
@@ -1136,20 +1125,20 @@ namespace dg::map_variants{
 
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
-                if (pred(node_vec[*it].first, key)){
+                if (pred(static_cast<const Key&>(node_vec[*it].first), key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
-                if (pred(node_vec[*it].first, key)){
+                if (pred(static_cast<const Key&>(node_vec[*it].first), key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
                 while (true){
-                    if (pred(node_vec[*it].first, key)) [[likely]]{
+                    if (pred(static_cast<const Key&>(node_vec[*it].first), key)) [[likely]]{
                         return it;
                     }
 
@@ -1161,7 +1150,7 @@ namespace dg::map_variants{
             constexpr auto bucket_exist_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                                  && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                //GCC sets branch prediction 1(unlikely)/10(likely) 
+                //GCC sets branch prediction 1(unlikely)/10(likely)
                 //assume load_factor of 50% - avg - and reasonable hash function
                 //50% ^ 3 = 1/8 - which is == branch predictor
 
