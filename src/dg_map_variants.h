@@ -8,8 +8,14 @@
 #include <limits>
 #include <climits>
 #include <utility>
+#include <ratio>
+#include <algorithm>
+#include <functional>
 
 namespace dg::map_variants{
+
+    static constexpr inline double unordered_unstable_map_min_max_load_factor = 0.3;
+    static constexpr inline double unordered_unstable_map_max_max_load_factor = 0.875; 
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr auto ulog2(T val) noexcept -> size_t{
@@ -31,13 +37,10 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-    //out of 100000s problems that C++ has, I don't think const Key is ever one of them 
-    //I mean it prevents users from shooting their feets - but we are in a C++ world - the world of free-will - from malloc to free to memory barrier to type-puning to compiler error to volatile - why assume the user is stupid enough to mutate the Key?
-    //dont ask me about constexpr and this->, and why programmer should pass self& as an argument like python 
-    //I dont know - I dont care - it's the compiler programmers' decision and I object those decisions
-    //it's stupid because it would impose overloading (ambiguous) issues with legacy library - this-> is to precisely prevent that - and it is NOT part of the constexpr - the language is just too stupid and crazy
+    //there is an exotic case of orphans - such that one could exploit by reaching max_load_factor and erase and repeat
+    //it's an unlikely event but for performance constraints - this implementation does not include such case - one could solve the problem performantly by using # of inserted before check for rehash - it's recommended
 
-    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>>
+    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_unstable_map{
 
         private:
@@ -84,6 +87,14 @@ namespace dg::map_variants{
             using size_type                     = SizeType;
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_map;
+            using load_factor_ratio             = typename LoadFactor::type; 
+
+            static consteval auto max_load_factor() noexcept -> double{
+
+                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
+            }
+
+            static_assert(std::clamp(self::max_load_factor(), unordered_unstable_map_min_max_load_factor, unordered_unstable_map_max_max_load_factor) == self::max_load_factor());
 
             constexpr unordered_unstable_map(): node_vec(), 
                                                 bucket_vec(self::min_capacity() + 1, null_virtual_addr),
@@ -165,7 +176,7 @@ namespace dg::map_variants{
                 size_type virtual_addr = *bucket_find(key);
 
                 if (virtual_addr == null_virtual_addr){
-                    return end();
+                    return node_vec.end();
                 }
 
                 return std::next(node_vec.begin(), virtual_addr);
@@ -177,7 +188,7 @@ namespace dg::map_variants{
                 size_type virtual_addr = *bucket_find(key);
 
                 if (virtual_addr == null_virtual_addr){
-                    return end();
+                    return node_vec.end();
                 }
 
                 return std::next(node_vec.begin(), virtual_addr);
@@ -210,8 +221,9 @@ namespace dg::map_variants{
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                for (auto it = first; it != last; ++it){
-                    insert(*it);
+                while (first != last){
+                    internal_insert(*first);
+                    std::advance(first, 1u);
                 }
             }
 
@@ -235,6 +247,15 @@ namespace dg::map_variants{
             constexpr auto erase(const KeyLike& key) noexcept(noexcept(internal_erase(std::declval<const KeyLike&>()))) -> size_t{
 
                 return internal_erase(key);
+            }
+
+            template <class Iterator>
+            constexpr auto erase(Iterator first, Iterator last) noexcept(noexcept(internal_erase(*std::declval<Iterator>()))){
+
+                while (first != last){
+                    internal_erase(*first);
+                    std::advance(first, 1u);
+                }
             }
 
             template <class KeyLike>
@@ -342,11 +363,6 @@ namespace dg::map_variants{
                 return node_vec.size() / static_cast<double>(bucket_vec.size() - 1);
             }
 
-            static consteval auto max_load_factor() noexcept -> double{
-
-                return 0.875;
-            }
-
             constexpr auto begin() noexcept -> iterator{
 
                 return node_vec.begin();
@@ -411,12 +427,12 @@ namespace dg::map_variants{
 
             constexpr void check_for_rehash(){
 
-                if (estimate_capacity(node_vec.size()) < bucket_vec.size()){
+                if (estimate_capacity(node_vec.size()) < bucket_vec.size()) [[likely]]{
                     return;
+                } else [[unlikely]]{
+                    size_type new_cap = (bucket_vec.size() - 1) * 2;
+                    rehash(new_cap);
                 }
-
-                size_type new_cap = (bucket_vec.size() - 1) * 2;
-                rehash(new_cap);
             }
 
             constexpr void force_uphash(){
@@ -427,7 +443,7 @@ namespace dg::map_variants{
 
             constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
 
-                return sz / self::max_load_factor();
+                return sz * load_factor_ratio::num / load_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
@@ -517,14 +533,14 @@ namespace dg::map_variants{
                 while (true){
                     bucket_iterator it = bucket_ifind(value.first);
 
-                    if (it != std::prev(bucket_vec.end())){
+                    if (it != std::prev(bucket_vec.end())) [[likely]]{
                         size_type addr = node_vec.size();
                         node_vec.push_back(std::forward<ValueLike>(value));
                         *it = addr;
                         return std::prev(node_vec.end());
+                    } else [[unlikely]]{
+                        force_uphash();
                     }
-
-                    force_uphash();
                 }
             } 
 
@@ -606,11 +622,11 @@ namespace dg::map_variants{
                 auto dif = std::distance(node_vec.begin(), it);
                 internal_exist_erase(it->first);
 
-                if (dif == node_vec.size()){
+                if (dif == node_vec.size()) [[unlikely]]{
                     return node_vec.begin();
+                } else [[likely]]{
+                    return std::next(node_vec.begin(), dif);
                 }
-
-                return std::next(node_vec.begin(), dif);
             }
     };
 }
