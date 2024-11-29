@@ -11,6 +11,7 @@
 #include <ratio>
 #include <algorithm>
 #include <functional>
+#include <iostream>
 
 namespace dg::map_variants{
 
@@ -37,10 +38,7 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-    //there is an exotic case of orphans - such that one could exploit by reaching max_load_factor and erase and repeat
-    //it's an unlikely event but for performance constraints - this implementation does not include such case - one could solve the problem performantly by using # of inserted before check for rehash - it's recommended
-
-    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>>
+    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class EraseFactor = std::ratio<4, 1>>
     class unordered_unstable_map{
 
         private:
@@ -50,9 +48,11 @@ namespace dg::map_variants{
             Hasher _hasher;
             Pred pred;
             Allocator allocator;
+            SizeType erase_count;
 
             using bucket_iterator               = typename std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>>::iterator;
             using bucket_const_iterator         = typename std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>>::const_iterator;
+            using erase_factor_ratio            = typename EraseFactor::type; //this is implementation specific so its better to encapsulate the erase_factor
 
             static inline constexpr SizeType null_virtual_addr      = std::numeric_limits<SizeType>::max() - 1;
             static inline constexpr SizeType orphaned_virtual_addr  = std::numeric_limits<SizeType>::max();
@@ -100,7 +100,8 @@ namespace dg::map_variants{
                                                 bucket_vec(self::min_capacity() + 1, null_virtual_addr),
                                                 _hasher(),
                                                 pred(),
-                                                allocator(){}
+                                                allocator(),
+                                                erase_count(0u){}
 
             constexpr explicit unordered_unstable_map(size_type bucket_count, 
                                                       const Hasher& _hasher = Hasher(), 
@@ -109,14 +110,16 @@ namespace dg::map_variants{
                                                                                                  bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
                                                                                                  _hasher(_hasher),
                                                                                                  pred(pred),
-                                                                                                 allocator(allocator){}
+                                                                                                 allocator(allocator),
+                                                                                                 erase_count(0u){}
 
             constexpr unordered_unstable_map(size_type bucket_count, 
                                              const Allocator& allocator): node_vec(allocator),
                                                                           bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
                                                                           _hasher(),
                                                                           pred(),
-                                                                          allocator(allocator){}
+                                                                          allocator(allocator),
+                                                                          erase_count(0u){}
 
             constexpr unordered_unstable_map(size_type bucket_count, 
                                              const Hasher& _hasher, 
@@ -124,13 +127,15 @@ namespace dg::map_variants{
                                                                           bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + 1, null_virtual_addr, allocator),
                                                                           _hasher(_hasher),
                                                                           pred(),
-                                                                          allocator(allocator){}
+                                                                          allocator(allocator),
+                                                                          erase_count(0u){}
 
             constexpr explicit unordered_unstable_map(const Allocator& allocator): node_vec(allocator),
                                                                                    bucket_vec(min_capacity() + 1, null_virtual_addr, allocator),
                                                                                    _hasher(),
                                                                                    pred(),
-                                                                                   allocator(allocator){}
+                                                                                   allocator(allocator),
+                                                                                   erase_count(0u){}
 
             template <class InputIt>
             constexpr unordered_unstable_map(InputIt first, 
@@ -325,8 +330,13 @@ namespace dg::map_variants{
 
             constexpr auto min_capacity() noexcept -> size_type{
 
-                return 8u;
-            } 
+                return 32u;
+            }
+
+            constexpr auto capacity() noexcept -> size_type{
+
+                return bucket_vec.size() - 1u;
+            }
 
             constexpr auto size() const noexcept -> size_type{
 
@@ -425,13 +435,22 @@ namespace dg::map_variants{
 
         private:
 
-            constexpr void check_for_rehash(){
+            constexpr void maybe_check_for_rehash(){
 
-                if (estimate_capacity(node_vec.size()) < bucket_vec.size()) [[likely]]{
+                if (((this->size() + this->erase_count) % 8u) != 0u) [[likely]]{
                     return;
-                } else [[unlikely]]{
-                    size_type new_cap = (bucket_vec.size() - 1) * 2;
-                    rehash(new_cap);
+                } else{
+                    if (estimate_capacity(node_vec.size()) < bucket_vec.size() && this->erase_count <= estimate_max_erase_count(capacity())) [[likely]]{
+                        return;
+                    } else [[unlikely]]{
+                        if (estimate_capacity(node_vec.size()) < bucket_vec.size()){
+                            size_type new_cap = (bucket_vec.size() - 1) * 2;
+                            rehash(new_cap);
+                        } else{
+                            size_type new_cap = estimate_capacity(node_vec.size());
+                            rehash(new_cap);
+                        }
+                    }
                 }
             }
 
@@ -444,6 +463,11 @@ namespace dg::map_variants{
             constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
 
                 return sz * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            constexpr auto estimate_max_erase_count(size_type cap) const noexcept -> size_type{
+
+                return cap * erase_factor_ratio::num / erase_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
@@ -528,7 +552,7 @@ namespace dg::map_variants{
             template <class ValueLike>
             constexpr auto internal_noexist_insert(ValueLike&& value) -> iterator{
 
-                check_for_rehash();
+                maybe_check_for_rehash();
 
                 while (true){
                     bucket_iterator it = bucket_ifind(value.first);
@@ -594,6 +618,7 @@ namespace dg::map_variants{
                     node_vec.pop_back();
                     *swapee_bucket_it   = erasing_bucket_virtual_addr;
                     *erasing_bucket_it  = orphaned_virtual_addr;
+                    erase_count         += 1;
 
                     return 1u;
                 }
@@ -611,6 +636,7 @@ namespace dg::map_variants{
                 std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                 node_vec.pop_back();
                 *swapee_bucket_it = erasing_bucket_virtual_addr;
+                erase_count += 1;
             }
 
             constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
