@@ -36,7 +36,13 @@ namespace dg::map_variants{
     }
 
     //alright guys - it should be good for now 
+    //we have thousands of map implementations - most of them stuck at compiler support for iterators - because vector<std::pair<Key, Value>>::iterator is compiler support - they do alien optimizations that we human can't comprehend
+    //then the question is whether to or not to overcome the std::pair<const Key, Value> - and there is no such beautiful answer - you either have to launder std::vector<std::pair<const Key, Value>> or you have to use union and risk undefined behavior in C++
     
+    //the second problem of unordered_map is args const propagation of find(args..) and find(args...) const - we want compiler optimizations for find() - like it does for std::vector<> or std::unique_ptr<[]> or raw pointers
+    //this is the very hard task that I don't think any engineer can solve without adding compiler's functionality
+    //we will get back to this problem in the future - where we write a compiler - for now - I think these maps should solve most of the problems 
+
     //this map is for general purposes - where you simply want something that is faster than the std-map - and you have full awareness of the std lib and its compatibility with const Key
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
     class unordered_unstable_map{
@@ -291,7 +297,7 @@ namespace dg::map_variants{
             template <class KeyLike>
             constexpr auto operator[](KeyLike&& key) -> mapped_type&{
 
-                return internal_find_or_default(std::forward<KeyLike>(key)).first->second;
+                return internal_find_or_default(std::forward<KeyLike>(key))->second;
             }
 
             template <class KeyLike>
@@ -628,15 +634,15 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike, class Arg = mapped_type, std::enable_if_t<std::is_default_constructible_v<Arg>, bool> = true>
-            constexpr auto internal_find_or_default(KeyLike&& key, Arg * compiler_hint = nullptr) -> std::pair<iterator, bool>{
+            constexpr auto internal_find_or_default(KeyLike&& key, Arg * compiler_hint = nullptr) -> iterator{
 
                 bucket_iterator it = bucket_find(key);
 
                 if (*it != NULL_VIRTUAL_ADDR){
-                    return std::make_pair(std::next(node_vec.begin(), *it), false);
+                    return std::next(node_vec.begin(), *it);
                 }
 
-                return std::make_pair(internal_noexist_insert(value_type(std::forward<KeyLike>(key), mapped_type())), true);
+                return internal_noexist_insert(value_type(std::forward<KeyLike>(key), mapped_type()));
             }
 
             template <class KeyLike>
