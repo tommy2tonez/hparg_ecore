@@ -40,7 +40,6 @@ namespace dg::map_variants{
     //insert_factor = 2     => 1 - (e^-2) virtual load factor - which is a decent load factor
     //with the actual load factor of 3/4, and insert_factor of 2, we can expect to have the least operation count of 2 / (3/4) = 8/3 = 2.6666 * size() before rehashing happens
     //this is not expensive - in the sense of statistic - like garbage collection - unless you are wiring money that requires certain latency otherwise people would die - I recommend to use this map
-
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_map{
 
@@ -203,34 +202,30 @@ namespace dg::map_variants{
                     return;
                 }
 
-                decltype(bucket_vec) bucket_proxy = std::move(bucket_vec); 
+                while (true){
+                    size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
+                    bool bad_bit    = false; 
+                    decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
-                try{
-                    while (true){
-                        size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
-                        bool bad_bit    = false; 
-                        bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
+                    for (size_t i = 0u; i < node_vec.size(); ++i){
+                        size_type bucket_idx    = _hasher(node_vec[i].first) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
+                        [[assume(it != tmp_bucket_vec.end())]];
 
-                        for (size_t i = 0u; i < node_vec.size(); ++i){
-                            auto it = bucket_efind(node_vec[i].first); //its fine to invoke internal method here because we are in a valid state - in other words, node_vec can contain allocations that aren't referenced by one of the buckets
-                            if (it != std::prev(bucket_vec.end())) [[likely]]{
-                                *it = i; 
-                            } else [[unlikely]]{
-                                tentative_new_cap = new_cap * 2;
-                                bad_bit = true;
-                                break;
-                            }
-                        }
-
-                        if (!bad_bit){
+                        if (it != std::prev(tmp_bucket_vec.end())) [[likely]]{
+                            *it = i; 
+                        } else [[unlikely]]{
+                            tentative_new_cap = new_cap * 2;
+                            bad_bit = true;
                             break;
                         }
                     }
 
-                    erase_count = 0u;
-                } catch (...){
-                    bucket_vec = std::move(bucket_proxy);
-                    std::rethrow_exception(std::current_exception());
+                    if (!bad_bit){
+                        bucket_vec = std::move(tmp_bucket_vec);
+                        erase_count = 0u;
+                        return;
+                    }
                 }
             }
 
@@ -588,34 +583,6 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_efind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
-
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
-
-                while (true){
-                    if (*it == NULL_VIRTUAL_ADDR){
-                        return it;
-                    }
-
-                    std::advance(it, 1u);
-                }
-            }
-
-            template <class KeyLike>
-            constexpr auto bucket_efind(const KeyLike& key) const noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_const_iterator{
-
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
-
-                while (true){
-                    if (*it == NULL_VIRTUAL_ADDR){
-                        return it;
-                    }
-
-                    std::advance(it, 1u);
-                }
-            }
-
-            template <class KeyLike>
             constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
@@ -913,34 +880,30 @@ namespace dg::map_variants{
                     return;
                 }
 
-                decltype(bucket_vec) bucket_proxy = std::move(bucket_vec); 
+                while (true){
+                    size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
+                    bool bad_bit    = false; 
+                    decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
-                try{
-                    while (true){
-                        size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
-                        bool bad_bit    = false; 
-                        bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
+                    for (size_t i = 1u; i < node_vec.size(); ++i){
+                        size_type bucket_idx    = _hasher(node_vec[i].first) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
+                        [[assume(it != tmp_bucket_vec.end())]];
 
-                        for (size_t i = 1u; i < node_vec.size(); ++i){
-                            auto it = bucket_efind(node_vec[i].first); //its fine to invoke internal method here because we are in a valid state - in other words, node_vec can contain allocations that aren't referenced by one of the buckets
-                            if (it != std::prev(bucket_vec.end())) [[likely]]{
-                                *it = i; 
-                            } else [[unlikely]]{
-                                tentative_new_cap = new_cap * 2;
-                                bad_bit = true;
-                                break;
-                            }
-                        }
-
-                        if (!bad_bit){
+                        if (it != std::prev(tmp_bucket_vec.end())) [[likely]]{
+                            *it = i; 
+                        } else [[unlikely]]{
+                            tentative_new_cap = new_cap * 2;
+                            bad_bit = true;
                             break;
                         }
                     }
 
-                    erase_count = 0u;
-                } catch (...){
-                    bucket_vec = std::move(bucket_proxy);
-                    std::rethrow_exception(std::current_exception());
+                    if (!bad_bit){
+                        bucket_vec = std::move(tmp_bucket_vec);
+                        erase_count = 0u;
+                        return;
+                    }
                 }
             }
 
@@ -1330,34 +1293,6 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_efind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
-
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
-
-                while (true){
-                    if (*it == NULL_VIRTUAL_ADDR){
-                        return it;
-                    }
-
-                    std::advance(it, 1u);
-                }
-            }
-
-            template <class KeyLike>
-            constexpr auto bucket_efind(const KeyLike& key) const noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_const_iterator{
-
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
-
-                while (true){
-                    if (*it == NULL_VIRTUAL_ADDR){
-                        return it;
-                    }
-
-                    std::advance(it, 1u);
-                }
-            }
-
-            template <class KeyLike>
             constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
@@ -1658,34 +1593,30 @@ namespace dg::map_variants{
                     return;
                 }
 
-                decltype(bucket_vec) bucket_proxy = std::move(bucket_vec); 
+                while (true){
+                    size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
+                    bool bad_bit    = false; 
+                    decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
-                try{
-                    while (true){
-                        size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
-                        bool bad_bit    = false;
-                        bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
+                    for (size_t i = 1u; i < node_vec.size(); ++i){
+                        size_type bucket_idx    = _hasher(node_vec[i].first) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
+                        [[assume(it != tmp_bucket_vec.end())]];
 
-                        for (size_t i = 1u; i < node_vec.size(); ++i){
-                            auto it = bucket_efind(node_vec[i].first); //its fine to invoke internal method here because we are in a valid state - in other words, node_vec can contain allocations that aren't referenced by one of the buckets
-                            if (it != std::prev(bucket_vec.end())) [[likely]]{
-                                *it = i; 
-                            } else [[unlikely]]{
-                                tentative_new_cap = new_cap * 2;
-                                bad_bit = true;
-                                break;
-                            }
-                        }
-
-                        if (!bad_bit){
+                        if (it != std::prev(tmp_bucket_vec.end())) [[likely]]{
+                            *it = i; 
+                        } else [[unlikely]]{
+                            tentative_new_cap = new_cap * 2;
+                            bad_bit = true;
                             break;
                         }
                     }
 
-                    erase_count = 0u;
-                } catch (...){
-                    bucket_vec = std::move(bucket_proxy);
-                    std::rethrow_exception(std::current_exception());
+                    if (!bad_bit){
+                        bucket_vec = std::move(tmp_bucket_vec);
+                        erase_count = 0u;
+                        return;
+                    }
                 }
             }
 
@@ -2077,37 +2008,17 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_efind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
-
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
-
-                while (true){
-                    if (*it == NULL_VIRTUAL_ADDR){
-                        return it;
-                    }
-
-                    std::advance(it, 1u);
-                }
-            }
-
-            template <class KeyLike>
-            constexpr auto bucket_efind(const KeyLike& key) const noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_const_iterator{
-
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
-
-                while (true){
-                    if (*it == NULL_VIRTUAL_ADDR){
-                        return it;
-                    }
-
-                    std::advance(it, 1u);
-                }
-            }
-
-            template <class KeyLike>
             constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                return bucket_efind(key);
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
             }
 
             template <class ValueLike>

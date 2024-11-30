@@ -17,7 +17,7 @@ struct PairNullValueGen{
 
 template <class T>
 auto to_const_reference(T& value) -> const T&{
-    
+
     return value;
 }
 
@@ -33,7 +33,7 @@ int main(){
 
     dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, PairNullValueGen> map_container;
 
-    auto now = high_resolution_clock::now();     
+    auto now = high_resolution_clock::now();
 
     for (uint32_t c: buf){
         map_container[c] = 1u;
