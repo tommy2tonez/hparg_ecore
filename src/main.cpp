@@ -28,35 +28,23 @@ int main(){
     const size_t SZ = size_t{1} << 22;
     std::vector<uint32_t> buf(SZ);
     std::generate(buf.begin(), buf.end(), std::mt19937());
-    dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, PairNullValueGen> map_container{};
-    map_container.reserve(SZ * 2);
+    // jg::dense_hash_map<uint32_t, uint32_t> map_container{};
     // std::vector<size_t> map_container(512);
 
-    auto now = high_resolution_clock::now(); 
-    for (uint32_t c: buf){
-        map_container[c] = 1u;
-    }
+    dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, PairNullValueGen> map_container;
 
-    std::shuffle(buf.begin(), buf.end(), std::mt19937{});
-
-    for (const uint32_t c: buf){
-        map_container[c] += 1u;
-    }
-
-    map_container.clear();
+    auto now = high_resolution_clock::now();     
 
     for (uint32_t c: buf){
         map_container[c] = 1u;
     }
+    // std::shuffle(buf.begin(), buf.end(), std::mt19937{});
 
-    std::shuffle(buf.begin(), buf.end(), std::mt19937{});
-
-    for (const uint32_t c: buf){
-        map_container[c] += 1u;
-    }
-
+    // for (uint32_t c: buf){
+    //     total += map_container.at(c);
+    // }
     auto then = high_resolution_clock::now();
 
-    std::cout << duration_cast<milliseconds>(then - now).count() << "<ms>" << "<>" << map_container.size() << std::endl; 
+    std::cout << duration_cast<milliseconds>(then - now).count() << "<ms>" << "<>" << map_container.size()  << std::endl; 
     // map_container.insert({1, 1});
 }

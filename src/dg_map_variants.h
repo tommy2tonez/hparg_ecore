@@ -35,16 +35,14 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-    //alright guys - it should be good for now 
-    //we have thousands of map implementations - most of them stuck at compiler support for iterators - because vector<std::pair<Key, Value>>::iterator is compiler support - they do alien optimizations that we human can't comprehend
-    //then the question is whether to or not to overcome the std::pair<const Key, Value> - and there is no such beautiful answer - you either have to launder std::vector<std::pair<const Key, Value>> or you have to use union and risk undefined behavior in C++
-    
-    //the second problem of unordered_map is args const propagation of find(args..) and find(args...) const - we want compiler optimizations for find() - like it does for std::vector<> or std::unique_ptr<[]> or raw pointers
-    //this is the very hard task that I don't think any engineer can solve without adding compiler's functionality
-    //we will get back to this problem in the future - where we write a compiler - for now - I think these maps should solve most of the problems 
 
-    //this map is for general purposes - where you simply want something that is faster than the std-map - and you have full awareness of the std lib and its compatibility with const Key
-    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
+    //there is a slight problem
+    //insert factor == 1    => 1 - (e^-1) virtual load factor
+    //insert_factor = 2     => 1 - (e^-2) virtual load factor - which is a decent load factor
+    //with the actual load factor of 3/4, and virtual load factor of 2, we can expect to have the least operation count of 2 / (3/4) = 8/3 = 2.6666 * size() before rehashing happens
+    //this is not expensive - in the sense of statistic - like garbage collection - unless you are wiring money that requires certain latency otherwise people would die - I recommend to use this map
+
+    template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_map{
 
         private:
@@ -206,13 +204,35 @@ namespace dg::map_variants{
                     return;
                 }
 
-                self proxy = self(tentative_new_cap, std::move(_hasher), std::move(pred), std::move(allocator));
+                decltype(bucket_vec) bucket_proxy = std::move(bucket_vec); 
 
-                for (auto& node: node_vec){
-                    proxy.internal_noexist_insert(std::move(node));
+                try{
+                    while (true){
+                        size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
+                        bool bad_bit    = false; 
+                        bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
+
+                        for (size_t i = 0u; i < node_vec.size(); ++i){
+                            auto it = bucket_efind(node_vec[i].first);
+                            if (it != std::prev(bucket_vec.end())) [[likely]]{
+                                *it = i; 
+                            } else [[unlikely]]{
+                                tentative_new_cap = new_cap * 2;
+                                bad_bit = true;
+                                break;
+                            }
+                        }
+
+                        if (!bad_bit){
+                            break;
+                        }
+                    }
+
+                    erase_count = 0u;
+                } catch (...){
+                    bucket_vec = std::move(bucket_proxy);
+                    std::rethrow_exception(std::current_exception());
                 }
-
-                *this = std::move(proxy);
             }
 
             constexpr void reserve(size_type new_sz){
@@ -569,6 +589,34 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
+            constexpr auto bucket_efind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
+            }
+
+            template <class KeyLike>
+            constexpr auto bucket_efind(const KeyLike& key) const noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_const_iterator{
+
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
+            }
+
+            template <class KeyLike>
             constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
@@ -697,7 +745,7 @@ namespace dg::map_variants{
     };
 
     //this map is extremely fast if you use it for const lookup purposes - where there is no insert, erase and the usage of at(const KeyLike&) is pivotal
-    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
+    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_fast_map{
 
         private:
@@ -866,13 +914,35 @@ namespace dg::map_variants{
                     return;
                 }
 
-                self proxy = self(tentative_new_cap, std::move(_hasher), std::move(pred), std::move(allocator));
+                decltype(bucket_vec) bucket_proxy = std::move(bucket_vec); 
 
-                for (size_t i = 1u; i < node_vec.size(); ++i){
-                    proxy.internal_noexist_insert(std::move(node_vec[i]));
+                try{
+                    while (true){
+                        size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
+                        bool bad_bit    = false; 
+                        bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
+
+                        for (size_t i = 1u; i < node_vec.size(); ++i){
+                            auto it = bucket_efind(node_vec[i].first);
+                            if (it != std::prev(bucket_vec.end())) [[likely]]{
+                                *it = i; 
+                            } else [[unlikely]]{
+                                tentative_new_cap = new_cap * 2;
+                                bad_bit = true;
+                                break;
+                            }
+                        }
+
+                        if (!bad_bit){
+                            break;
+                        }
+                    }
+
+                    erase_count = 0u;
+                } catch (...){
+                    bucket_vec = std::move(bucket_proxy);
+                    std::rethrow_exception(std::current_exception());
                 }
-
-                *this = std::move(proxy);
             }
 
             constexpr void reserve(size_type new_sz){
@@ -1261,6 +1331,34 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
+            constexpr auto bucket_efind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
+            }
+
+            template <class KeyLike>
+            constexpr auto bucket_efind(const KeyLike& key) const noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_const_iterator{
+
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
+            }
+
+            template <class KeyLike>
             constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
@@ -1391,7 +1489,8 @@ namespace dg::map_variants{
     //this map only works as if there is no erase - user must control the erase by using setter clear() and getter size() - this has a very specialized application - like dg_heap_allocation
     //erase was provided in the user interface - yet their usages aren't recommended 
     //this map is specialized for cache-purpose, where the CACHE is not FIFO - but cleared at cap
-    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<1, 1>>
+    //InsertFactor is now the new LoadFactor - and there is nothing we can do about decreasing the LoadFactor - except for calling clear() - otherwise it would tick per every insert + erase operation
+    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<1, 2>, class InsertFactor = std::ratio<3, 4>>
     class unordered_unstable_fastinsert_map{
 
         private:
@@ -1560,13 +1659,35 @@ namespace dg::map_variants{
                     return;
                 }
 
-                self proxy = self(tentative_new_cap, std::move(_hasher), std::move(pred), std::move(allocator));
+                decltype(bucket_vec) bucket_proxy = std::move(bucket_vec); 
 
-                for (size_t i = 1u; i < node_vec.size(); ++i){
-                    proxy.internal_noexist_insert(std::move(node_vec[i]));
+                try{
+                    while (true){
+                        size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
+                        bool bad_bit    = false;
+                        bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
+
+                        for (size_t i = 1u; i < node_vec.size(); ++i){
+                            auto it = bucket_efind(node_vec[i].first);
+                            if (it != std::prev(bucket_vec.end())) [[likely]]{
+                                *it = i; 
+                            } else [[unlikely]]{
+                                tentative_new_cap = new_cap * 2;
+                                bad_bit = true;
+                                break;
+                            }
+                        }
+
+                        if (!bad_bit){
+                            break;
+                        }
+                    }
+
+                    erase_count = 0u;
+                } catch (...){
+                    bucket_vec = std::move(bucket_proxy);
+                    std::rethrow_exception(std::current_exception());
                 }
-
-                *this = std::move(proxy);
             }
 
             constexpr void reserve(size_type new_sz){
@@ -1957,7 +2078,7 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_efind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
@@ -1968,6 +2089,26 @@ namespace dg::map_variants{
 
                     std::advance(it, 1u);
                 }
+            }
+
+            template <class KeyLike>
+            constexpr auto bucket_efind(const KeyLike& key) const noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_const_iterator{
+
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
+            }
+
+            template <class KeyLike>
+            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+
+                return bucket_efind(key);
             }
 
             template <class ValueLike>
