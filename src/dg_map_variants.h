@@ -743,7 +743,7 @@ namespace dg::map_variants{
             static_assert(std::is_unsigned_v<SizeType>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
             static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())  ) );
+            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
             static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>()) ));
             // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
@@ -1990,7 +1990,7 @@ namespace dg::map_variants{
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || pred(static_cast<const Key&>(node_vec[*it].first), key)) [[likely]]{
+                    if (*it == NULL_VIRTUAL_ADDR || pred(static_cast<const Key&>(node_vec[*it].first), key)){
                         return it;
                     }
 
@@ -2005,7 +2005,7 @@ namespace dg::map_variants{
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || pred(node_vec[*it].first, key)) [[]]{
+                    if (*it == NULL_VIRTUAL_ADDR || pred(node_vec[*it].first, key)){
                         return it;
                     }
 
