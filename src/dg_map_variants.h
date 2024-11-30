@@ -82,23 +82,23 @@ namespace dg::map_variants{
             static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
 
             using key_type                      = Key;
-            using value_type                    = std::pair<Key, Mapped>; 
+            using value_type                    = std::pair<Key, Mapped>;
             using mapped_type                   = Mapped;
             using hasher                        = Hasher;
-            using key_equal                     = Pred; 
+            using key_equal                     = Pred;
             using allocator_type                = Allocator;
             using reference                     = value_type&;
             using const_reference               = const value_type&;
-            using pointer                       = typename std::allocator_traits<Allocator>::pointer; 
+            using pointer                       = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator; 
-            using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator; 
+            using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator;
+            using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator;
             using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
             using const_reverse_iterator        = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_reverse_iterator;
             using size_type                     = SizeType;
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_map;
-            using load_factor_ratio             = typename LoadFactor::type; 
+            using load_factor_ratio             = typename LoadFactor::type;
             using insert_factor_ratio           = typename InsertFactor::type;
 
             static consteval auto max_load_factor() noexcept -> double{
@@ -114,38 +114,39 @@ namespace dg::map_variants{
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
             static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
 
-            constexpr unordered_unstable_map(): node_vec(), 
+            constexpr unordered_unstable_map(): node_vec(),
                                                 bucket_vec(self::min_capacity() + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR),
                                                 _hasher(),
                                                 pred(),
                                                 allocator(),
                                                 erase_count(0u){}
 
-            constexpr explicit unordered_unstable_map(size_type bucket_count, 
-                                                      const Hasher& _hasher = Hasher(), 
-                                                      const Pred& pred = Pred(), 
+            constexpr explicit unordered_unstable_map(size_type bucket_count,
+                                                      const Hasher& _hasher = Hasher(),
+                                                      const Pred& pred = Pred(),
                                                       const Allocator& allocator = Allocator()): node_vec(allocator),
                                                                                                  bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                                                  _hasher(_hasher),
                                                                                                  pred(pred),
                                                                                                  allocator(allocator),
                                                                                                  erase_count(0u){
-                
+
                 node_vec.reserve(estimate_size(capacity()));
             }
 
-            constexpr unordered_unstable_map(size_type bucket_count, 
+            constexpr unordered_unstable_map(size_type bucket_count,
                                              const Allocator& allocator): node_vec(allocator),
                                                                           bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                           _hasher(),
                                                                           pred(),
                                                                           allocator(allocator),
                                                                           erase_count(0u){
+
                 node_vec.reserve(estimate_size(capacity()));                                                                
             }
 
-            constexpr unordered_unstable_map(size_type bucket_count, 
-                                             const Hasher& _hasher, 
+            constexpr unordered_unstable_map(size_type bucket_count,
+                                             const Hasher& _hasher,
                                              const Allocator& allocator): node_vec(allocator),
                                                                           bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                           _hasher(_hasher),
@@ -167,29 +168,29 @@ namespace dg::map_variants{
             }
 
             template <class InputIt>
-            constexpr unordered_unstable_map(InputIt first, 
-                                             InputIt last, 
-                                             size_type bucket_count, 
-                                             const Hasher& _hasher = Hasher(), 
-                                             const Pred& pred = Pred(), 
+            constexpr unordered_unstable_map(InputIt first,
+                                             InputIt last,
+                                             size_type bucket_count,
+                                             const Hasher& _hasher = Hasher(),
+                                             const Pred& pred = Pred(),
                                              const Allocator& allocator = Allocator()): unordered_unstable_map(bucket_count, _hasher, pred, allocator){
-                
+
                 insert(first, last);
             }
 
             template <class InputIt>
-            constexpr unordered_unstable_map(InputIt first, 
-                                             InputIt last, 
-                                             size_type bucket_count, 
+            constexpr unordered_unstable_map(InputIt first,
+                                             InputIt last,
+                                             size_type bucket_count,
                                              const Allocator& allocator): unordered_unstable_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
-            constexpr unordered_unstable_map(std::initializer_list<value_type> init_list, 
-                                             size_type bucket_count, 
+            constexpr unordered_unstable_map(std::initializer_list<value_type> init_list,
+                                             size_type bucket_count,
                                              const Allocator& allocator): unordered_unstable_map(init_list.begin(), init_list.end(), bucket_count, allocator){}
 
-            constexpr unordered_unstable_map(std::initializer_list<value_type> init_list, 
-                                             size_type bucket_count, 
-                                             const Hasher& _hasher, 
+            constexpr unordered_unstable_map(std::initializer_list<value_type> init_list,
+                                             size_type bucket_count,
+                                             const Hasher& _hasher,
                                              const Allocator& allocator): unordered_unstable_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
             constexpr void clear() noexcept{
@@ -206,7 +207,7 @@ namespace dg::map_variants{
 
                 while (true){
                     size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
-                    bool bad_bit    = false; 
+                    bool bad_bit    = false;
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 0u; i < node_vec.size(); ++i){
@@ -215,7 +216,7 @@ namespace dg::map_variants{
                         [[assume(it != tmp_bucket_vec.end())]];
 
                         if (it != std::prev(tmp_bucket_vec.end())) [[likely]]{
-                            *it = i; 
+                            *it = i;
                         } else [[unlikely]]{
                             tentative_new_cap = new_cap * 2;
                             bad_bit = true;
@@ -243,7 +244,7 @@ namespace dg::map_variants{
             constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
                                                       && std::is_nothrow_swappable<Hasher>::value
                                                       && std::is_nothrow_swappable<Pred>::value){
-                
+
                 std::swap(node_vec, other.node_vec);
                 std::swap(bucket_vec, other.bucket_vec);
                 std::swap(_hasher, other._hasher);
@@ -519,8 +520,9 @@ namespace dg::map_variants{
                 return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
-            constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
+            constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
 
+                static_assert(std::is_unsigned_v<decltype(hashed_value)>);
                 return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
             }
 
@@ -621,7 +623,7 @@ namespace dg::map_variants{
                         force_uphash();
                     }
                 }
-            } 
+            }
 
             template <class ValueLike>
             constexpr auto internal_insert_or_assign(ValueLike&& value) -> std::pair<iterator, bool>{
@@ -668,7 +670,7 @@ namespace dg::map_variants{
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
 
                 if (erasing_bucket_virtual_addr != NULL_VIRTUAL_ADDR){
-                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first); 
+                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first);
                     std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                     node_vec.pop_back();
                     *swapee_bucket_it   = erasing_bucket_virtual_addr;
@@ -750,22 +752,22 @@ namespace dg::map_variants{
             static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
 
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
-            static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
+            static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95;
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
             static constexpr inline double MAX_MAX_INSERT_FACTOR    = 3; //1 - e^-3
 
             using key_type                      = Key;
-            using value_type                    = std::pair<Key, Mapped>; 
+            using value_type                    = std::pair<Key, Mapped>;
             using mapped_type                   = Mapped;
             using hasher                        = Hasher;
-            using key_equal                     = Pred; 
+            using key_equal                     = Pred;
             using allocator_type                = Allocator;
             using reference                     = value_type&;
             using const_reference               = const value_type&;
-            using pointer                       = typename std::allocator_traits<Allocator>::pointer; 
+            using pointer                       = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator; 
-            using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator; 
+            using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator;
+            using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator;
             using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
             using const_reverse_iterator        = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_reverse_iterator;
             using size_type                     = SizeType;
@@ -787,7 +789,7 @@ namespace dg::map_variants{
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
             static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
 
-            constexpr unordered_unstable_fast_map(): node_vec(), 
+            constexpr unordered_unstable_fast_map(): node_vec(),
                                                      bucket_vec(self::min_capacity() + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR),
                                                      _hasher(),
                                                      pred(),
@@ -797,40 +799,41 @@ namespace dg::map_variants{
                 node_vec.push_back(NullValueGenerator{}());
             }
 
-            constexpr explicit unordered_unstable_fast_map(size_type bucket_count, 
-                                                           const Hasher& _hasher = Hasher(), 
-                                                           const Pred& pred = Pred(), 
+            constexpr explicit unordered_unstable_fast_map(size_type bucket_count,
+                                                           const Hasher& _hasher = Hasher(),
+                                                           const Pred& pred = Pred(),
                                                            const Allocator& allocator = Allocator()): node_vec(allocator),
                                                                                                       bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                                                       _hasher(_hasher),
                                                                                                       pred(pred),
                                                                                                       allocator(allocator),
                                                                                                       erase_count(0u){
-                
+                                                                     
                 node_vec.reserve(estimate_size(capacity()) + 1u);
                 node_vec.push_back(NullValueGenerator{}());
             }
 
-            constexpr unordered_unstable_fast_map(size_type bucket_count, 
+            constexpr unordered_unstable_fast_map(size_type bucket_count,
                                                   const Allocator& allocator): node_vec(allocator),
                                                                                bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                                _hasher(),
                                                                                pred(),
                                                                                allocator(allocator),
                                                                                erase_count(0u){
-                
+
                 node_vec.reserve(estimate_size(capacity()) + 1u);
                 node_vec.push_back(NullValueGenerator{}());
             }
 
-            constexpr unordered_unstable_fast_map(size_type bucket_count, 
-                                                  const Hasher& _hasher, 
+            constexpr unordered_unstable_fast_map(size_type bucket_count,
+                                                  const Hasher& _hasher,
                                                   const Allocator& allocator): node_vec(allocator),
                                                                                bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                                _hasher(_hasher),
                                                                                pred(),
                                                                                allocator(allocator),
                                                                                erase_count(0u){
+
                 node_vec.reserve(estimate_size(capacity()) + 1u);
                 node_vec.push_back(NullValueGenerator{}());
             }
@@ -853,23 +856,23 @@ namespace dg::map_variants{
                                                   const Hasher& _hasher = Hasher(), 
                                                   const Pred& pred = Pred(), 
                                                   const Allocator& allocator = Allocator()): unordered_unstable_fast_map(bucket_count, _hasher, pred, allocator){
-                
+
                 insert(first, last);
             }
 
             template <class InputIt>
-            constexpr unordered_unstable_fast_map(InputIt first, 
+            constexpr unordered_unstable_fast_map(InputIt first,
                                                   InputIt last, 
-                                                  size_type bucket_count, 
+                                                  size_type bucket_count,
                                                   const Allocator& allocator): unordered_unstable_fast_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
-            constexpr unordered_unstable_fast_map(std::initializer_list<value_type> init_list, 
-                                                  size_type bucket_count, 
+            constexpr unordered_unstable_fast_map(std::initializer_list<value_type> init_list,
+                                                  size_type bucket_count,
                                                   const Allocator& allocator): unordered_unstable_fast_map(init_list.begin(), init_list.end(), bucket_count, allocator){}
 
-            constexpr unordered_unstable_fast_map(std::initializer_list<value_type> init_list, 
-                                                  size_type bucket_count, 
-                                                  const Hasher& _hasher, 
+            constexpr unordered_unstable_fast_map(std::initializer_list<value_type> init_list,
+                                                  size_type bucket_count,
+                                                  const Hasher& _hasher,
                                                   const Allocator& allocator): unordered_unstable_fast_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
             constexpr void clear() noexcept{
@@ -895,7 +898,7 @@ namespace dg::map_variants{
                         [[assume(it != tmp_bucket_vec.end())]];
 
                         if (it != std::prev(tmp_bucket_vec.end())) [[likely]]{
-                            *it = i; 
+                            *it = i;
                         } else [[unlikely]]{
                             tentative_new_cap = new_cap * 2;
                             bad_bit = true;
@@ -913,7 +916,7 @@ namespace dg::map_variants{
 
             constexpr void reserve(size_type new_sz){
  
-                if (new_sz < node_vec.size()){
+                if (new_sz <= size()){
                     return;
                 }
 
@@ -923,7 +926,7 @@ namespace dg::map_variants{
             constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
                                                       && std::is_nothrow_swappable<Hasher>::value
                                                       && std::is_nothrow_swappable<Pred>::value){
-                
+
                 std::swap(node_vec, other.node_vec);
                 std::swap(bucket_vec, other.bucket_vec);
                 std::swap(_hasher, other._hasher);
@@ -1105,7 +1108,7 @@ namespace dg::map_variants{
 
                 return static_cast<Pred&&>(pred);
             }
-            
+
             constexpr auto load_factor() const noexcept -> double{
 
                 return size() / static_cast<double>(capacity());
@@ -1199,8 +1202,9 @@ namespace dg::map_variants{
                 return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
-            constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
+            constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
 
+                static_assert(std::is_unsigned_v<decltype(hashed_value)>);
                 return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1));
             }
 
@@ -1380,7 +1384,7 @@ namespace dg::map_variants{
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
 
                 if (erasing_bucket_virtual_addr != NULL_VIRTUAL_ADDR){
-                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first); 
+                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first);
                     std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                     node_vec.pop_back();
                     *swapee_bucket_it   = erasing_bucket_virtual_addr;
@@ -1448,11 +1452,6 @@ namespace dg::map_variants{
             static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u; //this is important - because % 256 == a read of the address instead of an arithmetic operation
             static inline constexpr std::size_t LAST_MOHICAN_SZ         = 16u;
 
-            static constexpr auto is_insertable(SizeType virtual_addr) noexcept -> bool{
-
-                return virtual_addr == NULL_VIRTUAL_ADDR || virtual_addr == ORPHANED_VIRTUAL_ADDR;
-            }
-
         public:
 
             static_assert(std::is_unsigned_v<SizeType>);
@@ -1465,28 +1464,28 @@ namespace dg::map_variants{
             static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
 
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
-            static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
+            static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95;
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
             static constexpr inline double MAX_MAX_INSERT_FACTOR    = 0.95; 
 
             using key_type                      = Key;
-            using value_type                    = std::pair<Key, Mapped>; 
+            using value_type                    = std::pair<Key, Mapped>;
             using mapped_type                   = Mapped;
             using hasher                        = Hasher;
-            using key_equal                     = Pred; 
+            using key_equal                     = Pred;
             using allocator_type                = Allocator;
             using reference                     = value_type&;
             using const_reference               = const value_type&;
-            using pointer                       = typename std::allocator_traits<Allocator>::pointer; 
+            using pointer                       = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator; 
-            using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator; 
+            using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator;
+            using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator;
             using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
             using const_reverse_iterator        = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_reverse_iterator;
             using size_type                     = SizeType;
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_fastinsert_map;
-            using load_factor_ratio             = typename LoadFactor::type; 
+            using load_factor_ratio             = typename LoadFactor::type;
             using insert_factor_ratio           = typename InsertFactor::type;
 
             static consteval auto max_load_factor() noexcept -> double{
@@ -1502,7 +1501,7 @@ namespace dg::map_variants{
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
             static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
 
-            constexpr unordered_unstable_fastinsert_map(): node_vec(), 
+            constexpr unordered_unstable_fastinsert_map(): node_vec(),
                                                            bucket_vec(self::min_capacity() + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR),
                                                            _hasher(),
                                                            pred(),
@@ -1512,16 +1511,16 @@ namespace dg::map_variants{
                 node_vec.push_back(NullValueGenerator{}());
             }
 
-            constexpr explicit unordered_unstable_fastinsert_map(size_type bucket_count, 
-                                                                 const Hasher& _hasher = Hasher(), 
-                                                                 const Pred& pred = Pred(), 
+            constexpr explicit unordered_unstable_fastinsert_map(size_type bucket_count,
+                                                                 const Hasher& _hasher = Hasher(),
+                                                                 const Pred& pred = Pred(),
                                                                  const Allocator& allocator = Allocator()): node_vec(allocator),
                                                                                                             bucket_vec(std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(bucket_count)) + LAST_MOHICAN_SZ, NULL_VIRTUAL_ADDR, allocator),
                                                                                                             _hasher(_hasher),
                                                                                                             pred(pred),
                                                                                                             allocator(allocator),
                                                                                                             erase_count(0u){
-                
+
                 node_vec.reserve(estimate_size(capacity()) + 1u);
                 node_vec.push_back(NullValueGenerator{}());
             }
@@ -1533,7 +1532,7 @@ namespace dg::map_variants{
                                                                                      pred(),
                                                                                      allocator(allocator),
                                                                                      erase_count(0u){
-                
+
                 node_vec.reserve(estimate_size(capacity()) + 1u);
                 node_vec.push_back(NullValueGenerator{}());
             }
@@ -1546,6 +1545,7 @@ namespace dg::map_variants{
                                                                                      pred(),
                                                                                      allocator(allocator),
                                                                                      erase_count(0u){
+
                 node_vec.reserve(estimate_size(capacity()) + 1u);
                 node_vec.push_back(NullValueGenerator{}());
             }
@@ -1568,24 +1568,24 @@ namespace dg::map_variants{
                                                         const Hasher& _hasher = Hasher(), 
                                                         const Pred& pred = Pred(), 
                                                         const Allocator& allocator = Allocator()): unordered_unstable_fastinsert_map(bucket_count, _hasher, pred, allocator){
-                
+
                 insert(first, last);
             }
 
             template <class InputIt>
-            constexpr unordered_unstable_fastinsert_map(InputIt first, 
-                                                  InputIt last, 
-                                                  size_type bucket_count, 
-                                                  const Allocator& allocator): unordered_unstable_fastinsert_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
+            constexpr unordered_unstable_fastinsert_map(InputIt first,
+                                                        InputIt last,
+                                                        size_type bucket_count,
+                                                        const Allocator& allocator): unordered_unstable_fastinsert_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
-            constexpr unordered_unstable_fastinsert_map(std::initializer_list<value_type> init_list, 
-                                                  size_type bucket_count, 
-                                                  const Allocator& allocator): unordered_unstable_fastinsert_map(init_list.begin(), init_list.end(), bucket_count, allocator){}
+            constexpr unordered_unstable_fastinsert_map(std::initializer_list<value_type> init_list,
+                                                        size_type bucket_count,
+                                                        const Allocator& allocator): unordered_unstable_fastinsert_map(init_list.begin(), init_list.end(), bucket_count, allocator){}
 
-            constexpr unordered_unstable_fastinsert_map(std::initializer_list<value_type> init_list, 
-                                                  size_type bucket_count, 
-                                                  const Hasher& _hasher, 
-                                                  const Allocator& allocator): unordered_unstable_fastinsert_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
+            constexpr unordered_unstable_fastinsert_map(std::initializer_list<value_type> init_list,
+                                                        size_type bucket_count,
+                                                        const Hasher& _hasher,
+                                                        const Allocator& allocator): unordered_unstable_fastinsert_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
             constexpr void clear() noexcept{
 
@@ -1601,7 +1601,7 @@ namespace dg::map_variants{
 
                 while (true){
                     size_t new_cap  = std::max(self::min_capacity(), dg::map_variants::least_pow2_greater_equal_than(tentative_new_cap)) + LAST_MOHICAN_SZ;
-                    bool bad_bit    = false; 
+                    bool bad_bit    = false;
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 1u; i < node_vec.size(); ++i){
@@ -1610,7 +1610,7 @@ namespace dg::map_variants{
                         [[assume(it != tmp_bucket_vec.end())]];
 
                         if (it != std::prev(tmp_bucket_vec.end())) [[likely]]{
-                            *it = i; 
+                            *it = i;
                         } else [[unlikely]]{
                             tentative_new_cap = new_cap * 2;
                             bad_bit = true;
@@ -1638,7 +1638,7 @@ namespace dg::map_variants{
             constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
                                                       && std::is_nothrow_swappable<Hasher>::value
                                                       && std::is_nothrow_swappable<Pred>::value){
-                
+
                 std::swap(node_vec, other.node_vec);
                 std::swap(bucket_vec, other.bucket_vec);
                 std::swap(_hasher, other._hasher);
@@ -1663,7 +1663,7 @@ namespace dg::map_variants{
             constexpr auto noexist_insert(ValueLike&& value) -> iterator{
 
                 return internal_noexist_insert(std::forward<ValueLike>(value));
-            } 
+            }
 
             template <class ValueLike = value_type>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
@@ -1826,7 +1826,7 @@ namespace dg::map_variants{
 
                 return static_cast<Pred&&>(pred);
             }
-            
+
             constexpr auto load_factor() const noexcept -> double{
 
                 return size() / static_cast<double>(capacity());
@@ -1895,7 +1895,7 @@ namespace dg::map_variants{
                 }
             }
 
-            constexpr void force_uphash(){ //problems
+            constexpr void force_uphash(){
 
                 size_type new_cap = capacity() * 2;
                 rehash(new_cap, true);
@@ -1916,8 +1916,9 @@ namespace dg::map_variants{
                 return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
-            constexpr auto to_bucket_index(size_type hashed_value) const noexcept -> size_type{
+            constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
 
+                static_assert(std::is_unsigned_v<decltype(hashed_value)>);
                 return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1));
             }
 
@@ -2083,7 +2084,7 @@ namespace dg::map_variants{
                     return std::make_pair(do_insert_at(it, std::forward<ValueLike>(value)), true);
                 } else [[unlikely]]{
                     return std::make_pair(internal_noexist_insert(std::forward<ValueLike>(value)), true);
-                }            
+                }
             }
 
             template <class KeyLike, class Arg = mapped_type, std::enable_if_t<std::is_default_constructible_v<Arg>, bool> = true>
@@ -2109,7 +2110,7 @@ namespace dg::map_variants{
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
 
                 if (erasing_bucket_virtual_addr != NULL_VIRTUAL_ADDR){
-                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first); 
+                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first);
                     std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                     node_vec.pop_back();
                     *swapee_bucket_it   = erasing_bucket_virtual_addr;

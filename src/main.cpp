@@ -31,7 +31,7 @@ int main(){
     // jg::dense_hash_map<uint32_t, uint32_t> map_container{};
     // std::vector<size_t> map_container(512);
 
-    dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, PairNullValueGen> map_container;
+    dg::map_variants::unordered_unstable_fastinsert_map<uint32_t, uint32_t, PairNullValueGen> map_container;
 
     auto now = high_resolution_clock::now();
 
