@@ -69,10 +69,12 @@ namespace dg::map_variants{
 
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
             static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
-            static constexpr inline double MIN_MAX_INSERT_FACTOR    = 1;
-            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 32; 
+            static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
+            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 3; //1 - e^-3
 
             static_assert(std::is_unsigned_v<SizeType>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
             static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
             static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
@@ -739,8 +741,10 @@ namespace dg::map_variants{
         public:
 
             static_assert(std::is_unsigned_v<SizeType>);
-            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
-            static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
+            static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
+            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())  ) );
+            static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>()) ));
             // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
             static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
@@ -748,7 +752,7 @@ namespace dg::map_variants{
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
             static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
-            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 8; 
+            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 3; //1 - e^-3
 
             using key_type                      = Key;
             using value_type                    = std::pair<Key, Mapped>; 
@@ -1452,6 +1456,8 @@ namespace dg::map_variants{
         public:
 
             static_assert(std::is_unsigned_v<SizeType>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
             static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
             static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
             // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
@@ -1461,7 +1467,7 @@ namespace dg::map_variants{
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
             static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95; 
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
-            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 8; 
+            static constexpr inline double MAX_MAX_INSERT_FACTOR    = 0.95; 
 
             using key_type                      = Key;
             using value_type                    = std::pair<Key, Mapped>; 
