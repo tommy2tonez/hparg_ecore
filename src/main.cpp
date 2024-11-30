@@ -23,5 +23,22 @@ auto to_const_reference(T& value) -> const T&{
 
 int main(){
 
+    using namespace std::chrono;
 
+    const size_t SZ = size_t{1} << 22;
+    std::vector<uint32_t> buf(SZ);
+    std::generate(buf.begin(), buf.end(), std::mt19937());
+    dg::map_variants::unordered_unstable_fastinsert_map<uint32_t, uint32_t, PairNullValueGen> map_container{};
+    map_container.reserve(SZ * 2);
+    // std::vector<size_t> map_container(512);
+
+    auto now = high_resolution_clock::now(); 
+    for (uint32_t c: buf){
+        map_container[c] = 1u;
+    }
+
+    auto then = high_resolution_clock::now();
+
+    std::cout << duration_cast<milliseconds>(then - now).count() << "<ms>" << map_container.capacity() << "<>" << map_container.size() << std::endl; 
+    // map_container.insert({1, 1});
 }

@@ -35,6 +35,8 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
+    //alright guys - it should be good for now 
+    
     //this map is for general purposes - where you simply want something that is faster than the std-map - and you have full awareness of the std lib and its compatibility with const Key
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
     class unordered_unstable_map{
@@ -482,12 +484,12 @@ namespace dg::map_variants{
 
             constexpr auto estimate_size(size_type cap) const noexcept -> size_type{
 
-                return cap * load_factor_ratio::den / load_factor_ratio::num;
+                return cap * load_factor_ratio::num / load_factor_ratio::den;
             }
-            
+
             constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
 
-                return sz * load_factor_ratio::num / load_factor_ratio::den;
+                return sz * load_factor_ratio::den / load_factor_ratio::num;
             }
 
             constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
@@ -1142,12 +1144,12 @@ namespace dg::map_variants{
 
             constexpr auto estimate_size(size_type cap) const noexcept -> size_type{
 
-                return cap * load_factor_ratio::den / load_factor_ratio::num;
+                return cap * load_factor_ratio::num / load_factor_ratio::den;
             }
 
             constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
 
-                return sz * load_factor_ratio::num / load_factor_ratio::den;
+                return sz * load_factor_ratio::den / load_factor_ratio::num;
             }
 
             constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
@@ -1819,7 +1821,7 @@ namespace dg::map_variants{
                 if (estimate_capacity(size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
                     return;
                 } else [[unlikely]]{
-                    //either cap > size or insert_cap > max_insert_cap or both - if both - extend
+                   //either cap > size or insert_cap > max_insert_cap or both - if both - extend
                     if (estimate_capacity(size()) > capacity()){
                         size_type new_cap = capacity() * 2;
                         rehash(new_cap, true);
@@ -1838,12 +1840,12 @@ namespace dg::map_variants{
 
             constexpr auto estimate_size(size_type cap) const noexcept -> size_type{
 
-                return cap * load_factor_ratio::den / load_factor_ratio::num;
+                return cap * load_factor_ratio::num / load_factor_ratio::den;
             }
 
             constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
 
-                return sz * load_factor_ratio::num / load_factor_ratio::den;
+                return sz * load_factor_ratio::den / load_factor_ratio::num;
             }
 
             constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
