@@ -35,6 +35,7 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
+    //this map is for general purposes - where you simply want something that is faster than the std-map - and you have full awareness of the std lib and its compatibility with const Key
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
     class unordered_unstable_map{
 
@@ -208,7 +209,7 @@ namespace dg::map_variants{
 
             constexpr void reserve(size_type new_sz){
  
-                if (new_sz <= node_vec.size()){
+                if (new_sz <= size()){
                     return;
                 }
 
@@ -461,7 +462,8 @@ namespace dg::map_variants{
                     if (estimate_capacity(node_vec.size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
                         return;
                     } else [[unlikely]]{
-                        if (estimate_capacity(node_vec.size()) <= capacity()){
+                        //either cap > size or insert_cap > max_insert_cap or both - if both - extend
+                        if (estimate_capacity(node_vec.size()) > capacity()){
                             size_type new_cap = capacity() * 2;
                             rehash(new_cap, true);
                         } else{
@@ -686,9 +688,7 @@ namespace dg::map_variants{
             }
     };
 
-    //alright guys - I think these are decent maps for general purposes - load factor should be 1/2 - and SizeType should be demoted to uint32_t
-    //if yall reserve the map before doing any operations - I think this would beat most of the benchmarks out there - there are still some heres and theres but I think this should do the "heavy work" in our field
-
+    //this map is extremely fast if you use it for const lookup purposes - where there is no insert, erase and the usage of at(const KeyLike&) is pivotal
     template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<4, 1>>
     class unordered_unstable_fast_map{
 
@@ -1122,7 +1122,8 @@ namespace dg::map_variants{
                     if (estimate_capacity(size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
                         return;
                     } else [[unlikely]]{
-                        if (estimate_capacity(size()) <= capacity()){
+                        //either cap > size or insert_cap > max_insert_cap or both - if both - extend
+                        if (estimate_capacity(size()) > capacity()){
                             size_type new_cap = capacity() * 2;
                             rehash(new_cap, true);
                         } else{
@@ -1379,7 +1380,10 @@ namespace dg::map_variants{
             }
     };
 
-    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<7, 8>>
+    //this map only works as if there is no erase - user must control the erase by using setter clear() and getter size() - this has a very specialized application - like dg_heap_allocation
+    //erase was provided in the user interface - yet their usages aren't recommended 
+    //this map is specialized for cache-purpose, where the CACHE is not FIFO - but cleared at cap
+    template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<7, 8>, class InsertFactor = std::ratio<1, 1>>
     class unordered_unstable_fastinsert_map{
 
         private:
@@ -1396,7 +1400,7 @@ namespace dg::map_variants{
 
             static inline constexpr SizeType ORPHANED_VIRTUAL_ADDR      = std::numeric_limits<SizeType>::min();
             static inline constexpr SizeType NULL_VIRTUAL_ADDR          = std::numeric_limits<SizeType>::max();
-            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u;
+            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u; //this is important - because % 256 == a read of the address instead of an arithmetic operation
             static inline constexpr std::size_t LAST_MOHICAN_SZ         = 16u;
 
             static constexpr auto is_insertable(SizeType virtual_addr) noexcept -> bool{
@@ -1559,7 +1563,7 @@ namespace dg::map_variants{
 
             constexpr void reserve(size_type new_sz){
  
-                if (new_sz < node_vec.size()){
+                if (new_sz <= size()){
                     return;
                 }
 
@@ -1589,6 +1593,12 @@ namespace dg::map_variants{
 
                 return internal_insert(value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...)));
             }
+
+            template <class ValueLike = value_type>
+            constexpr auto noexist_insert(ValueLike&& value) -> iterator{
+
+                return internal_noexist_insert(std::forward<ValueLike>(value));
+            } 
 
             template <class ValueLike = value_type>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
@@ -1809,7 +1819,8 @@ namespace dg::map_variants{
                 if (estimate_capacity(size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
                     return;
                 } else [[unlikely]]{
-                    if (estimate_capacity(size()) <= capacity()){
+                    //either cap > size or insert_cap > max_insert_cap or both - if both - extend
+                    if (estimate_capacity(size()) > capacity()){
                         size_type new_cap = capacity() * 2;
                         rehash(new_cap, true);
                     } else{
@@ -1819,7 +1830,7 @@ namespace dg::map_variants{
                 }
             }
 
-            constexpr void force_uphash(){
+            constexpr void force_uphash(){ //problems
 
                 size_type new_cap = capacity() * 2;
                 rehash(new_cap, true);
@@ -1853,7 +1864,7 @@ namespace dg::map_variants{
                 //assume load_factor of 50% - avg - and reasonable hash function
                 //50% ^ 3 = 1/8 - which is == branch predictor
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key))); //we don't care where the bucket is pointing to - as long as it is a fixed random position and it does not pass the last of the last mohicans
 
                 if (pred(static_cast<const Key&>(node_vec[*it].first), key)){ //this optimization might not be as important in CPU arch but very important in GPU arch - where you want to minimize branch prediction by using block_quicksort approach
                     return it;
@@ -1937,6 +1948,20 @@ namespace dg::map_variants{
                 }
             }
 
+            template <class KeyLike>
+            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+
+                while (true){
+                    if (*it == NULL_VIRTUAL_ADDR){
+                        return it;
+                    }
+
+                    std::advance(it, 1u);
+                }
+            }
+
             template <class ValueLike>
             constexpr auto do_insert_at(bucket_iterator it, ValueLike&& value) -> iterator{
 
@@ -1952,9 +1977,9 @@ namespace dg::map_variants{
                 check_for_rehash();
 
                 while (true){
-                    bucket_iterator it = bucket_find(value.first);
+                    bucket_iterator it = bucket_ifind(value.first);
 
-                    if (it != std::prev(bucket_vec.end()) && *it == NULL_VIRTUAL_ADDR) [[likely]]{
+                    if (it != std::prev(bucket_vec.end())) [[likely]]{
                         return do_insert_at(it, std::forward<ValueLike>(value));
                     } else [[unlikely]]{
                         force_uphash();
