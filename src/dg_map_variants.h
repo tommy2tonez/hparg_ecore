@@ -210,7 +210,7 @@ namespace dg::map_variants{
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 0u; i < node_vec.size(); ++i){
-                        size_type bucket_idx    = _hasher(node_vec[i].first) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        size_type bucket_idx    = _hasher(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
                         auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
                         [[assume(it != tmp_bucket_vec.end())]];
 
@@ -890,7 +890,7 @@ namespace dg::map_variants{
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 1u; i < node_vec.size(); ++i){
-                        size_type bucket_idx    = _hasher(node_vec[i].first) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        size_type bucket_idx    = _hasher(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
                         auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
                         [[assume(it != tmp_bucket_vec.end())]];
 
@@ -1605,7 +1605,7 @@ namespace dg::map_variants{
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 1u; i < node_vec.size(); ++i){
-                        size_type bucket_idx    = _hasher(node_vec[i].first) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        size_type bucket_idx    = _hasher(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
                         auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
                         [[assume(it != tmp_bucket_vec.end())]];
 
