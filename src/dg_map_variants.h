@@ -35,11 +35,10 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-
     //there is a slight problem
     //insert factor == 1    => 1 - (e^-1) virtual load factor
     //insert_factor = 2     => 1 - (e^-2) virtual load factor - which is a decent load factor
-    //with the actual load factor of 3/4, and virtual load factor of 2, we can expect to have the least operation count of 2 / (3/4) = 8/3 = 2.6666 * size() before rehashing happens
+    //with the actual load factor of 3/4, and insert_factor of 2, we can expect to have the least operation count of 2 / (3/4) = 8/3 = 2.6666 * size() before rehashing happens
     //this is not expensive - in the sense of statistic - like garbage collection - unless you are wiring money that requires certain latency otherwise people would die - I recommend to use this map
 
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
@@ -213,7 +212,7 @@ namespace dg::map_variants{
                         bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
 
                         for (size_t i = 0u; i < node_vec.size(); ++i){
-                            auto it = bucket_efind(node_vec[i].first);
+                            auto it = bucket_efind(node_vec[i].first); //its fine to invoke internal method here because we are in a valid state - in other words, node_vec can contain allocations that aren't referenced by one of the buckets
                             if (it != std::prev(bucket_vec.end())) [[likely]]{
                                 *it = i; 
                             } else [[unlikely]]{
@@ -923,7 +922,7 @@ namespace dg::map_variants{
                         bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
 
                         for (size_t i = 1u; i < node_vec.size(); ++i){
-                            auto it = bucket_efind(node_vec[i].first);
+                            auto it = bucket_efind(node_vec[i].first); //its fine to invoke internal method here because we are in a valid state - in other words, node_vec can contain allocations that aren't referenced by one of the buckets
                             if (it != std::prev(bucket_vec.end())) [[likely]]{
                                 *it = i; 
                             } else [[unlikely]]{
@@ -1668,7 +1667,7 @@ namespace dg::map_variants{
                         bucket_vec.resize(new_cap, NULL_VIRTUAL_ADDR);
 
                         for (size_t i = 1u; i < node_vec.size(); ++i){
-                            auto it = bucket_efind(node_vec[i].first);
+                            auto it = bucket_efind(node_vec[i].first); //its fine to invoke internal method here because we are in a valid state - in other words, node_vec can contain allocations that aren't referenced by one of the buckets
                             if (it != std::prev(bucket_vec.end())) [[likely]]{
                                 *it = i; 
                             } else [[unlikely]]{
