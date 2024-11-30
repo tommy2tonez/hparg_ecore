@@ -22,8 +22,6 @@ namespace jg
 {
 namespace details
 {
-
-    
     static constexpr const float default_max_load_factor = 0.875f;
 
     template <
@@ -42,16 +40,6 @@ namespace details
             return dense_hash_map_iterator<Key, T, Container, isConst, projectToConstKey>{
                 std::next(nodes.begin(), bucket_it.current_node_index())};
         }
-    }
-
-    template <
-        class Key, class T, class Container, bool isConst, bool projectToConstKey, class Nodes>
-    [[nodiscard]] constexpr auto exist_bucket_iterator_to_iterator(
-        const bucket_iterator<Key, T, Container, isConst, projectToConstKey>& bucket_it,
-        Nodes& nodes) -> dense_hash_map_iterator<Key, T, Container, isConst, projectToConstKey>
-    {
-        return dense_hash_map_iterator<Key, T, Container, isConst, projectToConstKey>{
-            std::next(nodes.begin(), bucket_it.current_node_index())};
     }
 
     template <class Alloc, class T>
@@ -170,7 +158,6 @@ private:
         std::is_nothrow_default_constructible_v<deduced_key_equal>;
 
 public:
-
     using key_type = Key;
     using mapped_type = T;
     using value_type = std::pair<const Key, T>;
@@ -188,7 +175,7 @@ public:
         details::dense_hash_map_iterator<Key, T, nodes_container_type, true, true>;
     using local_iterator = details::bucket_iterator<Key, T, nodes_container_type, false, true>;
     using const_local_iterator = details::bucket_iterator<Key, T, nodes_container_type, true, true>;
-    
+
     constexpr dense_hash_map() noexcept(is_nothrow_default_constructible)
         : dense_hash_map(minimum_capacity())
     {}
@@ -522,12 +509,34 @@ public:
 
     constexpr auto at(const key_type& key) -> T&
     {
-        return exist_find(key)->second;
+        const auto it = find(key);
+
+        if (it == end())
+        {
+#ifdef JG_NO_EXCEPTION
+            std::abort();
+#else
+            throw std::out_of_range("The specified key does not exists in this map.");
+#endif
+        }
+
+        return it->second;
     }
 
     constexpr auto at(const key_type& key) const -> const T&
     {
-        return exist_find(key)->second;
+        const auto it = find(key);
+
+        if (it == end())
+        {
+#ifdef JG_NO_EXCEPTION
+            std::abort();
+#else
+            throw std::out_of_range("The specified key does not exists in this map.");
+#endif
+        }
+
+        return it->second;
     }
 
     constexpr auto operator[](const key_type& key) -> T&
@@ -557,21 +566,11 @@ public:
         return details::bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
     }
 
-    constexpr auto exist_find(const key_type& key) -> iterator{
-
-        return details::exist_bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
-    } 
-
     constexpr auto find(const key_type& key) const -> const_iterator
     {
         return details::bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
     }
 
-    constexpr auto exist_find(const key_type& key) const -> const_iterator
-    {
-        return details::exist_bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
-    }
-    
     template <
         class K, class Useless = std::enable_if_t<details::is_transparent_key_equal_v<Hash>, K>>
     constexpr auto find(const K& key) -> iterator
@@ -581,23 +580,9 @@ public:
 
     template <
         class K, class Useless = std::enable_if_t<details::is_transparent_key_equal_v<Hash>, K>>
-    constexpr auto exist_find(const K& key) -> iterator
-    {
-        return details::exist_bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
-    }
-
-    template <
-        class K, class Useless = std::enable_if_t<details::is_transparent_key_equal_v<Hash>, K>>
     constexpr auto find(const K& key) const -> const_iterator
     {
         return details::bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
-    }
-
-    template <
-        class K, class Useless = std::enable_if_t<details::is_transparent_key_equal_v<Hash>, K>>
-    constexpr auto exist_find(const K& key) const -> const_iterator
-    {
-        return details::exist_bucket_iterator_to_iterator(find_in_bucket(key, bucket_index(key)), nodes_);
     }
 
     constexpr auto contains(const key_type& key) const -> bool { return find(key) != end(); }
@@ -719,7 +704,7 @@ public:
         count = std::max(count, static_cast<size_type>(size() / max_load_factor()));
 
         count = compute_closest_capacity(count);
-        
+
         assert(count > 0 && "The computed rehash size must be greater than 0.");
 
         if (count == buckets_.size())
@@ -761,20 +746,20 @@ private:
     template <class K>
     constexpr auto find_in_bucket(const K& key, std::size_t bucket_index) -> local_iterator
     {
-        auto b  = begin(bucket_index);
-        auto e  = end(0u);
-        
-        return std::find_if(b, e, [&key, this](const auto& p) { return key_equal_(p.first, key); });
+        auto b = begin(bucket_index);
+        auto e = end(0u);
+        auto it = std::find_if(b, e, [&key, this](auto& p) { return key_equal_(p.first, key); });
+        return it;
     }
 
     template <class K>
     constexpr auto find_in_bucket(const K& key, std::size_t bucket_index) const
         -> const_local_iterator
     {
-        auto b  = begin(bucket_index);
-        auto e  = end(0u);
-
-        return std::find_if(b, e, [&key, this](const auto& p) { return key_equal_(p.first, key); });
+        auto b = begin(bucket_index);
+        auto e = end(0u);
+        auto it = std::find_if(b, e, [&key, this](auto& p) { return key_equal_(p.first, key); });
+        return it;
     }
 
     constexpr auto
@@ -816,7 +801,7 @@ private:
         auto previous_next = &buckets_[bindex];
         while (*previous_next != position)
         {
-            previous_next = &nodes_[*previous_next].next; //wait he is using the prison cell technique here?
+            previous_next = &nodes_[*previous_next].next;
         }
 
         return previous_next;
