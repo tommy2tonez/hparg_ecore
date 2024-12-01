@@ -79,8 +79,6 @@ namespace dg::map_variants{
             using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
             using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator;
             using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator;
-            using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
-            using const_reverse_iterator        = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_reverse_iterator;
             using size_type                     = SizeType;
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_map;
@@ -231,7 +229,7 @@ namespace dg::map_variants{
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
-                return internal_insert_or_assign(value_type(std::forward<Args>(args)...));
+                return internal_insert(value_type(std::forward<Args>(args)...)); //alright guys - I just read the std and emplace and try_emplace are THE SAME THING - I dont know why they add the try_ to indicate that KeyLike&& is the first arg 
             }
 
             template <class KeyLike, class ...Args>
@@ -443,12 +441,7 @@ namespace dg::map_variants{
                 return node_vec.begin();
             }
 
-            constexpr auto cbegin() noexcept -> reverse_iterator{
-
-                return node_vec.cbegin();
-            }
-
-            constexpr auto cbegin() const noexcept -> const_reverse_iterator{
+            constexpr auto cbegin() const noexcept -> const_iterator{
 
                 return node_vec.cbegin();
             }
@@ -463,12 +456,7 @@ namespace dg::map_variants{
                 return node_vec.end();
             }
 
-            constexpr auto cend() noexcept -> reverse_iterator{
-
-                return node_vec.cend();
-            }
-
-            constexpr auto cend() const noexcept -> const_reverse_iterator{
+            constexpr auto cend() const noexcept -> const_iterator{
 
                 return node_vec.cend();
             }
@@ -770,8 +758,6 @@ namespace dg::map_variants{
             using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
             using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator;
             using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator;
-            using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
-            using const_reverse_iterator        = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_reverse_iterator;
             using size_type                     = SizeType;
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_fast_map;
@@ -929,7 +915,7 @@ namespace dg::map_variants{
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
-                return internal_insert_or_assign(value_type(std::forward<Args>(args)...));
+                return internal_insert(value_type(std::forward<Args>(args)...));
             }
 
             template <class KeyLike, class ...Args>
@@ -1140,14 +1126,9 @@ namespace dg::map_variants{
                 return std::next(node_vec.begin());
             }
 
-            constexpr auto cbegin() noexcept -> reverse_iterator{
+            constexpr auto cbegin() const noexcept -> const_iterator{
 
-                return node_vec.cbegin();
-            }
-
-            constexpr auto cbegin() const noexcept -> const_reverse_iterator{
-
-                return node_vec.cbegin();
+                return std::next(node_vec.cbegin());
             }
 
             constexpr auto end() noexcept -> iterator{
@@ -1160,14 +1141,9 @@ namespace dg::map_variants{
                 return node_vec.end();
             }
 
-            constexpr auto cend() noexcept -> reverse_iterator{
+            constexpr auto cend() const noexcept -> const_iterator{
 
-                return std::prev(node_vec.cend());
-            }
-
-            constexpr auto cend() const noexcept -> const_reverse_iterator{
-
-                return std::prev(node_vec.cend());
+                return node_vec.cend();
             }
 
         private:
@@ -1464,7 +1440,7 @@ namespace dg::map_variants{
         private:
 
             std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>> node_vec;
-            std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>> bucket_vec;
+            std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>> bucket_vec; //I know for other OS - it is faster to do *ptr - instead of ptr[idx] - I dont know if this is an optimizable worth to make
             Hasher _hasher;
             Pred pred;
             Allocator allocator;
@@ -1497,8 +1473,6 @@ namespace dg::map_variants{
             using const_pointer                 = typename std::allocator_traits<Allocator>::const_pointer;
             using iterator                      = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::iterator;
             using const_iterator                = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_iterator;
-            using reverse_iterator              = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::reverse_iterator;
-            using const_reverse_iterator        = typename std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>>::const_reverse_iterator;
             using size_type                     = SizeType;
             using difference_type               = intmax_t;
             using self                          = unordered_unstable_fastinsert_map;
@@ -1656,7 +1630,7 @@ namespace dg::map_variants{
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
-                return internal_insert_or_assign(value_type(std::forward<Args>(args)...));
+                return internal_insert(value_type(std::forward<Args>(args)...));
             }
 
             template <class KeyLike, class ...Args>
@@ -1873,14 +1847,9 @@ namespace dg::map_variants{
                 return std::next(node_vec.begin());
             }
 
-            constexpr auto cbegin() noexcept -> reverse_iterator{
+            constexpr auto cbegin() const noexcept -> const_iterator{
 
-                return node_vec.cbegin();
-            }
-
-            constexpr auto cbegin() const noexcept -> const_reverse_iterator{
-
-                return node_vec.cbegin();
+                return std::next(node_vec.cbegin());
             }
 
             constexpr auto end() noexcept -> iterator{
@@ -1893,14 +1862,9 @@ namespace dg::map_variants{
                 return node_vec.end();
             }
 
-            constexpr auto cend() noexcept -> reverse_iterator{
+            constexpr auto cend() const noexcept -> const_iterator{
 
-                return std::prev(node_vec.cend());
-            }
-
-            constexpr auto cend() const noexcept -> const_reverse_iterator{
-
-                return std::prev(node_vec.cend());
+                return node_vec.cend();
             }
 
         private:
