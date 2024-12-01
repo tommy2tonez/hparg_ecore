@@ -35,11 +35,6 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-    //there is a slight problem
-    //insert factor == 1    => 1 - (e^-1) virtual load factor
-    //insert_factor = 2     => 1 - (e^-2) virtual load factor - which is a decent load factor
-    //with the actual load factor of 3/4, and insert_factor of 2, we can expect to have the least operation count of 2 / (3/4) = 8/3 = 2.6666 * size() before rehashing happens
-    //this is not expensive - in the sense of statistic - like garbage collection - unless you are wiring money that requires certain latency otherwise people would die - I recommend to use this map
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_map{
 
@@ -72,15 +67,6 @@ namespace dg::map_variants{
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
             static constexpr inline double MAX_MAX_INSERT_FACTOR    = 3; //1 - e^-3
 
-            static_assert(std::is_unsigned_v<SizeType>);
-            static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
-            static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
-            // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
-            // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
-            static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
-
             using key_type                      = Key;
             using value_type                    = std::pair<Key, Mapped>;
             using mapped_type                   = Mapped;
@@ -100,6 +86,13 @@ namespace dg::map_variants{
             using self                          = unordered_unstable_map;
             using load_factor_ratio             = typename LoadFactor::type;
             using insert_factor_ratio           = typename InsertFactor::type;
+
+            static_assert(std::is_unsigned_v<size_type>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
+            static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
+            // static_assert(noexcept(std::declval<const key_equal&>()(std::declval<const key_type&>(), std::declval<const key_type&>()))); its 2024 and I dont know why these arent noexcept
+            static_assert(std::is_nothrow_destructible_v<value_type>);
+            static_assert(std::is_nothrow_swappable_v<value_type>);
 
             static consteval auto max_load_factor() noexcept -> double{
 
@@ -205,7 +198,7 @@ namespace dg::map_variants{
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 0u; i < node_vec.size(); ++i){
-                        size_type bucket_idx    = _hasher(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        size_type bucket_idx    = hash_function()(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
                         auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
                         [[assume(it != tmp_bucket_vec.end())]];
 
@@ -283,6 +276,7 @@ namespace dg::map_variants{
 
             constexpr void clear() noexcept{
 
+                static_assert(noexcept(node_vec.clear()));
                 std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
                 node_vec.clear();
             }
@@ -299,7 +293,7 @@ namespace dg::map_variants{
                 std::swap(erase_count, other.erase_count);
             }
 
-            constexpr auto erase(const_iterator it) noexcept(noexcept(internal_erase(std::declval<const_iterator>()))) -> iterator{
+            constexpr auto erase(const_iterator it) noexcept -> iterator{
 
                 return internal_erase(it);
             }
@@ -529,13 +523,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
-                                                                          && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
+                                                                          && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it != ORPHANED_VIRTUAL_ADDR && pred(static_cast<const Key&>(node_vec[*it].first), key)){
+                    if (*it != ORPHANED_VIRTUAL_ADDR && key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){
                         return it;
                     }
 
@@ -547,10 +541,10 @@ namespace dg::map_variants{
             constexpr auto bucket_exist_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                                  && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it != ORPHANED_VIRTUAL_ADDR && pred(node_vec[*it].first, key)){
+                    if (*it != ORPHANED_VIRTUAL_ADDR && key_eq()(node_vec[*it].first, key)){
                         return it;
                     }
 
@@ -559,13 +553,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
-                                                                    && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
+                                                                    && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || (*it != ORPHANED_VIRTUAL_ADDR && pred(static_cast<const Key&>(node_vec[*it].first), key))){
+                    if (*it == NULL_VIRTUAL_ADDR || (*it != ORPHANED_VIRTUAL_ADDR && key_eq()(static_cast<const Key&>(node_vec[*it].first), key))){
                         return it;
                     }
 
@@ -577,10 +571,10 @@ namespace dg::map_variants{
             constexpr auto bucket_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                           && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || (*it != ORPHANED_VIRTUAL_ADDR && pred(node_vec[*it].first, key))){
+                    if (*it == NULL_VIRTUAL_ADDR || (*it != ORPHANED_VIRTUAL_ADDR && key_eq()(node_vec[*it].first, key))){
                         return it;
                     }
 
@@ -589,9 +583,9 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
                     if (is_insertable(*it)){
@@ -686,7 +680,7 @@ namespace dg::map_variants{
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
 
                 if (erasing_bucket_virtual_addr != NULL_VIRTUAL_ADDR){
-                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first);
+                    bucket_iterator swapee_bucket_it = bucket_exist_find(node_vec.back().first); //assume bucket_exist_find of const Key& is noexcept
                     std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                     node_vec.pop_back();
                     *swapee_bucket_it   = erasing_bucket_virtual_addr;
@@ -714,7 +708,7 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept(noexcept(internal_exist_erase(std::declval<const_iterator>()->first))) -> iterator{
+            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
 
                 if (it == node_vec.end()){
                     return it;
@@ -759,15 +753,6 @@ namespace dg::map_variants{
 
         public:
 
-            static_assert(std::is_unsigned_v<SizeType>);
-            static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
-            static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>()) ));
-            // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
-            // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
-            static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
-
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
             static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95;
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
@@ -792,6 +777,13 @@ namespace dg::map_variants{
             using self                          = unordered_unstable_fast_map;
             using load_factor_ratio             = typename LoadFactor::type; 
             using insert_factor_ratio           = typename InsertFactor::type;
+
+            static_assert(std::is_unsigned_v<size_type>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
+            static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
+            // static_assert(noexcept(std::declval<const key_equal&>()(std::declval<const key_type&>(), std::declval<const key_type&>()))); its 2024 and I dont know why these arent noexcept
+            static_assert(std::is_nothrow_destructible_v<value_type>);
+            static_assert(std::is_nothrow_swappable_v<value_type>);
 
             static consteval auto max_load_factor() noexcept -> double{
 
@@ -904,7 +896,7 @@ namespace dg::map_variants{
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 1u; i < node_vec.size(); ++i){
-                        size_type bucket_idx    = _hasher(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        size_type bucket_idx    = hash_function()(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
                         auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
                         [[assume(it != tmp_bucket_vec.end())]];
 
@@ -998,7 +990,7 @@ namespace dg::map_variants{
                 std::swap(erase_count, other.erase_count);
             }
 
-            constexpr auto erase(const_iterator it) noexcept(noexcept(internal_erase(std::declval<const_iterator>()))) -> iterator{
+            constexpr auto erase(const_iterator it) noexcept -> iterator{
 
                 return internal_erase(it);
             }
@@ -1228,29 +1220,29 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
-                                                                          && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
+                                                                          && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 //GCC sets branch prediction 1(unlikely)/10(likely) 
                 //assume load_factor of 50% - avg - and reasonable hash function
                 //50% ^ 3 = 1/8 - which is == branch predictor
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
-                if (pred(static_cast<const Key&>(node_vec[*it].first), key)){ //this optimization might not be as important in CPU arch but very important in GPU arch - where you want to minimize branch prediction by using block_quicksort approach
+                if (key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){ //this optimization might not be as important in CPU arch but very important in GPU arch - where you want to minimize branch prediction by using block_quicksort approach
                     return it;
                 }
 
                 std::advance(it, 1u);
 
-                if (pred(static_cast<const Key&>(node_vec[*it].first), key)){
+                if (key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
                 while (true){
-                    if (pred(static_cast<const Key&>(node_vec[*it].first), key)) [[likely]]{
+                    if (key_eq()(static_cast<const Key&>(node_vec[*it].first), key)) [[likely]]{
                         return it;
                     }
 
@@ -1266,22 +1258,22 @@ namespace dg::map_variants{
                 //assume load_factor of 50% - avg - and reasonable hash function
                 //50% ^ 3 = 1/8 - which is == branch predictor
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
-                if (pred(node_vec[*it].first, key)){
+                if (key_eq()(node_vec[*it].first, key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
-                if (pred(node_vec[*it].first, key)){
+                if (key_eq()(node_vec[*it].first, key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
                 while (true){
-                    if (pred(node_vec[*it].first, key)) [[likely]]{
+                    if (key_eq()(node_vec[*it].first, key)) [[likely]]{
                         return it;
                     }
 
@@ -1290,13 +1282,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
-                                                                    && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
+                                                                    && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || pred(static_cast<const Key&>(node_vec[*it].first), key)){
+                    if (*it == NULL_VIRTUAL_ADDR || key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){
                         return it;
                     }
 
@@ -1308,10 +1300,10 @@ namespace dg::map_variants{
             constexpr auto bucket_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                           && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || pred(node_vec[*it].first, key)){
+                    if (*it == NULL_VIRTUAL_ADDR || key_eq()(node_vec[*it].first, key)){
                         return it;
                     }
 
@@ -1320,9 +1312,9 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
                     if (is_insertable(*it)){
@@ -1445,7 +1437,7 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept(noexcept(internal_exist_erase(std::declval<const_iterator>()->first))) -> iterator{
+            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
 
                 if (it == node_vec.end()){
                     return it;
@@ -1488,15 +1480,6 @@ namespace dg::map_variants{
 
         public:
 
-            static_assert(std::is_unsigned_v<SizeType>);
-            static_assert(std::is_unsigned_v<decltype(std::declval<const Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(std::is_unsigned_v<decltype(std::declval<Hasher&>()(std::declval<const Key&>()))>);
-            static_assert(noexcept(std::declval<const Hasher&>()(std::declval<const Key&>())));
-            static_assert(noexcept(std::declval<Hasher&>()(std::declval<const Key&>())));
-            // static_assert(noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
-            // static_assert(noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const Key&>())));
-            static_assert(std::is_nothrow_destructible_v<std::pair<Key, Mapped>>);
-
             static constexpr inline double MIN_MAX_LOAD_FACTOR      = 0.05;
             static constexpr inline double MAX_MAX_LOAD_FACTOR      = 0.95;
             static constexpr inline double MIN_MAX_INSERT_FACTOR    = 0.05;
@@ -1521,6 +1504,13 @@ namespace dg::map_variants{
             using self                          = unordered_unstable_fastinsert_map;
             using load_factor_ratio             = typename LoadFactor::type;
             using insert_factor_ratio           = typename InsertFactor::type;
+
+            static_assert(std::is_unsigned_v<size_type>);
+            static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
+            static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
+            // static_assert(noexcept(std::declval<const key_equal&>()(std::declval<const key_type&>(), std::declval<const key_type&>()))); its 2024 and I dont know why these arent noexcept
+            static_assert(std::is_nothrow_destructible_v<value_type>);
+            static_assert(std::is_nothrow_swappable_v<value_type>);
 
             static consteval auto max_load_factor() noexcept -> double{
 
@@ -1633,7 +1623,7 @@ namespace dg::map_variants{
                     decltype(bucket_vec) tmp_bucket_vec(new_cap, NULL_VIRTUAL_ADDR, allocator);
 
                     for (size_t i = 1u; i < node_vec.size(); ++i){
-                        size_type bucket_idx    = _hasher(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
+                        size_type bucket_idx    = hash_function()(static_cast<const Key&>(node_vec[i].first)) & (tmp_bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
                         auto it                 = std::find(std::next(tmp_bucket_vec.begin(), bucket_idx), tmp_bucket_vec.end(), NULL_VIRTUAL_ADDR);
                         [[assume(it != tmp_bucket_vec.end())]];
 
@@ -1959,29 +1949,29 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
-                                                                          && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_exist_find(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
+                                                                          && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
                 //GCC sets branch prediction 1(unlikely)/10(likely) 
                 //assume load_factor of 50% - avg - and reasonable hash function
                 //50% ^ 3 = 1/8 - which is == branch predictor
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key))); //we don't care where the bucket is pointing to - as long as it is a fixed random position and it does not pass the last of the last mohicans
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key))); //we don't care where the bucket is pointing to - as long as it is a fixed random position and it does not pass the last of the last mohicans
 
-                if (pred(static_cast<const Key&>(node_vec[*it].first), key)){ //this optimization might not be as important in CPU arch but very important in GPU arch - where you want to minimize branch prediction by using block_quicksort approach
+                if (key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){ //this optimization might not be as important in CPU arch but very important in GPU arch - where you want to minimize branch prediction by using block_quicksort approach
                     return it;
                 }
 
                 std::advance(it, 1u);
 
-                if (pred(static_cast<const Key&>(node_vec[*it].first), key)){
+                if (key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
                 while (true){
-                    if (pred(static_cast<const Key&>(node_vec[*it].first), key)) [[likely]]{
+                    if (key_eq()(static_cast<const Key&>(node_vec[*it].first), key)) [[likely]]{
                         return it;
                     }
 
@@ -1997,22 +1987,22 @@ namespace dg::map_variants{
                 //assume load_factor of 50% - avg - and reasonable hash function
                 //50% ^ 3 = 1/8 - which is == branch predictor
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
-                if (pred(node_vec[*it].first, key)){
+                if (key_eq()(node_vec[*it].first, key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
-                if (pred(node_vec[*it].first, key)){
+                if (key_eq()(node_vec[*it].first, key)){
                     return it;
                 }
 
                 std::advance(it, 1u);
 
                 while (true){
-                    if (pred(node_vec[*it].first, key)) [[likely]]{
+                    if (key_eq()(node_vec[*it].first, key)) [[likely]]{
                         return it;
                     }
 
@@ -2021,13 +2011,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))
-                                                                    && noexcept(std::declval<Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_find(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
+                                                                    && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || pred(static_cast<const Key&>(node_vec[*it].first), key)){
+                    if (*it == NULL_VIRTUAL_ADDR || key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){
                         return it;
                     }
 
@@ -2039,10 +2029,10 @@ namespace dg::map_variants{
             constexpr auto bucket_find(const KeyLike& key) const noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))
                                                                           && noexcept(std::declval<const Pred&>()(std::declval<const Key&>(), std::declval<const KeyLike&>()))) -> bucket_const_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || pred(node_vec[*it].first, key)){
+                    if (*it == NULL_VIRTUAL_ADDR || key_eq()(node_vec[*it].first, key)){
                         return it;
                     }
 
@@ -2051,9 +2041,9 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
+            constexpr auto bucket_ifind(const KeyLike& key) noexcept(noexcept(std::declval<const Hasher&>()(std::declval<const KeyLike&>()))) -> bucket_iterator{
 
-                auto it = std::next(bucket_vec.begin(), to_bucket_index(_hasher(key)));
+                auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
                     if (*it == NULL_VIRTUAL_ADDR){
@@ -2193,7 +2183,7 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept(noexcept(internal_exist_erase(std::declval<const_iterator>()->first))) -> iterator{
+            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
 
                 if (it == node_vec.end()){
                     return it;
