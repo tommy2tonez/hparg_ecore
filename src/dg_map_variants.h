@@ -303,7 +303,8 @@ namespace dg::map_variants{
             template <class EraseArg>
             constexpr auto erase(EraseArg&& erase_arg) noexcept{
 
-                if constexpr(std::is_convertible_v<std::decay_t<EraseArg>, const_iterator>){
+                if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
+                    static_assert(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>);
                     return internal_erase_it(std::forward<EraseArg>(erase_arg));
                 } else{
                     // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
@@ -1004,7 +1005,8 @@ namespace dg::map_variants{
             template <class EraseArg>
             constexpr auto erase(EraseArg&& erase_arg) noexcept{
 
-                if constexpr(std::is_convertible_v<std::decay_t<EraseArg>, const_iterator>){
+                if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
+                    static_assert(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>);
                     return internal_erase_it(std::forward<EraseArg>(erase_arg));
                 } else{
                     // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
@@ -1671,6 +1673,16 @@ namespace dg::map_variants{
             }
 
             template <class ValueLike = value_type>
+            constexpr auto noexist_insert(ValueLike&& value, const_iterator find_clue) -> iterator{
+
+                if (insert_size() % REHASH_CHK_MODULO != 0u && find_clue != std::prev(bucket_vec.end())) [[likely]]{
+                    return do_insert_at(find_clue, std::forward<ValueLike>(value));
+                } else [[unlikely]]{
+                    return internal_noexist_insert(std::forward<ValueLike>(value));
+                }
+            }
+
+            template <class ValueLike = value_type>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
                 return internal_insert(std::forward<ValueLike>(value));
@@ -1734,7 +1746,8 @@ namespace dg::map_variants{
             template <class EraseArg>
             constexpr auto erase(EraseArg&& erase_arg) noexcept{
 
-                if constexpr(std::is_convertible_v<std::decay_t<EraseArg>, const_iterator>){
+                if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
+                    static_assert(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>);
                     return internal_erase_it(std::forward<EraseArg>(erase_arg));
                 } else{
                     // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
