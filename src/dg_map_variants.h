@@ -244,7 +244,7 @@ namespace dg::map_variants{
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return internal_insert(value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...)));
+                return internal_insert_w_key(std::forward<KeyLike>(key), std::forward<Args>(args)...);
             }
 
             template <class ValueLike = value_type> //the only problem we were trying to solve was adding implicit initialization of value_type - so this should solve it
@@ -653,6 +653,19 @@ namespace dg::map_variants{
                 return std::make_pair(internal_noexist_insert(std::forward<ValueLike>(value)), true);
             }
 
+            template <class KeyLike, class ...Args>
+            constexpr auto internal_insert_w_key(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
+
+                bucket_iterator it = bucket_find(key);
+
+                if (*it != NULL_VIRTUAL_ADDR){
+                    return std::make_pair(std::next(node_vec.begin(), *it), false);
+                }
+
+                auto value = value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...));
+                return std::make_pair(internal_noexist_insert(std::move(value)), true);
+            }
+
             template <class KeyLike, class Arg = mapped_type, std::enable_if_t<std::is_default_constructible_v<Arg>, bool> = true>
             constexpr auto internal_find_or_default(KeyLike&& key, Arg * compiler_hint = nullptr) -> iterator{
 
@@ -930,7 +943,7 @@ namespace dg::map_variants{
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return internal_insert(value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...)));
+                return internal_insert_w_key(std::forward<KeyLike>(key), std::forward<Args>(args)...);
             }
 
             template <class ValueLike = value_type>
@@ -1371,6 +1384,19 @@ namespace dg::map_variants{
                 return std::make_pair(internal_noexist_insert(std::forward<ValueLike>(value)), true);
             }
 
+            template <class KeyLike, class ...Args>
+            constexpr auto internal_insert_w_key(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
+
+                bucket_iterator it = bucket_find(key);
+
+                if (*it != NULL_VIRTUAL_ADDR){
+                    return std::make_pair(std::next(node_vec.begin(), *it), false);
+                }
+
+                auto value = value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...));
+                return std::make_pair(internal_noexist_insert(std::move(value)), true);
+            }
+
             template <class KeyLike, class Arg = mapped_type, std::enable_if_t<std::is_default_constructible_v<Arg>, bool> = true>
             constexpr auto internal_find_or_default(KeyLike&& key, Arg * compiler_hint = nullptr) -> iterator{
 
@@ -1646,7 +1672,7 @@ namespace dg::map_variants{
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return internal_insert(value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...)));
+                return internal_insert_w_key(std::forward<KeyLike>(key), std::forward<Args>(args)...);
             }
 
             template <class ValueLike = value_type>
@@ -2094,6 +2120,24 @@ namespace dg::map_variants{
                     return std::make_pair(do_insert_at(it, std::forward<ValueLike>(value)), true);
                 } else [[unlikely]]{
                     return std::make_pair(internal_noexist_insert(std::forward<ValueLike>(value)), true);
+                }
+            }
+
+            template <class KeyLike, class ...Args>
+            constexpr auto internal_insert_w_key(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
+
+                bucket_iterator it = bucket_find(key);
+
+                if (*it != NULL_VIRTUAL_ADDR){
+                    return std::make_pair(std::next(node_vec.begin(), *it), false);
+                }
+
+                auto value = value_type(std::piecewise_construct, std::forward_as_tuple(std::forward<KeyLike>(key)), std::forward_as_tuple(std::forward<Args>(args)...));
+
+                if (insert_size() % REHASH_CHK_MODULO != 0u && it != std::prev(bucket_vec.end())) [[likely]]{
+                    return std::make_pair(do_insert_at(it, std::move(value)), true);
+                } else [[unlikely]]{
+                    return std::make_pair(internal_noexist_insert(std::move(value)), true);
                 }
             }
 
