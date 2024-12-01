@@ -1291,7 +1291,7 @@ namespace dg::map_variants{
                 auto it = std::next(bucket_vec.begin(), to_bucket_index(hash_function()(key)));
 
                 while (true){
-                    if (*it == NULL_VIRTUAL_ADDR || key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){
+                    if (*it == NULL_VIRTUAL_ADDR || key_eq()(static_cast<const Key&>(node_vec[*it].first), key)){ //branching is expensive - but I dont know if *it == NULL_VIRTUAL_ADDR should be optimized - I dont think so - this has a clearer branching pipeline - and increase the chance of hitting branch prediction
                         return it;
                     }
 
