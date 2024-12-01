@@ -9,6 +9,14 @@
 #include <functional>
 #include <unordered_map>
 
+
+struct PairNullValueGen{
+
+    constexpr auto operator()() -> std::pair<size_t, size_t>{
+        return std::make_pair(std::numeric_limits<size_t>::max(), size_t{});
+    }
+};
+
 int main(){
 
     //alright - I think the maps should be ready for final_draft

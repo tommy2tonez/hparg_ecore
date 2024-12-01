@@ -1666,21 +1666,22 @@ namespace dg::map_variants{
                 return internal_insert_w_key(std::forward<KeyLike>(key), std::forward<Args>(args)...);
             }
 
-            template <class ValueLike = value_type>
-            constexpr auto noexist_insert(ValueLike&& value) -> iterator{
+            //we'll worry about these features later - I think this is specialized features for fast_cache
+            // template <class ValueLike = value_type>
+            // constexpr auto noexist_insert(ValueLike&& value) -> iterator{
 
-                return internal_noexist_insert(std::forward<ValueLike>(value));
-            }
+            //     return internal_noexist_insert(std::forward<ValueLike>(value));
+            // }
 
-            template <class ValueLike = value_type>
-            constexpr auto noexist_insert(ValueLike&& value, const_iterator find_clue) -> iterator{
+            // template <class ValueLike = value_type>
+            // constexpr auto noexist_insert(ValueLike&& value, iterator find_clue) -> iterator{
 
-                if (insert_size() % REHASH_CHK_MODULO != 0u && find_clue != std::prev(bucket_vec.end())) [[likely]]{
-                    return do_insert_at(find_clue, std::forward<ValueLike>(value));
-                } else [[unlikely]]{
-                    return internal_noexist_insert(std::forward<ValueLike>(value));
-                }
-            }
+            //     if (insert_size() % REHASH_CHK_MODULO != 0u && find_clue != std::prev(bucket_vec.end())) [[likely]]{
+            //         return do_insert_at(find_clue, std::forward<ValueLike>(value));
+            //     } else [[unlikely]]{
+            //         return internal_noexist_insert(std::forward<ValueLike>(value));
+            //     }
+            // }
 
             template <class ValueLike = value_type>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
