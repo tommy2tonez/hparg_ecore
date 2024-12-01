@@ -165,8 +165,11 @@ namespace dg::map_variants{
                                              const Hasher& _hasher = Hasher(),
                                              const Pred& pred = Pred(),
                                              const Allocator& allocator = Allocator()): unordered_unstable_map(bucket_count, _hasher, pred, allocator){
-
-                insert(first, last);
+                
+                while (first != last){
+                    internal_insert(*first);
+                    std::advance(first, 1);
+                }
             }
 
             template <class InputIt>
@@ -244,20 +247,32 @@ namespace dg::map_variants{
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
-            //TODOs: this has to be an atomic operation
+            //developer has to use insert at their own discretion - because it might compromise speed - compared to insert(ValueType&&)
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                Iterator cur = first;
+                static_assert(std::is_lvalue_reference_v<decltype(*first)>);
+
+                size_t insert_sz        = std::distance(first, last); 
+                auto insert_status_vec  = std::vector<uint8_t>(insert_sz, allocator);
+                Iterator cur            = first;
+                size_t succeed_sz       = 0u;
 
                 try{
                     while (cur != last){
-                        internal_insert(*cur);
+                        auto [_, status] = internal_insert(*cur);
                         std::advance(cur, 1);
+                        insert_status_vec[succeed_sz++] = status;
                     }
                 } catch (...){
-                    // static_assert(std::is_lvalue_reference_v<decltype(*first)>);
-                    // erase(first, cur);
+                    cur = first;
+                    for (size_t i = 0u; i < succeed_sz; ++i){
+                        if (insert_status_vec[i]){
+                            erase(cur->first);
+                        }
+                        std::advance(cur, 1);
+                    }
+
                     std::rethrow_exception(std::current_exception());
                 }
             }
@@ -311,19 +326,6 @@ namespace dg::map_variants{
                     return internal_erase(std::forward<EraseArg>(erase_arg));
                 }
             }
-
-            //defect report - this does not imply what std does - deprecated
-            // template <class Iterator>
-            // constexpr auto erase(Iterator first, Iterator last) noexcept{
-
-            //     static_assert(std::is_reference_v<decltype(*first)>);
-            //     // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
-
-            //     while (first != last){
-            //         internal_erase(*first);
-            //         std::advance(first, 1);
-            //     }
-            // }
 
             template <class KeyLike>
             constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
@@ -866,7 +868,10 @@ namespace dg::map_variants{
                                                   const Pred& pred = Pred(), 
                                                   const Allocator& allocator = Allocator()): unordered_unstable_fast_map(bucket_count, _hasher, pred, allocator){
 
-                insert(first, last);
+                while (first != last){
+                    internal_insert(*first);
+                    std::advance(first, 1);
+                }
             }
 
             template <class InputIt>
@@ -944,20 +949,32 @@ namespace dg::map_variants{
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
-            //TODOs: this has to be an atomic operation
+            //developer has to use insert at their own discretion - because it might compromise speed - compared to insert(ValueType&&)
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                Iterator cur = first;
+                static_assert(std::is_lvalue_reference_v<decltype(*first)>);
+
+                size_t insert_sz        = std::distance(first, last);
+                auto insert_status_vec  = std::vector<uint8_t>(insert_sz, allocator);
+                Iterator cur            = first;
+                size_t succeed_sz       = 0u;
 
                 try{
                     while (cur != last){
-                        internal_insert(*cur);
+                        auto [_, status] = internal_insert(*cur);
                         std::advance(cur, 1);
+                        insert_status_vec[succeed_sz++] = status;
                     }
                 } catch (...){
-                    // static_assert(std::is_lvalue_reference_v<decltype(*first)>);
-                    // erase(first, cur);
+                    cur = first;
+                    for (size_t i = 0u; i < succeed_sz; ++i){
+                        if (insert_status_vec[i]){
+                            erase(cur->first);
+                        }
+                        std::advance(cur, 1);
+                    }
+
                     std::rethrow_exception(std::current_exception());
                 }
             }
@@ -1467,7 +1484,7 @@ namespace dg::map_variants{
         private:
 
             std::vector<std::pair<Key, Mapped>, typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<Key, Mapped>>> node_vec;
-            std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>> bucket_vec; //I know for other OS - it is faster to do *ptr - instead of ptr[idx] - I dont know if this is an optimizable worth to make
+            std::vector<SizeType, typename std::allocator_traits<Allocator>::template rebind_alloc<SizeType>> bucket_vec; //I know for other OS - it is faster to do *ptr - instead of ptr[idx] - I dont know if this is an optimizable worth to make - this is a 5%-10% optimization opportunity - yet I dont think its worth the readability
             Hasher _hasher;
             Pred pred;
             Allocator allocator;
@@ -1594,7 +1611,10 @@ namespace dg::map_variants{
                                                         const Pred& pred = Pred(), 
                                                         const Allocator& allocator = Allocator()): unordered_unstable_fastinsert_map(bucket_count, _hasher, pred, allocator){
 
-                insert(first, last);
+                while (first != last){
+                    internal_insert(*first);
+                    std::advance(first, 1);
+                }            
             }
 
             template <class InputIt>
@@ -1689,20 +1709,32 @@ namespace dg::map_variants{
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
-            //TOOOs: this has to be an atomic operation
+            //developer has to use insert at their own discretion - because it might compromise speed - compared to insert(ValueType&&)
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                Iterator cur = first;
+                static_assert(std::is_lvalue_reference_v<decltype(*first)>);
+
+                size_t insert_sz        = std::distance(first, last);
+                auto insert_status_vec  = std::vector<uint8_t>(insert_sz, allocator);
+                Iterator cur            = first;
+                size_t succeed_sz       = 0u;
 
                 try{
                     while (cur != last){
-                        internal_insert(*cur);
+                        auto [_, status] = internal_insert(*cur);
                         std::advance(cur, 1);
+                        insert_status_vec[succeed_sz++] = status;
                     }
                 } catch (...){
-                    // static_assert(std::is_lvalue_reference_v<decltype(*first)>);
-                    // erase(first, cur);
+                    cur = first;
+                    for (size_t i = 0u; i < succeed_sz; ++i){
+                        if (insert_status_vec[i]){
+                            erase(cur->first);
+                        }
+                        std::advance(cur, 1);
+                    }
+
                     std::rethrow_exception(std::current_exception());
                 }
             }
