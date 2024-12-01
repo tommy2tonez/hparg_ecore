@@ -193,12 +193,6 @@ namespace dg::map_variants{
                                              const Hasher& _hasher,
                                              const Allocator& allocator): unordered_unstable_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
-            constexpr void clear() noexcept{
-
-                std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
-                node_vec.clear();
-            }
-
             constexpr void rehash(size_type tentative_new_cap, bool force_rehash = false){
 
                 if (!force_rehash && tentative_new_cap <= capacity()){
@@ -241,18 +235,6 @@ namespace dg::map_variants{
                 rehash(estimate_capacity(new_sz));
             }
 
-            constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
-                                                      && std::is_nothrow_swappable<Hasher>::value
-                                                      && std::is_nothrow_swappable<Pred>::value){
-
-                std::swap(node_vec, other.node_vec);
-                std::swap(bucket_vec, other.bucket_vec);
-                std::swap(_hasher, other._hasher);
-                std::swap(pred, other.pred);
-                std::swap(allocator, other.allocator);
-                std::swap(erase_count, other.erase_count);
-            }
-
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
@@ -285,13 +267,39 @@ namespace dg::map_variants{
                 insert(init_list.begin(), init_list.end());
             }
 
-            template <class KeyLike>
-            constexpr auto insert_or_assign(KeyLike&& key, mapped_type&& mapped) -> std::pair<iterator, bool>{
+            template <class KeyLike, class MappedLike>
+            constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
-                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<mapped_type>(mapped)));
+                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<MappedLike>(mapped)));
             }
 
-            constexpr auto erase(const_iterator it) noexcept -> iterator{
+            template <class KeyLike>
+            constexpr auto operator[](KeyLike&& key) -> mapped_type&{
+
+                return internal_find_or_default(std::forward<KeyLike>(key))->second;
+            }
+
+            //I feel like these are noexcept(auto) features - and the APIs should explicitly declare the noexcept criterias that are not encapsulated by the container - we aren't worrying about that now
+
+            constexpr void clear() noexcept{
+
+                std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
+                node_vec.clear();
+            }
+
+            constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
+                                                      && std::is_nothrow_swappable_v<Hasher>
+                                                      && std::is_nothrow_swappable_v<Pred>){
+
+                std::swap(node_vec, other.node_vec);
+                std::swap(bucket_vec, other.bucket_vec);
+                std::swap(_hasher, other._hasher);
+                std::swap(pred, other.pred);
+                std::swap(allocator, other.allocator);
+                std::swap(erase_count, other.erase_count);
+            }
+
+            constexpr auto erase(const_iterator it) noexcept(noexcept(internal_erase(std::declval<const_iterator>()))) -> iterator{
 
                 return internal_erase(it);
             }
@@ -312,19 +320,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto operator[](KeyLike&& key) -> mapped_type&{
-
-                return internal_find_or_default(std::forward<KeyLike>(key))->second;
-            }
-
-            template <class KeyLike>
-            constexpr auto contains(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> bool{
+            constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
 
                 return *bucket_find(key) != NULL_VIRTUAL_ADDR;
             }
 
             template <class KeyLike>
-            constexpr auto count(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> size_type{
+            constexpr auto count(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> size_type{
 
                 return *bucket_find(key) != NULL_VIRTUAL_ADDR;
             }
@@ -664,7 +666,8 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> size_type{
+            constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))
+                                                                       && std::is_nothrow_swappable_v<value_type>) -> size_type{
 
                 bucket_iterator erasing_bucket_it       = bucket_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
@@ -684,7 +687,8 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))){
+            constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(bucket_exist_find(std::declval<const KeyLike&>()))
+                                                                             && std::is_nothrow_swappable_v<value_type>){
 
                 bucket_iterator erasing_bucket_it       = bucket_exist_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
@@ -697,7 +701,7 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
+            constexpr auto internal_erase(const_iterator it) noexcept(noexcept(internal_exist_erase(std::declval<const_iterator>()->first))) -> iterator{
 
                 if (it == node_vec.end()){
                     return it;
@@ -875,12 +879,6 @@ namespace dg::map_variants{
                                                   const Hasher& _hasher,
                                                   const Allocator& allocator): unordered_unstable_fast_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
-            constexpr void clear() noexcept{
-
-                std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
-                node_vec.resize(1u);
-            }
-
             constexpr void rehash(size_type tentative_new_cap, bool force_rehash = false){
 
                 if (!force_rehash && tentative_new_cap <= capacity()){
@@ -923,18 +921,6 @@ namespace dg::map_variants{
                 rehash(estimate_capacity(new_sz));
             }
 
-            constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
-                                                      && std::is_nothrow_swappable<Hasher>::value
-                                                      && std::is_nothrow_swappable<Pred>::value){
-
-                std::swap(node_vec, other.node_vec);
-                std::swap(bucket_vec, other.bucket_vec);
-                std::swap(_hasher, other._hasher);
-                std::swap(pred, other.pred);
-                std::swap(allocator, other.allocator);
-                std::swap(erase_count, other.erase_count);
-            }
-
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
@@ -967,13 +953,39 @@ namespace dg::map_variants{
                 insert(init_list.begin(), init_list.end());
             }
 
-            template <class KeyLike>
-            constexpr auto insert_or_assign(KeyLike&& key, mapped_type&& mapped) -> std::pair<iterator, bool>{
+            template <class KeyLike, class MappedLike>
+            constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
-                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<mapped_type>(mapped)));
+                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<MappedLike>(mapped)));
             }
 
-            constexpr auto erase(const_iterator it) noexcept -> iterator{
+            template <class KeyLike>
+            constexpr auto operator[](KeyLike&& key) -> mapped_type&{
+
+                return internal_find_or_default(std::forward<KeyLike>(key))->second;
+            }
+
+            //I feel like these are noexcept(auto) features - and the APIs should explicitly declare the noexcept criterias that are not encapsulated by the container - we aren't worrying about that now
+
+            constexpr void clear() noexcept{
+
+                std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
+                node_vec.resize(1u);
+            }
+
+            constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
+                                                      && std::is_nothrow_swappable<Hasher>::value
+                                                      && std::is_nothrow_swappable<Pred>::value){
+
+                std::swap(node_vec, other.node_vec);
+                std::swap(bucket_vec, other.bucket_vec);
+                std::swap(_hasher, other._hasher);
+                std::swap(pred, other.pred);
+                std::swap(allocator, other.allocator);
+                std::swap(erase_count, other.erase_count);
+            }
+
+            constexpr auto erase(const_iterator it) noexcept(noexcept(internal_erase(std::declval<const_iterator>()))) -> iterator{
 
                 return internal_erase(it);
             }
@@ -994,19 +1006,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto operator[](KeyLike&& key) -> mapped_type&{
-
-                return internal_find_or_default(std::forward<KeyLike>(key))->second;
-            }
-
-            template <class KeyLike>
-            constexpr auto contains(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> bool{
+            constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
 
                 return *bucket_find(key) != NULL_VIRTUAL_ADDR;
             }
 
             template <class KeyLike>
-            constexpr auto count(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> size_type{
+            constexpr auto count(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> size_type{
 
                 return *bucket_find(key) != NULL_VIRTUAL_ADDR;
             }
@@ -1378,7 +1384,8 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> size_type{
+            constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))
+                                                                       && std::is_nothrow_swappable_v<value_type>) -> size_type{
 
                 bucket_iterator erasing_bucket_it       = bucket_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
@@ -1398,7 +1405,8 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))){
+            constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(bucket_exist_find(std::declval<const KeyLike&>()))
+                                                                             && std::is_nothrow_swappable_v<value_type>){
 
                 bucket_iterator erasing_bucket_it       = bucket_exist_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
@@ -1411,7 +1419,7 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
+            constexpr auto internal_erase(const_iterator it) noexcept(noexcept(internal_exist_erase(std::declval<const_iterator>()->first))) -> iterator{
 
                 if (it == node_vec.end()){
                     return it;
@@ -1587,12 +1595,6 @@ namespace dg::map_variants{
                                                         const Hasher& _hasher,
                                                         const Allocator& allocator): unordered_unstable_fastinsert_map(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
-            constexpr void clear() noexcept{
-
-                std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
-                node_vec.resize(1u);
-            }
-
             constexpr void rehash(size_type tentative_new_cap, bool force_rehash = false){
 
                 if (!force_rehash && tentative_new_cap <= capacity()){
@@ -1635,18 +1637,6 @@ namespace dg::map_variants{
                 rehash(estimate_capacity(new_sz));
             }
 
-            constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
-                                                      && std::is_nothrow_swappable<Hasher>::value
-                                                      && std::is_nothrow_swappable<Pred>::value){
-
-                std::swap(node_vec, other.node_vec);
-                std::swap(bucket_vec, other.bucket_vec);
-                std::swap(_hasher, other._hasher);
-                std::swap(pred, other.pred);
-                std::swap(allocator, other.allocator);
-                std::swap(erase_count, other.erase_count);
-            }
-
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
@@ -1685,13 +1675,39 @@ namespace dg::map_variants{
                 insert(init_list.begin(), init_list.end());
             }
 
-            template <class KeyLike>
-            constexpr auto insert_or_assign(KeyLike&& key, mapped_type&& mapped) -> std::pair<iterator, bool>{
+            template <class KeyLike, class MappedLike>
+            constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
-                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<mapped_type>(mapped)));
+                return internal_insert_or_assign(value_type(std::forward<KeyLike>(key), std::forward<MappedLike>(mapped)));
             }
 
-            constexpr auto erase(const_iterator it) noexcept -> iterator{
+            template <class KeyLike>
+            constexpr auto operator[](KeyLike&& key) -> mapped_type&{
+
+                return internal_find_or_default(std::forward<KeyLike>(key))->second;
+            }
+
+            //I feel like these are noexcept(auto) features - and the APIs should explicitly declare the noexcept criterias that are not encapsulated by the container - we aren't worrying about that now
+
+            constexpr void clear() noexcept{
+
+                std::fill(bucket_vec.begin(), bucket_vec.end(), NULL_VIRTUAL_ADDR);
+                node_vec.resize(1u);
+            }
+
+            constexpr void swap(self& other) noexcept(std::allocator_traits<Allocator>::is_always_equal
+                                                      && std::is_nothrow_swappable<Hasher>::value
+                                                      && std::is_nothrow_swappable<Pred>::value){
+
+                std::swap(node_vec, other.node_vec);
+                std::swap(bucket_vec, other.bucket_vec);
+                std::swap(_hasher, other._hasher);
+                std::swap(pred, other.pred);
+                std::swap(allocator, other.allocator);
+                std::swap(erase_count, other.erase_count);
+            }
+
+            constexpr auto erase(const_iterator it) noexcept(noexcept(internal_erase(std::declval<const_iterator>()))) -> iterator{
 
                 return internal_erase(it);
             }
@@ -1712,19 +1728,13 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto operator[](KeyLike&& key) -> mapped_type&{
-
-                return internal_find_or_default(std::forward<KeyLike>(key))->second;
-            }
-
-            template <class KeyLike>
-            constexpr auto contains(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> bool{
+            constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
 
                 return *bucket_find(key) != NULL_VIRTUAL_ADDR;
             }
 
             template <class KeyLike>
-            constexpr auto count(const KeyLike& key) const noexcept(bucket_find(std::declval<const KeyLike&>())) -> size_type{
+            constexpr auto count(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> size_type{
 
                 return *bucket_find(key) != NULL_VIRTUAL_ADDR;
             }
@@ -2104,7 +2114,8 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))) -> size_type{
+            constexpr auto internal_erase(const KeyLike& key) noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))
+                                                                       && std::is_nothrow_swappable_v<value_type>) -> size_type{
 
                 bucket_iterator erasing_bucket_it       = bucket_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
@@ -2124,7 +2135,8 @@ namespace dg::map_variants{
             }
 
             template <class KeyLike>
-            constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(std::declval<Hasher&>()(std::declval<const KeyLike&>()))){
+            constexpr void internal_exist_erase(const KeyLike& key) noexcept(noexcept(bucket_exist_find(std::declval<const KeyLike&>()))
+                                                                             && std::is_nothrow_swappable_v<value_type>){
 
                 bucket_iterator erasing_bucket_it       = bucket_exist_find(key);
                 size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
@@ -2137,7 +2149,7 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
+            constexpr auto internal_erase(const_iterator it) noexcept(noexcept(internal_exist_erase(std::declval<const_iterator>()->first))) -> iterator{
 
                 if (it == node_vec.end()){
                     return it;

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <vector>
 #include <functional>
+#include <unordered_map>
 
 struct PairNullValueGen{
 
@@ -29,8 +30,7 @@ int main(){
     std::vector<uint32_t> buf(SZ);
     std::generate(buf.begin(), buf.end(), std::mt19937());
     // jg::dense_hash_map<uint32_t, uint32_t> map_container{};
-    // std::vector<size_t> map_container(512);
-
+    // std::vector<size_t> map_container(512);    
     dg::map_variants::unordered_unstable_fastinsert_map<uint32_t, uint32_t, PairNullValueGen> map_container;
 
     auto now = high_resolution_clock::now();
@@ -38,6 +38,7 @@ int main(){
     for (uint32_t c: buf){
         map_container[c] = 1u;
     }
+
     // std::shuffle(buf.begin(), buf.end(), std::mt19937{});
 
     // for (uint32_t c: buf){
