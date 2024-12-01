@@ -33,7 +33,7 @@ void test_map(){
     auto seed                   = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     auto key_rand_gen           = std::bind(std::uniform_int_distribution<Key>{}, std::mt19937_64(seed));
     auto val_rand_gen           = std::bind(std::uniform_int_distribution<Value>{}, std::mt19937_64(seed * 2));
-    auto ops_gen                = std::bind(std::uniform_int_distribution<size_t>(0u, 10u), std::mt19937_64(seed * 4));
+    auto ops_gen                = std::bind(std::uniform_int_distribution<size_t>(0u, 11u), std::mt19937_64(seed * 4));
     auto random_clear_gen       = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 8)); 
     auto random_clear_sz_gen    = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 16));
     auto clear_gen              = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1u} << 24), std::mt19937_64(seed * 32));
@@ -138,6 +138,10 @@ void test_map(){
                 std::cout << "mayday" << std::endl;
                 std::abort();
             }
+        } else if (ops == 11u){
+            auto map_pair = std::make_pair(key, val);
+            std_map.insert(&map_pair, &map_pair + 1);
+            cmp_map.insert(&map_pair, &map_pair + 1);
         }
 
         if (clear == 0u){
@@ -165,7 +169,7 @@ void test_map(){
             cmp_map.clear();
         }
     }
-    
+
     for (auto it = cmp_map.begin(); it != cmp_map.end(); ++it){
         if (it->second != std_map.at(it->first)){
             std::cout << "mayday" << std::endl;

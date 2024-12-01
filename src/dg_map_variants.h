@@ -244,12 +244,21 @@ namespace dg::map_variants{
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
+            //TODOs: this has to be an atomic operation
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                while (first != last){
-                    internal_insert(*first);
-                    std::advance(first, 1);
+                Iterator cur = first;
+
+                try{
+                    while (cur != last){
+                        internal_insert(*cur);
+                        std::advance(cur, 1);
+                    }
+                } catch (...){
+                    // static_assert(std::is_lvalue_reference_v<decltype(*first)>);
+                    // erase(first, cur);
+                    std::rethrow_exception(std::current_exception());
                 }
             }
 
@@ -302,14 +311,18 @@ namespace dg::map_variants{
                 }
             }
 
-            template <class Iterator>
-            constexpr auto erase(Iterator first, Iterator last) noexcept(noexcept(internal_erase(*std::declval<Iterator>()))){
+            //defect report - this does not imply what std does - deprecated
+            // template <class Iterator>
+            // constexpr auto erase(Iterator first, Iterator last) noexcept{
 
-                while (first != last){
-                    internal_erase(*first);
-                    std::advance(first, 1);
-                }
-            }
+            //     static_assert(std::is_reference_v<decltype(*first)>);
+            //     // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
+
+            //     while (first != last){
+            //         internal_erase(*first);
+            //         std::advance(first, 1);
+            //     }
+            // }
 
             template <class KeyLike>
             constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
@@ -930,12 +943,21 @@ namespace dg::map_variants{
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
+            //TODOs: this has to be an atomic operation
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                while (first != last){
-                    internal_insert(*first);
-                    std::advance(first, 1);
+                Iterator cur = first;
+
+                try{
+                    while (cur != last){
+                        internal_insert(*cur);
+                        std::advance(cur, 1);
+                    }
+                } catch (...){
+                    // static_assert(std::is_lvalue_reference_v<decltype(*first)>);
+                    // erase(first, cur);
+                    std::rethrow_exception(std::current_exception());
                 }
             }
 
@@ -990,14 +1012,14 @@ namespace dg::map_variants{
                 }
             }
 
-            template <class Iterator>
-            constexpr auto erase(Iterator first, Iterator last) noexcept(noexcept(internal_erase(*std::declval<Iterator>()))){
-
-                while (first != last){
-                    internal_erase(*first);
-                    std::advance(first, 1);
-                }
-            }
+            //this should be noexcept - defect report - this does not imply what std does - so it's deprecated
+            // constexpr auto erase(const_iterator first, const_iterator last) noexcept -> iterator{
+                
+            //     while (first != last){
+            //         internal_erase_it(*first);
+            //         std::advance(first, 1);
+            //     }
+            // }
 
             template <class KeyLike>
             constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
@@ -1654,12 +1676,21 @@ namespace dg::map_variants{
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
+            //TOOOs: this has to be an atomic operation
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
-                while (first != last){
-                    internal_insert(*first);
-                    std::advance(first, 1);
+                Iterator cur = first;
+
+                try{
+                    while (cur != last){
+                        internal_insert(*cur);
+                        std::advance(cur, 1);
+                    }
+                } catch (...){
+                    // static_assert(std::is_lvalue_reference_v<decltype(*first)>);
+                    // erase(first, cur);
+                    std::rethrow_exception(std::current_exception());
                 }
             }
 
@@ -1711,14 +1742,18 @@ namespace dg::map_variants{
                 }
             }
 
-            template <class Iterator>
-            constexpr auto erase(Iterator first, Iterator last) noexcept(noexcept(internal_erase(*std::declval<Iterator>()))){
+            //this should be noexcept - defect report - this does not imply what std does - deprecated
+            // template <class Iterator>
+            // constexpr auto erase(Iterator first, Iterator last) noexcept{
+                
+            //     static_assert(std::is_reference_v<decltype(*first)>);
+            //     // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
 
-                while (first != last){
-                    internal_erase(*first);
-                    std::advance(first, 1);
-                }
-            }
+            //     while (first != last){
+            //         internal_erase(*first);
+            //         std::advance(first, 1);
+            //     }
+            // }
 
             template <class KeyLike>
             constexpr auto contains(const KeyLike& key) const noexcept(noexcept(bucket_find(std::declval<const KeyLike&>()))) -> bool{
