@@ -25,27 +25,7 @@ auto to_const_reference(T& value) -> const T&{
 int main(){
 
     using namespace std::chrono;
-
-    const size_t SZ = size_t{1} << 22;
-    std::vector<uint32_t> buf(SZ);
-    std::generate(buf.begin(), buf.end(), std::mt19937());
-    // jg::dense_hash_map<uint32_t, uint32_t> map_container{};
-    // std::vector<size_t> map_container(512);    
-    dg::map_variants::unordered_unstable_fastinsert_map<uint32_t, uint32_t, PairNullValueGen> map_container;
-
-    auto now = high_resolution_clock::now();
-
-    for (uint32_t c: buf){
-        map_container[c] = 1u;
-    }
-
-    // std::shuffle(buf.begin(), buf.end(), std::mt19937{});
-
-    // for (uint32_t c: buf){
-    //     total += map_container.at(c);
-    // }
-    auto then = high_resolution_clock::now();
-
-    std::cout << duration_cast<milliseconds>(then - now).count() << "<ms>" << "<>" << map_container.size()  << std::endl; 
-    // map_container.insert({1, 1});
+    
+    //alright guys - I think our map is very good now
+    //let's get back on track to crack the asymmetric encoding method - probably at least 2 months
 }
