@@ -291,15 +291,15 @@ namespace dg::map_variants{
                 std::swap(erase_count, other.erase_count);
             }
 
-            constexpr auto erase(const_iterator it) noexcept -> iterator{
+            template <class EraseArg>
+            constexpr auto erase(EraseArg&& erase_arg) noexcept{
 
-                return internal_erase(it);
-            }
-
-            template <class KeyLike>
-            constexpr auto erase(const KeyLike& key) noexcept(noexcept(internal_erase(std::declval<const KeyLike&>()))) -> size_t{
-
-                return internal_erase(key);
+                if constexpr(std::is_convertible_v<std::decay_t<EraseArg>, const_iterator>){
+                    return internal_erase_it(std::forward<EraseArg>(erase_arg));
+                } else{
+                    // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
+                    return internal_erase(std::forward<EraseArg>(erase_arg));
+                }
             }
 
             template <class Iterator>
@@ -696,13 +696,13 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
+            constexpr auto internal_erase_it(const_iterator it) noexcept -> iterator{
 
                 if (it == node_vec.end()){
-                    return it;
+                    return node_vec.end();
                 }
 
-                auto dif = std::distance(node_vec.begin(), it);
+                auto dif = std::distance(node_vec.cbegin(), it);
                 internal_exist_erase(it->first);
 
                 if (dif != node_vec.size()) [[likely]]{
@@ -976,15 +976,18 @@ namespace dg::map_variants{
                 std::swap(erase_count, other.erase_count);
             }
 
-            constexpr auto erase(const_iterator it) noexcept -> iterator{
+            //alright guy - reviews coming in - this is harder than expected - the problem is that the compiler generates two different headers for the key and it picks the more-accurate - in the interim, noexcept got in the way and the specific implementation is not a subset of requirements
+            //the only way we can solve this is by taking in perfect forwarding and constexpr decay and converitble + friends - then there's a noexcept problem - which we force to be noexcept 
 
-                return internal_erase(it);
-            }
+            template <class EraseArg>
+            constexpr auto erase(EraseArg&& erase_arg) noexcept{
 
-            template <class KeyLike>
-            constexpr auto erase(const KeyLike& key) noexcept(noexcept(internal_erase(std::declval<const KeyLike&>()))) -> size_t{
-
-                return internal_erase(key);
+                if constexpr(std::is_convertible_v<std::decay_t<EraseArg>, const_iterator>){
+                    return internal_erase_it(std::forward<EraseArg>(erase_arg));
+                } else{
+                    // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
+                    return internal_erase(std::forward<EraseArg>(erase_arg));
+                }
             }
 
             template <class Iterator>
@@ -1413,13 +1416,13 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
+            constexpr auto internal_erase_it(const_iterator it) noexcept -> iterator{
 
                 if (it == node_vec.end()){
-                    return it;
+                    return node_vec.end();
                 }
 
-                auto dif = std::distance(node_vec.begin(), it);
+                auto dif = std::distance(node_vec.cbegin(), it);
                 internal_exist_erase(it->first);
 
                 if (dif != node_vec.size()) [[likely]]{
@@ -1697,15 +1700,15 @@ namespace dg::map_variants{
                 std::swap(erase_count, other.erase_count);
             }
 
-            constexpr auto erase(const_iterator it) noexcept(noexcept(internal_erase(std::declval<const_iterator>()))) -> iterator{
+            template <class EraseArg>
+            constexpr auto erase(EraseArg&& erase_arg) noexcept{
 
-                return internal_erase(it);
-            }
-
-            template <class KeyLike>
-            constexpr auto erase(const KeyLike& key) noexcept(noexcept(internal_erase(std::declval<const KeyLike&>()))) -> size_t{
-
-                return internal_erase(key);
+                if constexpr(std::is_convertible_v<std::decay_t<EraseArg>, const_iterator>){
+                    return internal_erase_it(std::forward<EraseArg>(erase_arg));
+                } else{
+                    // static_assert(noexcept(internal_erase(std::forward<EraseArg>(erase_arg))));
+                    return internal_erase(std::forward<EraseArg>(erase_arg));
+                }
             }
 
             template <class Iterator>
@@ -2147,13 +2150,13 @@ namespace dg::map_variants{
                 erase_count         += 1;
             }
 
-            constexpr auto internal_erase(const_iterator it) noexcept -> iterator{
+            constexpr auto internal_erase_it(const_iterator it) noexcept -> iterator{
 
                 if (it == node_vec.end()){
-                    return it;
+                    return node_vec.end();
                 }
 
-                auto dif = std::distance(node_vec.begin(), it);
+                auto dif = std::distance(node_vec.cbegin(), it);
                 internal_exist_erase(it->first);
 
                 if (dif != node_vec.size()) [[likely]]{

@@ -33,9 +33,9 @@ void test_map(){
     auto seed                   = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     auto key_rand_gen           = std::bind(std::uniform_int_distribution<Key>{}, std::mt19937_64(seed));
     auto val_rand_gen           = std::bind(std::uniform_int_distribution<Value>{}, std::mt19937_64(seed * 2));
-    auto ops_gen                = std::bind(std::uniform_int_distribution<size_t>(0u, 4u), std::mt19937_64(seed * 4));
-    auto random_clear_gen       = std::bind(std::uniform_int_distribution<size_t>(0u, 32768u), std::mt19937_64(seed * 8)); 
-    auto random_clear_sz_gen    = std::bind(std::uniform_int_distribution<size_t>(0u, 32768u), std::mt19937_64(seed * 16));
+    auto ops_gen                = std::bind(std::uniform_int_distribution<size_t>(0u, 10u), std::mt19937_64(seed * 4));
+    auto random_clear_gen       = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 8)); 
+    auto random_clear_sz_gen    = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 16));
     auto clear_gen              = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1u} << 24), std::mt19937_64(seed * 32));
 
     // while (true){
@@ -61,6 +61,83 @@ void test_map(){
         } else if (ops == 4u){
             std_map[key] = val;
             cmp_map[key] = val;
+        } else if (ops == 5u){
+            auto std_map_ptr            = std_map.find(key);
+            auto cmp_map_ptr            = cmp_map.find(key);
+            bool is_valid_std_map_ptr   = std_map_ptr != std_map.end();
+            bool is_valid_cmp_map_ptr   = cmp_map_ptr != cmp_map.end();
+
+            if (is_valid_cmp_map_ptr != is_valid_std_map_ptr){
+                std::cout << "mayday" << std::endl;
+                std::abort();
+            }
+
+            if (is_valid_std_map_ptr){
+                if (std_map_ptr->second != cmp_map_ptr->second){
+                    std::cout << "mayday" << std::endl;
+                    std::abort();
+                }
+            }
+        } else if (ops == 6u){
+            auto std_map_ptr            = to_const_reference(std_map).find(key);
+            auto cmp_map_ptr            = to_const_reference(cmp_map).find(key);
+            bool is_valid_std_map_ptr   = std_map_ptr != std_map.end();
+            bool is_valid_cmp_map_ptr   = cmp_map_ptr != cmp_map.end();
+
+            if (is_valid_cmp_map_ptr != is_valid_std_map_ptr){
+                std::cout << "mayday" << std::endl;
+                std::abort();
+            }
+
+            if (is_valid_std_map_ptr){
+                if (std_map_ptr->second != cmp_map_ptr->second){
+                    std::cout << "mayday" << std::endl;
+                    std::abort();
+                }
+            }
+        } else if (ops == 7u){
+            bool std_map_contain_rs     = std_map.contains(key);
+            bool cmp_map_contain_rs     = cmp_map.contains(key);
+
+            if (std_map_contain_rs != cmp_map_contain_rs){
+                std::cout << "mayday" << std::endl;
+                std::abort();
+            }
+        } else if (ops == 8u){
+            bool std_map_contain_rs     = std_map.contains(key);
+            bool cmp_map_contain_rs     = cmp_map.contains(key);
+
+            if (std_map_contain_rs != cmp_map_contain_rs){
+                std::cout << "mayday" << std::endl;
+                std::abort();
+            }
+
+            if (std_map_contain_rs){
+                if (std_map.at(key) != cmp_map.at(key)){
+                    std::cout << "mayday" << std::endl;
+                    std::abort();
+                }
+            }
+        } else if (ops == 9u){
+            bool std_map_contain_rs     = std_map.contains(key);
+            bool cmp_map_contain_rs     = cmp_map.contains(key);
+
+            if (std_map_contain_rs != cmp_map_contain_rs){
+                std::cout << "mayday" << std::endl;
+                std::abort();
+            }
+
+            if (std_map_contain_rs){
+                if (to_const_reference(std_map).at(key) != to_const_reference(cmp_map).at(key)){
+                    std::cout << "mayday" << std::endl;
+                    std::abort();
+                }
+            }  
+        } else if (ops == 10u){
+            if (std_map.size() != cmp_map.size()){
+                std::cout << "mayday" << std::endl;
+                std::abort();
+            }
         }
 
         if (clear == 0u){
@@ -70,6 +147,16 @@ void test_map(){
             for (size_t i = 0u; i < dispatching_clear_sz; ++i){
                 cmp_map.erase(it->first);
                 it = std_map.erase(it);
+            }
+        }
+
+        if (clear == 1u){
+            size_t dispatching_clear_sz = std::min(std::min(static_cast<size_t>(random_clear_sz_gen()), std_map.size()), cmp_map.size());
+            auto it = cmp_map.begin();
+
+            for (size_t i = 0u; i < dispatching_clear_sz; ++i){
+                std_map.erase(it->first);
+                it = cmp_map.erase(it);
             }
         }
 
