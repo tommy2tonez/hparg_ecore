@@ -35,6 +35,12 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
+    template <class T>
+    void restrict_swap(T * __restrict__ lhs, T * __restrict__ rhs){
+
+        std::swap(*lhs, *rhs);
+    }
+
     //alright
     //been thinking about erase this morning
     //thing is we kinda "hack" the bucket iterator - and the iterator is not pointing to the buckets but pointing to the allocations
@@ -438,12 +444,12 @@ namespace dg::map_variants{
                 return node_vec.empty();
             }
 
-            constexpr auto min_capacity() noexcept -> size_type{
+            constexpr auto min_capacity() const noexcept -> size_type{
 
                 return 32u;
             }
 
-            constexpr auto capacity() noexcept -> size_type{
+            constexpr auto capacity() const noexcept -> size_type{
 
                 return bucket_vec.size() - LAST_MOHICAN_SZ;
             }
@@ -724,14 +730,16 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
-                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
+                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                if (swapee_bucket_it != erasing_bucket_it){
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    *swapee_bucket_it = erasing_bucket_virtual_addr;
+                }
+
                 node_vec.pop_back();
-                *swapee_bucket_it   = erasing_bucket_virtual_addr;
-                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
-                erase_count         += 1;
+                erase_count += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
@@ -1189,12 +1197,12 @@ namespace dg::map_variants{
                 return size() != 0u;
             }
 
-            constexpr auto min_capacity() noexcept -> size_type{
+            constexpr auto min_capacity() const noexcept -> size_type{
 
                 return 32u;
             }
 
-            constexpr auto capacity() noexcept -> size_type{
+            constexpr auto capacity() const noexcept -> size_type{
 
                 return bucket_vec.size() - LAST_MOHICAN_SZ;
             }
@@ -1506,15 +1514,17 @@ namespace dg::map_variants{
             }
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
-
-                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
+                
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
+                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                if (swapee_bucket_it != erasing_bucket_it){
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    *swapee_bucket_it = erasing_bucket_virtual_addr;
+                }
+
                 node_vec.pop_back();
-                *swapee_bucket_it   = erasing_bucket_virtual_addr;
-                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
-                erase_count         += 1;
+                erase_count += 1;            
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
@@ -2318,14 +2328,16 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
-                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
+                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                if (swapee_bucket_it != erasing_bucket_it){
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    *swapee_bucket_it = erasing_bucket_virtual_addr;
+                }
+
                 node_vec.pop_back();
-                *swapee_bucket_it   = erasing_bucket_virtual_addr;
-                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
-                erase_count         += 1;
+                erase_count += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{

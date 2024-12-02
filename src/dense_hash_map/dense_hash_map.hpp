@@ -780,7 +780,7 @@ private:
 
         // Swap last node and the one we want to delete.
         using std::swap;
-        swap(*sub_it, *last);
+        swap(*sub_it, *last); //
 
         // Now sub_it points to the one we swapped with. We have to readjust sub_it.
         previous_next =
