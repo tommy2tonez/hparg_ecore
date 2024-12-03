@@ -34,6 +34,31 @@ namespace dg::map_variants{
 
         return T{1u} << cand_log2;
     }
+    
+    template <class T, intmax_t Num, intmax_t Den, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    static consteval auto get_max_pow2_multiplier_in_range(std::ratio<Num, Den>) -> T{
+
+        using promoted_t = std::size_t;
+
+        constexpr auto find_lambda = []() constexpr{
+            promoted_t rs = 1u; 
+
+            for (size_t i = 0u; i < std::numeric_limits<T>::digits; ++i){
+                promoted_t cand = promoted_t{1} << i;
+
+                if (cand * Num / Den <= std::numeric_limits<T>::max()){
+                    rs = cand;
+                }
+            }
+
+            return rs;
+        };
+
+        constexpr promoted_t rs = find_lambda();
+        static_assert(rs * Num / Den <= std::numeric_limits<T>::max());
+
+        return rs;
+    }
 
     //these maps are flat variations of jg::dense_hash_map
     //this only works if you have a very good hash function - such is near-perfect hashing - otherwise chooses the approach my brother took (using chaining) because it works better in most cases
@@ -42,6 +67,31 @@ namespace dg::map_variants{
     //so demoting SizeType from std::size_t -> std::uint32_t or even std::uint16_t is encouraged in most cases - mind that std::uint16_t is not "std-access" - so it might be slower compared to uint32_t
     //erase is slow compared to other maps because other maps kinda hack the erase by avoiding value dereferencing - which is unlikely to happen in real-life scenerios
     //std is adding flat_map variations - and I think this is THE way
+
+    //alright guys - we've been wasting too much time - let's move on
+    //idea is to reduce possible memory touch by a factor of 1.5 - usually - we expect a cap/size ratio of 2 
+    //the usual overhead per value_type == sizeof(value_type)
+    //we reduce the overhead per value_type -> sizeof(size_type) * 2 => 8 if uint32_t, 4 if uint16_t
+    //so we should expect a 2 time speed up on avg for random lookups - assuming our sizeof(value_type) >= 16u
+
+    //for std::unordered_map, the max_memory_touch is size() *  CACHE_LINE_SIZE + capacity() * sizeof(void *)
+    //for jg::dense_hash_map, the max_memory_touch is size() * (std::pair<Key, Mapped> + linked_list_pointer + paddings) + capacity() * sizeof(void *)
+    //for our map, the max_memory_touch is size() * std::pair<Key, Mapped> + capacity() * sizeof(void *)
+
+    //in a less ideal scenerio, node_map from jg::dense_hash_map will outperform - because there is less collision and unnecessary fetch
+    //in an ideal hashing scenerio (perfect hashing) - our map will outperform - because of the max_memory_touch rule
+    //we don't really care about branching + SIMD + friends - they are necessary - but nothing compared to a fetch from L3 or L2
+    //I dont want to implement in the direction of my brother jg::dense_hash_map because I think he did a good job there - this map is only appeared to be useful when you know what you are doing with hashing + virtual_addr_t and use it mainly for insert, lookup and clear()
+
+    //most importantly, don't trust a single benchmark in the market - know what you are doing - know the formula - and choose wisely
+    //it seems easy but most people implemented the map wrong by benchmarking the map wrong
+    //I'm talking about 95% of the maps are implemented wrong - there is no bias in big tech, small tech, amateurs or friends - the statistic is true for every group
+    //only 5% know what they are doing with memory and things
+    //take boost::concurrent_map for example, I really don't know why they concurrent the operations when they should concurrent the map - concurrent the operations is the worst way to thrash cache between cores and totally eliminate the purpose of having concurrency in the first place
+    //like what's the deal with atomic operations that took you 3 months to implement?
+    //what's up with atomic_flag and concurrent <hash_map> and not concurrent <hash_map_operation>
+    //we could easily linearly scale the concurrent map by spawning 32 maps - and use spinlock on each of them - and use jg::dense_hash_map
+    //it's fast - it's efficient and there is LITERALLY nothing wrong with it
 
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_map{
@@ -60,8 +110,8 @@ namespace dg::map_variants{
 
             static inline constexpr SizeType NULL_VIRTUAL_ADDR          = std::numeric_limits<SizeType>::max();
             static inline constexpr SizeType ORPHANED_VIRTUAL_ADDR      = std::numeric_limits<SizeType>::max() - 1;
-            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u;
-            static inline constexpr std::size_t LAST_MOHICAN_SZ         = 16u;
+            static inline constexpr std::size_t REHASH_CHK_MODULO       = 8u;
+            static inline constexpr std::size_t LAST_MOHICAN_SZ         = 8u;
 
             static constexpr auto is_insertable(SizeType virtual_addr) noexcept -> bool{
 
@@ -109,11 +159,37 @@ namespace dg::map_variants{
                 return 32u;
             }
 
-            static consteval auto max_size() -> size_type{
-
-                return std::numeric_limits<size_type>::max() - 2;
+            static consteval auto max_capacity() -> size_type{
+                
+                return std::min(size_type{1} << (std::numeric_limits<size_type>::digits - 1), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
             }
 
+            static consteval auto max_size() -> size_type{
+
+                return max_capacity() * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            static consteval auto max_insert_size() -> size_type{
+
+                return max_capacity() * insert_factor_ratio::num / insert_factor_ratio::den;
+            }
+
+            static constexpr auto estimate_size(size_type cap) noexcept -> size_type{
+
+                return cap * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            static constexpr auto estimate_capacity(size_type sz) noexcept -> size_type{
+
+                return sz * load_factor_ratio::den / load_factor_ratio::num;
+            }
+
+            static constexpr auto estimate_insert_capacity(size_type cap) noexcept -> size_type{
+
+                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
+            }
+
+            static_assert(min_capacity() <= max_capacity());
             static_assert(std::is_unsigned_v<size_type>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
             static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
@@ -524,11 +600,11 @@ namespace dg::map_variants{
                 if (((size() + erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
                     return;
                 } else{
-                    if (estimate_capacity(node_vec.size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
+                    if (size() < estimate_size(capacity()) && insert_size() < estimate_insert_capacity(capacity())) [[likely]]{ //might be buggy - not this line but other inserts that do not lead to this line
                         return;
                     } else [[unlikely]]{
                         //either cap > size or insert_cap > max_insert_cap or both - if both - extend
-                        if (estimate_capacity(node_vec.size()) > capacity()){
+                        if (size() >= estimate_size(capacity())){
                             size_type new_cap = capacity() * 2;
                             rehash(new_cap, true);
                         } else{
@@ -543,21 +619,6 @@ namespace dg::map_variants{
 
                 size_type new_cap = capacity() * 2;
                 rehash(new_cap, true);
-            }
-
-            constexpr auto estimate_size(size_type cap) const noexcept -> size_type{
-
-                return cap * load_factor_ratio::num / load_factor_ratio::den;
-            }
-
-            constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
-
-                return sz * load_factor_ratio::den / load_factor_ratio::num;
-            }
-
-            constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
-
-                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
@@ -806,8 +867,8 @@ namespace dg::map_variants{
 
             static inline constexpr SizeType ORPHANED_VIRTUAL_ADDR      = std::numeric_limits<SizeType>::min();
             static inline constexpr SizeType NULL_VIRTUAL_ADDR          = std::numeric_limits<SizeType>::max();
-            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u;
-            static inline constexpr std::size_t LAST_MOHICAN_SZ         = 16u;
+            static inline constexpr std::size_t REHASH_CHK_MODULO       = 8u;
+            static inline constexpr std::size_t LAST_MOHICAN_SZ         = 8u;
 
             static constexpr auto is_insertable(SizeType virtual_addr) noexcept -> bool{
 
@@ -855,11 +916,37 @@ namespace dg::map_variants{
                 return 32u;
             }
 
-            static consteval auto max_size() -> size_type{
+            static consteval auto max_capacity() -> size_type{
 
-                return std::numeric_limits<size_type>::max() - 2;
+                return std::min(size_type{1} << (std::numeric_limits<size_type>::digits - 1), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
             }
 
+            static consteval auto max_size() -> size_type{
+
+                return max_capacity() * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            static consteval auto max_insert_size() -> size_type{
+
+                return max_capacity() * insert_factor_ratio::num / insert_factor_ratio::den;
+            }
+
+            static constexpr auto estimate_size(size_type cap) noexcept -> size_type{
+
+                return cap * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            static constexpr auto estimate_capacity(size_type sz) noexcept -> size_type{
+
+                return sz * load_factor_ratio::den / load_factor_ratio::num;
+            }
+
+            static constexpr auto estimate_insert_capacity(size_type cap) noexcept -> size_type{
+
+                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
+            }
+
+            static_assert(min_capacity() <= max_capacity());
             static_assert(std::is_unsigned_v<size_type>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
             static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
@@ -1276,11 +1363,11 @@ namespace dg::map_variants{
                 if (((size() + erase_count) % REHASH_CHK_MODULO) != 0u) [[likely]]{
                     return;
                 } else [[unlikely]]{
-                    if (estimate_capacity(size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
+                    if (size() < estimate_size(capacity()) && insert_size() < estimate_insert_capacity(capacity())) [[likely]]{ //might be buggy - not this line but other inserts that do not lead to this line
                         return;
                     } else [[unlikely]]{
                         //either cap > size or insert_cap > max_insert_cap or both - if both - extend
-                        if (estimate_capacity(size()) > capacity()){
+                        if (size() >= estimate_size(capacity())){
                             size_type new_cap = capacity() * 2;
                             rehash(new_cap, true);
                         } else{
@@ -1295,21 +1382,6 @@ namespace dg::map_variants{
 
                 size_type new_cap = capacity() * 2;
                 rehash(new_cap, true);
-            }
-
-            constexpr auto estimate_size(size_type cap) const noexcept -> size_type{
-
-                return cap * load_factor_ratio::num / load_factor_ratio::den;
-            }
-
-            constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
-
-                return sz * load_factor_ratio::den / load_factor_ratio::num;
-            }
-
-            constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
-
-                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
@@ -1590,8 +1662,8 @@ namespace dg::map_variants{
 
             static inline constexpr SizeType ORPHANED_VIRTUAL_ADDR      = std::numeric_limits<SizeType>::min();
             static inline constexpr SizeType NULL_VIRTUAL_ADDR          = std::numeric_limits<SizeType>::max();
-            static inline constexpr std::size_t REHASH_CHK_MODULO       = 16u; //this is important - because % 256 == a read of the address instead of an arithmetic operation
-            static inline constexpr std::size_t LAST_MOHICAN_SZ         = 16u;
+            static inline constexpr std::size_t REHASH_CHK_MODULO       = 8u;
+            static inline constexpr std::size_t LAST_MOHICAN_SZ         = 8u;
 
         public:
 
@@ -1634,11 +1706,37 @@ namespace dg::map_variants{
                 return 32u;
             }
 
-            static consteval auto max_size() -> size_type{
+            static consteval auto max_capacity() -> size_type{
 
-                return std::numeric_limits<size_type>::max() - 2;
+                return std::min(size_type{1} << (std::numeric_limits<size_type>::digits - 1), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
             }
 
+            static consteval auto max_size() -> size_type{
+
+                return max_capacity() * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            static consteval auto max_insert_size() -> size_type{
+
+                return max_capacity() * insert_factor_ratio::num / insert_factor_ratio::den;
+            }
+
+            static constexpr auto estimate_size(size_type cap) noexcept -> size_type{
+
+                return cap * load_factor_ratio::num / load_factor_ratio::den;
+            }
+
+            static constexpr auto estimate_capacity(size_type sz) noexcept -> size_type{
+
+                return sz * load_factor_ratio::den / load_factor_ratio::num;
+            }
+
+            static constexpr auto estimate_insert_capacity(size_type cap) noexcept -> size_type{
+
+                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
+            }
+
+            static_assert(min_capacity() <= max_capacity());
             static_assert(std::is_unsigned_v<size_type>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
             static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
@@ -2051,11 +2149,11 @@ namespace dg::map_variants{
 
             constexpr void check_for_rehash(){
 
-                if (estimate_capacity(size()) <= capacity() && insert_size() <= estimate_insert_capacity(capacity())) [[likely]]{
+                if (size() < estimate_size(capacity()) && insert_size() < estimate_insert_capacity(capacity())) [[likely]]{ //might be buggy - not this line but other inserts that do not lead to this line
                     return;
                 } else [[unlikely]]{
                    //either cap > size or insert_cap > max_insert_cap or both - if both - extend
-                    if (estimate_capacity(size()) > capacity()){
+                    if (size() >= estimate_size(capacity())){
                         size_type new_cap = capacity() * 2;
                         rehash(new_cap, true);
                     } else{
@@ -2069,21 +2167,6 @@ namespace dg::map_variants{
 
                 size_type new_cap = capacity() * 2;
                 rehash(new_cap, true);
-            }
-
-            constexpr auto estimate_size(size_type cap) const noexcept -> size_type{
-
-                return cap * load_factor_ratio::num / load_factor_ratio::den;
-            }
-
-            constexpr auto estimate_capacity(size_type sz) const noexcept -> size_type{
-
-                return sz * load_factor_ratio::den / load_factor_ratio::num;
-            }
-
-            constexpr auto estimate_insert_capacity(size_type cap) const noexcept -> size_type{
-
-                return cap * insert_factor_ratio::num / insert_factor_ratio::den;
             }
 
             constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
