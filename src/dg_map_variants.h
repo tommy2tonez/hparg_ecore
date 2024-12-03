@@ -94,16 +94,6 @@ namespace dg::map_variants{
             using insert_factor_ratio           = typename InsertFactor::type;
             using erase_hint                    = bucket_const_iterator;
 
-            static consteval auto min_capacity() -> size_type{
-
-                return 32u;
-            }
-
-            static consteval auto max_size() -> size_type{
-
-                return std::numeric_limits<size_type>::max();
-            }
-
             static consteval auto max_load_factor() -> double{
 
                 return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
@@ -112,6 +102,16 @@ namespace dg::map_variants{
             static consteval auto max_insert_factor() -> double{
 
                 return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
+            static consteval auto min_capacity() -> size_type{
+
+                return 32u;
+            }
+
+            static consteval auto max_size() -> size_type{
+
+                return std::numeric_limits<size_type>::max() - 2;
             }
 
             static_assert(std::is_unsigned_v<size_type>);
@@ -838,16 +838,6 @@ namespace dg::map_variants{
             using insert_factor_ratio           = typename InsertFactor::type;
             using erase_hint                    = bucket_const_iterator;
 
-            static consteval auto min_capacity() -> size_type{
-
-                return 32u;
-            }
-
-            static consteval auto max_size() -> size_type{
-
-                return std::numeric_limits<size_type>::max();
-            }
-
             static consteval auto max_load_factor() -> double{
 
                 return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
@@ -856,6 +846,16 @@ namespace dg::map_variants{
             static consteval auto max_insert_factor() -> double{
 
                 return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
+            static consteval auto min_capacity() -> size_type{
+
+                return 32u;
+            }
+
+            static consteval auto max_size() -> size_type{
+
+                return std::numeric_limits<size_type>::max() - 2;
             }
 
             static_assert(std::is_unsigned_v<size_type>);
@@ -1632,7 +1632,7 @@ namespace dg::map_variants{
 
             static consteval auto max_size() -> size_type{
 
-                return std::numeric_limits<size_type>::max();
+                return std::numeric_limits<size_type>::max() - 2;
             }
 
             static_assert(std::is_unsigned_v<size_type>);
