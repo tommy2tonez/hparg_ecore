@@ -21,43 +21,32 @@ int main(){
 
     using namespace std::chrono;
 
+    //this implies that perfect hashing (indexing entries) by using key_internalizer is required
+    //with the right implementation - and reduce virtual_addr to 24 bits per table - we are expecting to see a 1.5 billion lookups per second
+    //with a right concurrent approach - we are expecting to see at least 5 billions entry lookups per second
+    //this might change the hash_table industry forever - but take my words for granted - it's the direction I happened to explore - not the direction I wanted to explore
+    //hopefully someone would continue my hash_table research - I'm back to the neural network for now
+
     const size_t SZ = size_t{1} << 30;
-    dg::map_variants::unordered_unstable_fast_map<size_t, size_t, NullKeyGen, uint32_t, robin_hood::hash<size_t>> map{};
-    // std::vector<size_t> map(256);
+    dg::map_variants::unordered_unstable_fast_map<size_t, size_t, NullKeyGen, uint32_t> map{};
     std::vector<uint8_t> buf(SZ);
-    std::vector<size_t> table1(256);
-    std::vector<size_t> table2(256);
-    std::generate(buf.begin(), buf.end(), std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937_64{}));
 
-    std::iota(table1.begin(), table1.end(), 0u);
-    // for (size_t i = 0u; i < 256; ++i){
-    //     map.insert({i, i});
-    // }
-
-    // std::cout << map.at(0) << std::endl;
-    // for (size_t i = 0u; i < 256; ++i){
-        // std::cout << i << "<>" << map.at(i) << "<>" << map.find(i)->second << std::endl;
-    // }
-    // map.reserve(SZ * 2);
-    // for (uint32_t e: buf){
-    //     // map[e] += 1;
-    //     map[e] += 1;
-    // }
+    std::iota(buf.begin(), buf.end(), 0u);
+    size_t total{};
     
-    // std::shuffle(buf.begin(), buf.end(), std::mt19937{});
+    for (size_t e: buf){
+        map[e] += 1;
+    }
+
+    std::shuffle(buf.begin(), buf.end(), std::mt19937{});
+
     auto now = high_resolution_clock::now();
-    
-    for (uint32_t e: buf){
-        // map.at(e) += 1;
-        table2[e] += 1;
+
+    for (size_t e: buf){
+        total += map.at(e);
     }
 
     auto then = high_resolution_clock::now();
-
-    // // for (size_t i = 0u; i < 64; ++i){
-    // //     std::cout << map.find(i)->first << "<>" << map.find(i)->second << std::endl;
-    // // }
-
-    std::cout << table2[0] << "<>" << duration_cast<milliseconds>(then - now).count() << std::endl;
+    std::cout << total << "<>" << duration_cast<milliseconds>(then - now).count() << std::endl;
 
 }
