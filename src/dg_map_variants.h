@@ -35,25 +35,13 @@ namespace dg::map_variants{
         return T{1u} << cand_log2;
     }
 
-    template <class T>
-    void restrict_swap(T * __restrict__ lhs, T * __restrict__ rhs){
-
-        std::swap(*lhs, *rhs);
-    }
-
-    //alright
-    //been thinking about erase this morning
-    //thing is we kinda "hack" the bucket iterator - and the iterator is not pointing to the buckets but pointing to the allocations
-    //in order to store the information of buckets - we need to either make another iterator which inherits the vector iterator and potentially break builtin compiler support for C++ lib: memcpy, copy, find, find_if, etc
-    //or we need to store 2 ways allocations - which break locality of memory access
-    //or we have to return a pair of <allocation_iterator, bucket_iterator> - which break the interface consistency
-    //they are equally bad
-    //let's go with breaking the interface consistency for now - because that is the extensible, not-breaking-anything way - and it patches the performance bug - it might confuse the user but this is a "derived" implementation of std
-
-    //the problem with erase is erasing the const_iterator - that's the feature that is most used
-    //we have to do 2 key lookup - which is fine cache-wise - but not fine branching-wise - this is probably debatable - whether it is worth it to either break interface consistency or compiler support for that specific feature of slightly faster earse
-    //in most of the applications, cache is always the issue, not branching - branching is nothing compared to L2 access or even L3 access
-    //but in specialized application - erase_find might be of use
+    //these maps are flat variations of jg::dense_hash_map
+    //this only works if you have a very good hash function - such is near-perfect hashing - otherwise chooses the approach my brother took (using chaining) because it works better in most cases
+    //this map speaks to the core performance constraint in a macro situation which is about memregion_touch_size
+    //when designing a container - we care about one true formula: cost = max_memregion_touch_size(operation_size) + operation_size * operation_const_cost
+    //so demoting SizeType from std::size_t -> std::uint32_t or even std::uint16_t is encouraged in most cases - mind that std::uint16_t is not "std-access" - so it might be slower compared to uint32_t
+    //erase is slow compared to other maps because other maps kinda hack the erase by avoiding value dereferencing - which is unlikely to happen in real-life scenerios
+    //std is adding flat_map variations - and I think this is THE way
 
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_map{
@@ -106,22 +94,32 @@ namespace dg::map_variants{
             using insert_factor_ratio           = typename InsertFactor::type;
             using erase_hint                    = bucket_const_iterator;
 
+            static consteval auto min_capacity() -> size_type{
+
+                return 32u;
+            }
+
+            static consteval auto max_size() -> size_type{
+
+                return std::numeric_limits<size_type>::max();
+            }
+
+            static consteval auto max_load_factor() -> double{
+
+                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
+            }
+
+            static consteval auto max_insert_factor() -> double{
+
+                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
             static_assert(std::is_unsigned_v<size_type>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
             static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
             // static_assert(noexcept(std::declval<const key_equal&>()(std::declval<const key_type&>(), std::declval<const key_type&>()))); its 2024 and I dont know why these arent noexcept
             static_assert(std::is_nothrow_destructible_v<value_type>);
             static_assert(std::is_nothrow_swappable_v<value_type>);
-
-            static consteval auto max_load_factor() noexcept -> double{
-
-                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
-            }
-
-            static consteval auto max_insert_factor() noexcept -> double{
-
-                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
-            }
 
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
             static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
@@ -444,11 +442,6 @@ namespace dg::map_variants{
                 return node_vec.empty();
             }
 
-            constexpr auto min_capacity() const noexcept -> size_type{
-
-                return 32u;
-            }
-
             constexpr auto capacity() const noexcept -> size_type{
 
                 return bucket_vec.size() - LAST_MOHICAN_SZ;
@@ -462,11 +455,6 @@ namespace dg::map_variants{
             constexpr auto insert_size() const noexcept -> size_type{
 
                 return size() + erase_count;
-            }
-
-            constexpr auto max_size() const noexcept -> size_type{
-
-                return std::numeric_limits<size_type>::max();
             }
 
             constexpr auto hash_function() const & noexcept -> const Hasher&{
@@ -730,16 +718,14 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
+                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
-                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                if (swapee_bucket_it != erasing_bucket_it){
-                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
-                    *swapee_bucket_it = erasing_bucket_virtual_addr;
-                }
-
+                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                 node_vec.pop_back();
-                erase_count += 1;
+                *swapee_bucket_it   = erasing_bucket_virtual_addr;
+                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
+                erase_count         += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
@@ -801,7 +787,6 @@ namespace dg::map_variants{
             }
     };
 
-    //this map is extremely fast if you use it for const lookup purposes - where there is no insert, erase and the usage of at(const KeyLike&) is pivotal
     template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_fast_map{
 
@@ -853,22 +838,32 @@ namespace dg::map_variants{
             using insert_factor_ratio           = typename InsertFactor::type;
             using erase_hint                    = bucket_const_iterator;
 
+            static consteval auto min_capacity() -> size_type{
+
+                return 32u;
+            }
+
+            static consteval auto max_size() -> size_type{
+
+                return std::numeric_limits<size_type>::max();
+            }
+
+            static consteval auto max_load_factor() -> double{
+
+                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
+            }
+
+            static consteval auto max_insert_factor() -> double{
+
+                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
             static_assert(std::is_unsigned_v<size_type>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
             static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
             // static_assert(noexcept(std::declval<const key_equal&>()(std::declval<const key_type&>(), std::declval<const key_type&>()))); its 2024 and I dont know why these arent noexcept
             static_assert(std::is_nothrow_destructible_v<value_type>);
             static_assert(std::is_nothrow_swappable_v<value_type>);
-
-            static consteval auto max_load_factor() noexcept -> double{
-
-                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
-            }
-
-            static consteval auto max_insert_factor() noexcept -> double{
-
-                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
-            }
 
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
             static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
@@ -1197,11 +1192,6 @@ namespace dg::map_variants{
                 return size() != 0u;
             }
 
-            constexpr auto min_capacity() const noexcept -> size_type{
-
-                return 32u;
-            }
-
             constexpr auto capacity() const noexcept -> size_type{
 
                 return bucket_vec.size() - LAST_MOHICAN_SZ;
@@ -1215,11 +1205,6 @@ namespace dg::map_variants{
             constexpr auto insert_size() const noexcept -> size_type{
 
                 return size() + erase_count;
-            }
-
-            constexpr auto max_size() const noexcept -> size_type{
-
-                return std::numeric_limits<size_type>::max();
             }
 
             constexpr auto hash_function() const & noexcept -> const Hasher&{
@@ -1514,17 +1499,15 @@ namespace dg::map_variants{
             }
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
-                
+
+                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
-                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                if (swapee_bucket_it != erasing_bucket_it){
-                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
-                    *swapee_bucket_it = erasing_bucket_virtual_addr;
-                }
-
+                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                 node_vec.pop_back();
-                erase_count += 1;            
+                *swapee_bucket_it   = erasing_bucket_virtual_addr;
+                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
+                erase_count         += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
@@ -1586,10 +1569,6 @@ namespace dg::map_variants{
             }
     };
 
-    //this map only works as if there is no erase - user must control the erase by using setter clear() and getter size() - this has a very specialized application - like dg_heap_allocation
-    //erase was provided in the user interface - yet their usages aren't recommended 
-    //this map is specialized for cache-purpose, where the CACHE is not FIFO - but cleared at cap
-    //InsertFactor is now the new LoadFactor - and there is nothing we can do about decreasing the LoadFactor - except for calling clear() - otherwise it would tick per every insert + erase operation
     template <class Key, class Mapped, class NullValueGenerator, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<1, 2>, class InsertFactor = std::ratio<3, 4>>
     class unordered_unstable_fastinsert_map{
 
@@ -1636,22 +1615,32 @@ namespace dg::map_variants{
             using insert_factor_ratio           = typename InsertFactor::type;
             using erase_hint                    = bucket_const_iterator;
 
+            static consteval auto max_load_factor() -> double{
+
+                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
+            }
+
+            static consteval auto max_insert_factor() -> double{
+
+                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
+            }
+
+            static consteval auto min_capacity() -> size_type{
+
+                return 32u;
+            }
+
+            static consteval auto max_size() -> size_type{
+
+                return std::numeric_limits<size_type>::max();
+            }
+
             static_assert(std::is_unsigned_v<size_type>);
             static_assert(std::is_unsigned_v<decltype(std::declval<const hasher&>()(std::declval<const key_type&>()))>);
             static_assert(noexcept(std::declval<const hasher&>()(std::declval<const key_type&>())));
             // static_assert(noexcept(std::declval<const key_equal&>()(std::declval<const key_type&>(), std::declval<const key_type&>()))); its 2024 and I dont know why these arent noexcept
             static_assert(std::is_nothrow_destructible_v<value_type>);
             static_assert(std::is_nothrow_swappable_v<value_type>);
-
-            static consteval auto max_load_factor() noexcept -> double{
-
-                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
-            }
-
-            static consteval auto max_insert_factor() noexcept -> double{
-
-                return static_cast<double>(insert_factor_ratio::num) / insert_factor_ratio::den;
-            }
 
             static_assert(std::clamp(self::max_load_factor(), MIN_MAX_LOAD_FACTOR, MAX_MAX_LOAD_FACTOR) == self::max_load_factor());
             static_assert(std::clamp(self::max_insert_factor(), MIN_MAX_INSERT_FACTOR, MAX_MAX_INSERT_FACTOR) == self::max_insert_factor());
@@ -1799,30 +1788,12 @@ namespace dg::map_variants{
                 return internal_insert_w_key(std::forward<KeyLike>(key), std::forward<Args>(args)...);
             }
 
-            //we'll worry about these features later - I think this is specialized features for fast_cache
-            // template <class ValueLike = value_type>
-            // constexpr auto noexist_insert(ValueLike&& value) -> iterator{
-
-            //     return internal_noexist_insert(std::forward<ValueLike>(value));
-            // }
-
-            // template <class ValueLike = value_type>
-            // constexpr auto noexist_insert(ValueLike&& value, iterator find_clue) -> iterator{
-
-            //     if (insert_size() % REHASH_CHK_MODULO != 0u && find_clue != std::prev(bucket_vec.end())) [[likely]]{
-            //         return do_insert_at(find_clue, std::forward<ValueLike>(value));
-            //     } else [[unlikely]]{
-            //         return internal_noexist_insert(std::forward<ValueLike>(value));
-            //     }
-            // }
-
             template <class ValueLike = value_type>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
                 return internal_insert(std::forward<ValueLike>(value));
             }
 
-            //developer has to use insert at their own discretion - because it might compromise speed - compared to insert(ValueType&&)
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
 
@@ -1997,12 +1968,7 @@ namespace dg::map_variants{
                 return size() != 0u;
             }
 
-            constexpr auto min_capacity() noexcept -> size_type{
-
-                return 32u;
-            }
-
-            constexpr auto capacity() noexcept -> size_type{
+            constexpr auto capacity() const noexcept -> size_type{
 
                 return bucket_vec.size() - LAST_MOHICAN_SZ;
             }
@@ -2015,11 +1981,6 @@ namespace dg::map_variants{
             constexpr auto insert_size() const noexcept -> size_type{
 
                 return size() + erase_count;
-            }
-
-            constexpr auto max_size() const noexcept -> size_type{
-
-                return std::numeric_limits<size_type>::max();
             }
 
             constexpr auto hash_function() const & noexcept -> const Hasher&{
@@ -2328,16 +2289,14 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
+                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
-                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                if (swapee_bucket_it != erasing_bucket_it){
-                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
-                    *swapee_bucket_it = erasing_bucket_virtual_addr;
-                }
-
+                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
                 node_vec.pop_back();
-                erase_count += 1;
+                *swapee_bucket_it   = erasing_bucket_virtual_addr;
+                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
+                erase_count         += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
