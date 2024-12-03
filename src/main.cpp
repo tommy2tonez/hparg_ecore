@@ -26,9 +26,10 @@ int main(){
     //with a right concurrent approach - we are expecting to see at least 5 billions entry lookups per second
     //this might change the hash_table industry forever - but take my words for granted - it's the direction I happened to explore - not the direction I wanted to explore
     //hopefully someone would continue my hash_table research - I'm back to the neural network for now
+    //thing is the unordered_map is only useful in cuda_environment - where we don't want the branching - we want perfect hashing of the hash_table - and dispatch 1 billion concurrent hash_tables to cuda
 
-    const size_t SZ = size_t{1} << 30;
-    dg::map_variants::unordered_unstable_fast_map<size_t, size_t, NullKeyGen, uint32_t> map{};
+    const size_t SZ = size_t{1} << 26;
+    dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, NullKeyGen, uint32_t> map{};
     std::vector<uint8_t> buf(SZ);
 
     std::iota(buf.begin(), buf.end(), 0u);
@@ -48,5 +49,4 @@ int main(){
 
     auto then = high_resolution_clock::now();
     std::cout << total << "<>" << duration_cast<milliseconds>(then - now).count() << std::endl;
-
 }
