@@ -28,6 +28,11 @@ int main(){
     //hopefully someone would continue my hash_table research - I'm back to the neural network for now
     //thing is the unordered_map is only useful in cuda_environment - where we don't want the branching - we want perfect hashing of the hash_table - and dispatch 1 billion concurrent hash_tables to cuda
 
+    //this map is also useful in probably 10-15 years - when we reach granual cache access implementation from hardware
+    //right now - cache is discrete, L1, L2, L3, L4, etc.
+    //there will be a time - where there is no number - just distances of memory accesses
+    //so our formula will be of use then - but for now, this is only usable in cuda env - and it requires a specialized implementation of internalizer at node level
+
     const size_t SZ = size_t{1} << 26;
     dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, NullKeyGen, uint32_t> map{};
     std::vector<uint8_t> buf(SZ);
