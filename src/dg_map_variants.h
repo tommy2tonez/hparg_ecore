@@ -718,14 +718,16 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
-                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
+                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                if (swapee_bucket_it != erasing_bucket_it){
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    *swapee_bucket_it = erasing_bucket_virtual_addr;
+                }
+
                 node_vec.pop_back();
-                *swapee_bucket_it   = erasing_bucket_virtual_addr;
-                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
-                erase_count         += 1;
+                erase_count += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
@@ -1500,14 +1502,16 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
-                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
+                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                if (swapee_bucket_it != erasing_bucket_it){
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    *swapee_bucket_it = erasing_bucket_virtual_addr;
+                }
+
                 node_vec.pop_back();
-                *swapee_bucket_it   = erasing_bucket_virtual_addr;
-                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
-                erase_count         += 1;
+                erase_count += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
@@ -2289,14 +2293,16 @@ namespace dg::map_variants{
 
             constexpr void internal_exist_bucket_erase(bucket_iterator erasing_bucket_it) noexcept{
 
-                size_type erasing_bucket_virtual_addr   = *erasing_bucket_it;
                 bucket_iterator swapee_bucket_it        = bucket_exist_find(node_vec.back().first);
+                size_type erasing_bucket_virtual_addr   = std::exchange(*erasing_bucket_it, ORPHANED_VIRTUAL_ADDR);
 
-                std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                if (swapee_bucket_it != erasing_bucket_it){
+                    std::iter_swap(std::next(node_vec.begin(), erasing_bucket_virtual_addr), std::prev(node_vec.end()));
+                    *swapee_bucket_it = erasing_bucket_virtual_addr;
+                }
+
                 node_vec.pop_back();
-                *swapee_bucket_it   = erasing_bucket_virtual_addr;
-                *erasing_bucket_it  = ORPHANED_VIRTUAL_ADDR;
-                erase_count         += 1;
+                erase_count += 1;
             }
 
             constexpr void internal_exist_bucket_erase(bucket_const_iterator erasing_bucket_const_it) noexcept{
