@@ -114,10 +114,14 @@ namespace dg::network_tile_metadata{
     // using dst_info_t            = std::array<char, 32>;
     // using timein_t              = uint64_t;
 
-    static inline constexpr init_status_t TILE_INIT_STATUS_ORPHANED                                     = 0u;
-    static inline constexpr init_status_t TILE_INIT_STATUS_ADOPTED                                      = 1u;
-    static inline constexpr init_status_t TILE_INIT_STATUS_DECAYED                                      = 2u;
-    static inline constexpr init_status_t TILE_INIT_STATUS_INITIALIZED                                  = 3u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_EMPTY                                        = 0u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_ORPHANED                                     = 1u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_ADOPTED                                      = 2u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_DECAYED                                      = 3u;
+    static inline constexpr init_status_t TILE_INIT_STATUS_INITIALIZED                                  = 4u;
+
+    static inline constexpr init_status_t TILE_GRAD_STATUS_EMPTY                                        = 0u;
+    static inline constexpr init_status_t TILE_GRAD_STATUS_INITIALIZED                                  = 1u; 
 
     static inline constexpr tile_addr_t TILE_OBSERVER_DEFAULT                                           = {};
     static inline constexpr std::array<tile_addr_t, OBSERVER_ARRAY_SZ> TILE_OBSERVER_ARRAY_DEFAULT      = {};

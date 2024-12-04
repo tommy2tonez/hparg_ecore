@@ -1354,7 +1354,7 @@ namespace dg::map_variants{
             constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
 
                 static_assert(std::is_unsigned_v<decltype(hashed_value)>);
-                return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1));
+                return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
             }
 
             template <class KeyLike>
@@ -2139,7 +2139,7 @@ namespace dg::map_variants{
             constexpr auto to_bucket_index(auto hashed_value) const noexcept -> size_type{
 
                 static_assert(std::is_unsigned_v<decltype(hashed_value)>);
-                return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1));
+                return hashed_value & (bucket_vec.size() - (LAST_MOHICAN_SZ + 1u));
             }
 
             template <class KeyLike>

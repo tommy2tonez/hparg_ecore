@@ -2308,7 +2308,9 @@ namespace dg::network_tile_member_access{
     using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
 
     struct Resource{
-        dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_id_t> region_id_map;
+        dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_id_t> region_id_map; //due to technological constraints of 2024 - we are forced to use std::vector to achieve const propagation, and compiler optimizations support of setters/ getters here
+        std::vector<tile_polymorphic_id_t> region_id_table; //alright this might be expensive - whatever
+        uma_ptr_t region_id_table_head;
     };
 
     inline Resource resource{};
@@ -2329,8 +2331,12 @@ namespace dg::network_tile_member_access{
 
         stdx::memtransaction_guard transaction_guard;
 
-        uma_ptr_t cur           = buf;
-        resource.region_id_map  = {};
+        uma_ptr_t cur                   = buf;
+        resource.region_id_map          = {};
+        resource.region_id_table_head   = dg::memult::align(buf, MEMREGION_SZ);
+        size_t max_memory_span_sz       = get_memory_usage() + MEMREGION_SZ;
+        size_t table_sz                 = max_memory_span_sz / MEMREGION_SZ + size_t{max_memory_span_sz % MEMREGION_SZ != 0u}; 
+        resource.region_id_table        = std::vector<tile_polymorphic_id_t>(table_sz);
 
         auto initializer = []<class Accessor>(const Accessor, uma_ptr_t cur, tile_polymorphic_id_t tile_polymorphic_id){
             Accessor::init(cur);
@@ -2339,10 +2345,12 @@ namespace dg::network_tile_member_access{
             for (size_t i = 0u; i < Accessor::tile_size(); ++i){
                 uma_ptr_t id_ptr                    = Accessor::id_addr(dg::memult::advance(head, i));
                 uma_ptr_t id_region                 = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                size_t table_idx                    = dg::memult::distance(resource.region_id_table_head, id_ptr) / MEMREGION_SZ;
                 resource.region_id_map[id_region]   = tile_polymorphic_id;
+                resource.region_id_table[table_idx] = tile_polymorphic_id;
             }
 
-            return dg::memult::advance(cur, Accessor::tile_size());
+            return dg::memult::advance(cur, Accessor::buf_size());
         };
 
         cur = initializer(leaf8_accessor_t{},  cur, id_leaf_8);
@@ -2595,13 +2603,13 @@ namespace dg::network_tile_member_access{
     inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_id_t{
         
         stdx::atomic_optional_signal_fence(std::memory_order_acquire);
-        uma_ptr_t id_region = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        const size_t table_idx = dg::memult::distance(resource.region_id_table_head, ptr) / MEMREGION_SZ;
 
-        return stdx::to_const_reference(resource.region_id_map).at(id_region); //this is very important - compiler needs to be able to see the constness of vector - the at has to be a memory read of a vector - to avoid duplicate memory reads and group of table dispatchs - shall dg_typeid appears multiple times in a block
+        return stdx::to_const_reference(resource.region_id_table)[table_idx]; //this is very important - compiler needs to be able to see the constness of vector - the at has to be a memory read of a vector - to avoid duplicate memory reads and group of table dispatchs - shall dg_typeid appears multiple times in a block
     }
 
     template <class CallBack>
-    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
+    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{  //this is probably not necessary  -
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
@@ -2634,7 +2642,7 @@ namespace dg::network_tile_member_access{
     }
 
     template <class CallBack>
-    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
+    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{ //this is probably not necessary  -
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
