@@ -2040,162 +2040,222 @@ namespace dg::network_tile_lifetime::poly{
             case payload_kind_init_leaf:
             {
                 InitLeafPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_leaf_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_int_leaf_payload(std::move(devirt_payload));
             }
             case payload_kind_init_mono:
             {
                 InitMonoPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_mono_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_mono_payload(std::move(devirt_payload));
             }
             case payload_kind_init_pair:
             {
                 InitPairPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_pair_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_pair_payload(std::move(devirt_payload));
             }
             case payload_kind_init_uacm:
             {
                 InitUACMPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_uacm_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_uacm_payload(std::move(devirt_payload));
             }
             case payload_kind_init_pacm:
             {
                 InitPACMPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_pacm_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_pacm_payload(std::move(devirt_payload));
             }
             case payload_kind_init_crit:
             {
                 InitCritPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_crit_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_crit_payload(std::move(devirt_payload));
             }
             case payload_kind_init_msgrfwd:
             {
                 InitMsgrFwdPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_msgrfwd_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_msgrfwd_payload(std::move(devirt_payload));
             }
             case payload_kind_init_msgrbwd:
             {
                 InitMsgrBwdPayLoad devirt_payload{};
-                // dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
-                return load_msgrbwd_payload(devirt_payload);
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_msgrbwd_payload(std::move(devirt_payload));
             }
             case payload_kind_init_srcextclone:
             {
-                
+                InitSrcExtClonePayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_srcextclone_payload(std::move(devirt_payload));
             }
             case payload_kind_init_dstextclone:
             {
-
+                InitDstExtClonePayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_dstextclone_payload(std::move(devirt_payload));
             }
             case payload_kind_init_immu:
             {
-
+                InitImmuPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_init_immu_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_leaf:
             {
-
+                OrphanLeafPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_leaf_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_mono:
             {
-
+                OrphanMonoPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_mono_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_pair:
             {
-                
+                OrphanPairPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_pair_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_uacm:
             {
-
+                OrphanUACMPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_uacm_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_pacm:
             {
-
+                OrphanPACMPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_pacm_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_crit:
             {
-
+                OrphanCritPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_crit_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_msgrfwd:
             {
-
+                OrhapnMsgrFwdPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_msgrfwd_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_msgrbwd:
             {
-
+                OrphanMsgrBwdPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_msgrbwd_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_srcextclone:
             {
-
+                OrphanSrcExtClonePayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_srcextclone_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_dstextclone:
             {
-
+                OrphanDstExtClonePayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_dstextclone_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan_immu:
             {
-
+                OrphanImmuPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_immu_payload(std::move(devirt_payload));
             }
             case payload_kind_orphan:
             {
-
+                OrphanPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_orphan_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_leaf:
             {
-
+                DeinitLeafPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_leaf_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_mono:
             {
-
+                DeinitMonoPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_mono_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_pair:
             {
-
+                DeinitPairPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_pair_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_uacm:
             {
-
+                DeinitUACMPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_uacm_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_pacm:
             {
-
+                DeinitPACMPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payhload.payload_content.data());
+                return load_deinit_pacm_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_crit:
             {
-
+                DeinitCritPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_crit_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_msgrfwd:
             {
-
+                DeinitMsgrFwdPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_msgrfwd_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_msgrbwd:
             {
-
+                DeinitMsgrBwdPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_msgrbwd_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_srcextclone:
             {
-
+                DeinitSrcExtClonePayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_srcextclone_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_dstextclone:
             {
-
+                DeinitDstExtClonePayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_dstextclone_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit_immu:
             {
-
+                DeinitImmuPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content.data());
+                return load_deinit_immu_payload(std::move(devirt_payload));
             }
             case payload_kind_deinit:
             {
-
+                DeinitPayLoad devirt_payload{};
+                dg::network_compact_serializer::deserialize_into(devirt_payload, payload.payload_content,data());
+                return load_deinit_payload(std::move(devirt_payload));
             }
             default:
             {
-                return dg::network_exception::INVALID_ARGUMENT;
+                if constexpr(DEBUG_MODE_FLAG){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                } else{
+                    std::unreachable();
+                    return {};
+                }
             }
         }
     }
@@ -2203,7 +2263,14 @@ namespace dg::network_tile_lifetime::poly{
     void load_virtual_payload_arr(VirtualPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
         //this code looks dumb but this is an optimization trick that compilers are not allowed to make - it is called polymorphic dispatch - where we want to move the polymorphic up one level to void * - then we radix the dispatch by using polymorphic table(void *)
-        //alright - this moves from 40 flops per table dispatch -> 3-5 flops - which is good - even though we are dispatching fat tiles - 64x64 
+        //alright - this moves from 40 flops per table dispatch -> 3-5 flops - which is good - even though we are dispatching fat tiles - 64x64
+        //we are actually facing a problem of 4GB of CPU flops/ 40TB of GPU flops - the ratio is 1/ 1 << 15
+        //64x64 = 1 << 12 / 1 << 4 = 1 << 8, so we are still 1 << 7 shy
+        //that statistic will tell you how hard it is to program tile logics
+        //this is a very crucial part of synchronous brain
+
+        //you probably see the tile_member_access and think it is not at all important
+        //that is actually the hardest part of this program - is to fit all these getters in L1 cache and dispatch them to GPU - without that, this entire thing would be in L2-L3 and we defeat our purpose of dispatching the tiles to cuda in the first place
 
         constexpr size_t DISPATCH_DELIVERY_CAP = 32u;
 
@@ -2482,7 +2549,7 @@ namespace dg::network_tile_lifetime::poly{
         auto deinit_dispatcher              = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             DeinitPayLoad cur_payload{};
             for (const auto& vec_pair: vec){
-                dg::network_compact_serializedr::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
+                dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
                 *vec_pair.second = load_deinit_payload(std::move(cur_payload));
             }
         };
