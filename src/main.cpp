@@ -21,37 +21,42 @@ int main(){
 
     using namespace std::chrono;
 
-    //this implies that perfect hashing (indexing entries) by using key_internalizer is required
-    //with the right implementation - and reduce virtual_addr to 24 bits per table - we are expecting to see a 1.5 billion lookups per second
-    //with a right concurrent approach - we are expecting to see at least 5 billions entry lookups per second
-    //this might change the hash_table industry forever - but take my words for granted - it's the direction I happened to explore - not the direction I wanted to explore
-    //hopefully someone would continue my hash_table research - I'm back to the neural network for now
-    //thing is the unordered_map is only useful in cuda_environment - where we don't want the branching - we want perfect hashing of the hash_table - and dispatch 1 billion concurrent hash_tables to cuda
+    //alright guys - let's talk about financial transactions
+    //assume, for now, that we have a radix tree of N descendants
+    //every guy in the tree has his own version of correct financial graph
+    //everytime we do a transaction - we send the event to a random guy in the tree
+    //so graph synchronization is done by dimensional reduction, from descendants to ancestors
+    //for N, set_or(graphs) - produce correct result - push upward to ancestor - otherwise, resolute and intersect all the ideas from all the N graphs to get the correct graph - push to ancestor
+    //assume we are at root, root is where all the "financial_graph_variants" are resolved - and now we want to push our "newly_synchronous_graph" to all descedants - and now we have a financial system that's woking - fine
 
-    //this map is also useful in probably 10-15 years - when we reach granual cache access implementation from hardware
-    //right now - cache is discrete, L1, L2, L3, L4, etc.
-    //there will be a time - where there is no number - just distances of memory accesses
-    //so our formula will be of use then - but for now, this is only usable in cuda env - and it requires a specialized implementation of internalizer at node level
+    //what does this radix tree have anything to do with synchronous brain?
 
-    const size_t SZ = size_t{1} << 26;
-    dg::map_variants::unordered_unstable_fast_map<uint32_t, uint32_t, NullKeyGen, uint32_t> map{};
-    std::vector<uint8_t> buf(SZ);
+    //assume this cycle of synchronous brain, a -> b -> c -> d -> a
+    //assume another cycle of synchronous brain, b -> q -> w -> e -> r -> t -> y -> b
 
-    std::iota(buf.begin(), buf.end(), 0u);
-    size_t total{};
-    
-    for (size_t e: buf){
-        map[e] += 1;
-    }
+    //let a -> b -> c -> d -> a be a radix tree of N = 3, and root = a 
+    //let b -> q -> w -> e -> r -> t -> y -> b be a radix tree of N = 6, and root = b
 
-    std::shuffle(buf.begin(), buf.end(), std::mt19937{});
+    //so a transaction - accorading to our theorem, must be completed within 1 global cycle of synchronous brain
+    //we are assuming a functioning, working brain
 
-    auto now = high_resolution_clock::now();
+    //our synchronous brain set up is very simple, we have rings of tiles
+    //each ring of tile is actually a tile of different versions
+    //WLOG, without synchronous brain, we have a brain B = set(logit_1, logit_2, logit_3, logit_4)
 
-    for (size_t e: buf){
-        total += map.at(e);
-    }
+    //with synchronous brain, we have 2 brains B    = set(logit1_1, logit1_2, logit1_3, logit1_4)
+    //                                         B1   = set(logit2_1, logit2_2, logit2_3, logit2_4)
 
-    auto then = high_resolution_clock::now();
-    std::cout << total << "<>" << duration_cast<milliseconds>(then - now).count() << std::endl;
+    //ring1 = (logit1_1, logit2_1)
+    //ring2 = (logit1_2, logit2_2)
+    //etc.
+
+    //backprop is the main way of communication - it's exactly how our brain works - we see things (inputs) - we correct things (backprop) and we acknowledge things
+
+    //okay, so this is not just about finanical transactions but probably about every type of transactions
+    //the idea is very simple - but to put this to practice - I'm saying probably 3-5 years
+    //we need to have a working brain - we need to "battle test" the brain - to make sure that it is very very accurate
+    //we need a system that runs on every device
+    //and we need to get the engineering right
 }
+

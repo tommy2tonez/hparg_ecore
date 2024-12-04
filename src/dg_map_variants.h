@@ -60,39 +60,6 @@ namespace dg::map_variants{
         return rs;
     }
 
-    //these maps are flat variations of jg::dense_hash_map
-    //this only works if you have a very good hash function - such is near-perfect hashing - otherwise chooses the approach my brother took (using chaining) because it works better in most cases
-    //this map speaks to the core performance constraint in a macro situation which is about memregion_touch_size
-    //when designing a container - we care about one true formula: cost = max_memregion_touch_size(operation_size) + operation_size * operation_const_cost
-    //so demoting SizeType from std::size_t -> std::uint32_t or even std::uint16_t is encouraged in most cases - mind that std::uint16_t is not "std-access" - so it might be slower compared to uint32_t
-    //erase is slow compared to other maps because other maps kinda hack the erase by avoiding value dereferencing - which is unlikely to happen in real-life scenerios
-    //std is adding flat_map variations - and I think this is THE way
-
-    //alright guys - we've been wasting too much time - let's move on
-    //idea is to reduce possible memory touch by a factor of 1.5 - usually - we expect a cap/size ratio of 2 
-    //the usual overhead per value_type == sizeof(value_type)
-    //we reduce the overhead per value_type -> sizeof(size_type) * 2 => 8 if uint32_t, 4 if uint16_t
-    //so we should expect a 2 time speed up on avg for random lookups - assuming our sizeof(value_type) >= 16u
-
-    //for std::unordered_map, the max_memory_touch is size() *  CACHE_LINE_SIZE + capacity() * sizeof(void *)
-    //for jg::dense_hash_map, the max_memory_touch is size() * (std::pair<Key, Mapped> + linked_list_pointer + paddings) + capacity() * sizeof(void *)
-    //for our map, the max_memory_touch is size() * std::pair<Key, Mapped> + capacity() * sizeof(void *)
-
-    //in a less ideal scenerio, node_map from jg::dense_hash_map will outperform - because there is less collision and unnecessary fetch
-    //in an ideal hashing scenerio (perfect hashing) - our map will outperform - because of the max_memory_touch rule
-    //we don't really care about branching + SIMD + friends - they are necessary - but nothing compared to a fetch from L3 or L2
-    //I dont want to implement in the direction of my brother jg::dense_hash_map because I think he did a good job there - this map is only appeared to be useful when you know what you are doing with hashing + virtual_addr_t and use it mainly for insert, lookup and clear()
-
-    //most importantly, don't trust a single benchmark in the market - know what you are doing - know the formula - and choose wisely
-    //it seems easy but most people implemented the map wrong by benchmarking the map wrong
-    //I'm talking about 95% of the maps are implemented wrong - there is no bias in big tech, small tech, amateurs or friends - the statistic is true for every group
-    //only 5% know what they are doing with memory and things
-    //take boost::concurrent_map for example, I really don't know why they concurrent the operations when they should concurrent the map - concurrent the operations is the worst way to thrash cache between cores and totally eliminate the purpose of having concurrency in the first place
-    //like what's the deal with atomic operations that took you 3 months to implement?
-    //what's up with atomic_flag and concurrent <hash_map> and not concurrent <hash_map_operation>
-    //we could easily linearly scale the concurrent map by spawning 32 maps - and use spinlock on each of them - and use jg::dense_hash_map
-    //it's fast - it's efficient and there is LITERALLY nothing wrong with it
-
     template <class Key, class Mapped, class SizeType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<std::pair<Key, Mapped>>, class LoadFactor = std::ratio<3, 4>, class InsertFactor = std::ratio<2, 1>>
     class unordered_unstable_map{
 
