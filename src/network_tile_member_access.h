@@ -2218,7 +2218,7 @@ namespace dg::network_tile_member_access{
     static inline constexpr bool IS_SAFE_ACCESS_ENABLED     = true;
     static inline constexpr size_t PADDING_SZ               = std::hardware_destructive_interference_size;
 
-    enum tile_polymorphic_id_option: tile_polymorphic_id_t{
+    enum tile_polymorphic_id_kind: tile_polymorphic_id_t{
         id_immu_8       = 0u,
         id_immu_16      = 1u,
         id_immu_32      = 2u,
@@ -2265,7 +2265,13 @@ namespace dg::network_tile_member_access{
         id_pacm_64      = 43u,
     };
 
+
     struct network_tile_member_access_signature{}; 
+
+    using immu8_accessor_t          = ;
+    using immu16_accessor_t         = ;
+    using immu32_accessor_t         = ;
+    using immu64_accessor_t         = ; 
 
     using leaf8_accessor_t          = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
     using leaf16_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
@@ -2307,8 +2313,18 @@ namespace dg::network_tile_member_access{
     using msgrbwd32_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_32_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_32_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
     using msgrbwd64_accessor_t      = dg::network_tile_member_access::implementation::MsgrBwdAddressLookup<network_tile_member_access_signature, TILE_COUNT_MSGRBWD_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_64_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_64_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t), sizeof(tile_addr_t), sizeof(dst_info_t), sizeof(timein_t)>;
 
+    using extnsrc8_accessor_t       = ;
+    using extnsrc16_accessor_t      = ;
+    using extnsrc32_accessor_t      = ;
+    using extnsrc64_accessor_t      = ;
+
+    using extndst8_accessor_t       = ;
+    using extndst16_accessor_t      = ;
+    using extndst32_accessor_t      = ;
+    using extndst64_accessor_t      = ; 
+
     struct Resource{
-        dg::unordered_unstable_map<uma_ptr_t, tile_polymorphic_id_t> region_id_map; //due to technological constraints of 2024 - we are forced to use std::vector to achieve const propagation, and compiler optimizations support of setters/ getters here
+        dg::unordered_unstable_map<uma_ptr_t, std::pair<tile_polymorphic_id_t, uma_ptr_t>> region_idlast_map; //due to technological constraints of 2024 - we are forced to use std::vector to achieve const propagation, and compiler optimizations support of setters/ getters here
         std::vector<tile_polymorphic_id_t> region_id_table; //alright this might be expensive - whatever
         uma_ptr_t region_id_table_head;
     };
@@ -2317,14 +2333,17 @@ namespace dg::network_tile_member_access{
 
     consteval auto get_memory_usage() -> size_t{
 
-        return      leaf8_accessor_t::buf_size() + leaf16_accessor_t::buf_size() + leaf32_accessor_t::buf_size() + leaf64_accessor_t::buf_size()
+        return      immu8_accessor_t::buf_size() + immu16_accessor_t::buf_size() + immu32_accessor_t::buf_size() + immu64_accessor_t::buf_size()
+                +   leaf8_accessor_t::buf_size() + leaf16_accessor_t::buf_size() + leaf32_accessor_t::buf_size() + leaf64_accessor_t::buf_size()
                 +   mono8_accessor_t::buf_size() + mono16_accessor_t::buf_size() + mono32_accessor_t::buf_size() + mono64_accessor_t::buf_size()
                 +   pair8_accessor_t::buf_size() + pair16_accessor_t::buf_size() + pair32_accessor_t::buf_size() + pair64_accessor_t::buf_size()
                 +   uacm8_accessor_t::buf_size() + uacm16_accessor_t::buf_size() + uacm32_accessor_t::buf_size() + uacm64_accessor_t::buf_size()
                 +   pacm8_accessor_t::buf_size() + pacm16_accessor_t::buf_size() + pacm32_accessor_t::buf_size() + pacm64_accessor_t::buf_size()
                 +   crit8_accessor_t::buf_size() + crit16_accessor_t::buf_size() + crit32_accessor_t::buf_size() + crit64_accessor_t::buf_size()
                 +   msgrfwd8_accessor_t::buf_size() + msgrfwd16_accessor_t::buf_size() + msgrfwd32_accessor_t::buf_size() + msgrfwd64_accessor_t::buf_size()
-                +   msgrbwd8_accessor_t::buf_size() + msgrbwd16_accessor_t::buf_size() + msgrbwd32_accessor_t::buf_size() + msgrbwd64_accessor_t::buf_size();
+                +   msgrbwd8_accessor_t::buf_size() + msgrbwd16_accessor_t::buf_size() + msgrbwd32_accessor_t::buf_size() + msgrbwd64_accessor_t::buf_size()
+                +   extnsrc8_accessor_t::buf_size() + extnsrc16_accessor_t::buf_size() + extnsrc32_accessor_t::buf_size() + extnsrc64_accessor_t::buf_size()
+                +   extndst8_accessor_t::buf_size() + extndst16_accessor_t::buf_size() + extndst32_accessor_t::buf_size() + extndst64_accessor_t::buf_size();
     }
 
     void init(uma_ptr_t buf){
@@ -2332,7 +2351,7 @@ namespace dg::network_tile_member_access{
         stdx::memtransaction_guard transaction_guard;
 
         uma_ptr_t cur                   = buf;
-        resource.region_id_map          = {};
+        resource.region_idlast_map      = {};
         resource.region_id_table_head   = dg::memult::align(buf, MEMREGION_SZ);
         size_t max_memory_span_sz       = get_memory_usage() + MEMREGION_SZ;
         size_t table_sz                 = max_memory_span_sz / MEMREGION_SZ + size_t{max_memory_span_sz % MEMREGION_SZ != 0u}; 
@@ -2343,15 +2362,21 @@ namespace dg::network_tile_member_access{
             uma_ptr_t head = Accessor::get_head();
 
             for (size_t i = 0u; i < Accessor::tile_size(); ++i){
-                uma_ptr_t id_ptr                    = Accessor::id_addr(dg::memult::advance(head, i));
-                uma_ptr_t id_region                 = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-                size_t table_idx                    = dg::memult::distance(resource.region_id_table_head, id_ptr) / MEMREGION_SZ;
-                resource.region_id_map[id_region]   = tile_polymorphic_id;
-                resource.region_id_table[table_idx] = tile_polymorphic_id;
+                uma_ptr_t id_ptr                        = Accessor::id_addr(dg::memult::advance(head, i));
+                uma_ptr_t id_region                     = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+                uma_ptr_t last_ptr                      = Accessor::id_addr(dg::memult::advance(head, Accessor::tile_size()));
+                size_t table_idx                        = dg::memult::distance(resource.region_id_table_head, id_ptr) / MEMREGION_SZ;
+                resource.region_idlast_map[id_region]   = {tile_polymorphic_id, last_ptr};
+                resource.region_id_table[table_idx]     = tile_polymorphic_id;
             }
 
             return dg::memult::advance(cur, Accessor::buf_size());
         };
+
+        cur = initializer(immu8_accessor_t{}, cur, id_immu_8);
+        cur = initializer(immu16_accessor_t{}, cur, id_immu_16);
+        cur = initializer(immu32_accessor_t{}, cur, id_immu_32);
+        cur = initializer(immu64_accessor_t{}, cur, id_immu_64);
 
         cur = initializer(leaf8_accessor_t{},  cur, id_leaf_8);
         cur = initializer(leaf16_accessor_t{}, cur, id_leaf_16);
@@ -2389,15 +2414,30 @@ namespace dg::network_tile_member_access{
         cur = initializer(msgrfwd64_accessor_t{}, cur, id_msgrfwd_64);
 
         cur = initializer(msgrbwd8_accessor_t{},  cur, id_msgrbwd_8);
-        cur = initializer(msgrbwd8_accessor_t{},  cur, id_msgrbwd_16);
-        cur = initializer(msgrbwd16_accessor_t{}, cur, id_msgrbwd_32);
-        cur = initializer(msgrbwd32_accessor_t{}, cur, id_msgrbwd_64);
+        cur = initializer(msgrbwd16_accessor_t{},  cur, id_msgrbwd_16);
+        cur = initializer(msgrbwd32_accessor_t{}, cur, id_msgrbwd_32);
+        cur = initializer(msgrbwd64_accessor_t{}, cur, id_msgrbwd_64);
+
+        cur = initializer(extnsrc8_accessor_t{}, cur, id_extnsrc_8);
+        cur = initializer(extnsrc16_accessor_t{}, cur, id_extnsrc_16);
+        cur = initializer(extnsrc32_accessor_t{}, cur, id_extnsrc_32);
+        cur = initializer(extnsrc64_accessor_t{}, cur, id_extnsrc_64);
+
+        cur = initializer(extndst8_accessor_t{}, cur, id_extndst_8);
+        cur = initializer(extndst16_accessor_t{}, cur, id_extndst_16);
+        cur = initializer(extndst32_accessor_t{}, cur, id_extndst_32);
+        cur = initializer(extndst64_accessor_t{}, cur, id_extndst_64);
     }
 
     void deinit() noexcept{
 
         stdx::memtransaction_guard transaction_guard;
         resource = {};
+    }
+
+    constexpr auto is_immu_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return (id == id_immu_8) || (id == id_immu_16) || (id == id_immu_32) || (id == id_immu_64);
     }
 
     constexpr auto is_leaf_tile(tile_polymorphic_id_t id) noexcept -> bool{
@@ -2440,6 +2480,21 @@ namespace dg::network_tile_member_access{
         return (id == id_msgrbwd_8) || (id == id_msgrbwd_16) || (id == id_msgrbwd_32) || (id == id_msgrbwd_64);
     }
 
+    constexpr auto is_extsnrc_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return (id == id_extnsrc_8) == (id == id_extnsrc_16) || (id == id_extnsrc_32) || (id == id_extnsrc_64);
+    }
+
+    constexpr auto is_extndst_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return (id == id_extndst_8) || (id == id_extndst_16) || (id == id_extndst_32) || (id == id_extndst_64);
+    }
+
+    constexpr auto is_immu8_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_immu_8;
+    } 
+
     constexpr auto is_leaf8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_8;
@@ -2479,6 +2534,21 @@ namespace dg::network_tile_member_access{
 
         return id == id_msgrbwd_8;
     } 
+
+    constexpr auto is_extnsrc8_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extnsrc_8;
+    }
+
+    constexpr auto is_extndst8_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extndst_8;
+    }
+
+    constexpr auto is_immu16_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_immu_16;
+    }
 
     constexpr auto is_leaf16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
@@ -2520,6 +2590,21 @@ namespace dg::network_tile_member_access{
         return id == id_msgrbwd_16;
     }
 
+    constexpr auto is_extnsrc16_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extnsrc_16;
+    }
+
+    constexpr auto is_extndst16_tile(tile_polymorphic_id_t id) noexcept -> bool{
+        
+        return id == id_extndst_16;
+    }
+
+    constexpr auto is_immu32_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_immu_32;
+    } 
+
     constexpr auto is_leaf32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_32;
@@ -2558,6 +2643,21 @@ namespace dg::network_tile_member_access{
     constexpr auto is_msgrbwd32_tile(tile_polymorphic_id_t id) noexcept -> bool{
         
         return id == id_msgrbwd_32;
+    }
+
+    constexpr auto is_extnsrc32_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extnsrc_32;
+    }
+
+    constexpr auto is_extndst32_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extndst_32;
+    }
+
+    constexpr auto is_immu64_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_immu_64;
     }
 
     constexpr auto is_leaf64_tile(tile_polymorphic_id_t id) noexcept -> bool{
@@ -2600,16 +2700,61 @@ namespace dg::network_tile_member_access{
         return id == id_msgrbwd_64;
     }
 
+    constexpr auto is_extnsrc64_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extnsrc_64;
+    }
+
+    constexpr auto is_extndst64_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_extndst_64;
+    }
+
     inline auto dg_typeid(uma_ptr_t ptr) noexcept -> tile_polymorphic_id_t{
-        
-        stdx::atomic_optional_signal_fence(std::memory_order_acquire);
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); //this is prolly the decision that's questionable - but the performance requirement is very stingent - I rather risk "implementation defined" - and include it in the function's description than to compromise access + risk compiler optimizations here
         const size_t table_idx = dg::memult::distance(resource.region_id_table_head, ptr) / MEMREGION_SZ;
 
         return stdx::to_const_reference(resource.region_id_table)[table_idx]; //this is very important - compiler needs to be able to see the constness of vector - the at has to be a memory read of a vector - to avoid duplicate memory reads and group of table dispatchs - shall dg_typeid appears multiple times in a block
     }
 
     template <class CallBack>
-    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{  //this is probably not necessary  -
+    inline void get_immu_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
+
+        std::atomic_optional_signal_fence(std::memory_order_acquire);
+
+        //offload the optimization to compiler's heuristics - this is best done by clang
+
+        if (is_immu8_tile(id)){
+            static_assert(noexcept(cb(immu8_accessor_t{})));
+            cb(immu8_accessor_t{});
+        } else if (is_immu16_tile(id)){
+            static_assert(noexcept(cb(immu16_accessor_t{})));
+            cb(immu16_accessor_t{});
+        } else if (is_immu32_tile(id)){
+            static_assert(noexcept(cb(immu32_accessor_t{})));
+            cb(immu32_accessor_t{});
+        } else if (is_immu64_tile(id)){
+            static_assert(noexcept(cb(immu64_accessor_t{})));
+            cb(immu64_accessor_t{});
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+            }
+        }
+    }
+
+    template <class CallBack>
+    inline void get_immu_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+
+        get_immu_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
+    } 
+
+    template <class CallBack>
+    inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
@@ -2638,11 +2783,11 @@ namespace dg::network_tile_member_access{
     template <class CallBack>
     inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
-        return get_leaf_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
+        get_leaf_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
-    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{ //this is probably not necessary  -
+    inline void get_mono_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
 
@@ -2872,43 +3017,96 @@ namespace dg::network_tile_member_access{
         get_msgrbwd_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
-    auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    template <class CallBack>
+    inline void get_extnsrc_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
 
-        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
-        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire);
 
-        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
-            return std::unexpected(dg::network_exception::BAD_ACCESS);
-        }
-
-        tile_polymorphic_id_t tile_kind = map_ptr->second; 
-
-        if (!is_leaf_tile(tile_kind)){
-            return std::unexpected(dg::network_exception::BAD_ACCESS);
-        } 
-
-        if (is_leaf8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf8_accessor_t::get_head(), leaf8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_leaf16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf16_accessor_t::get_head(), leaf16_accessor_t::tile_size())) , ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_leaf32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf32_accessor_t::get_head(), leaf32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_leaf64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf64_accessor_t::get_head(), leaf64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
+        if (is_extnsrc8_tile(id)){
+            static_assert(noexcept(cb(extnsrc8_accessor_t{})));
+            cb(extnsrc8_accessor_t{});
+        } else if (is_extnsrc16_tile(id)){
+            static_assert(noexcept(cb(extnsrc16_accessor_t{})));
+            cb(extnsrc16_accessor_t{});
+        } else if (is_extnsrc32_tile(id)){
+            static_assert(noexcept(cb(extnsrc32_accessor_t{})));
+            cb(extnsrc32_accessor_t{});
+        } else if (is_extnsrc64_tile(id)){
+            static_assert(noexcept(cb(extnsrc64_accessor_t{})));
+            cb(extnsrc64_accessor_t{});
         } else{
             if constexpr(DEBUG_MODE_FLAG){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
-                return {};
             } else{
                 std::unreachable();
-                return {};
             }
         }
     }
 
-    auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    template <class CallBack>
+    inline void get_extnsrc_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+
+        get_extnsrc_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
+    }
+
+    template <class CallBack>
+    inline void get_extndst_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
+
+        std::atomic_optional_signal_fence(std::memory_order_acquire);
+
+        if (is_extndst8_tile(id)){
+            static_assert(noexcept(cb(extndst8_accessor_t{})));
+            cb(extndst8_accessor_t{});
+        } else if (is_extndst16_tile(id)){
+            static_assert(noexcept(cb(extndst16_accessor_t{})));
+            cb(extndst16_accessor_t{});
+        } else if (is_extndst32_tile(id)){
+            static_assert(noexcept(cb(extndst32_accessor_t{})));
+            cb(extndst32_accessor_t{});
+        } else if (is_extndst64_tile(id)){
+            static_assert(noexcept(cb(extndst64_accessor_t{})));
+            cb(extndst64_accessor_t{});
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+            }
+        }
+    }
+
+    template <class CallBack>
+    inline void get_extndst_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+
+        get_extndst_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
+    }
+
+    inline auto safecthrow_immu_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire);
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
+
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        auto [tile_kind, last]  = map_ptr->second;
+
+        if (!is_immu_tile(tile_kind)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        return ptr;
+    }
+
+    inline auto safecthrow_leaf_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -2918,33 +3116,43 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
+
+        if (!is_leaf_tile(tile_kind)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+        
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        return ptr;
+    }
+
+    inline auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
+
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        auto [tile_kind, last]  = map_ptr->second;
 
         if (!is_mono_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_mono8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono8_accessor_t::get_head(), mono8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono16_accessor_t::get_head(), mono16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono32_accessor_t::get_head(), mono32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono64_accessor_t::get_head(), mono64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-                return {};
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_pair_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -2954,32 +3162,20 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
         
         if (!is_pair_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_pair8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair8_accessor_t::get_head(), pair8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair16_accessor_t::get_head(), pair16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair32_accessor_t::get_head(), pair32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair64_accessor_t::get_head(), pair64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_uacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -2989,32 +3185,20 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
 
         if (!is_uacm_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_uacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm8_accessor_t::get_head(), uacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm16_accessor_t::get_head(), uacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm32_accessor_t::get_head(), uacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm64_accessor_t::get_head(), uacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_pacm_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -3024,33 +3208,20 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
 
         if (!is_pacm_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_pacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm8_accessor_t::get_head(), pacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm16_accessor_t::get_head(), pacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm32_accessor_t::get_head(), pacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm64_accessor_t::get_head(), pacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-                return {};
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_crit_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -3060,32 +3231,20 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second; 
+        auto [tile_kind, last]  = map_ptr->second; 
 
         if (!is_crit_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_crit8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit8_accessor_t::get_head(), crit8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit16_accessor_t::get_head(), crit16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit32_accessor_t::get_head(), crit32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit64_accessor_t::get_head(), crit64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -3095,33 +3254,20 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
 
         if (!is_msgrfwd_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_msgrfwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd8_accessor_t::get_head(), msgrfwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd16_accessor_t::get_head(), msgrfwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd32_accessor_t::get_head(), msgrfwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd64_accessor_t::get_head(), msgrfwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else {
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-                return {};
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -3131,33 +3277,20 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
 
         if (!is_msgrbwd_tile(tile_kind)){
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        if (is_msgrbwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd8_accessor_t::get_head(), msgrbwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd16_accessor_t::get_head(), msgrbwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd32_accessor_t::get_head(), msgrbwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd64_accessor_t::get_head(), msgrbwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-                return {};
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        return ptr;
     }
 
-    auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+    inline auto safecthrow_srcextclone_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
         uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
@@ -3167,85 +3300,71 @@ namespace dg::network_tile_member_access{
             return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
 
-        tile_polymorphic_id_t tile_kind = map_ptr->second;
+        auto [tile_kind, last]  = map_ptr->second;
 
-        if (is_leaf8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf8_accessor_t::get_head(), leaf8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_leaf16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf16_accessor_t::get_head(), leaf16_accessor_t::tile_size())) , ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_leaf32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf32_accessor_t::get_head(), leaf32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_leaf64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(leaf64_accessor_t::get_head(), leaf64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono8_accessor_t::get_head(), mono8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono16_accessor_t::get_head(), mono16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono32_accessor_t::get_head(), mono32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_mono64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(mono64_accessor_t::get_head(), mono64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit8_accessor_t::get_head(), crit8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit16_accessor_t::get_head(), crit16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit32_accessor_t::get_head(), crit32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_crit64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(crit64_accessor_t::get_head(), crit64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd8_accessor_t::get_head(), msgrfwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd16_accessor_t::get_head(), msgrfwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd32_accessor_t::get_head(), msgrfwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrfwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrfwd64_accessor_t::get_head(), msgrfwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd8_accessor_t::get_head(), msgrbwd8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd16_accessor_t::get_head(), msgrbwd16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd32_accessor_t::get_head(), msgrbwd32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_msgrbwd64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(msgrbwd64_accessor_t::get_head(), msgrbwd64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair8_accessor_t::get_head(), pair8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair16_accessor_t::get_head(), pair16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair32_accessor_t::get_head(), pair32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pair64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pair64_accessor_t::get_head(), pair64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm8_accessor_t::get_head(), uacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm16_accessor_t::get_head(), uacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm32_accessor_t::get_head(), uacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_uacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(uacm64_accessor_t::get_head(), uacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm8_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm8_accessor_t::get_head(), pacm8_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm16_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm16_accessor_t::get_head(), pacm16_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm32_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm32_accessor_t::get_head(), pacm32_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else if (is_pacm64_tile(tile_kind)){
-            return dg::network_exception::expected_result_if(dg::memult::ptrcmp_less(ptr, dg::memult::advance(pacm64_accessor_t::get_head(), pacm64_accessor_t::tile_size())), ptr, std::unexpected(dg::network_exception::BAD_ACCESS));
-        } else{
-            if constexpr(DEBUG_MODE_FLAG){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-                return {};
-            } else{
-                std::unreachable();
-                return {};
-            }
+        if (!is_srcextclone_tile(tile_kind)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
         }
+
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        return ptr;
     }
 
-    auto safe_leaf_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safecthrow_dstextclone_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
+
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        auto [tile_kind, last]  = map_ptr->second;
+
+        if (!is_dstextclone_tile(tile_kind)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        return ptr;
+    }
+
+    inline auto safecthrow_tile_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
+
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        auto [_, last]          = map_ptr->second;
+
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        return ptr;
+    }
+
+    inline auto safe_immu_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_immu_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+    
+    inline auto safe_leaf_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_leaf_ptr_access(ptr));
@@ -3254,7 +3373,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_mono_ptr_access(ptr));
@@ -3263,7 +3382,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_pair_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_pair_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_pair_ptr_access(ptr));
@@ -3272,7 +3391,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_uacm_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_uacm_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_uacm_ptr_access(ptr));
@@ -3281,7 +3400,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_pacm_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_pacm_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_pacm_ptr_access(ptr));
@@ -3290,7 +3409,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_crit_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_crit_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_crit_ptr_access(ptr));
@@ -3299,7 +3418,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_msgrfwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_msgrfwd_ptr_access(ptr));
@@ -3308,7 +3427,7 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_msgrbwd_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_msgrbwd_ptr_access(ptr));
@@ -3317,7 +3436,25 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safe_tile_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+    inline auto safe_srcextclone_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_srcextclone_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    inline auto safe_dstextclone_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_dstextclone_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
+    inline auto safe_tile_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
             return dg::network_exception_handler::nothrow_log(safecthrow_tile_ptr_access(ptr));
@@ -3326,47 +3463,62 @@ namespace dg::network_tile_member_access{
         }
     }
 
-    auto safethrow_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_immu_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_immu_ptr_access(ptr));
+    }
+
+    inline auto safethrow_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_leaf_ptr_access(ptr));
     }
 
-    auto safethrow_mono_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_mono_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_mono_ptr_access(ptr));
     }
 
-    auto safethrow_pair_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_pair_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_pair_ptr_access(ptr));
     }
 
-    auto safethrow_uacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_uacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_uacm_ptr_access(ptr));
     }
     
-    auto safethrow_pacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_pacm_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_pacm_ptr_access(ptr));
     }
 
-    auto safethrow_crit_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_crit_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_crit_ptr_access(ptr));
     }
 
-    auto safethrow_msgrfwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_msgrfwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_msgrfwd_ptr_access(ptr));
     }
 
-    auto safethrow_msgrbwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_msgrbwd_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_msgrbwd_ptr_access(ptr));
     }
 
-    auto safethrow_tile_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+    inline auto safethrow_srcextclone_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_srcextclone_ptr_access(ptr));
+    }
+
+    inline auto safethrow_dstextclone_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_dstextclone_ptr_access(ptr));
+    }
+
+    inline auto safethrow_tile_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_tile_ptr_access(ptr));
     }
