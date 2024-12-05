@@ -46,6 +46,25 @@ namespace dg::network_producer_consumer{
         virtual auto capacity() const noexcept -> size_t = 0;
     };
 
+    template <class EventType, class Lambda>
+    class LambdaWrappedConsumer: public virtual ConsumerInterface<EventType>{
+
+        private:
+
+            Lambda lambda;
+        
+        public:
+
+            static_assert(std::is_nothrow_destructible_v<Lambda>);
+
+            LambdaWrappedConsumer(Lambda lambda) noexcept(std::is_nothrow_move_constructible_v<Lambda>): lambda(std::move(lambda)){}
+
+            void push(EventType * src, size_t src_sz) noexcept(std::is_nothrow_invocable_v<Lambda, EventType *, size_t>){
+
+                this->lambda(src, src_sz);
+            }
+    };
+
     template <class EventType>
     class LimitConsumerToConsumerWrapper: public virtual ConsumerInterface<EventType>{
 
@@ -122,7 +141,11 @@ namespace dg::network_producer_consumer{
     auto delvrsrv_close_handle(DeliveryHandle<event_t> * handle) noexcept{
 
         handle = stdx::safe_ptr_access(handle);
-        handle->consumer->push(handle->deliverable_arr.get(), handle->deliverable_sz);
+
+        if (handle->delivery_sz != 0u){ //a predicted branch or even a mispredicted one is way less expensive than a polymorphic call - so it should be like this
+            handle->consumer->push(handle->deliverable_arr.get(), handle->deliverable_sz);
+        }
+
         delete handle; //TODO: internalize delete
     }
 
@@ -383,7 +406,11 @@ namespace dg::network_raii_producer_consumer{
     void delvrsrv_close_handle(DeliveryHandle<event_t> * handle) noexcept{
 
         handle = stdx::safe_ptr_access(handle);
-        handle->consumer->push(std::move(handle->deliverable_vec));
+
+        if (!handle->deliverable_vec.empty()){
+            handle->consumer->push(std::move(handle->deliverable_vec));
+        }
+
         delete handle;
     }
 
