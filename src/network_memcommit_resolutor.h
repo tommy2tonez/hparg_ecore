@@ -834,63 +834,6 @@ namespace dg::network_memcommit_resolutor{
         T content;
     };
 
-    //alrights - things to consider
-    //let's look at this application from users' perspectives
-
-    //user has data, user has leaf logits (either resides in our storage engine or their storage engines)
-    //user wants to f(x) -> y, and y -> f(x)
-    
-    //user opens controller session (this is not core)
-    //user allocates tiles via controller
-    //user ingests leaf
-    //user signals 
-    //user waits for msgrfwd (msgrfwd + extnsrc + extndst tiles need to have ID + retry_count)
-    //user terminates session
-
-    //everything's fine - we have a massive training system (MPP) that everyone can have access to - without the usage of supercomputer (we have 2 billion handheld devices to backprop - we'll get there someday)
-
-    //user wants to train leaf logits
-    //by adding crit logits
-    //user wants to extract leaf_logits - by using msgrbwd - either extract it to ingestion accelerator back to the storage engine or to their endpoints
-
-    //user wants to have cyclic brains
-    //we don't want to cyclic each leaf logit because it's too expensive
-    //so we could use msgrbwd in this case to overcome the issues
-
-    //what do we provide from the core's perspective? 
-    //we make sure that the msgrfwd tiles are in fact intact - as if they are forwarded in the traditional synchronous fashion - not guarantee no-exceptability from RAM or other hardware failures
-
-    //application from the core's perspective:
-    //core manages tiles - and core is not responsible for tile's lifetime - to core - tile is always alive - so there is no leak of tiles in core's perspective
-    //core forward and backward tiles that are referenced in the memcommit and share the same operatable_id
-    //core does internal comm by using UDP packets + TCP packets without proper handshakes (to avoid overheads)
-    //core can drop memcommit - because it does not violate the contract of msgrfwd intactability
-
-    //application from the controller's perspective:
-    //controller is the user <-> cores comm 
-    //controller is responsible for: tile allocations, operatable_id management, tile lifetime with respect to the controller, user sessions, logit ingestions, and bring msgrfwd -> users 
-
-    //today we learn about interface designs 
-
-    //we ALWAYS design our interface in users' perspective - not implementation perspective - like ping resolutor takes in uma_ptr_t, pong_resolutor takes in uma_ptr_t or tile_initialization takes in uma_ptr_t
-    //in the user's perspective - we want to do the memcommit of something at a certain address, we dont give a shit about how, why, where - it's encapsulated in those resolutors
-    //thing is we want to minimize the information necessary in the interface design - always abstract it to the absolute - maximum 1 or 2 arguments
-    //we don't want 20 arguments in our methods - first, it is not maintainable
-    //                                            second, it is not extensible
-    //                                            third, it pollutes the upstream functions
-    //best, abstract the interface - include those implementation details in your class members
-    //this is for an extensible, maintainable engineering practices - <implementation_arguments> never should appear in the interface - because we most likely will think of something better and change that - and we don't want the change the whole stack_trace - we want to change that specific component
-    //there are C people who would disagree with me - but they are like 1 century away from good practices
-    //they always have problem with changing their entire stack_trace once they think of something better - yeah - because of <implementation_arguments>
-
-    //second thing we learn about is component designs
-    //always design your component to do one thing - if you see MemcommitResolutor - its responsbility is to devirtualize virtual_memory_event_t
-    //ForwardPingResolutor responsibility is to again devirtualize tile_kind
-    //ForwardPingLeafSignalResolutor is to do dispatch and decay the dispatch -> another work_order which is delivered back to the dispatch center
-    //the ultimate goal of component design is to split them in reasonable chunks - not for anyone - but for yourself to digest the concepts + debug the concepts
-    //and don't think of every usecase for your components - you can't - think of a very specific use case for that component - tell me what the components need, tell me what the components do, and tell me how to use it 
-    //if you think devirtualization is worth one component - then creates a component for it - just for devirtualization and dispatch to other guys
-
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
         public:
@@ -900,11 +843,6 @@ namespace dg::network_memcommit_resolutor{
                 (void) ptr_arr;
             }
     };
-
-    //the congestion of ping/pong is too high - 
-    //assume the cost of mutex acquisition is 100 flops - then there needs to be at least 200 delta dispatches to justify the lock acquisition time 
-    //these delivery guys must be stack allocated - for speed + locality
-    //ping resolutor must be polymorphic - to achieve locality of deliveries - we'll work on this later - 
 
     class ForwardPingPairSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
@@ -921,7 +859,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - in the sense of delivery locality - when we ping tiles - we want locality of accesses - and locality of deliveries
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -952,7 +890,7 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                     case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                     case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
-                    case TILE_INIT_STATUS_INITIALIZED: [[fallthrough]]
+                    case TILE_INIT_STATUS_INITIALIZED:
                         break;
                     case TILE_INIT_STATUS_ADOPTED:
                     {
@@ -993,7 +931,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here -
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1024,7 +962,7 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                     case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                     case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
-                    case TILE_INIT_STATUS_INITIALIZED: [[fallthrough]]
+                    case TILE_INIT_STATUS_INITIALIZED:
                         break;
                     case TILE_INIT_STATUS_ADOPTED:
                     {
@@ -1066,7 +1004,7 @@ namespace dg::network_memcommit_resolutor{
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - 
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1097,7 +1035,7 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                     case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                     case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
-                    case TILE_INIT_STATUS_INITIALIZED: [[fallthrough]]
+                    case TILE_INIT_STATUS_INITIALIZED:
                         break;
                     case TILE_INIT_STATUS_ADOPTED:
                     {
@@ -1142,7 +1080,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - 
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1173,7 +1111,7 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                     case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                     case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
-                    case TILE_INIT_STATUS_INITIALIZED: [[fallthrough]]
+                    case TILE_INIT_STATUS_INITIALIZED:
                         break;
                     case TILE_INIT_STATUS_ADOPTED:
                     {
@@ -1217,7 +1155,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - 
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1248,7 +1186,7 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                     case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                     case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
-                    case TILE_INIT_STATUS_INITIALIZED: [[fallthrough]]
+                    case TILE_INIT_STATUS_INITIALIZED:
                         break;
                     case TILE_INIT_STATUS_ADOPTED:
                     {
@@ -1290,7 +1228,7 @@ namespace dg::network_memcommit_resolutor{
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - 
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1359,7 +1297,7 @@ namespace dg::network_memcommit_resolutor{
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - 
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1428,7 +1366,7 @@ namespace dg::network_memcommit_resolutor{
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity); //there is a perf constraint here - 
 
                 if (!delivery_handle.has_value()){
                     dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
@@ -1801,10 +1739,12 @@ namespace dg::network_memcommit_resolutor{
                     this->resolve(ptr_arr[i], delivery_handle->get());
                 }
             }
-        
+
         private:
 
-            //alright guys - things are complicated - we want to see if init_status_t == DECAYED - we then want to see if src is initialized - then we forward - then we notify observers - then we return true
+            //alright guys - things are complicated - we want to see if init_status_t == DECAYED - we then want to see if src is initialized - then we forward - then we decay init_signal -> pong_signal
+            //5 flops/ dispatch is prolly a dream - we tried our best to reduce as many polymorphism overhead as possible - I think we better vectorize uma_ptr_t * dispatch to reduce cuda synchronization overheads here - rather than using "array" approaches - this is a bad approach as we already talked about this being not a quantifiable thing
+            //think of the vectorizations as delvsrv_open_raiihandle - the only diff is we stop when std::vector<std::tuple<void * __restrict__, const void * __restrict__, const void * __restrict__>> contract is broken
 
             void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
 
@@ -1823,27 +1763,24 @@ namespace dg::network_memcommit_resolutor{
                     src = get_mono_src_nothrow(dst);
                 }
 
-                uma_ptr_t src_lck_addr = get_tile_rcu_addr_nothrow(src);
+                uma_ptr_t src_lck_addr = get_tile_rcu_addr_nothrow(src); //access_err
                 dg::network_memops_uma::memlock_guard mem_grd(dst_lck_addr, src_lck_addr); //we dont want to use try_lock because it's not a good practice here - so let's actually do twice lock_guards - lock_guard does mmeory flush + everything - which is good
 
-                //these guys have to fit in L1 cache by collector grouping techniques - otherwise we are very F - this is an important problem to solve
-                //1 << 30 tiles of 64x64 - we need bitwises - to reduce this to 1 << 22 bytes
-                //= 4TB
-                //I think cuda is only for uacm and pacm right now - uacm of acm size 32-64 and pacm of acm size 32-64
+                //we want to combine some of these guys to avoid too many cache reads - we'll do that after implementing this - we cant rely on uma_ptr_t * being adjecent to offset the costs
 
-                uma_ptr_t new_src                                       = get_mono_src_nothrow(dst);
-                init_status_t dst_init_status                           = get_mono_init_status_nothrow(dst);
-                operatable_id_t dst_operatable_id                       = get_mono_operatable_id_nothrow(dst);
-                std::array<uma_ptr_t, OBSERVER_ARRAY_CAP> observer_arr  = get_mono_observer_array(dst);
-                size_t observer_arr_sz                                  = get_mono_observer_array_size(dst);
-                uma_ptr_t dst_logit_umaptr                              = get_mono_logit_addr_nothrow(dst);
-                dispatch_control_t dispatch_control                     = get_mono_dispatch_control_nothrow(dst);
-                init_status_t src_init_status                           = get_tile_init_status_nothrow(src);
-                operatable_id_t src_operatable_id                       = get_tile_operatable_id_nothrow(src);
-                uma_ptr_t src_logit_umaptr                              = get_tile_logit_addr_nothrow(src);
+                uma_ptr_t new_src                                           = get_mono_src_nothrow(dst);
+                init_status_t dst_init_status                               = get_mono_init_status_nothrow(dst);
+                operatable_id_t dst_operatable_id                           = get_mono_operatable_id_nothrow(dst);
+                std::array<uma_ptr_t, OBSERVER_ARRAY_CAP> dst_observer_arr  = get_mono_observer_array(dst);
+                size_t dst_observer_arr_sz                                  = get_mono_observer_array_size(dst);
+                uma_ptr_t dst_logit_umaptr                                  = get_mono_logit_addr_nothrow(dst);
+                dispatch_control_t dispatch_control                         = get_mono_dispatch_control_nothrow(dst);
+                init_status_t src_init_status                               = get_tile_init_status_nothrow(src);
+                operatable_id_t src_operatable_id                           = get_tile_operatable_id_nothrow(src);
+                uma_ptr_t src_logit_umaptr                                  = get_tile_logit_addr_nothrow(src);
 
                 if (new_src != src){
-                    return; //is this necessary? let's see - we have paths - paths just been altered - problem is we don't want to retry because pong_count will retrigger the initialization process - so no try_resolve here - 
+                    return;
                 }
 
                 if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
@@ -1880,8 +1817,8 @@ namespace dg::network_memcommit_resolutor{
 
                 set_mono_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
 
-                for (size_t i = 0u; i < observer_arr_sz; ++i){
-                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_forward_pong_signal(observer_arr[i]));
+                for (size_t i = 0u; i < dst_observer_arr_sz; ++i){
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_forward_pong_signal(dst_observer_arr[i]));
                 }
             }
     };
@@ -1901,6 +1838,88 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
+            }
+        
+        private:
+
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
+
+                // using namespace dg::network_tile_member_getsetter;
+                auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(dst);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                } 
+
+                uma_ptr_t dst_lck_addr  = get_pair_rcu_addr_nothrow(dst);
+                uma_ptr_t lhs           = {};
+                uma_ptr_t rhs           = {};
+
+                //fine - refactor later
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_lck_addr);
+                    lhs = get_pair_left_descendant_nothrow(dst);
+                    rhs = get_pair_right_descendant_nothrow(dst);
+                }
+
+                uma_ptr_t lhs_lck_addr  = get_rcu_addr_nothrow(lhs);
+                uma_ptr_t rhs_lck_addr  = get_rcu_addr_nothrow(rhs);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_lck_addr, lhs_lck_addr, rhs_lck_addr);
+
+                uma_ptr_t new_lhs                       = get_pair_left_descendant_nothrow(dst);
+                uma_ptr_t new_rhs                       = get_pair_right_descendant_nothrow(dst);
+                operatable_id_t dst_operatable_id       = get_pair_operatable_id_nothrow(dst);
+                operatable_id_t lhs_operatable_id       = get_operatable_id_nothrow(lhs);
+                operatable_id_t rhs_operatable_id       = get_operatable_id_nothrow(rhs);
+                uma_ptr_t dst_logit_umaptr              = get_pair_logit_addr_nothrow(dst);
+                uma_ptr_t lhs_logit_umaptr              = get_logit_addr_nothrow(lhs);
+                uma_ptr_t rhs_logit_umaptr              = get_logit_addr_nothrow(rhs);
+                dispatch_control_t dispatch_control     = get_pair_dispatch_control_nothrow(dst);
+
+                if (lhs != new_lhs){
+                    return;
+                }
+
+                if (rhs != new_rhs){
+                    return;
+                }
+
+                if (!dg::network_genult::is_same_value(dst_operatable_id, lhs_operatable_id, rhs_operatable_id)){
+                    return;
+                }
+
+                auto [dst_vd_id, lhs_vd_id, rhs_vd_id, dp_device, tileops_dp]   = dg::network_dispatch_control::decode_pair(dispatch_control);
+                auto [dst_map_resource, lhs_map_resource, rhs_map_resource]     = dg::network_uma::mapsafe_recursivewait_many<3u>({{dst_logit_umaptr, dst_vd_id}, {lhs_logit_umaptr, lhs_vd_id}, {rhs_logit_umaptr, rhs_vd_id}});
+                auto dst_logit_vmaptr   = dg::network_uma::get_vma_ptr(dst_map_resource);
+                auto lhs_logit_vmaptr   = dg::network_uma::get_vma_ptr(lhs_map_resource);
+                auto rhs_logit_vmaptr   = dg::network_uma::get_vma_ptr(rhs_map_resource); 
+                auto dst_logit_vmamap   = dg::network_vmamap::mapsafe_nothrow(dst_logit_vmaptr);
+                auto lhs_logit_vmamap   = dg::network_vmamap::mapsafe_nothrow(lhs_logit_vmaptr);
+                auto rhs_logit_vmamap   = dg::network_vmamap::mapsafe_nothrow(rhs_logit_vmaptr); 
+
+                if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
+                    dg::network_tileops_cuda_poly::fwd_pair(get_cuda_ptr(dst_logit_vmamap), get_cuda_ptr(lhs_logit_vmamap), get_cuda_ptr(rhs_logit_vmamap), tileops_dp_id);
+                } else if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
+                    dg::network_tileops_host_poly::fwd_pair(get_host_ptr(dst_logit_vmamap), get_host_ptr(lhs_logit_vmamap), get_host_ptr(rhs_logit_vmamap), tileops_dp_id);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
             }
     };
 
