@@ -2476,9 +2476,9 @@ namespace dg::network_memcommit_resolutor{
 
                 //no-ops on errors
 
-                if (dg::network_dispatch_control::is_cuda_dispatch()){
+                if (dg::network_dispatch_control::is_cuda_dispatch(dp_device_kind)){
                     dg::network_tileops_cuda_poly::forward_mono(dg::network_vmamap::get_cuda_ptr(dst_logit_vmamap), dg::network_vmamap::get_cuda_ptr(src_logit_vmamap), tileops_dp_kind);
-                }  else if (dg::network_dispatch_control::is_host_dispatch()){
+                }  else if (dg::network_dispatch_control::is_host_dispatch(dp_device_kind)){
                     dg::network_tileops_host_poly::forward_mono(dg::network_vmamap::get_host_ptr(dst_logit_vmamap), dg::network_vmamap::get_host_ptr(src_logit_vmamap), tileops_dp_kind);
                 } else{
                     if constexpr(DEBUG_MODE_FLAG){
@@ -2749,6 +2749,29 @@ namespace dg::network_memcommit_resolutor{
 
     //
 
+    //we'll get these compiled then we'll write a linter that could turn our code -> C++ acceptable code - we don't care about that now
+    //we care about easy to debug - easy to digest - after the program is theoretically working - then we'll lint the program
+    //there are bugs that are hard to catch without inlining the entire programs - like global var accesses
+    //when inlining the program, we have to assume that the global vars are concurrent vars - which requires us to use concurrent-safety-measures when we access those vars
+    //when we not inlining the program, we accidentally, undefinely solve those problems by compiling those guys separately
+
+    //alrights, we'll try to reduce the overhead flops, after get the grasp of the high level interface - we want to reduce worst case member_access -> one_cache_read + 1 memlock + try_acquire - increase locality of access by scheduling, etc.
+    //the chance of lock acquisition must be unif for all tasks 
+
+    //I think the scheduling algorithm is the state of the art for concurrent training
+    //we want to schedule the tile -> max_init_time(descendants)
+
+    //the further the forward hops or the backward hops - the lesser the scan frequency on such memregion
+    //scan frequency ONLY makes sense relatively
+
+    //lets say we have mono (32 Hz)-> pair (16Hz) -> uacm (8Hz) -> pacm (4Hz) -> mono (2Hz) -> msgfwd (1Hz) -> crit
+    //we want to increase the locality of dispatches for forwards - not because of the tiles - but because of the locality access of the tile_members - every time we read 1 cache_line for an element of size 8 bytes - we are utilizing the memfetch at a rate of 8/CAHCE_LINE_SIZE = 8/64 = 1/8 - which is bad
+    //the moral is simple - we don't care if we are the fastest forward or backward - that's meaningless - we care about given that GPU power and CPU power - we want maximum computation thruput for all the trainings or all the forwards and backwards
+
+    //if you skip synchronization for backwards - you are wasting at least 20x GPU powers - the exact formula for no-synchro backprop is 1 << n + 2 * (1 << (n - 1)) + 4 * (1 << (n - 2)) + (8 * (1 << (n -3))) etc. 
+    //so we are talking about height * cost(synchro)
+    //so when people are training 1 model - we are training concurrently HEIGHT models with the same cost and extracting the derivatives of gradients
+
     class BackwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
         private:
@@ -2764,25 +2787,103 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
             }
 
-        // private:    
+        private:
 
-        //     std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-        //     const size_t delivery_capacity;
-        
-        // public:
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
 
-        //     LeafBackwardDoSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-        //                                   size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
-        //                                                                       delivery_capacity(delivery_capacity){}
-            
-        //     void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
+                auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(dst);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
+
+                uma_ptr_t dst_rcu_addr                  = get_leaf_rcu_addr_nothrow(dst);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                init_status_t init_status               = get_leaf_init_status_nothrow(dst);
+                grad_status_t grad_status               = get_leaf_grad_status_nothrow(dst);
+                uma_ptr_t logit_umaptr                  = get_leaf_logit_addr_nothrow(dst);
+                uma_ptr_t grad_umaptr                   = get_leaf_grad_addr_nothrow(dst);
+                dispatch_control_t dispatch_control     = get_leaf_grad_dispatch_control_nothrow(dst);
+
+                if (init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return; //no-ops no-err
+                }
+
+                if (grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }      
                 
-        //         for (size_t i = 0u; i < sz; ++i){
-        //             dg::network_tileops_handler::backward_leaf(ptr_arr[i]); 
-        //         }
-        //     }
+                auto [logit_vd_id, grad_vd_id, dp_device_kind, tileops_dp_id]   = dg::network_dispatch_control::decode_gradupdate_leaf(dispatch_control);
+                auto [logit_map_resource, grad_map_resource]                    = dg::network_uma::lockmap_safewait_many_nothrow<2u>({{logit_umaptr, logit_vd_id}, {grad_umaptr, grad_vd_id}});
+                auto logit_vmaptr                                               = dg::network_uma::get_vma_ptr(logit_map_resource);
+                auto grad_vmaptr                                                = dg::network_uma::get_vma_ptr(grad_map_resource);
+                auto logit_vmamap                                               = dg::network_vmamap::mapsafe_nothrow(logit_vmaptr);
+                auto grad_vmamap                                                = dg::network_vmamap::mapsafe_nothrow(grad_vmaptr);
+
+                //so we have expected output - which we called clogit
+                //we take the difference of clogit and logit - we propagate the difference and gradients
+                //then we want to update the leaf logits by using the formula new_var = old_var + lr * dy/ (dy/dvar)
+                //is there a clever way to just backprop the gradients?
+                //if dy is always 1 - then 1dy/dy/dvar = dvar + var = new_var
+                //what's the general formula for this? I think this is where we lack -
+
+                //so there must exist a loss function to offset the cost - such loss function is with one increase in lf - difference/ratio increase in y
+                //dy/dlf = difference/ratio
+                //dlf/dy = ratio/difference
+                //so its just two mono transforms then - because the mono is trainable - and crit is actually immu - so we could expect a dynamic training
+                //so we did crit wrong - there is no clogit - only 11111111
+                //so there also must exist a logit where backprop is deactivated - such is gradients do not prop through the values
+
+                //because what we want is this f(x) -> y
+                //f(x) - immu = difference
+                //u(f(x)) =  f(x) * ratio/difference (this is what we want)
+                //d u(f(x)) / d f(x) = ratio/difference
+                //there is no d u(f(x)) / d difference/ratio
+
+                //-----------------
+                //alrights - let's do 1/d_grad update for now
+                //thing is we try to const these at some point - either it is the learning rate or the backpropagation or etc. 
+                //all these recursive definitions of training needs to have a recursive base
+
+                //a dynamic training (loss_function) is something, in my opinion, not quantifiable - and I don't know if we should move in the direction to mess up the code - but we'll try the theories
+                //a dynamic training can be done - via the usage of F(f(x), g(x)) -> y + crit prop back of memset(clogit, 1, sizeof(clogit_sz))
+                //a static training could be done via storing immu logits on the crit tiles - which is fine - and has a finer grain of logic-binding
+
+                //------------------
+                //the rotor and gears problem could be solved by having multiple networks - 
+                //the maximum layers a training network should have is 10-15 layers each layer is uacm pacm mono pair
+                //we'll move in the direction of random sticks and paths to estimate the best possible network
+                //because we are training compression f(g(x)) -> x - and not f(x) -> y - so there should be no problem with the output (intermediate layer) being "unreasonable"- for the ouput of any network is the semantic of its input
+                //we'll try to stack 1000 networks and compress the thing - let's see how it goes
+                //------------------
+
+                if (dg::network_dispatch_control::is_cuda_dispatch(dp_device_kind)){
+                    dg::network_tileops_cuda_poly::grad_update_n_zero(dg::network_vmamap::get_cuda_ptr(logit_vmamap), dg::network_vmamap::get_cuda_ptr(grad_vmamap), tileops_dp_id);
+                } else if (dg::network_dispatch_control::is_cuda_dispatch(dp_device_kind)){
+                    dg::network_tileops_host_poly::grad_update_n_zero(dg::network_vmamap::get_host_ptr(logit_vmamap), dg::network_vmamap::get_host_ptr(grad_vmamap), tileops_dp_id);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+
+            }
     };
 
     class BackwardDoMonoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
@@ -2800,6 +2901,136 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
+            }
+        
+        private:
+
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle){
+
+                auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(dst);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
+
+                uma_ptr_t dst_rcu_addr  = get_mono_rcu_addr_nothrow(dst);
+                uma_ptr_t src           = {};
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                    src = get_mono_descendant_nothrow(dst);
+                }        
+
+                uma_ptr_t src_rcu_addr  = get_tile_rcu_addr_nothrow(dst);
+                dg::network_memops_uma::memlock_guard mem_grd(src_rcu_addr, dst_rcu_addr); 
+
+                uma_ptr_t new_src                   = get_mono_descendant_nothrow(dst);
+                init_status_t dst_init_status       = get_mono_init_status_nothrow(dst);
+                grad_status_t dst_grad_status       = get_mono_grad_status_nothrow(dst);
+                operatable_id_t dst_operatable_id   = get_mono_operatable_id_nothrow(dst); //operatable_id seems like an individual identifier - use operatable_group_id instead
+                uma_ptr_t dst_grad_umaptr           = get_mono_grad_addr_nothrow(dst);
+                dispatch_control_t dispatch_control = get_mono_backprop_dispatch_control_nothrow(dst);
+                init_status_t src_init_status       = get_tile_init_status_nothrow(src); //ptr-access
+                operatable_id_t src_operatable_id   = get_tile_operatable_id_nothrow(src);
+                grad_status_t src_grad_status       = get_tile_grad_status_nothrow(src);
+                uma_ptr_t src_grad_umaptr           = get_tile_grad_addr_nothrow(src);
+                uma_ptr_t src_logit_umaptr          = get_tile_logit_addr_nothrow(src);
+
+                if (src != new_src){
+                    return;
+                }
+
+                if (dst_operatable_id != src_operatable_id){
+                    return;
+                }
+
+                if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (dst_grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }
+                
+                //refactor later
+                auto [backwardee_grad_vd_id, backwardee_logit_vd_id, backwarder_grad_vd_id, dp_device_kind, tileops_dp_kind]    = dg::network_dispatch_control::decode_bwd_mono(dispatch_control); //dst src is ambiguous here
+                auto [backwardee_grad_map_resource, backwardee_logit_map_resource, backwarder_grad_map_resouce]                 = dg::network_uma::lockmap_safewait_many_nothrow<3u>({{src_grad_umaptr, backwardee_grad_vd_id}, {src_logit_umaptr, backwardee_logit_vd_id}, {dst_grad_umaptr, backwarder_grad_vd_id}});
+                auto backwardee_grad_vmaptr     = dg::network_uma::get_vma_ptr(backwardee_grad_map_resource);
+                auto backwardee_logit_vmaptr    = dg::network_uma::get_vma_ptr(backwardee_logit_map_resource);
+                auto backwarder_grad_vmaptr     = dg::network_uma::get_vma_ptr(backwarder_grad_map_resouce);
+
+                auto backwardee_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(backwardee_grad_vmaptr);
+                auto backwardee_logit_vmamap    = dg::network_vmamap::mapsafe_nothrow(backwardee_logit_vmaptr);
+                auto backwarder_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(backwarder_grad_vmaptr);
+
+                if (dg::network_dispatch_control::is_cuda_dispatch(dp_device_kind)){
+                    if (src_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+                        dg::network_tileops_cuda_poly::bwd_mono_zero_n_add(dg::network_vmamap::get_cuda_ptr(backwardee_grad_vmamap), dg::network_vmamap::get_cuda_ptr(backwardee_logit_vmamap), dg::network_vmamap::get_cuda_ptr(backwarder_grad_vmamap), tileops_dp_kind);
+                    } else if (src_grad_status == TILE_GRAD_STATUS_EMPTY){
+                        dg::network_tileops_cuda_poly::bwd_mono_zero_n_assign(dg::network_vmamap::get_cuda_ptr(backwardee_grad_vmamap), dg::network_vmamap::get_cuda_ptr(backwardee_logit_vmamap), dg::network_vmamap::get_cuda_ptr(backwarder_grad_vmamap), tileops_dp_kind);
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else if (dg::network_dispatch_control::is_host_dispatch(dp_device_kind)){
+                    if (src_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+                        dg::network_tileops_host_poly::bwd_mono_zero_n_add(dg::network_vmamap::get_host_ptr(backwardee_grad_vmamap), dg::network_vmamap::get_host_ptr(backwardee_logit_vmamap), dg::network_vmamap::get_host_ptr(backwarder_grad_vmamap), tileops_dp_kind);
+                    } else if (src_grad_status == TILE_GRAD_STATUS_EMPTY){
+                        dg::network_tileops_host_poly::bwd_mono_zero_n_assign(dg::network_vmamap::get_host_ptr(backwardee_grad_vmamap), dg::network_vmamap::get_host_ptr(backwardee_logit_vmamap), dg::network_vmamap::get_host_ptr(backwarder_grad_vmamap), tileops_dp_kind);
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+
+                switch (src_grad_status){
+                    case TILE_GRAD_STATUS_EMPTY:
+                        set_tile_grad_status_nothrow(src, TILE_GRAD_STATUS_INITIALIZED);
+                        break;
+                    case TILE_GRAD_STATUS_INITIALIZED:
+                        break;
+                    default:
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                            break;
+                        } else{
+                            std::unreachable();
+                            break;
+                        }
+                }
+
+                dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_backward_do_signal(src));
             }
     };
 
@@ -2809,14 +3040,187 @@ namespace dg::network_memcommit_resolutor{
 
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
             const size_t delivery_capacity;
-        
+
         public:
 
             BackwardDoPairSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
                                           size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity){}
-            
+
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
+
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
+            }
+
+        private:
+
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle){
+
+                auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(ptr);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
+
+                uma_ptr_t dst_rcu_addr  = get_pair_rcu_addr_nothrow(ptr);
+                uma_ptr_t lhs           = {};
+                uma_ptr_t rhs           = {};
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                    lhs = get_pair_left_descendant_nothrow(dst);
+                    rhs = get_pair_right_descendant_nothrow(dst);
+                }
+
+                uma_ptr_t lhs_rcu_addr              = get_tile_rcu_addr_nothrow(lhs);
+                uma_ptr_t rhs_rcu_addr              = get_tile_rcu_addr_nothrow(rhs);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr, lhs_rcu_addr, rhs_rcu_addr);
+
+                uma_ptr_t new_lhs                   = get_pair_left_descendant_nothrow(dst);
+                uma_ptr_t new_rhs                   = get_pair_right_descendant_nothrow(dst);
+                operatable_id_t dst_operatable_id   = get_pair_operatable_id_nothrow(dst);
+                init_status_t dst_init_status       = get_pair_init_status_nothrow(dst);
+
+                if (lhs != new_lhs){
+                    return;
+                }
+
+                if (rhs != new_rhs){
+                    return;
+                }
+
+                if (lhs_operatable_id != rhs_operatable_id || lhs_operatable_id != dst_operatable_id){
+                    return;
+                }
+
+                if (lhs_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (rhs_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (dst_grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }
+
+                auto dispatch_info = dg::network_dispatch_control::decode_bwd_pair(dispatch_control); 
+
+                {
+                    // auto [backwardee_grad_vd_id, backwardee_logit_vd_id, backwarder_grad_vd_id, other_logit_vd_id, dp_device_kind. tileops_dp_kind] = dg::network_dispatch_control::decode_bwd_pair(dispatch_control);
+                    auto [lhs_grad_map_resource, lhs_logit_map_resource, rhs_logit_map_resource, backwarder_grad_map_resource] = dg::network_uma::lockmap_safewait_many_nothrow<4>({{lhs_grad_umaptr, dispatch_info.lhs_grad_vd_id}, {lhs_logit_umaptr, dispatch_info.lhs_logit_vd_id}, 
+                                                                                                                                                                                    {rhs_logit_umaptr, dispatch_info.rhs_logit_vd_id}, {dst_grad_umaptr, dispatch_info.backwarder_grad_vd_id}});
+                    
+                    auto lhs_grad_vmamap        = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(lhs_grad_map_resource));
+                    auto lhs_logit_vmamap       = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(lhs_logit_map_resource));
+                    auto rhs_logit_vmamap       = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(rhs_logit_map_resource));
+                    auto backwarder_grad_vmamap = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwarder_grad_map_resource));
+
+                    if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.lhs_dp_device_kind)){
+                        if (lhs_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+
+                        } else if (lhs_grad_status == TILE_GRAD_STATUS_EMPTY){
+
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.lhs_dp_device_kind)){
+                        if (lhs_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+
+                        } else if (lhs_grad_status == TILE_GRAD_STATUS_EMPTY){
+
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+
+                    switch (lhs_grad_status){
+                        case TILE_GRAD_STATUS_EMPTY:
+                            set_tile_grad_status_nothrow(lhs, TILE_GRAD_STATUS_INITIALIZED);
+                            break;
+                        case TILE_GRAD_STATUS_INITIALIZED:
+                            break;
+                        default:
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                    }
+
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_backward_do_signal(lhs));
+                }
+
+                {
+                    auto [rhs_grad_map_resource, rhs_logit_map_resource, lhs_logit_map_resource, backwarder_grad_map_resource] = dg::network_uma::lockmap_safewait_many_nothrow<4>({{rhs_grad_umaptr, dispatch_info.rhs_grad_vd_id}, {rhs_logit_umaptr, dispatch_info.rhs_logit_vd_id}, 
+                                                                                                                                                                                    {lhs_logit_umaptr, dispatch_info.lhs_logit_vd_id}, {dst_grad_umaptr, dispatch_info.backwarder_grad_vd_id}});
+                    
+                    auto rhs_grad_vmamap        = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(rhs_grad_map_resource));
+                    auto rhs_logit_vmamap       = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(rhs_logit_map_resource));
+                    auto lhs_logit_vmamap       = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(lhs_logit_map_resource));
+                    auto backwarder_grad_vmamap = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwarder_grad_map_resource));
+
+                    if (dg::network_dispatch_control::is_cuda_dispatch()){
+
+                    } else if (dg::network_dispatch_control::is_host_dispatch()){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+
+                        } else{
+
+                        }
+                    }
+
+                    switch (rhs_grad_status){
+                        case TILE_GRAD_STATUS_EMPTY:
+                            set_tile_grad_status_nothrow(rhs, TILE_GRAD_STATUS_INITIALIZED);
+                            break;
+                        case TILE_GRAD_STATUS_INITIALIZED:
+                            break;
+                        default:
+                            if constexpr(DEBUG_MODE_FLAG){
+
+                            } else{
+
+                            }
+                    }
+
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_backward_do_signal(rhs));
+                }
 
             }
     };
