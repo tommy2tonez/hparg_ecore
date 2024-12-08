@@ -2512,7 +2512,7 @@ namespace dg::network_tile_lifetime::poly{
             }
         };
 
-        auto deinit_extnsrc_dispatcher  = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
+        auto deinit_extnsrc_dispatcher      = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             DeinitExtnsrcPayLoad cur_payload{};
             for (const auto& vec_pair: vec){
                 dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
@@ -2520,7 +2520,7 @@ namespace dg::network_tile_lifetime::poly{
             }
         };
 
-        auto deinit_extndst_dispatcher  = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
+        auto deinit_extndst_dispatcher      = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             DeinitExtndstPayLoad cur_payload{};
             for (const auto& vec_pair: vec){
                 dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());
@@ -2528,7 +2528,7 @@ namespace dg::network_tile_lifetime::poly{
             }
         };
         
-        auto deinit_immu_dispatcher         = []{dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec} noexcept{
+        auto deinit_immu_dispatcher         = [](dg::vector<std::pair<VirtualPayLoad, exception_t *>> vec) noexcept{
             DeinitImmuPayLoad cur_payload{};
             for (const auto& vec_pair: vec){
                 dg::network_compact_serializer::deserialize_into(cur_payload, vec_pair.first.payload_content.data());

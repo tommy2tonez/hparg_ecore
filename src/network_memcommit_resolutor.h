@@ -23,794 +23,23 @@
 #include "network_memops_uma.h"
 #include "network_vmamap.h"
 
-// namespace dg::network_tileops_handler{
-
-//     using namespace dg::network_tileops_poly::taxonomy;
-//     using dispatch_t = poly_t;
-    
-//     auto forward_mono(uma_ptr_t dst) noexcept -> bool{
-        
-//         using namespace dg::network_tile_member_getsetter;
-        
-//         uma_ptr_t dst_lck_addr  = get_mono_rculock_addr_nothrow(dst);
-//         uma_ptr_t src           = {}; 
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(dst_lck_addr); 
-//             src = get_mono_src_nothrow(src);
-//         }
-
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_mono_operatable_id_nothrow(dst);
-//         operatable_id_t src_operatable_id   = get_operatable_id_nothrow(src);
-
-//         if (dst_operatable_id != src_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                          = get_mono_logit_addr_nothrow(dst);
-//         uma_ptr_t src_logit_umaptr                          = get_logit_addr_nothrow(src);
-//         dispatch_control_t dispatch_control                 = get_mono_dispatch_control_nothrow(dst);
-//         auto [dst_vd_id, src_vd_id, dp_device, tileops_dp]  = dg::network_dispatch_control::decode_mono(dispatch_control);
-//         auto [dst_map_resource, src_map_resource]           = dg::network_uma::mapsafe_recursivewait_many<2u>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}}); //weird - I mean this could combined with vmamap - yet I have yet wanted to complicate this further
-//         auto dst_logit_vmaptr                               = dg::network_uma::get_vma_ptr(dst_map_resource);
-//         auto src_logit_vmaptr                               = dg::network_uma::get_vma_ptr(src_map_resource); 
-//         auto dst_logit_vmamap                               = dg::network_vmamap::mapsafe_nothrow(dst_logit_vmaptr);
-//         auto src_logit_vmamap                               = dg::network_vmamap::mapsafe_nothrow(src_logit_vmaptr);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             dg::network_tileops_cuda_poly::fwd_mono(dg::network_vmamap::get_cuda_ptr(dst_logit_vmamap), dg::network_vmamap::get_cuda_ptr(src_logit_vmamap), tileops_dp);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             dg::network_tileops_host_poly::fwd_mono(dg::network_vmamap::get_host_ptr(dst_logit_vmamap), dg::network_vmamap::get_host_ptr(src_logit_vmamap), tileops_dp);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto forward_pair(uma_ptr_t dst) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter;
-
-//         uma_ptr_t dst_lck_addr  = get_pair_rculock_addr_nothrow(dst);
-//         uma_ptr_t lhs           = {};
-//         uma_ptr_t rhs           = {};
-
-//         //fine - refactor later
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(dst_lck_addr);
-//             lhs = get_pair_lhs_nothrow(dst);
-//             rhs = get_pair_rhs_nothrow(dst);
-//         }
-
-//         uma_ptr_t lhs_lck_addr              = get_rculock_addr_nothrow(lhs);
-//         uma_ptr_t rhs_lck_addr              = get_rculock_addr_nothrow(rhs);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, lhs_lck_addr, rhs_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_pair_operatable_id_nothrow(dst);
-//         operatable_id_t lhs_operatable_id   = get_operatable_id_nothrow(lhs);
-//         operatable_id_t rhs_operatable_id   = get_operatable_id_nothrow(rhs);
-
-//         if (!dg::network_genult::is_same_value(dst_operatable_id, lhs_operatable_id, rhs_operatable_id)){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr              = get_pair_logit_addr_nothrow(dst);
-//         uma_ptr_t lhs_logit_umaptr              = get_logit_addr_nothrow(lhs);
-//         uma_ptr_t rhs_logit_umaptr              = get_logit_addr_nothrow(rhs);
-//         dispatch_control_t dispatch_control     = get_pair_dispatch_control_nothrow(dst);
-//         auto [dst_vd_id, lhs_vd_id, rhs_vd_id, dp_device, tileops_dp]   = dg::network_dispatch_control::decode_pair(dispatch_control);
-//         auto [dst_map_resource, lhs_map_resource, rhs_map_resource]     = dg::network_uma::mapsafe_recursivewait_many<3u>({{dst_logit_umaptr, dst_vd_id}, {lhs_logit_umaptr, lhs_vd_id}, {rhs_logit_umaptr, rhs_vd_id}});
-//         auto dst_logit_vmaptr                   = dg::network_uma::get_vma_ptr(dst_map_resource);
-//         auto lhs_logit_vmaptr                   = dg::network_uma::get_vma_ptr(lhs_map_resource);
-//         auto rhs_logit_vmaptr                   = dg::network_uma::get_vma_ptr(rhs_map_resource); 
-//         auto dst_logit_vmamap                   = dg::network_vmamap::mapsafe_nothrow(dst_logit_vmaptr);
-//         auto lhs_logit_vmamap                   = dg::network_vmamap::mapsafe_nothrow(lhs_logit_vmaptr);
-//         auto rhs_logit_vmamap                   = dg::network_vmamap::mapsafe_nothrow(rhs_logit_vmaptr); 
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             dg::network_tileops_cuda_poly::fwd_pair(get_cuda_ptr(dst_logit_vmamap), get_cuda_ptr(lhs_logit_vmamap), get_cuda_ptr(rhs_logit_vmamap), tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             dg::network_tileops_host_poly::fwd_pair(get_host_ptr(dst_logit_vmamap), get_host_ptr(lhs_logit_vmamap), get_host_ptr(rhs_logit_vmamap), tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto forward_uacm(uma_ptr_t dst) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter; 
-
-//         std::array<uma_ptr_t, UACM_COUNT> src = {};
-
-//         //fine - refactor later
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(get_uacm_rcu_add_nothrow(dst));
-//             src = get_uacm_src(dst);
-//         }
-
-//         auto addr       = dg::genult::tuple_join(std::make_tuple(dst), src);
-//         auto lck_addr   = dg::genult::tuple_transform(addr, get_rculock_addr_nothrow); 
-//         auto lck_grd    = dg::genult::tuple_invoke(dg::network_memops_uma::memlock_many_guard, lck_addr);
-//         auto ops_id     = dg::genult::tuple_transform(addr, get_operatable_id_nothrow);
-
-//         if (!dg::network_genult::tuple_invoke(dg::network_genult::is_same_value, ops_id)){
-//             return false;
-//         }
-
-//         auto logit_umaaddr      = dg::genult::tuple_transform(addr, get_logit_addr_nothrow);
-//         auto dispatch_control   = get_uacm_dispatch_control_nothrow(dst);
-//         auto vd_id              = dg::network_dispatch_control::decode_uacm_vd_id(dispatch_control);
-//         auto tileops_dp_id      = dg::network_dispatch_control::decode_uacm_tileops_dp_id(dispatch_control); //weird - 
-//         auto dp_device          = dg::network_dispatch_control::decode_uacm_dp_device(dispatch_control); 
-//         auto map_resource_arg   = dg::network_genult::tuple_zip(logit_umaaddr, vd_id);
-//         auto map_resource       = dg::network_uma::mapsafe_recursivewait_many_nothrow(map_resource_arg); //
-//         auto logit_vmaptr       = dg::network_genult::tuple_transform(map_resource, dg::network_uma::get_vma_ptr); 
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto cuda_resource  = dg::network_genult::tuple_transform(logit_vmaptr, dg::network_virtual_device::devirtualize_cuda_ptr);
-//             dg::network_tileops_cuda_poly::fwd_uacm(cuda_resource, tileops_dp_id); //
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto fsyshost_resource  = dg::network_genult::tuple_transform(logit_vmaptr, map_fsyshost);
-//             auto cptr_array         = dg::network_genult::tuple_transform(fsyshost_resource, get_cptr); 
-//             dg::network_tileops_host_poly::fwd_uacm(cptr_array, tileops_dp_id); //
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto forward_pacm(uma_ptr_t dst) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter; 
-
-//         std::array<uma_ptr_t, PACM_COUNT> lhs = {};
-//         std::array<uma_ptr_t, PACM_COUNT> rhs = {};
-
-//         //fine - refactor later
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(get_pacm_rculock_addr(dst));
-//             lhs = get_pacm_lhs(dst);
-//             rhs = get_pacm_rhs(dst);
-//         }
-
-//         auto addr       = dg::network_genult::tuple_join(std::make_tuple(dst), lhs, rhs);
-//         auto lck_addr   = dg::network_genult::tuple_transform(addr, get_rculock_addr_nothrow);
-//         auto lck_grd    = dg::network_genult::tuple_invoke(dg::network_memops_uma::memlock_many_guard, lck_addr);
-//         auto ops_id     = dg::network_genult::tuple_transform(addr, get_operatable_id_nothrow);
-
-//         if (!dg::network_genult::tuple_invoke(dg::network_genult::is_same_value, ops_id)){
-//             return false;
-//         }
-
-//         auto logit_umaaddr      = dg::network_genult::tuple_transform(addr, get_logit_addr_nothrow);
-//         auto dispatch_control   = get_pacm_dispatch_control_nothrow(dst);
-//         auto vd_id              = dg::network_dispatch_control::decode_pacm_vd_id(dispatch_control);
-//         auto tileops_dp_id      = dg::network_dispatch_control::decode_pacm_tileops_dp_id(dispatch_control);
-//         auto dp_device          = dg::network_dispatch_control::decode_pacm_dp_device(dispatch_control);
-//         auto map_resource_arg   = dg::network_genult::tuple_zip(logit_umaaddr, vd_id); //
-//         auto map_resource       = dg::network_uma::mapsafe_recursivewait_many_nothrow(map_resource_arg); //
-//         auto logit_vmaptr       = dg::network_genult::tuple_transform(map_resource, dg::network_uma::get_vma_ptr);
-        
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto cuda_resource          = dg::network_genult::tuple_transform(logit_vmaptr, dg::network_virtual_device::devirtualize_cuda_ptr);
-//             auto [first, second, third] = dg::network_genult::tuple_peek_many(cuda_resource, std::integral_constant<size_t, 1>{}, std::integral_constant<size_t, PACM_COUNT>{}, std::integral_constant<size_t, PACM_COUNT>{});
-//             dg::network_tileops_cuda_poly::fwd_pacm(first, second, third, tileops_dp_id); //array flatten
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto fsyshost_resource      = dg::network_genult::tuple_transform(logit_vmaptr, map_fsyshost);
-//             auto cptr_array             = dg::network_genult::tuple_transform(fsyshost_resource, get_cptr);
-//             auto [first, second, third] = dg::network_genult::tuple_peek_many(cptr_array, std::integral_constant<size_t, 1>{}, std::integral_constant<size_t, PACM_COUNT>{}, std::integral_constant<size_t, PACM_COUNT>{});
-//             dg::network_tileops_host_poly::fwd_pacm(first, second, third, tileops_dp_id); //array flatten
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }    
-
-//         return false;
-//     }
-
-//     auto forward_crit(uma_ptr_t dst) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter; 
- 
-//         uma_ptr_t dst_lck_addr  = get_crit_rculock_addr_nothrow(dst); 
-//         uma_ptr_t src           = {};
-
-//         //fine - refactor later
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(dst_lck_addr);
-//             src = get_crit_src(dst);
-//         }
-
-//         uma_ptr_t src_lck_addr              = get_rculock_addr_nothrow(src);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_crit_operatable_id_nothrow(dst);
-//         operatable_id_t src_operatable_id   = get_operatable_id_nothrow(src);
-
-//         if (dst_operatable_id != src_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                  = get_crit_logit_addr_nothrow(dst);
-//         uma_ptr_t src_logit_umaptr                  = get_logit_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_crit_dispatch_control_nothrow(dst);
-//         auto [dst_vd_id, src_vd_id, dp_device, tileops_dp_id]  = dg::network_dispatch_control::decode_crit(dispatch_control);
-//         auto [dst_map_resource, src_map_resource]   = dg::network_uma::mapsafe_recursivewait_many_nothrow<2>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}});
-//         vma_ptr_t dst_logit_vmaptr                  = dg::network_uma::get_vma_ptr(dst_map_resource);
-//         vma_ptr_t src_logit_vmaptr                  = dg::network_uma::get_vma_ptr(src_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_logit_cudaptr, dst_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(dst_logit_vmaptr);
-//             auto [src_logit_cudaptr, src_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(src_logit_vmaptr);
-//             dg::network_tileops_cuda_poly::fwd_clone(dst_logit_cudaptr, dst_logit_cudaid, src_logit_cudaptr, src_logit_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_logit_fsyshost_resource = map_fsyshost(dst_logit_vmaptr);
-//             auto src_logit_fsyshost_resource = map_fsyshost(src_logit_vmaptr);
-//             dg::network_tileops_host_poly::fwd_clone(dst_logit_fsyshost_resource, src_logit_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     template <class T>
-//     struct TileTranslatorInterface{
-
-//         inline auto translate(uma_ptr_t ptr) noexcept -> std::optional<uma_ptr_t>{
-
-//             return static_cast<T *>(this)->translate(ptr);
-//         }
-//     };
-
-//     template <class T>
-//     auto forward_extn(uma_ptr_t dst, TileTranslatorInterface<T>& translator) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter;
-
-//         uam_ptr_t dst_lck_addr  = get_extn_rculock_addr_nothrow(dst);
-//         uma_ptr_t src           = {};
-
-//         //fine - refactor later
-//         {
-//             auto lck_grd        = dg::network_memops_uma::memlock_guard(dst_lck_addr);
-//             uma_ptr_t ext_src   = get_extn_src_nothrow(dst);
-//             std::optional<uma_ptr_t> int_src = translator.translate(ext_src);
-
-//             if (!int_src.has_value()){
-//                 return false;
-//             }
-
-//             src = int_src.value();
-//         }
-
-//         uma_ptr_t src_lck_addr              = get_rculock_addr_nothrow(src);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_extn_operatable_id_nothrow(dst);
-//         operatable_id_t src_operatable_id   = get_operatable_id_nothrow(src);
-
-//         if (dst_operatable_id != src_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                  = get_extn_logit_addr_nothrow(dst);
-//         uma_ptr_t src_logit_umaptr                  = get_logit_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_extn_dispatch_control_nothrow(dst);
-//         auto [dst_vd_id, src_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_extn(dispatch_control);    
-//         auto [dst_map_resource, src_map_resource]   = dg::network_uma::mapsafe_recursivewait_many_nothrow<2>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}}); //should be consistent - memlock_many_guard
-//         vma_ptr_t dst_logit_vmaptr                  = dg::network_uma::get_vma_ptr(dst_map_resource);
-//         vma_ptr_t src_logit_vmaptr                  = dg::network_uma::get_vma_ptr(src_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_logit_cudaptr, dst_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(dst_logit_vmaptr);
-//             auto [src_logit_cudaptr, src_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(src_logit_vmaptr);
-//             dg::network_tileops_cuda_poly::fwd_clone(dst_logit_cudaptr, dst_logit_cudaid, src_logit_cudaptr, src_logit_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_map_fsyshost_resource = map_fsyshost(dst_logit_vmaptr); 
-//             auto src_map_fsyshost_resource = map_fsyshost(src_logit_vmaptr); 
-//             dg::network_tileops_host_poly::fwd_clone(dst_map_fsyshost_resource, src_map_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto forward_msgrfwd(uma_ptr_t dst) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter;
-
-//         uma_ptr_t dst_lck_addr  = get_msgrfwd_rculock_addr_nothrow(dst);
-//         uma_ptr_t src           = {};
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(dst_lck_addr);
-//             src = get_msgrfwd_src_nothrow(dst);
-//         }
-
-//         uma_ptr_t src_lck_addr              = get_rculock_addr_nothrow(src);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_msgrfwd_operatable_id_nothrow(dst);
-//         operatable_id_t src_operatable_id   = get_operatable_id_nothrow(src);
-
-//         if (dst_operatable_id != src_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                  = get_msgrfwd_logit_addr_nothrow(dst);
-//         uma_ptr_t src_logit_umaptr                  = get_logit_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_msgrfwd_dispatch_control_nothrow(dst);
-//         auto [dst_vd_id, src_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_msgrfwd(dispatch_control);
-//         auto [dst_map_resource, src_map_resource]   = dg::network_uma::mapsafe_recursivewait_many_nothrow<2>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}});
-//         vma_ptr_t dst_logit_vmaptr                  = dg::network_uma::get_vma_ptr(dst_map_resource);
-//         vma_ptr_t src_logit_vmaptr                  = dg::network_uma::get_vma_ptr(src_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_logit_cudaptr, dst_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(dst_logit_vmaptr);
-//             auto [src_logit_cudaptr, src_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(src_logit_vmaptr);
-//             dg::network_tileops_cuda_poly::fwd_clone(dst_logit_cudaptr, dst_logit_cudaid, src_logit_cudaptr, src_logit_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_map_fsyshost_resource  = map_fsyshost(dst_logit_vmaptr);
-//             auto src_map_fsyshost_resource  = map_fsyshost(src_logit_vmaptr);
-//             dg::network_tileops_host_poly::fwd_clone(dst_map_fsyshost_resource, src_map_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         //single responsibility - forward only does tile_forward - the fwd in msgrfwd is another functor responsibility - either change function name semantic to remove ambiguity or keep the function name and document the decision 
-//         return false;
-//     }
-
-//     auto forward_msgrbwd(uma_ptr_t dst) noexcept -> bool{
-
-//         //good to repeat the code here - this is not refactorable - refactor this code increase coupling of component - not a good practice
-//         using namespace dg::network_tile_member_getsetter;
-
-//         uma_ptr_t dst_lck_addr  = get_msgrbwd_rculock_addr_nothrow(dst); 
-//         uma_ptr_t src           = {};
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(dst_lck_addr);
-//             src = get_msgrbwd_src_nothrow(dst);
-//         }
-
-//         uma_ptr_t src_lck_addr              = get_rculock_addr_nothrow(src);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_msgrbwd_operatable_id_nothrow(dst);
-//         operatable_id_t src_operatable_id   = get_operatable_id_nothrow(src);
-
-//         if (dst_operatable_id != src_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                  = get_msgrbwd_logit_addr_nothrow(dst);
-//         uma_ptr_t src_logit_umaptr                  = get_logit_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_msgrbwd_dispatch_control_nothrow(dst);
-//         auto [dst_vd_id, src_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_msgrbwd(dispatch_control);
-//         auto [dst_map_resource, src_map_resource]   = dg::network_uma::mapsafe_recursivewait_many_nothrow<2>({{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr, src_vd_id}});
-//         vma_ptr_t dst_logit_vmaptr                  = dg::network_uma::get_vma_ptr(dst_map_resource);
-//         vma_ptr_t src_logit_vmaptr                  = dg::network_uma::get_vma_ptr(src_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_logit_cudaptr, dst_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(dst_logit_vmaptr);
-//             auto [src_logit_cudaptr, src_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(src_logit_vmaptr);
-//             dg::network_tileops_cuda_poly::fwd_clone(dst_logit_cudaptr, dst_logit_cudaid, src_logit_cudaptr, src_logit_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_map_fsyshost_resource  = map_fsyshost(dst_logit_vmaptr); //weird name 
-//             auto src_map_fsyshost_resource  = map_fsyshost(src_logit_vmaptr);
-//             dg::network_tileops_host_poly::fwd_clone(dst_map_fsyshost_resource, src_map_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-        
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto backward_mono(uma_ptr_t src) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter; 
-
-//         uam_ptr_t src_lck_addr  = get_mono_rculock_addr_nothrow(src);
-//         uma_ptr_t dst           = {};
-        
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(src_lck_addr);
-//             dst = get_mono_src_nothrow(src);
-//         }
-        
-//         auto dst_lck_addr                   = get_rculock_addr_nothrow(dst);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(dst_lck_addr, src_lck_addr);
-//         operatable_id_t dst_operatable_id   = get_operatable_id_nothrow(dst);
-//         operatable_id_t src_operatable_id   = get_mono_operatable_id_nothrow(src);
-
-//         if (dst_operatable_id != src_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_grad_umaptr                   = get_grad_addr_nothrow(dst);
-//         uma_ptr_t dst_logit_umaptr                  = get_logit_addr_nothrow(dst);
-//         uma_ptr_t src_grad_umaptr                   = get_mono_grad_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_mono_dispatch_control_nothrow(src);
-//         auto [src_vd_id, dst_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_mono(dispatch_control);
-//         auto [dst_grad_map_resource, dst_logit_map_resource, src_grad_map_resource] = dg::network_uma::mapsafe_recursivewait_many_nothrow<3>({{dst_grad_umaptr, dst_vd_id}, {dst_logit_umaptr, dst_vd_id}, {src_grad_umaptr, src_vd_id}});
-//         vma_ptr_t dst_grad_vmaptr                   = dg::network_uma::get_vma_ptr(dst_grad_map_resource);
-//         vma_ptr_t dst_logit_vmaptr                  = dg::network_uma::get_vma_ptr(dst_logit_map_resource);
-//         vma_ptr_t src_grad_vmaptr                   = dg::network_uma::get_vma_ptr(src_grad_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_grad_cudaptr, dst_grad_cudaid]    = dg::network_virtual_device::devirtualize_cuda_ptr(dst_grad_vmaptr);
-//             auto [dst_logit_cudaptr, dst_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(dst_logit_vmaptr);
-//             auto [src_grad_cudaptr, src_grad_cudaid]    = dg::network_virtual_device::devirtualize_cuda_ptr(src_grad_vmaptr);
-//             dg::network_tileops_cuda_poly::bwdzr_mono(dst_grad_cudaptr, dst_grad_cudaid, dst_logit_cudaptr, dst_logit_cudaid, src_grad_cudaptr, src_grad_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_grad_fsyshost_resource     = map_fsyshost(dst_grad_vmaptr); //weird
-//             auto dst_logit_fsyshost_resource    = map_fsyshost(dst_logit_vmaptr); //weird 
-//             auto src_grad_fsyshost_resource     = map_fsyshost(src_grad_vmaptr); //weird
-//             dg::network_tileops_host_poly::bwdzr_mono(dst_grad_fsyshost_resource, dst_logit_fsyshost_resource, src_grad_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             std::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto backward_pair(uma_ptr_t src) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter;
-
-//         uma_ptr_t src_lck_addr  = get_pair_rculock_addr_nothrow(src);
-//         uma_ptr_t lhs           = {};
-//         uma_ptr_t rhs           = {};
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(src_lck_addr);
-//             lhs = get_pair_lhs_nothrow(src);
-//             rhs = get_pair_rhs_nothrow(src);
-//         }
-        
-//         //I'll fix the tabs later
-//         uma_ptr_t lhs_lck_addr              = get_rculock_addr_nothrow(lhs);
-//         uma_ptr_t rhs_lck_addr              = get_rculock_addr_nothrow(rhs);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(src_lck_addr, lhs_lck_addr, rhs_lck_addr);
-//         operatable_id_t src_operatable_id   = get_pair_operatable_id_nothrow(src);
-//         operatable_id_t lhs_operatable_id   = get_operatable_id_nothrow(lhs);
-//         operatable_id_t rhs_operatable_id   = get_operatable_id_nothrow(rhs);
-
-//         if (!dg::network_genult::is_same_value(src_operatable_id, lhs_operatable_id, rhs_operatable_id)){
-//             return false;
-//         }
-
-//         uma_ptr_t lhs_grad_umaptr           = get_grad_addr_nothrow(lhs);
-//         uma_ptr_t lhs_logit_umaptr          = get_logit_addr_nothrow(lhs);
-//         uma_ptr_t rhs_grad_umaptr           = get_grad_addr_nothrow(rhs);
-//         uma_ptr_t rhs_logit_umaptr          = get_logit_addr_nothrow(rhs);
-//         uma_ptr_t src_grad_umaptr           = get_pair_grad_addr_nothrow(src); //
-//         dispatch_control_t dispatch_control = get_pair_dispatch_control_nothrow(src);
-//         auto [src_vd_id, lhs_vd_id, rhs_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_pair(dispatch_control);
-//         auto [lhs_grad_map_resource, lhs_logit_map_resource, rhs_grad_map_resource, rhs_logit_map_resource, src_grad_map_resource] = dg::network_uma::mapsafe_recursivewait_many_nothrow<4>({{lhs_grad_umaptr, lhs_vd_id}, {lhs_logit_umaptr, lhs_vd_id}, {rhs_grad_umaptr, rhs_vd_id}, {rhs_logit_umaptr, rhs_vd_id}, {src_grad_umaptr, src_vd_id}}); //too lengthy - syntax program fix this
-        
-//         vma_ptr_t lhs_grad_vmaptr           = dg::network_uma::get_vma_ptr(lhs_grad_map_resource);
-//         vma_ptr_t lhs_logit_vmaptr          = dg::network_uma::get_vma_ptr(lhs_logit_map_resource);
-//         vma_ptr_t rhs_grad_vmaptr           = dg::network_uma::get_vma_ptr(rhs_grad_map_resource);
-//         vma_ptr_t rhs_logit_vmaptr          = dg::network_uma::get_vma_ptr(rhs_logit_map_resource);
-//         vma_ptr_t src_grad_vmaptr           = dg::network_uma::get_vma_ptr(src_grad_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [lhs_grad_cudaptr, lhs_grad_cudaid]    = dg::network_virtual_device::devirtualize_cuda_ptr(lhs_grad_vmaptr);
-//             auto [lhs_logit_cudaptr, lhs_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(lhs_logit_vmaptr);
-//             auto [rhs_grad_cudaptr, rhs_grad_cudaid]    = dg::network_virtual_device::devirtualize_cuda_ptr(rhs_grad_vmaptr);
-//             auto [rhs_logit_cudaptr, rhs_logit_cudaid]  = dg::network_virtual_device::devirtualize_cuda_ptr(rhs_logit_vmaptr);
-//             auto [src_grad_cudaptr, src_grad_cudaid]    = dg::network_virtual_device::devirtualize_cuda_ptr(src_grad_vmaptr);
-
-//             dg::network_tileops_cuda_poly::bwdzr_pair(lhs_grad_cudaptr, lhs_grad_cudaid, lhs_logit_cudaptr, lhs_logit_cudaid, 
-//                                                       rhs_grad_cudaptr, rhs_grad_cudaid, rhs_logit_cudaptr, rhs_logit_cudaid, 
-//                                                       src_grad_cudaptr, src_grad_cudaid);
-//             return true;
-//         } 
-        
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto lhs_grad_fsyshost_resource     = map_fsyshost(lhs_grad_vmaptr);
-//             auto lhs_logit_fsyshost_resource    = map_fsyshost(lhs_logit_vmaptr);
-//             auto rhs_grad_fsyshost_resource     = map_fsyshost(rhs_grad_vmaptr);
-//             auto rhs_logit_fsyshost_resource    = map_fsyshost(rhs_logit_vmaptr);
-//             auto src_grad_fsyshost_resource     = map_fsyshost(src_grad_vmaptr); 
-
-//             dg::network_tileops_host_poly::bwdzr_pair(lhs_grad_fsyshost_resource, lhs_logit_fsyshost_resource,
-//                                                       rhs_grad_fsyshost_resource, rhs_logit_fsyshost_resource,
-//                                                       src_grad_fsyshost_resource); //weird
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto backward_uacm(uma_ptr_t src) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter;
-//         uma_ptr_t src_lck_addr                  = get_uacm_rculock_addr_nothrow(src);
-//         std::array<uma_ptr_t, UACM_COUNT> dst   = {}; 
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(src_lck_addr);
-//             dst = get_uacm_src_nothrow(src);
-//         }
-
-//         auto addr       = dg::network_genult::tuple_join(std::tuple(src), dst);
-//         auto lck_addr   = dg::network_genult::tuple_transform(addr, get_rculock_addr_nothrow);
-//         auto lck_grd    = dg::network_genult::tuple_invoke(dg::network_memops_uma::memlock_many_guard, lck_addr);
-//         auto ops_id     = dg::network_genult::tuple_transform(addr, get_operatable_id_nothrow);
-
-//         if (!dg::network_genult::tuple_invoke(is_same_value, ops_id)){
-//             return false;
-//         }
-
-//         auto logit_addr                     = dg::network_genult::tuple_transform(addr, get_logit_addr_nothrow); //
-//         auto grad_addr                      = dg::network_genult::tuple_transform(addr, get_grad_addr_nothrow); //
-//         dispatch_control_t dispatch_control = get_uacm_dispatch_control_nothrow(src); 
-//         auto vd_id                          = dg::network_dispatch_control::decode_uacm_vd_id(dispatch_control); 
-//         auto tileops_dp_id                  = dg::network_dispatch_control::decode_uacm_tileops_dp_id(dispatch_control); 
-//         auto zipped_logit_addr              = dg::network_genult::tuple_zip(logit_addr, vd_id);
-//         auto zipped_grad_addr               = dg::network_genult::tuple_zip(grad_addr, vd_id); 
-
-//     }
-
-//     auto backward_pacm(uma_ptr_t src) noexcept -> bool{
-
-//     }
-
-//     auto backward_crit(uma_ptr_t src) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter;
-
-//         uma_ptr_t src_lck_addr  = get_crit_rculock_addr_nothrow(src); 
-//         uma_ptr_t dst           = {};
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(src_lck_addr);
-//             dst = get_crit_src_nothrow(src);
-//         }
-
-//         uma_ptr_t dst_lck_addr              = get_rculock_addr_nothrow(dst); 
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(src_lck_addr, dst_lck_addr);
-//         operatable_id_t src_operatable_id   = get_crit_operatable_id_nothrow(src);
-//         operatable_id_t dst_operatable_id   = get_operatable_id_nothrow(dst);
-
-//         if (src_operatable_id != dst_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                  = get_logit_addr_nothrow(dst);
-//         uma_ptr_t dst_grad_umaptr                   = get_grad_addr_nothrow(dst);
-//         uma_ptr_t src_grad_umaptr                   = get_grad_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_crit_dispatch_control_nothrow(src);
-//         auto [src_vd_id, dst_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_crit(dispatch_control);
-//         auto [dst_logit_map_resource, dst_grad_map_resource, src_grad_map_resource] = dg::network_uma::mapsafe_recursivewait_many_nothrow<3>({{dst_logit_umaptr, dst_vd_id}, {dst_grad_umaptr, dst_vd_id}, {src_grad_umaptr, src_vd_id}});
-//         vma_ptr_t dst_grad_vmaptr                   = dg::network_uma::get_vma_ptr(dst_grad_map_resource);
-//         vma_ptr_t src_grad_vmaptr                   = dg::network_uma::get_vma_ptr(src_grad_map_resource);
-        
-
-//         //cuda_id + cuda_handle_t are singleton managed by network_tileops_cuda_poly 
-//         //cross device computation or in device computation are runtime-checked by the controller + internal corruption if failed 
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_grad_cudaptr, dst_grad_cudaid] = dg::network_virtual_device::devirtualize_cuda_ptr(dst_grad_vmaptr);
-//             auto [src_grad_cudaptr, src_grad_cudaid] = dg::network_virtual_device::devirtualize_cuda_ptr(src_grad_vmaptr);
-//             dg::network_tileops_cuda_poly::bwdzr_crit(dst_grad_cudaptr, dst_grad_cudaid, src_grad_cudaptr, src_grad_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_grad_fsyshost_resource = map_fsyshost(dst_grad_vmaptr);
-//             auto src_grad_fsyshost_resource = get_fsyshost_reosurce(src_grad_vmaptr); 
-//             dg::network_tileops_host_poly::bwdzr_crit(dst_grad_fsyshost_resource, src_grad_fsyshost_resource, tileops_dp_id); //implicit conversion is not allowed here - fsyshost resource is vma_ptr_t wrapper - should only implicitly convert to vma_ptr_t - placeholder for now
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto backward_extn(uma_ptr_t src) noexcept -> bool{
-
-//     }
-
-//     auto backward_msgrfwd(uma_ptr_t src) noexcept -> bool{
-
-//         using namespace dg::network_tile_member_getsetter; 
-        
-//         uma_ptr_t src_lck_addr  = get_msgrfwd_rculock_addr_nothrow(src);
-//         uma_ptr_t dst           = {};
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(src_lck_addr);
-//             dst = get_msgrfwd_src_nothrow(src);
-//         }
-
-//         uma_ptr_t dst_lck_addr              = get_rculock_addr_nothrow(dst);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(src_lck_addr, dst_lck_addr);
-//         operatable_id_t src_operatable_id   = get_msgrfwd_operatable_id_nothrow(src);
-//         operatable_id_t dst_operatable_id   = get_operatable_id_nothrow(dst);
-
-//         if (src_operatable_id != dst_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr                  = get_logit_addr_nothrow(dst);
-//         uma_ptr_t dst_grad_umaptr                   = get_grad_addr_nothrow(dst);
-//         uam_ptr_t src_grad_umaptr                   = get_msgrfwd_grad_addr_nothrow(src);
-//         dispatch_control_t dispatch_control         = get_msgrfwd_dispatch_control_nothrow(src);
-//         auto [src_vd_id, dst_vd_id, dp_device, tileops_dp_id] = dg::network_dispatch_control::decode_msgrfwd(dispatch_control); //weird
-//         auto [dst_logit_map_resource, dst_grad_map_resource, src_grad_map_resource] = dg::network_uma::mapsafe_recursivewait_many_nothrow<3>({{dst_logit_umaptr, dst_vd_id}, {dst_grad_umaptr, dst_vd_id}, {src_grad_umaptr, src_vd_id}});
-//         vma_ptr_t dst_grad_vmaptr                   = dg::network_uma::get_vma_ptr(dst_grad_map_resource);
-//         vma_ptr_t src_grad_vmaptr                   = dg::network_uma::get_vma_ptr(src_grad_map_resource);
-
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){ //uma_ptr_t is cuda_dispatchable - not dp_device - change semantic
-//             auto [dst_grad_cudaptr, dst_grad_cudaid] = dg::network_virtual_device::devirtualize_cuda_ptr(dst_grad_vmaptr);
-//             auto [src_grad_cudaptr, src_grad_cudaid] = dg::network_virtual_device::devirtualize_cuda_ptr(src_grad_vmaptr);
-//             dg::network_tileops_cuda_poly::bwdzr_clone(dst_grad_cudaptr, dst_grad_cudaid, src_grad_cudaptr, src_grad_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_grad_fsyshost_resource = map_fsyshost(dst_grad_vmaptr);
-//             auto src_grad_fsyshost_resource = map_fsyshost(src_grad_vmaptr); 
-//             dg::network_tileops_host_poly::bwdzr_clone(dst_grad_fsyshost_resource, src_grad_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     auto backward_msgrbwd(uma_ptr_t src) noexcept -> bool{
-        
-//         using namespace dg::network_tile_member_getsetter; 
-
-//         uma_ptr_t src_lck_addr  = get_msgrbwd_rculock_addr_nothrow(src);
-//         uma_ptr_t dst           = {};
-
-//         {
-//             auto lck_grd = dg::network_memops_uma::memlock_guard(src_lck_addr);
-//             dst = get_msgrbwd_src_nothrow(src);
-//         }
-
-//         uma_ptr_t dst_lck_addr              = get_rculock_addr_nothrow(dst);
-//         auto lck_grd                        = dg::network_memops_uma::memlock_many_guard(src_lck_addr, dst_lck_addr);
-//         operatable_id_t src_operatable_id   = get_msgrbwd_operatable_id_nothrow(src);
-//         operatable_id_t dst_operatable_id   = get_operatable_id_nothrow(dst);
-
-//         if (src_operatable_id != dst_operatable_id){
-//             return false;
-//         }
-
-//         uma_ptr_t dst_logit_umaptr          = get_logit_addr_nothrow(dst);
-//         uma_ptr_t dst_grad_umaptr           = get_grad_addr_nothrow(dst);
-//         uma_ptr_t src_grad_umaptr           = get_msgrbwd_grad_addr_nothrow(src);
-//         dispatch_control_t dispatch_control = get_msgrbwd_dispatch_control_nothrow(src); 
-//         auto [src_vd_id, dst_vd_id, dp_device, tileops_dp_id] =  dg::network_dispatch_control::decode_msgrbwd(dispatch_control);
-//         auto [dst_logit_map_resource, dst_grad_map_resource, src_grad_map_resource] = dg::network_uma::mapsafe_recursivewait_many_nothrow<3>({{dst_logit_umaptr, dst_vd_id}, {dst_grad_umaptr, dst_vd_id}, {src_grad_umaptr, src_vd_id}});
-//         vma_ptr_t dst_grad_vmaptr           = dg::network_uma::get_vma_ptr(dst_grad_map_resource);
-//         vma_ptr_t src_grad_vmaptr           = dg::network_uma::get_vma_ptr(src_grad_map_resource);
-        
-//         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-//             auto [dst_grad_cudaptr, dst_grad_cudaid] = dg::network_virtual_device::devirtualize_cuda_ptr(dst_grad_vmaptr);
-//             auto [src_grad_cudaptr, src_grad_cudaid] = dg::network_virtual_device::devirtualize_cuda_ptr(src_grad_vmaptr);
-//             dg::network_tileops_cuda_poly::bwdzr_clone(dst_grad_cudaptr, dst_grad_cudaid, src_grad_cudaptr, src_grad_cudaid, tileops_dp_id);
-//             return true;
-//         }
-
-//         if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-//             auto dst_grad_fsyshost_resource = map_fsyshost(dst_grad_vmaptr);
-//             auto src_grad_fsyshost_resource = map_fsyshost(src_grad_vmaptr); 
-//             dg::network_tileops_host_poly::bwdzr_clone(dst_grad_fsyshost_resource, src_grad_fsyshost_resource, tileops_dp_id);
-//             return true;
-//         }
-
-//         if constexpr(DEBUG_MODE_FLAG){
-//             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-//             std::abort();
-//         }
-
-//         return false;
-//     }
-
-//     //----
-//     void dispatch_fwdpong(uma_ptr_t dst) noexcept{
-
-//     }
-
-//     void dispatch_fwdmsgr(uma_ptr_t dst) noexcept{
-
-//     }
-
-//     void dispatch_bwdmsgr(uma_ptr_t dst) noexcept{
-
-//     }
-
-
-// } 
-
-// #endif
-
 namespace dg::network_memcommit_resolutor{
+
+    //alright guys, let's not talk about the future and focus on the engineering
+    //this turned out to be more work than I expected
+    //2 weeks of 5 flops/ dispatch and I couldn't finish this on time
+    //we are not being greedy guys - every host flop is very very important here - and it is the backbone of the engine
+    //from offset branch misprediction by using delivery approach - to special layout of tiles - to scheduled tiles by using collector approach - we want to <orphan> + <init> tiles in O(1) time literally - sequential access of memory + fetch + in + out
+    //then here comes these resolutors - this is FINE if this is only used for host-dispatching, we are dispatching 64x64, so 20 cache line fetches shouldn't be a problem - it has the maximum overhead of 1/3 for mono - and it is not significant compared to linear or other combinatorial operations
+
+    //but it is not fine for cuda-dispatching, we are talking about the ratio of at least 1 << 15 needs to be maintained, and reasonable # of dispatch -> cuda_devices to avoid synchronization overhead - WLOG, this requires vectorization of std::array<void * __restrict__, const void * __restrict__, const void * __restrict__> 
+    //which we will solve next week
+
+    //we are talking about + 20.000 lines at least to get these guys working - then there is a instruction cache issue - which we will discuss later
+    //then there is an overflow issue, which we will discuss later
+    //then there are fail-safe issues - of tile input assumptions - which we will fix later
+    //then there is the lock semantic issue - we probably will head in the direction of dependencies - a memregion is depended on another memregion - so an acquire of a higher memregion puts an arbitrary "atomic_reference" on its descendants 
+    //then there is probably 1024 other issues we haven't mentioned
 
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
@@ -1212,7 +441,7 @@ namespace dg::network_memcommit_resolutor{
                 }
             }
     };
-    
+
     class ForwardPingCritSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
         private:
@@ -1698,6 +927,8 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
+    //
+    
     class ForwardInitMonoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
         private:
@@ -2749,41 +1980,6 @@ namespace dg::network_memcommit_resolutor{
 
     //
 
-    //we'll get these compiled then we'll write a linter that could turn our code -> C++ acceptable code - we don't care about that now
-    //we care about easy to debug - easy to digest - after the program is theoretically working - then we'll lint the program
-    //there are bugs that are hard to catch without inlining the entire programs - like global var accesses
-    //when inlining the program, we have to assume that the global vars are concurrent vars - which requires us to use concurrent-safety-measures when we access those vars
-    //when we not inlining the program, we accidentally, undefinely solve those problems by compiling those guys separately
-
-    //alrights, we'll try to reduce the overhead flops, after get the grasp of the high level interface - we want to reduce worst case member_access -> one_cache_read + 1 memlock + try_acquire - increase locality of access by scheduling, etc.
-    //the chance of lock acquisition must be unif for all tasks 
-
-    //I think the scheduling algorithm is the state of the art for concurrent training
-    //we want to schedule the tile -> max_init_time(descendants)
-
-    //the further the forward hops or the backward hops - the lesser the scan frequency on such memregion
-    //scan frequency ONLY makes sense relatively
-
-    //lets say we have mono (32 Hz)-> pair (16Hz) -> uacm (8Hz) -> pacm (4Hz) -> mono (2Hz) -> msgfwd (1Hz) -> crit
-    //we want to increase the locality of dispatches for forwards - not because of the tiles - but because of the locality access of the tile_members - every time we read 1 cache_line for an element of size 8 bytes - we are utilizing the memfetch at a rate of 8/CAHCE_LINE_SIZE = 8/64 = 1/8 - which is bad
-    //the moral is simple - we don't care if we are the fastest forward or backward - that's meaningless - we care about given that GPU power and CPU power - we want maximum computation thruput for all the trainings or all the forwards and backwards
-
-    //if you skip synchronization for backwards - you are wasting at least 20x GPU powers - the exact formula for no-synchro backprop is 1 << n + 2 * (1 << (n - 1)) + 4 * (1 << (n - 2)) + (8 * (1 << (n -3))) etc. 
-    //so we are talking about height * cost(synchro)
-    //so when people are training 1 model - we are training concurrently HEIGHT models with the same cost and extracting the derivatives of gradients
-    //I'm trying to think of the problems for this kind of training
-    //it is possible for bad training data - saturate the network and the compression pipeline - but it does not happen as bad for f(g(x)) -> x
-    //is it possible to remove a compression node (f(g(x) -> x)) - replace it and get a better loss_rate? - hmm - this is up for debate
-
-    //essentially - we want raw inputs of terabytes of data (electrical signals at every pixel on Earth) - and compress terabytes of data -> gigabytes of data or even 100 MBs of data
-    //we want 5000 stack of f(g(x)) -> x
-
-    //each compression node, a.k.a. f(g(x)) takes in a fixed context size - let's say 1 TB -> 900GB -> 810GB -> down to 1GB - with the decay rate of 10% or 5% or 1% 
-    //we want data decay rate of 0.1%, so 99.9% ** 5000 compression stack should yield 0.00672111195 compression rate - or 0.6% compression rate
-    //intelligent/intelligence is done by reversing the process - g(x) -> x
-    //g(x) can be an arbitrary context token
-    //we'll get there buddys - the day of democracy and a community run by the people, for the people
-
     class BackwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
         private:
@@ -3739,7 +2935,63 @@ namespace dg::network_memcommit_resolutor{
                     return;
                 }
 
+                auto [backwardee_grad_vd_id, backwardee_logit_vd_id, backwarder_grad_vd_id, dp_device_kind, tileops_dp_id]  = dg::network_dispatch_control::decode_bwd_msgrfwd(dispatch_control);
+                auto [backwardee_grad_map_resource, backwardee_logit_map_resource, backwarder_grad_map_resource]            = dg::network_uma::lockmap_safewait_many_nothrow<3>({{src_grad_umaptr, backwardee_grad_vd_id}, {src_logit_umaptr, backwardee_logit_vd_id}, {dst_grad_umaptr, backwarder_grad_vd_id}});
                 
+                auto backwardee_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwardee_grad_map_resource));
+                auto backwardee_logit_vmamap    = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwardee_logit_map_resource));
+                auto backwarder_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwarder_grad_map_resource));
+
+                if (dg::network_dispatch_control::is_cuda_dispatch()){
+                    if (src_init_status == TILE_INIT_STATUS_INITIALIZED){
+
+                    } else if (src_init_status == TILE_INIT_STATUS_EMPTY){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else if (dg::network_dispatch_control::is_host_dispatch()){
+                    if (src_init_status == TILE_INIT_STATUS_INITIALIZED){
+
+                    } else if (src_init_status == TILE_INIT_STATUS_EMPTY){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+
+                switch (src_grad_status){
+                    case TILE_GRAD_STATUS_INITIALIZED:
+                        break;
+                    case TILE_GRAD_STATUS_EMPTY:
+                        break;
+                    default:
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                }
+
+                dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_backward_do_signal(src));
             }
     };
 
@@ -3774,6 +3026,27 @@ namespace dg::network_memcommit_resolutor{
 
             void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
 
+                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(dst);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
+
+                uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(dst);
+                uma_ptr_t src           = {};
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                    src = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(dst);
+                }
+
+                uma_ptr_t src_rcu_addr              = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(src);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr, src_rcu_addr);
+                uma_ptr_t new_src                   = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(dst);
+                operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(dst);
+                dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_msgrbwd_dispatch_control_nothrow(dst);
+                init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(dst);
             }
     };
 
