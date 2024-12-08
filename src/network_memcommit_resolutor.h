@@ -2771,6 +2771,18 @@ namespace dg::network_memcommit_resolutor{
     //if you skip synchronization for backwards - you are wasting at least 20x GPU powers - the exact formula for no-synchro backprop is 1 << n + 2 * (1 << (n - 1)) + 4 * (1 << (n - 2)) + (8 * (1 << (n -3))) etc. 
     //so we are talking about height * cost(synchro)
     //so when people are training 1 model - we are training concurrently HEIGHT models with the same cost and extracting the derivatives of gradients
+    //I'm trying to think of the problems for this kind of training
+    //it is possible for bad training data - saturate the network and the compression pipeline - but it does not happen as bad for f(g(x)) -> x
+    //is it possible to remove a compression node (f(g(x) -> x)) - replace it and get a better loss_rate? - hmm - this is up for debate
+
+    //essentially - we want raw inputs of terabytes of data (electrical signals at every pixel on Earth) - and compress terabytes of data -> gigabytes of data or even 100 MBs of data
+    //we want 5000 stack of f(g(x)) -> x
+
+    //each compression node, a.k.a. f(g(x)) takes in a fixed context size - let's say 1 TB -> 900GB -> 810GB -> down to 1GB - with the decay rate of 10% or 5% or 1% 
+    //we want data decay rate of 0.1%, so 99.9% ** 5000 compression stack should yield 0.00672111195 compression rate - or 0.6% compression rate
+    //intelligent/intelligence is done by reversing the process - g(x) -> x
+    //g(x) can be an arbitrary context token
+    //we'll get there buddys - the day of democracy and a community run by the people, for the people
 
     class BackwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
@@ -3266,115 +3278,197 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-            std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter;
+            std::shared_ptr<ForeignTileAliasGetterInterface> alias_getter;
             const size_t delivery_capacity;
         
         public:
 
             BackwardDoExtnSrcSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                             std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter, //
+                                             std::shared_ptr<ForeignTileAliasGetterInterface> alias_getter, //
                                              size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
                                                                                  alias_getter(std::move(alias_getter)),
                                                                                  delivery_capacity(delivery_capacity){}
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
                 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get());
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
             }
 
-        // private:
+        private:
 
-        //     std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-        //     std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter;
-        //     const size_t delivery_capacity;
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
+                
+                //a backward do on this tile == backward do on the counterpart tile
+                //we have a cyclic external tile queue - we, essentially could assume all addresses be external - yet it would impose too much overhead
+                //and a fixed_size hash_map with FIFO vector
+                //then we want to concurrent the hash_map by using modulo - 
+                //so there is a chance where the external tile cannot be backpropped - this is equivalent to "packet_loss"
 
-        // public:
+                //what do we assume?
+                //we assume that counterparts external tiles are identical - we could add fail-safes along the way - by doing no-ops on err 
+                //we have to add fail-safes along the way - and we must assume all inputs are corrupted
+                //incompatible dispatchs + unsafe memory access + etc. will be added later
+                //we'll add the assumptions next round
 
-        //     SrcExternalBackwardDoSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-        //                                          std::shared_ptr<ExternalAddressAliasGetterInterface> alias_getter,
-        //                                          const size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
-        //                                                                                    alias_getter(std::move(alias_getter)),
-        //                                                                                    delivery_capacity(delivery_capacity){}
+                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(dst);
 
-        //     void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
 
-        //         auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                uma_ptr_t dst_rcu_addr  = get_extnsrc_rcu_addr_nothrow(dst);
+                uma_ptr_t counterpart   = {};
+                uma_ptr_t src           = {}; 
 
-        //         if (!delivery_handle.has_value()){
-        //             dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
-        //             return;
-        //         }
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                    uma_ptr_t counterpart   = get_extnsrc_counterpart_nothrow(dst);
+                    uma_ptr_t src           = get_extnsrc_descendant_nothrow(dst);
+                }
 
-        //         for (size_t i = 0u; i < sz; ++i){
-        //             this->resolve(ptr_arr[i], delivery_handle->get());
-        //         }
-        //     }
+                std::optional<uma_ptr_t> local_counterpart = this->alias_getter->alias(counterpart);
 
-        // private:
+                if (!local_counterpart.has_value()){
+                    return;
+                }
 
-        //     void resolve(uma_ptr_t backwarder, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * handle) noexcept{
+                uma_ptr_t local_counterpart_rcu_addr    = get_extndst_rcu_addr_nothrow(local_counterpart.value());
+                uma_ptr_t src_rcu_addr                  = get_tile_rcu_addr_nothrow(src);
+                dg::network_uma_memops::memlock_guard mem_grd(dst_rcu_addr, src_rcu_addr, local_counterpart_rcu_addr);
 
-        //         std::optional<uma_ptr_t> alias = this->alias_getter->alias(backwarder);
+                uma_ptr_t new_src                       = get_extnsrc_descendant_nothrow(dst);
+                operatable_id_t dst_operatable_id       = get_extnsrc_operatable_id_nothrow(dst);
+                init_status_t init_status               = get_extnsrc_init_status_nothrow(dst);
+                uma_ptr_t new_counterpart               = get_extnsrc_counterpart_nothrow(dst); 
+                dispatch_control_t dispatch_control     = get_extnsrc_dispatch_control_nothrow(dst);
 
-        //         if (!alias.has_value()){
-        //             return;
-        //         }
+                uma_ptr_t dst_grad_umaptr               = get_extndst_logit_addr_nothrow(local_counterpart.value());
+                uma_ptr_t external_counterpart          = get_extndst_counterpart_nothrow(local_counterpart.value());
+                uma_ptr_t external_selfaddr             = get_extndst_selfaddr_nothrow(local_counterpart.value());
+                uma_ptr_t external_grad_status          = get_extndst_grad_status_nothrow(local_counterpart.value());
+                uma_ptr_t src_grad_umaptr               = get_tile_logit_addr_nothrow(src);
+                uma_ptr_t src_logit_umaptr              = get_tile_grad_addr_nothrow(src);
+                operatable_id_t src_operatable_id       = get_tile_operatable_id_nothrow(src);
 
-        //         bool backward_status = dg::network_tileops_host_handler::backward(backwarder, alias.value());
+                if (new_src != src){
+                    return;
+                }
 
-        //         if (!backward_status){
-        //             return;
-        //         }
+                if (new_counterpart != external_selfaddr){
+                    return;
+                }
 
-        //         uma_ptr_t backwarder_rcu_addr                               = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(backwarder);
-        //         std::array<uma_ptr_t, MAX_DESCENDANT_SIZE> descendant_arr   = {};
-        //         size_t descendant_arr_sz                                    = {};
-        //         init_status_t init_status                                   = {};
+                if (external_counterpart != dst){
+                    return;
+                }
 
-        //         {
-        //             dg::network_memops_uma::memlock_guard mem_grd(backwarder_rcu_addr);
-        //             init_status = dg::network_tile_member_getsetter::get_tile_init_status_nothrow(backwarder);
+                if (src_operatable_id != dst_operatable_id){
+                    return;
+                }
 
-        //             switch (init_status){
-        //                 case TILE_INIT_STATUS_ORPHANED:
-        //                     break;
-        //                 case TILE_INIT_STATUS_ADOPTED:
-        //                     break;
-        //                 case ITLE_INIT_STATUS_DECAYED:
-        //                     break;
-        //                 case TILE_INIT_STATUS_INITIALIZED:
-        //                     descendant_arr      = dg::network_tile_member_getsetter::get_srcextclone_descendant_nothrow(backwarder);
-        //                     descendant_arr_sz   = dg::network_tile_member_getsetter::get_srcextclone_descendant_size_nothrow(backwarder);
-                            
-        //                     for (size_t i = 0u; i < descendant_arr_sz; ++i){
-        //                         virtual_memory_event_t request = dg::network_memcommit_factory::make_event_backward_do_request(descendant_arr[i]);
-        //                         dg::network_producer_consumer::delvrsrv_deliver(handle, std::move(request));
-        //                     }
-        //                     break;
-        //                 default:
-        //                     if constexpr(DEBUG_MODE_FLAG){
-        //                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-        //                         std::abort();
-        //                         break;
-        //                     } else{
-        //                         std::unreachable();
-        //                         break;
-        //                     }
-        //             }
-        //         }
-        //     }
+                if (dst_operatable_id != external_operatable_id){
+                    return;
+                }
+
+                if (external_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (external_grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }
+
+                auto [backwardee_grad_vd_id, backwardee_logit_vd_id, backwarder_grad_vd_id, dp_device_kind, tileops_dp_kind]    = dg::network_dispatch_control::decode_bwd_extnsrc(dispatch_control);
+                auto [backwardee_grad_map_resource, backwardee_logit_map_resource, backwarder_grad_map_resource]                = dg::network_uma::lockmap_safewait_many_nothrow<3>({{src_grad_umaptr, backwardee_grad_vd_id}, {src_logit_umaptr, backwardee_logit_vd_id}, {dst_grad_umaptr, backwarder_grad_vd_id}}); 
+                
+                auto backwardee_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwardee_grad_map_resource)); 
+                auto backwardee_logit_vmamap    = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwardee_logit_map_resource));
+                auto backwarder_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwarder_grad_map_resource));
+
+                if (dg::network_dispatch_control::is_cuda_dispatch()){
+                    if (src_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+
+                    } else if (src_grad_status == TILE_GRAD_STATUS_EMPTY){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else if (dg::network_dispatch_control::is_host_dispatch()){
+                    if (src_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+
+                    } else if (src_grad_status == TILE_GRAD_STATUS_EMPTY){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+
+                switch (src_grad_status){
+                    case TILE_GRAD_STATUS_EMPTY:
+                        set_tile_grad_status_nothrow(src, TILE_GRAD_STATUS_INITIALIZED);
+                        break;
+                    case TILE_GRAD_STATUS_INITIALIZED:
+                        break;
+                    default:
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                            break;
+                        }
+                }
+
+                dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_backward_do_signal(src));
+            }
     };
 
     class BackwardDoExtnDstSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
         private:
 
-            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<external_virtual_memory_event_t>> requst_box;
+            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_event_t>>> requst_box;
             const size_t delivery_capacity;
             std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever;
         
         public:
 
-            BackwardDoExtnDstSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<external_virtual_memory_event_t>> request_box,
+            BackwardDoExtnDstSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_event_t>>> request_box,
                                              size_t delivery_capacity,
                                              std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever) noexcept: request_box(std::move(request_box)),
                                                                                                                             delivery_capacity(delivery_capacity),
@@ -3382,42 +3476,55 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
             }
-
-        // private:
-
-        //     std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<virtual_memory_event_t>>> request_box;
-        //     const size_t delivery_capacity;
-        //     std::shared_ptr<UnifiedMemoryIPRetrieverInterface>  uma_ip_retriever;
         
-        // public:
+        private:
 
-        //     DstExternalBackwardDoSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<virtual_memory_event_t>>> request_box,
-        //                                          size_t delivery_capacity,
-        //                                          std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever) noexcept: request_box(std::move(request_box)),
-        //                                                                                                                         delivery_capacity(delivery_capacity),
-        //                                                                                                                         uma_ip_retriever(std::move(uma_ip_retriever)){}
-            
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<Request<Request<external_virtual_memory_event_t>>> * delivery_handle) noexcept{
 
-        //     void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
+                auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(dst);
 
-        //         auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()))
+                    return;
+                }
 
-        //         if (!delivery_handle.has_value()){
-        //             dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
-        //             return;
-        //         }
+                uma_ptr_t dst_rcu_addr      = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(dst);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                uma_ptr_t counterpart       = dg::network_tile_member_getsetter::get_extndst_counterpart_nothrow(dst);
+                init_status_t init_status   = dg::network_tile_member_getsetter::get_init_status_nothrow(dst);
+                grad_status_t grad_status   = dg::network_tile_member_getsetter::get_grad_status_nothrow(dst);
+                dg::string serialized       = dg::network_tile_member_getsetter::serialize_extndst(dst); 
 
-        //         for (size_t i = 0u; i < sz; ++i){
-        //             this->resolve(ptr_arr[i], delivery_handle->get());
-        //         }
-        //     }
+                if (init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
 
-        // private:
+                if (grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }
 
-        //     void resolve(uma_ptr_t ptr, dg::network_producer_consumer::DeliveryHandle<Request<external_virtual_memory_event_t>> * handle) noexcept{
+                external_virtual_memory_event_t injection_event     = dg::network_external_memcommit_factory::make_event_foreign_injection(dst, std::move(serialized));
+                external_virtual_memory_event_t signal_event        = dg::network_external_memcommit_factory::make_event_backward_do_signal(counterpart);
+                external_virtual_memory_event_t event               = dg::network_external_memcommit_factory::make_sequential_event(std::move(injection_event), std::move(signal_event));
+                
+                Request<external_virtual_memory_event_t> request{};
+                request.requestor   = this->host_ip_retriever->ip();
+                request.requestee   = this->uma_ip_retriever->ip(counterpart);
+                request.content     = std::move(event);
 
-        //     }
+                dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, std::move(request));
+            }
     };
 
     class BackwardDoCritSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
@@ -3435,6 +3542,127 @@ namespace dg::network_memcommit_resolutor{
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
+            }
+        
+        private:
+
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
+
+                auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(dst);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
+
+                uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(dst);
+                uma_ptr_t src           = {};
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                    src = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(src);
+                }
+
+                uma_ptr_t src_rcu_addr              = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(src);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr, src_rcu_addr);
+                uma_ptr_t new_src                   = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(dst);
+                operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(dst);
+                init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(dst);
+                dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_crit_dispatch_control_nothrow(dst);
+                uma_ptr_t dst_grad_umaptr           = dg::network_tile_member_getsetter::get_crit_grad_addr_nothrow(dst);
+                grad_status_t dst_grad_status       = dg::network_tile_member_getsetter::get_crit_grad_status_nothrow(dst);
+
+                operatable_id_t src_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_id_nothrow(src);
+                init_status_t src_init_status       = dg::network_tile_member_getsetter::get_tile_init_status_nothrow(src);
+                grad_status_t src_grad_status       = dg::network_tile_member_getsetter::get_tile_grad_status_nothrow(src);
+
+                if (src != new_src){
+                    return;
+                }
+
+                if (dst_operatable_id != src_operatable_id){
+                    return;
+                }
+
+                if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (dst_grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }
+
+                auto [backwardee_grad_vd_id, backwardee_logit_vd_id, backwarder_grad_vd_id, dp_device_kind, tileops_dp_id]  = dg::network_dispatch_control::decode_bwd_crit(dispatch_control);
+                auto [backwardee_grad_map_resource, backwardee_logit_map_resource, backwarder_grad_map_resource]            = dg::network_uma::lockmap_safewait_many_nothrow<3u>({{src_grad_umaptr, backwardee_grad_vd_id}, {src_logit_umaptr, backwardee_logit_vd_id}, {dst_grad_umaptr, backwarder_grad_vd_id}});
+                
+                auto backwardee_grad_vmamap     = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwardee_grad_map_resource));
+                auto backwardee_logit_vmamap    = dg::network_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwardee_logit_map_resource));
+                auto backwarder_grad_vmamap     = dg::networK_vmamap::mapsafe_nothrow(dg::network_uma::get_vma_ptr(backwarder_grad_map_resource));
+
+                if (dg::network_dispatch_control::is_cuda_dispatch(dp_device_kind)){
+                    if (src_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+
+                    } else if (src_grad_status == TILE_GRAD_STATUS_EMPTY){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else if (dg::network_dispatch_control::is_host_dispatch(dp_device_kind)){
+                    if (src_grad_status == TILE_GRAD_STATUS_INITIALIZED){
+
+                    } else if (src_grad_status == TILE_GRAD_STATUS_EMPTY){
+
+                    } else{
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+
+                switch (src_grad_status){
+                    case TILE_GRAD_STATUS_INITIALIZED:
+                        break;
+                    case TILE_GRAD_STATUS_EMPTY:
+                        break;
+                    default:
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                }
+
+                dg::network_producer_consumer::delvrsrv_deliver(delivery_handle, dg::network_memcommit_factory::make_event_backward_do_signal(src));
             }
     };
 
@@ -3453,6 +3681,65 @@ namespace dg::network_memcommit_resolutor{
 
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
 
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
+            }
+        
+        private:
+
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
+
+                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(dst);
+
+                if (!ptrchk.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                    return;
+                }
+
+                uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(dst);
+                uma_ptr_t src           = {};
+
+                {
+                    dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr);
+                    src = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(dst);
+                }
+
+                uma_ptr_t src_rcu_addr                  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(src);
+                dg::network_memops_uma::memlock_guard mem_grd(dst_rcu_addr, src_rcu_addr);
+                uma_ptr_t new_src                       = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(dst);
+                operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(dst);
+                dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_msgrfwd_dispatch_control_nothrow(dst);
+                init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(dst);
+
+                if (new_src != src){
+                    return;
+                }
+
+                if (dst_operatable_id != src_operatable_id){
+                    return;
+                }
+
+                if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
+                    return;
+                }
+
+                if (dst_grad_status != TILE_GRAD_STATUS_INITIALIZED){
+                    return;
+                }
+
+                
             }
     };
 
@@ -3470,6 +3757,22 @@ namespace dg::network_memcommit_resolutor{
                                                                                  delivery_capacity(delivery_capacity){}
             
             void push(uma_ptr_t * ptr_arr, size_t sz) noexcept{
+
+                auto delivery_handle = dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity);
+
+                if (!delivery_handle.has_value()){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(delivery_handle.error()));
+                    return;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->resolve(ptr_arr[i], delivery_handle->get());
+                }
+            }
+        
+        private:
+
+            void resolve(uma_ptr_t dst, dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * delivery_handle) noexcept{
 
             }
     };
