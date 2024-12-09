@@ -29,10 +29,11 @@ int main(){
     //there is no good answer in pathing - the best we can do is have a small neural networks of size 20-30 hops - then train them concurrently - pick the one that has the least loss_rate and validation_rate (compared to the same weight models)
     //what we wanna do is to saturate the model - then we gonna unlink the logit tiles - by using detach_clone tiles - and we rinse and repeats   
     //so f(x) -> y, and F(f(x), g(x)) -> y is the answer to the rotor | gear problem which states that the deeper the neural network - the harder it is to train the neural network
-    //we'll build the ring of compression
 
+    //we'll build the ring of compression
     //ring of compression is easy f(g(x)) - > x - 20 hops (dijkstra + path + etc. to permute all possible transformation paths - pacm | uacm | pair | mono)
     //f'(g'(g(x))) -> g(x) - 20 hops
     //so on and so forth
     //we want to train all the networks CONCURRENTLY (I'm talking about 50 TBs concurrent training - in one computation node - or petabytes of concurrent training in multiple nodes) - and extract the derivative of gradients
+
 }
