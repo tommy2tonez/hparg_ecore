@@ -310,7 +310,7 @@ namespace stdx{
             inline __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
                 this->mtx->test_and_set();
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                std::atomic_thread_fence(std::memory_order_seq_cst); //Mom told me this does not work on some compilers - this means we have to do function-style like std::atomic_thread_fence(), decltype(auto) rs = callable(), std::atomic_thread_fence(), return rs
            }
 
             xlock_guard(const self&) = delete;
