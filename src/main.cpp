@@ -1,19 +1,50 @@
+#include <stdint.h>
+#include <stdlib.h>
+
+//alright - so buffer_streamer is a class that is daemon-registered to pull data up to a cap
+//data integrity is done internally by chksum + repull data + friends
+//a click on the bar == a spawn of video frame streamer 
+//so we are expecting something like - user gives movies - we read movie_header -> extract the movie_resolution + # of images per second - set the RenderMachine hz appropriately - and set_video_streamer() to run in a daemon loop
+//essentially, render_machine references a panel - and a video_streamer, 
+//render_machine has an update() function - which will fetch the frame on the panel every time it is invoked - 
+//if the update is successful - a timecounter will tick and the progress bar will move forward
+//update() is deamon-subscriptible
+
+
+class BufferStreamerInterface{
+
+    public:
+
+        virtual ~BufferStreamerInterface() noexcept = default;
+        virtual auto is_end_of_stream() -> bool = 0;
+        virtual auto next(size_t buf_sz) -> std::string = 0 ;
+        virtual auto has_next() -> bool = 0; 
+};
+
+class VideoFrameStreamerInterface{
+
+    public:
+
+        virtual ~VideoFrameStreamerInterface() noexcept = default;
+        virtual auto next_frame() -> std::unique_ptr<Image> = 0;
+        virtual auto is_end_of_stream() -> bool = 0;
+        virtual auto has_next() -> bool = 0;
+};
+
+class RenderMachineInterface{
+
+    public:
+
+        virtual ~RenderMachineInterface() noexcept = default;
+        virtual void set_video_streamer(std::unique_ptr<VideoFrameStreamerInterface>) = 0;
+        virtual void set_time(std::chrono::nanoseconds) = 0;
+        virtual void start() = 0;
+        virtual void stop() = 0;
+        virtual void set_render_hz(double) = 0;
+        virtual void set_dim(Dimension) = 0;
+        virtual void set_pos() = 0;
+};
+
 int main(){
 
-    //idk I thought about browser last night - particularly how to built firefox
-    //essentially - you want a UI framework (Swing, etc.) + bytecode interpreter + SQLLite database
-    //UI framework is for the tool_bars + search bars + settings + etc
-    //bytecode interpreter is like python - but for javascript - it takes raw code every time we load a site - and interpret it line by line
-    //concurrency is multiple tabs - we want to manage the bytecode exec machine internally in the browser - so it's like a mini OS within an OS
-
-    //I thought about building a bytecode interpreter machine - the idea is to serialize statement - so we built something like what I built to compile code - except for this time - we dictionarize literally everything ' from variable name, etc., name of operation
-    //so normal compilers compile var_name -> addresses, arithmetic to instructions, etc.
-    //bytecode machine has a global dictionary, convert var_name -> path, arthmetic instructions -> enumerated dispatch code
-    //so everything is a dictionary
-    //like everything is a function - function in bytecode world is actually a string - and its arguments have pre-deterministic paths - says foo(int a, int b) then a has the path _global_foo_a, b has the path _global_foo_b
-    //we want to serialize the function - and store the address of the function in the global dictionary - like __global_foo
-    //it's a nice project to get a grasp of modern architecture - I'll try to build the bytecode machine someday
-    
-    //why dictionaries? because they are good for concurrency
-    //and it's cheap - for every var access in Python or JavaScript is already 1 CACHE_LINE_ACCESS given their nature of object langauge
 }
