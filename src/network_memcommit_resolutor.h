@@ -35,6 +35,17 @@ namespace dg::network_memcommit_resolutor{
     //let's do this
     //gonna be bumpy road - we need to change all the codes
 
+    //the question is to whether devirtualize this at a dispatching center - or devirtualize this at the resolutors
+    //the problem with devirtualizing this at a dispatching center is - radix problems + access serialization + locality problems - locality problem is storage problems - we pull virtual_event from a container - we radix it - then we push to another container - the pushing to another container is the expensive phase - where we need to touch at least O(n) space in adjunction to the O(n) pulling space
+    //we either need to have dedicated worker on a radix - or ... have a dedicated worker on a number of radixes - which impose (1): code management problem (2): affinity problem, (3): access serialization problem
+    //but the trade off is devirtualizing at a dispatching center could achieve better dispatching result - by forcing relevant events together 
+    
+    //in contrasts, by devirtualizing these guys at the resolutors - we must rely on chances - chances that adjecent virtual_memory_event_t(s) are relevant - and we offload this "semantic relevantness" responsibility to memregion frequency (Hz) + collectors + memory press
+    //there is no perfect answer - only use cases, benchmarks, statistics and profile guided optimizations
+    //we are moving in the direction of keep it simple, stupid, maintainable for these solutions are only means to an end - which is 5 flops/ virtual_memory_event
+    //fast forward could be achieved by pinging more tiles - to reduce the pingpong communication latencies 
+    //we will get back to the allocation problem soon - we want to maximize locality for delvrsrv by using heap_stack hybrid allocations
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> Address = 0;
