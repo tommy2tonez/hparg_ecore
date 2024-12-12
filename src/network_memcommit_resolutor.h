@@ -78,6 +78,21 @@ namespace dg::network_memcommit_resolutor{
 
     //we are expecting to have these filled in roughly 2-3 weeks
 
+    //---------
+    //alright - I think this is an appropriate approach - not necessarily decent - if we are aiming to maximize host_flops
+    //sleeping mutex + hyperthreading is a good approach to avoid memregion acquisition collisions (we offload the responsibility to kernel instead of doing internal management) - we'll move in the direction
+    //the formula is easy - assume 1024 memlock_regions
+    //assume 32 concurrent workers
+    //assume each concurrent worker occupies maximum 4 memregions at a time
+    //so the collision rate in the worst case scenerio is 128/1024 = 1/8 = 16%
+    //so for every 8 task - there is 1 waiting task - since the nature of ping/pong + orphan + inits is not expensive - we want to hyperthread this (to "proceed" to another task while waiting on the "busy" tasks)
+    //in another word, we reduce the sleeping overhead by the factor of hyperthreads
+    //or we can increase the # of memlock_regions - to reduce the collision rate
+    //these are calbratables and it totally depends on the implementation of kernel's completely fair scheduling
+
+    //kv_raiihandle is an insert-only (unordered_unstable_fastinsert_map) map that clears on certain cap - with virtual_addr size of uint8_t - we are not wasting spaces
+    //we'll do detail benchmarks later - but these are the optimizables and calibratables - which we don't care about for now
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> Address = 0;
@@ -1099,7 +1114,7 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
     };
-    
+
     class ForwardPongMonoRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>>{
 
         private:
@@ -1150,6 +1165,49 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             }
+        
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, uma_ptr_t>>{
+
+                dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t> * ptr_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [requestee, requestor] = ptr_arr[i];
+                        init_status_t init_status   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                                break;
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED:
+                            {
+                                dg::network_tile_member_getsetter::controller_mono_push_observer_nothrow(requestee, requestor);
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::make_event_forward_pong_signal(requestor));
+                                break;
+                            }
+                            default:
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                    break;
+                                } else{
+                                    std::unreachable();
+                                    break;
+                                }
+                        }
+                    }
+                }
+            };
     };
 
     class ForwardPongPairRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>>{
@@ -2093,7 +2151,7 @@ namespace dg::network_memcommit_resolutor{
                     case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                     case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                     case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
-                    case TILE_INIT_STATUS_INITIALIZED: [[fallthrough]]
+                    case TILE_INIT_STATUS_INITIALIZED:
                         break;
                     case TILE_INIT_STATUS_DECAYED:
                     {
