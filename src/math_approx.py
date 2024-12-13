@@ -252,9 +252,10 @@ def calc_deviation(instrument: Callable[[float, float], float], operation: Calla
     discrete_value_arr: list[float]             = discretize(first, last, discretization_sz)
     pair_point_arr: list[tuple[float, float]]   = combinatorial_zip([discrete_value_arr, discrete_value_arr])
     sqr_sum: float                              = sum([(instrument(a, b) - operation(a, b)) ** 2 for (a, b) in pair_point_arr])
-    denorm: float                               = float(len(pair_point_arr))
+    denom: float                                = float(len(pair_point_arr))
+    normalized: float                           = math.sqrt(sqr_sum / denom)
 
-    return math.sqrt(sqr_sum / denorm)
+    return normalized
 
 def newton_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.1) -> float:
 
