@@ -142,7 +142,7 @@ namespace dg::network_producer_consumer{
 
         handle = stdx::safe_ptr_access(handle);
 
-        if (handle->delivery_sz != 0u){ //a predicted branch or even a mispredicted one is way less expensive than a polymorphic call - so it should be like this
+        if (handle->deliverable_sz != 0u){ //a predicted branch or even a mispredicted one is way less expensive than a polymorphic call - so it should be like this
             handle->consumer->push(handle->deliverable_arr.get(), handle->deliverable_sz);
         }
 
