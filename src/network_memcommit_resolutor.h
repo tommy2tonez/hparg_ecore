@@ -3764,7 +3764,7 @@ namespace dg::network_memcommit_resolutor{
         }
     };
 
-    //
+    //alright guys - I'll be back later to get these filled - in the interim - I'll get the initializations + getsetters + other things done today
 
     class ForwardInitLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>{
 
@@ -3969,7 +3969,7 @@ namespace dg::network_memcommit_resolutor{
 
             struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, uma_ptr_t *>>{
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t *, dispatch_device_id *> * data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t *> data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
@@ -4012,11 +4012,11 @@ namespace dg::network_memcommit_resolutor{
                 void push(std::tuple<uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t> * data_arr, size_t sz){
 
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr));
-                    dg::network_cuda_controller::CudaSynchronizer synchronizer{}; //cuda synchronizer only has two methods add(async_workorder_id) -> exception_t and void sync() noexcept
-                    dg::network_controller::RestrictPointerSynchronizer restrict_synchronizer(synchronizer); //compiler might reorder this and invalidate the pointer reference - guard with a scope
                     auto umamap_reacquirer      = dg::network_uma::reacquirer_raii_initialize(std::integral_constant<size_t, 2u>{});
                     auto dst_vmamap_reacquirer  = dg::network_vmamap::reacquirer_raii_initialize(); 
                     auto src_vmamap_reacquirer  = dg::network_vmamap::reacquirer_raii_initialize();
+                    dg::network_cuda_controller::CudaSynchronizer synchronizer{}; //cuda synchronizer only has two methods void add(async_workorder_id) noexcept and void sync() noexcept
+                    dg::network_controller::RestrictPointerSynchronizer restrict_synchronizer(synchronizer); //compiler might reorder this and invalidate the pointer reference - guard with a scope
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src]                                             = data_arr[i];
