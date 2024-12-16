@@ -6,133 +6,318 @@
 #include <tuple>
 #include "network_trivial_serializer.h" 
 #include <array>
+#include "network_pointer.h"
 
 namespace dg::network_memcommit_factory{
 
-    using memory_event_kind_t = uint8_t;
+    using memory_event_kind_t       = uint8_t;
+    using uma_ptr_t                 = dg::network_pointer::uma_ptr_t;
 
-    enum enum_memory_event_kind: memory_event_kind_t{
+    enum enum_memory_event: memory_event_kind_t{
         event_kind_forward_ping_signal      = 0u,
         event_kind_forward_pong_request     = 1u,
-        event_kind_forward_pong_signal      = 2u,
-        event_kind_forward_do_signal        = 3u,
-        event_kind_backward_do_signal       = 4u
+        event_kind_forward_pingpong_request = 2u,
+        event_kind_forward_pong_signal      = 3u,
+        event_kind_forward_do_signal        = 4u,
+        event_kind_backward_do_signal       = 5u
+    };
+
+    struct ForwardPingSignalEvent{
+        uma_ptr_t dst;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(dst);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(dst);
+        }
+    };
+
+    struct ForwardPongSignalEvent{
+        uma_ptr_t dst;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(dst);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(dst);
+        }
+    };
+
+    struct ForwardPongRequestEvent{
+        uma_ptr_t requestee;
+        uma_ptr_t requestor;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(requestee, requestor);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(requestee, requestor);
+        }
+    };
+
+    struct ForwardPingPongRequestEvent{
+        uma_ptr_t requestee;
+        uma_ptr_t requestor;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(requestee, requestor);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(requestee, requestor);
+        }
+    };
+
+    struct ForwardDoSignalEvent{
+        uma_ptr_t dst;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(dst);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(dst);
+        }
+    };
+
+    struct BackwardDoSignalEvent{
+        uma_ptr_t dst;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(dst);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(dst);
+        }
     };
 
     static inline constexpr size_t VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5; 
 
-    using namespace dg::network_memcommit_taxonomy;
+    struct VirtualEvent{
+        memory_event_kind_t event_kind;
+        std::array<char, VIRTUAL_EVENT_BUFFER_SZ> content;
 
-    using uma_ptr_t                 = uint64_t;
-    using virtual_memory_event_t    = std::array<char, VIRTUAL_EVENT_BUFFER_SZ>;
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(event_kind, content);
+        }
 
-    auto make_event_forward_ping_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(event_kind, content);
+        }
+    };
 
-        constexpr size_t SERILIAZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t>{}); 
-        static_assert(SERILIAZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
-        virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_ping_signal);
-        dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
+    using virtual_memory_event_t    = VirtualEvent;
 
-        return rs;
+    constexpr auto make_event_forward_ping_signal(uma_ptr_t dst) noexcept -> ForwardPingSignalEvent{
+
+        return ForwardPingSignalEvent{dst};
     }
 
-    auto make_event_forward_pong_request(uma_ptr_t requestee, uma_ptr_t requestor) noexcept -> virtual_memory_event_t{
+    constexpr auto make_event_forward_pong_request(uma_ptr_t requestee, uma_ptr_t requestor) noexcept -> ForwardPongRequestEvent{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
-        static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
-        virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_pong_request);
-        dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(requestee, requestor));
-
-        return rs;
+        return ForwardPongRequestEvent{requestee, requestor};
     }
 
-    auto make_event_forward_pong_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
+    constexpr auto make_event_forward_pingpong_request(uma_ptr_t requestee, uma_ptr_t requestor) noexcept -> ForwardPingPongRequestEvent{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
-        static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
-        virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_pong_signal);
-        dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
+        return ForwardPingPongRequestEvent{requestee, requestor};
+    }
 
-        return rs;
+    constexpr auto make_event_forward_pong_signal(uma_ptr_t dst) noexcept -> ForwardPongSignalEvent{
+
+        return ForwardPongSignalEvent{dst};
     } 
 
-    auto make_event_forward_do_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
+    constexpr auto make_event_forward_do_signal(uma_ptr_t dst) noexcept -> ForwardDoSignalEvent{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t>{});
-        static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);;
-        virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_forward_do_signal);
-        dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
-
-        return rs;
+        return ForwardDoSignalEvent{dst};
     }
 
-    auto make_event_backward_do_signal(uma_ptr_t signalee) noexcept -> virtual_memory_event_t{
+    constexpr auto make_event_backward_do_signal(uma_ptr_t dst) noexcept -> BackwardDoSignalEvent{
 
-        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(memory_event_kind_t{}) + dg::network_trivial_serializer::size(std::tuple<uma_ptr_t, uma_ptr_t>{});
-        static_assert(SERIALIZATION_SZ <= VIRTUAL_EVENT_BUFFER_SZ);
-        virtual_memory_event_t rs{};
-        char * nxt  = dg::network_trivial_serializer::serialize_into(rs.data(), event_kind_backward_do_signal);
-        dg::network_trivial_serializer::serialize_into(nxt, std::make_tuple(signalee));
-
-        return rs;
+        return BackwardDoSignalEvent{dst};
     }
 
-    auto read_event_kind(virtual_memory_event_t event) noexcept -> memory_event_kind_t{
-
-        memory_event_kind_t rs{};
-        dg::network_trivial_serializer::deserialize_into(rs, event.data());
+    constexpr auto virtualize_event(ForwardPingSignalEvent event) noexcept -> VirtualEvent{
         
-        return rs;
-    } 
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
 
-    auto read_event_forward_ping_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
-
-        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
-        std::tuple<uma_ptr_t> rs{};
-        dg::network_trivial_serializer::deserialize_into(rs, buf); 
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_forward_ping_signal;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    auto read_event_forward_pong_request(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t, uma_ptr_t>{
+    constexpr auto virtualize_event(ForwardPongSignalEvent event) noexcept -> VirtualEvent{
 
-        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
-        std::tuple<uma_ptr_t, uma_ptr_t> rs{};
-        dg::network_trivial_serializer::deserialize_into(rs, buf);
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
 
-        return rs;
-    } 
-
-    auto read_event_forward_pong_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
-
-        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
-        std::tuple<uma_ptr_t> rs{};
-        dg::network_trivial_serializer::deserialize_into(rs, buf);
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_forward_pong_signal;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    auto read_event_forward_do_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
+    constexpr auto virtualize_event(ForwardPongRequestEvent event) noexcept -> VirtualEvent{
 
-        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
-        std::tuple<uma_ptr_t> rs{};
-        dg::network_trivial_serializer::deserialize_into(rs, buf);
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
+
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_forward_pong_request;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
+
+        return rs;
+    }
+
+    constexpr auto virtualize_event(ForwardPingPongRequestEvent event) noexcept -> VirtualEvent{
+
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
+
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_forward_pingpong_request;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    auto read_event_backward_do_signal(virtual_memory_event_t event) noexcept -> std::tuple<uma_ptr_t>{
+    constexpr auto virtualize_event(ForwardDoSignalEvent event) noexcept -> VirtualEvent{
 
-        const char * buf = std::next(event.data(), dg::network_trivial_serializer::size(memory_event_kind_t{}));
-        std::tuple<uma_ptr_t> rs{};
-        dg::network_trivial_serializer::deserialize_into(rs, buf);
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
+
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_forward_do_signal;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
+
+    constexpr auto virtualize_event(BackwardDoSignalEvent event) noexcept -> VirtualEvent{
+
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
+
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_backward_do_signal;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
+
+        return rs;
+    }
+
+    constexpr auto read_virtual_event_kind(VirtualEvent event) noexcept -> memory_event_kind_t{
+
+        return event.event_kind;
+    }
+
+    constexpr auto devirtualize_forward_ping_signal_event(VirtualEvent event) noexcept -> ForwardPingSignalEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_forward_ping_signal){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        ForwardPingSignalEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto devirtualize_forward_pong_signal_event(VirtualEvent event) noexcept -> ForwardPongSignalEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_forward_pong_signal){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        ForwardPongSignalEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto devirtualize_forward_pong_request_event(VirtualEvent event) noexcept -> ForwardPongRequestEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_forward_pong_request){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        ForwardPongRequestEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto devirtualize_forward_pinppong_request_event(VirtualEvent event) noexcept -> ForwardPingPongRequestEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_forward_pingpong_request){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        ForwardPingPongRequestEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto devirtualize_forward_do_signal_event(VirtualEvent event) noexcept -> ForwardDoSignalEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_forward_do_signal){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        ForwardDoSignalEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto devirtualize_backward_do_signal_event(VirtualEvent event) noexcept -> BackwardDoSignalEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_backward_do_signal){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        BackwardDoSignalEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
 }
 
 #endif
