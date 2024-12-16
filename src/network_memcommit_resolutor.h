@@ -125,6 +125,16 @@ namespace dg::network_memcommit_resolutor{
     //assume polymorphic getsetters are no_exception operations - fix
     //assume vmamap_nothrow (we can assume this)
 
+    //-------
+    //alrights - the GOAL we want to align in the next year is to be approximation-turing-complete as defined in math_approx, and maximize the compressible_size/brain_size 
+    //in other words, the model defined in math_approx could approximate any function to the absolute accuracy
+    //this will be hard to solve using the current training - we'll work on adding the features later
+
+    //we want to start small - we want to get the ratios - then we'll scale the model - then we'll set very comptetitive bid/ask for brain miners to "achieve" better compressible_size/brain_size
+    //we'll run these guys in probably billions of devices - compete for the best f(g(x)) -> x function
+
+    //first, I have a promise with my brother to crack asymmetric encoding next month
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> Address = 0;
@@ -3445,8 +3455,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
-                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());  //memregion_size to avoid false_sharing - memregion_size must be pow2(x) <= memlock_region_size()
-                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size());  //memregion_size to avoid false_sharing - memregion_size must be pow2(x) <= memlock_region_size()
+                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));  //memregion_size to avoid false_sharing - memregion_size must be pow2(x) <= memlock_region_size()
+                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));  //memregion_size to avoid false_sharing - memregion_size must be pow2(x) <= memlock_region_size()
                         auto key                = dg::utility::to_unique_representation(dst_lck_addr, src_lck_addr);   //consider unique_representation by sorting 
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(ptr_arr[i], descendant_arr[i]));
@@ -3655,9 +3665,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst               = ptr_arr[i];
                         uma_ptr_t left              = std::get<0>(descendant_arr[i].value());
                         uma_ptr_t right             = std::get<1>(descendant_arr[i].value());
-                        uma_ptr_t dst_lck_addr      = dg::memult::region(dst, dg::network_uma::memregion_size());
-                        uma_ptr_t left_lck_addr     = dg::memult::region(left, dg::network_uma::memregion_size());
-                        uma_ptr_t right_lck_addr    = dg::memult::region(right, dg::network_uma::memregion_size());
+                        uma_ptr_t dst_lck_addr      = dg::memult::region(dst, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t left_lck_addr     = dg::memult::region(left, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t right_lck_addr    = dg::memult::region(right, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                    = dg::utility::to_unique_representation(dst_lck_addr, left_lck_addr, right_lck_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(dst, left, right));
@@ -3706,10 +3716,8 @@ namespace dg::network_memcommit_resolutor{
                                 if constexpr(DEBUG_MODE_FLAG){
                                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                                     std::abort();
-                                    break;
                                 } else{
                                     std::unreachable();
-                                    break;
                                 }
                                 
                         }
@@ -3911,7 +3919,7 @@ namespace dg::network_memcommit_resolutor{
 
                         dg::vector<uma_ptr_t> ptr_vec   = dg::utility::vector_immu_push_back(descendant_arr[i].value(), ptr_arr[i]);
                         dg::vector<uma_ptr_t> rcu_vec   = dg::utility::vector_immu_transform(ptr_vec, [](uma_ptr_t e){return dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(e);});
-                        dg::vector<uma_ptr_t> rep_vec   = dg::utility::vector_immu_transform(rcu_vec, [](uma_ptr_t e){return dg::memult::region(e, dg::network_uma::memregion_size());}); 
+                        dg::vector<uma_ptr_t> rep_vec   = dg::utility::vector_immu_transform(rcu_vec, [](uma_ptr_t e){return dg::memult::region(e, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));}); 
                         dg::set<uma_ptr_t> key          = dg::utility::set_make_from_vec(rep_vec);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle->get(), key, std::make_tuple(ptr_arr[i], descendant_arr[i].value()));
@@ -4096,8 +4104,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
-                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                = dg::utility::to_unique_representation(dst_rep_addr, src_rep_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle->get(), key, std::make_tuple(ptr_arr[i], descendant_arr[ri]));
@@ -4686,8 +4694,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
-                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size()); 
+                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size())); 
                         auto key                = dg::utility::to_unique_representation(dst_rep_addr, src_rep_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle->get(), key, std::make_tuple(ptr_arr[i], descendant_arr[i]));
@@ -4906,8 +4914,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
-                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                = dg::utility::to_unique_representation(dst_lck_addr, src_lck_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle->get(), key, std::make_tuple(ptr_arr[i], descendant_arr[i]));
@@ -5270,7 +5278,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(ptr_arr[i]);
-                    uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_uma::memregion_size());
+                    uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
 
                     dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, ptr_arr[i]);
                 }
@@ -5408,8 +5416,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
-                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                = dg::utility::to_unique_representation(dst_lck_addr, src_lck_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(descendant_arr[i], ptr_arr[i]));
@@ -5613,9 +5621,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t lhs_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(lhs_ptr);
                         uma_ptr_t rhs_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(rhs_ptr);
-                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t lhs_rep_addr  = dg::memult::region(lhs_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t rhs_rep_addr  = dg::memult::region(rhs_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t lhs_rep_addr  = dg::memult::region(lhs_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t rhs_rep_addr  = dg::memult::region(rhs_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                = dg::utility::to_unique_representation(dst_rep_addr, lhs_rep_addr, rhs_rep_addr); //this might mess up the ordering - this is precisely why I need to weight the pros and cons of this
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(ptr_arr[i], lhs_ptr, rhs_ptr));
@@ -5901,9 +5909,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant_rcu_addr       = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant);
                         uma_ptr_t localcounterpart_rcu_addr = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(localcounterpart);
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(ptr_arr[i]);
-                        uma_ptr_t descendant_rep_addr       = dg::memult::region(descendant_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t localcounterpart_rep_addr = dg::memult::region(localcounterpart_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t dst_rep_addr              = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t descendant_rep_addr       = dg::memult::region(descendant_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t localcounterpart_rep_addr = dg::memult::region(localcounterpart_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t dst_rep_addr              = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                            = dg::utility::to_unique_representation(descendant_rep_addr, localcounterpart_rep_addr, dst_rep_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(descendant, ptr_arr[i], local_counterpart));
@@ -5961,11 +5969,11 @@ namespace dg::network_memcommit_resolutor{
             };
 
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>>{
-                
+
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
 
                 void push(std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t> * data_arr, size_t sz) noexcept{
-                    
+
                     //we'll reiterate to get the requirements - and the failsafes - there are tons of bugs right now that I haven't skimmed through just yet
 
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr), std::get<2>(lck_addr));
@@ -6323,8 +6331,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(ptr_arr[i]);
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
-                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                = dg::utility::to_unique_representation(dst_rep_addr, src_rep_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(ptr_arr[i], descendant_arr[i]));
@@ -6528,8 +6536,8 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]);
                         uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(ptr_arr[i]);
-                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, dg::network_uma::memregion_size());
-                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, dg::network_uma::memregion_size());
+                        uma_ptr_t src_rep_addr  = dg::memult::region(src_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
+                        uma_ptr_t dst_rep_addr  = dg::memult::region(dst_rcu_addr, std::min(dg::network_memops_uma::memlock_region_size(), dg::network_uma::memregion_size()));
                         auto key                = dg::utility::to_unique_representation(src_rep_addr, dst_rep_addr);
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(ptr_arr[i], descendant_arr[i]));
