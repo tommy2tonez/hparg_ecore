@@ -317,7 +317,6 @@ namespace dg::network_memcommit_factory{
 
         return rs;
     }
-
 }
 
 #endif
