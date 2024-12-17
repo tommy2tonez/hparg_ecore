@@ -128,7 +128,7 @@ namespace dg::map_variants{
 
             static consteval auto max_capacity() -> size_type{
                 
-                return std::min(size_type{1} << (std::numeric_limits<size_type>::digits - 1), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
+                return std::min(static_cast<size_type>(size_type{1} << (std::numeric_limits<size_type>::digits - 1)), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
             }
 
             static consteval auto max_size() -> size_type{
@@ -885,7 +885,7 @@ namespace dg::map_variants{
 
             static consteval auto max_capacity() -> size_type{
 
-                return std::min(size_type{1} << (std::numeric_limits<size_type>::digits - 1), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
+                return std::min(static_cast<size_type>(size_type{1} << (std::numeric_limits<size_type>::digits - 1)), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
             }
 
             static consteval auto max_size() -> size_type{
@@ -1675,7 +1675,7 @@ namespace dg::map_variants{
 
             static consteval auto max_capacity() -> size_type{
 
-                return std::min(size_type{1} << (std::numeric_limits<size_type>::digits - 1), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
+                return std::min(static_cast<size_type>(size_type{1} << (std::numeric_limits<size_type>::digits - 1)), get_max_pow2_multiplier_in_range<size_type>(insert_factor_ratio{}));
             }
 
             static consteval auto max_size() -> size_type{
