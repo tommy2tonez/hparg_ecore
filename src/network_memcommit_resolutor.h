@@ -55,6 +55,12 @@ namespace dg::network_memcommit_resolutor{
     //then the latency is actually the sum(all_pairs_discretization_delta)
     //so ideally - we want to use pow(1.01) on memregions - or even smaller - to achieve fast forwards and backwards
 
+    //alrights - I got the idea - we want low latency synchronization by leveraging hardware
+    //create an affined mutex associated with the thread - lock the component mutex update the synchronization id with the current thread mutex  - make sure the current thread mutex is always in lock state - release the component lock - relock the thread mutex  
+    //make sure that the affined mutexes aren't global otherwise we are risking hiearchical ordering - deadlocks - we want thread_affined mutex with respect to the component
+    //other producer consumer can use the kernel scheduling approach - because the chance of hitting an empty order is very low
+    //my Dad will live his life in good fortunes - I'm worried about you auntie
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> Address = 0;

@@ -1406,14 +1406,14 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         return DeinitMsgrBwdPayLoad{ptr};
     }
 
-    auto make_deinit_extnsrc_payload(uma_ptr_t ptr) noexcept -> DeinitExtnsrcPayLoad{
+    auto make_deinit_extnsrc_payload(uma_ptr_t ptr) noexcept -> DeinitExtnSrcPayLoad{
 
-        return DeinitExtnsrcPayLoad{ptr};
+        return DeinitExtnSrcPayLoad{ptr};
     }
 
-    auto make_deinit_extndst_payload(uma_ptr_t ptr) noexcept -> DeinitExtndstPayLoad{
+    auto make_deinit_extndst_payload(uma_ptr_t ptr) noexcept -> DeinitExtnDstPayLoad{
 
-        return DeinitExtndstPayLoad{ptr};
+        return DeinitExtnDstPayLoad{ptr};
     }
 
     auto make_deinit_immu_payload(uma_ptr_t ptr) noexcept -> DeinitImmuPayLoad{
@@ -1965,12 +1965,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
             dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
         }
-
-        //fix is simple Mom - for every memregion - declare its dependency - a lock on the region == a lock on all the ancestors - we'll move in the direction 
-        //we dont want atomic reference - thing is slow we want compile-time dependency of memregions - if lock semantic is desired
-        //because memregions' orders do not form "hierachically" in the user's perspective - it is always a good practice to do one single memlock payload (if you want to touch 16memregions - acquires all 16 memregions in a single load) - and have a clear exit strategy
-        // return dg::network_tile_lifetime::statix::orphan_extnsrc(payload.ptr);
-        //thing is hard to implement but not impossible - we'll consider the options of lock segment trees - I dont want to compromise the speed for the lock semantics for now - so let's move on and implement this until we either change the semantics or change the implementation
     }
 
     void load_orphan_extndst_payload(OrphanExtnDstPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
@@ -2030,6 +2024,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
     //its bad to have this interface here - it breaks the symmetric - and virtual | devirtualization dispatches rule
     //it forces all the tiles to share a virtual base - which is sufficient for orphaning - we dont want virtualization at this level because it limits future design decisions which we don't know yet - like password to orphan tiles or something - we dont know what we even want yet
     //we'll implement this anyways
+
     void load_orphan_payload(OrphanPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
         const size_t VECTORIZATION_SZ   = size_t{1} << 8;
@@ -2059,62 +2054,299 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
     void load_deinit_leaf_payload(DeinitLeafPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_leaf(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitLeafPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_leaf(payload.ptr, payload.operatable_id); 
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitLeafPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_leaf_rcu_addr(payload_arr[i].ptr)
+            
+            if (!rcu_addr.has_value());{
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_mono_payload(DeinitMonoPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_mono(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMonoPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_mono(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitMonoPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_mono_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+            
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_pair_payload(DeinitPairPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_pair(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitPairPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_pair(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitPairPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_pair_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_uacm_payload(DeinitUACMPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_uacm(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitUACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_uacm(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitUACMPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_uacm_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            } 
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_pacm_payload(DeinitPACMPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_pacm(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitPACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_pacm(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitPACMPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_pacm_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_crit_payload(DeinitCritPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_crit(payload.ptr);
+        auto VECTORIZATION_SZ           = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitCritPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_crit(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitCritPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_crit_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_msgrfwd_payload(DeinitMsgrFwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_msgrfwd(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMsgrFwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_msgrfwd(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitMsgrFwdPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_msgrbwd_payload(DeinitMsgrBwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_msgrbwd(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMsgrBwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_msgrbwd(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitMsgrBwdPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
-    void load_deinit_extnsrc_payload(DeinitExtnsrcPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_deinit_extnsrc_payload(DeinitExtnSrcPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_extnsrc(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitExtnSrcPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_extnsrc(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitExtnSrcPayLoad, exception-t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr(payload_arr[i].ptr);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
-    void load_deinit_extndst_payload(DeinitExtndstPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_deinit_extndst_payload(DeinitExtnDstPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_extndst(payload.ptr);
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitExtnDstPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_extndst(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitExtnDstPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
+
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_extndst_rcu_addr(payload_arr[i].dst);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 
     void load_deinit_immu_payload(DeinitImmuPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        // return dg::network_tile_lifetime::statix::deinit_immu(payload.ptr);
-    }
+        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
+        auto funnel                     = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitImmuPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
-    void load_deinit_payload(DeinitPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload, exception_ptr] = payload_arr[i];
+                *exception_ptr = dg::network_tile_lifetime::concurrent_unsafe::deinit_immu(payload.ptr, payload.operatable_id);
+            }
+        };
+        auto virtual_funnel             = dg::network_producer_consumer::LambdaWrappedConsumer<std::tuple<DeinitImmuPayLoad, exception_t *>, decltype(funnel)>(funnel);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&virtual_funnel, VECTORIZATION_SZ));
 
-        // return dg::network_tile_lifetime::statix::deinit(payload.ptr);
+        for (size_t i = 0u; i < sz; ++i){
+            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_immu_rcu_addr(payload_arr[i].dst);
+
+            if (!rcu_addr.has_value()){
+                exception_arr[i] = rcu_addr.error();
+                continue;
+            }
+
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_arr[i], std::next(exception_arr, i)));
+        }
     }
 }
 
