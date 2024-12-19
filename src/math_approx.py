@@ -4,6 +4,14 @@ import math
 import json
 import random 
 
+#alright
+#I think I was right that activations are machine learning's failure from the fundamental concepts
+#activations are not differentiable and thus its interference on the result is not in the way we would expect in this math_approx (mathematically - activations do not make sense in the traditional neural network training)
+#we want continuous functions - A lot of continuous functions
+#and we want to limit the range of f(x) -> y by using decay compression approach
+#continuous function is NOT good on a larger range, but it is good for smaller range, which is precisely the supposedly existence purpose of activation functions which we are going to replace by using decay compression
+#alright - time will tell - we have 1 month to get this working 
+
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
 
@@ -27,8 +35,8 @@ def operation_xor(lhs: object, rhs: object) -> object:
 
 def operation_discrete(lhs: object, rhs: object) -> object:
     if lhs < rhs:
-        return lhs 
-    
+        return lhs
+
     return 0
 
 def operation_exp(val) -> object:
@@ -64,8 +72,8 @@ def right_extract_operation() -> Callable[[object, object], object]:
 def const_operation(c: float) -> Callable[[object, object], object]:
     return lambda a, b: c 
 
-def bind_operation(operatable: Callable[[object, object], object], lhs: Callable[[object, object], object], rhs: Callable[[object, object], object]) -> Callable[[object, object], object]:
-    return lambda a, b: operatable(lhs(a, b), rhs(a, b))
+def bind_operation(f: Callable[[object, object], object], lhs: Callable[[object, object], object], rhs: Callable[[object, object], object]) -> Callable[[object, object], object]:
+    return lambda a, b: f(lhs(a, b), rhs(a, b))
 
 operation_arr       = ["add", "sub", "mul", "div", "dsc", "and", "or", "xor"]
 operation_dict      = {

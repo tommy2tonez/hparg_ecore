@@ -3483,7 +3483,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //
-
+    
     class ForwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         public:
@@ -3493,57 +3493,6 @@ namespace dg::network_memcommit_resolutor{
                 (void) event_arr;
             }
     };
-
-    //alright - this is hard - we have only met 20% of design specs
-    //we want code management for cuda | host | whatever dispatches - we dont want to not be able to extend if there are different devices (this is optional - we want performance and proof of concept right now - that this is able to handle 100TB/core*s cuda load, otherwise all these go to waste)
-    //we want to be able to do one-many relations dispatches for mono + pair + msgrfwd + msgrbwd residing on asynchronous devices (cuda + friends) - we dont care about host dispatches because we are in a concurrent context
-    //we also want extnsrc(s) to be able to broadcast
-    //we'll get these done this week
-    //alrights - we want to use unordered_unstable_fastinsert_map - then we want to "bucket_sort" 1024 sequential orders on uint16_t address - it is src for mono, and lhs for pair - without loss of generality - we can assume lhs is the shared forward operand
-    //then we generate different async order for a bucket - let's bench the thing
-    //bench result is 3-4x array access (as if it is a perfect hashmap and the operation count to compute the bucket_idx is 1) - which is decent - we'll move in the direction
-    //this is extremely hard to write - from cuda_sync memory_corruption to host cache_eviction to asynchronous dispatch to cuda synchronize frequency, etc.
-    //so we want to code mangament these guys by placing all the logics in one componenet - for ease of reading and future removal
-
-    //alright guys - thing is hard - we want exceptions management but the exception management clutters the code in the negative way - so LET"S assume that every thing's working fine or else things crash
-    //the chance of cuda device is not working is probably the chance of your computer is not working - its highly unrealistic - and we don't handle unrealistic case - rather an abort and a restart
-    //but we do provide low level interface for such unrealistic case - only end users (resolutors) decide WHAT to do with the unrealistic exceptions
-    //and we want asynchronous for host also - we want affined region - dispatcher to avoid false sharing of cache + friends
-    //and we want to hyperthread the resolutor to reduce wait time
-    //void sync() must be a noexcept operation 
-    //we only handle the case that the device is not working from the start (asynchonous->add(async_id)) - not the device is not working midway - from the dispatching point -> the synchronous point
-    //deallocation orders might be altered - we need seq_cst guards - which will be added later - better safe than sorry 
-
-    //alrights - so we just implemented asynchronous to avoid dispatches cache_eviction - we should make the file_reading also an asynchronous task - with affined fsys_ptr_t to override OS locks
-    //the optimization (vectorization) overheads should not exceed 5% of the non-vectorization approach
-    //the optimization (vectorization) benefits must be at least 2x-50x compared to the non-vectorization approach
-    //we want the resolutor to not pollute its affined cache - by offloading the memfetch responsibility + dispatch responsibility to asynchronous devices
-    //we want to reduce collision rate by hyperthreading the resolutors or increasing the concurrent_region_count
-    //we want to avoid uma_ptr_t eviction rate by vectorizing the dispatches
-    //we want fast forward and backward by assigning reverse bindings at initialization time
-    //we want to use heap-stack whenever possible to avoid dynamic memory allocation overheads and cache pollution - this is important
-
-    //the thing with the current transformer is we are doing f(g(j(k(x))))
-    //when in fact, we want to do f(g(x), h(x))
-    //the difference is the former is not approx-turing-complete - they are all f(x) - but the recursive building is different
-    //we want uniform distribution of context not by rotating the tiles - but by static binding - so we are at least 2x faster than the traditional approach by not rotating anything
-    //then we want to discretize the activation points - because activations aren't differentiable
-    //we want dimensional reduction via usage of pacm and uacm - then dimensional expansion - by using one-many dispatches which are included in the optimization design specs
-    //we want to start small to get the idea of what a good model for maximized compressible_sz/ brain_size looks like
-    //then we want to scale the model to terabytes or even petabytes of data concurrently
-
-    //we "think outside of the box" by assigning frequencies on memregions so most of the dispatches have good localities (in other words, we must set our model up for hitting the optimized spot - as we set up any of our program for cache locality)
-    //this vectorization optimization has nothing to do with fattening the tile size or tile array approach
-    //these are another optimization tricks that we could consider
-    //our backprop if optimized correctly is at least base_size * tree_height time faster than the non-synchronous approach
-    //we are training gigabytes of input_size - so this problem does not exist in any of the machine learning framework yet
-
-    //esentially, we want to leverage the cuda_fsys_ptr_t - assume the concurrency rate of 1024 - we are at max acquiring 1024 * memregion_sz at any given time
-    //so we are expecting asynchronous deivce memory of size probably 16GB - 32GB (this is suitable for handheld device usages) 
-    //and disk storage (RAID SSDs) of size probably 1TB - 4TB
-    //we want to do as many combinatorial operations as possible on cuda_fsys_ptr_t - to reduce the gap of gpu_memory_fetch_rate and gpu_computation_flop_rate
-
-    //we'll get these done this week
 
     class ForwardDoMonoSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
@@ -3722,9 +3671,8 @@ namespace dg::network_memcommit_resolutor{
                     };
 
                     dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(dispatching_hostptr_vec.begin(), dispatching_hostptr_vec.end()));
-                    auto affine_hint    = dg::memult::region_idx(key, dg::network_uma::memregion_size());
                     auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
-                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task), affine_hint)); //this requires an error issue - we'll work on this later - next sprint
+                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task))); //this requires an error issue - we'll work on this later - next sprint
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
@@ -3795,7 +3743,7 @@ namespace dg::network_memcommit_resolutor{
 
                         if (!dg::network_vmamap::reacquirer_is_region_reacquirable(dst_vmamap_reacquirer, dst_map_vmaptr) || !dg::network_vmamap::reacquirer_is_region_reacquirable(src_vmamap_reacquirer, src_map_vmaptr)){       
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
-                            dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get()); 
+                            dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
                             cuda_synchronizer.sync();
                             cuda_restrict_synchronizer.clear();
                             host_synchronizer.sync();
@@ -3864,8 +3812,8 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->request_delivery_capacity));
-                auto descendant_arr     = std::make_unique<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>[]>(sz);
+                auto request_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->request_delivery_capacity));
+                auto descendant_arr             = std::make_unique<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>[]>(sz);
 
                 {
                     InternalDescendantAddressFetcher fetcher{};
@@ -3889,7 +3837,7 @@ namespace dg::network_memcommit_resolutor{
 
                 {
                     InternalResolutor internal_resolutor{};
-                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+                    internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
                     internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
                     internal_resolutor.host_async_device        = this->host_async_device.get();
                     internal_resolutor.vectorization_sz         = this->forward_vectorization_sz;
@@ -3972,18 +3920,6 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
 
-            //alrights - there are 4 scenerios (or we want to radix all possible scenerios into 4 sets)
-            //dst, lhs, rhs are unique
-            //dst, lhs, rhs only share lhs - left major 
-            //dst, lhs, rhs only share rhs - right major
-            //dst, lhs, rhs only share lhs, rhs - left major or right major - this is complex - alrights - there is appearantly no good solution for these - let's assume people are rational and do not mix left and right
-            //we aren't sharing dst because dst is unique according to implementation
-
-            //we want to minimize the restrict_pointer_synchronization overheads + increase locality of dispatches by combining these guys into one asynchronous order
-            //it does not necessary mean that the cuda device only proceeds one async order at a time - that is up to the async_device to make such decision
-            //internally - asynchronous device is responsible for radixing the orders to avoid lock overheads and aggregating the orders to avoid dispatch overheads 
-            //other than that - I think the code is clear
-
             struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, tileops_cuda_dispatch_t>>{
 
                 dg::network_cuda_controller::CudaSynchronizer * synchronizer;
@@ -3993,7 +3929,7 @@ namespace dg::network_memcommit_resolutor{
                 void push(cuda_ptr_t key, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, tileops_cuda_dispatch_t> * data_arr, size_t sz) noexcept{
 
                     auto pair_aggregator    = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_pair(sz));
-                    auto cuda_ptr_vec       = dg::vector<cuda_ptr_t>(data_arr.size() * 3);
+                    auto cuda_ptr_vec       = dg::vector<cuda_ptr_t>(sz * 3);
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, lhs, rhs, tileops_dp_code]   = data_arr[i];
@@ -4004,7 +3940,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     auto executable = [arg = std::move(pair_aggregator)]() noexcept{
-                        dg::network_tileops_cuda_poly::aggregator_exec(arg); //exceptions - 
+                        dg::network_tileops_cuda_poly::aggregator_exec(arg); //exceptions -
                     };
                     auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
 
@@ -4018,12 +3954,12 @@ namespace dg::network_memcommit_resolutor{
 
                 dg::network_host_asynchronous::Synchronizer * synchronizer;
                 dg::network_controller::RestrictPointerSynchronizer * restrict_synchronizer;
-                dg::networK_host_asynchronous::AsynchronousDeviceInterface * async_device;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
 
                 void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, tileops_host_dispatch_t> * data_arr, size_t sz) noexcept{
 
                     auto pair_aggregator    = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_pair(sz));
-                    auto host_ptr_vec       = dg::vector<host_ptr_t>(data_arr.size() * 3);
+                    auto host_ptr_vec       = dg::vector<host_ptr_t>(sz * 3);
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, lhs, rhs, tileops_dp_code]   = data_arr[i];
@@ -4039,8 +3975,7 @@ namespace dg::network_memcommit_resolutor{
                     auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
 
                     dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_vec.begin(), host_ptr_vec.end()));
-                    auto affine_hint    = dg::memult::region_idx(key, dg::network_uma::memregion_size());
-                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task), affine_hint));
+                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
@@ -4066,8 +4001,8 @@ namespace dg::network_memcommit_resolutor{
                     auto cuda_restrict_synchronizer                 = dg::network_controller::RestrictPointerSynchronizer(cuda_synchronizer);
                     auto host_restrict_synchronizer                 = dg::network_controller::RestrictPointerSynchronizer(host_synchronizer);
 
-                    auto internal_cuda_resolutor                    = InternalCudaResolutor{};
-                    auto internal_host_resolutor                    = InternalHostResolutor{};
+                    auto internal_cuda_resolutor                    = InternalCudaResolutor();
+                    auto internal_host_resolutor                    = InternalHostResolutor();
 
                     internal_cuda_resolutor.restrict_synchronizer   = &cuda_restrict_synchronizer;
                     internal_cuda_resolutor.synchronizer            = &cuda_synchronizer;
@@ -4189,7 +4124,7 @@ namespace dg::network_memcommit_resolutor{
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j])));
                         }
 
-                        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
+                        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED); //bad assumption in asynchronous context
                     }
                 }
             };
@@ -5605,9 +5540,9 @@ namespace dg::network_memcommit_resolutor{
 
             BackwardDoLeafSignalResolutorV2(std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                            size_t region_vectorization_sz) noexcept:   cuda_async_device(std::move(cuda_async_device)),
-                                                                                        host_async_device(std::move(host_async_device)),
-                                                                                        region_vectorization_sz(region_vectorization_sz){}
+                                            size_t region_vectorization_sz) noexcept: cuda_async_device(std::move(cuda_async_device)),
+                                                                                      host_async_device(std::move(host_async_device)),
+                                                                                      region_vectorization_sz(region_vectorization_sz){}
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -5647,7 +5582,7 @@ namespace dg::network_memcommit_resolutor{
                     auto grad_vmamap_reacquirer     = dg::network_vmamap::reacquirer_raii_initialize();
                     auto logit_vmamap_reacquirer    = dg::network_vmamap::reacquirer_raii_initialize();
                     auto cuda_synchronizer          = dg::network_cuda_controller::CudaSynchronizer(this->cuda_async_device);
-                    auto host_synchronizer          = dg::network_asynchronous::Synchronizer(this->host_async_device);
+                    auto host_synchronizer          = dg::network_host_asynchronous::Synchronizer(this->host_async_device);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                       = ptr_arr[i];
@@ -5676,7 +5611,8 @@ namespace dg::network_memcommit_resolutor{
                         vma_ptr_t logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
                         vma_ptr_t grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
 
-                        if (!dg::network_vmamap::reacquirer_is_region_reacquirable(logit_vmamap_reacquirer, logit_vmaptr) || !dg::network_vmamap::reacquirer_is_region_reacquirable(grad_vmamap_reacquirer, grad_vmaptr)){
+                        if (!dg::network_vmamap::reacquirer_is_region_reacquirable(logit_vmamap_reacquirer, logit_vmaptr) 
+                            || !dg::network_vmamap::reacquirer_is_region_reacquirable(grad_vmamap_reacquirer, grad_vmaptr)){
                             cuda_synchronizer.sync();
                             host_synchronizer.sync();
                         }
@@ -5693,17 +5629,17 @@ namespace dg::network_memcommit_resolutor{
                             auto async_task     = dg::network_cuda_controller::virtualize_async_task(std::move(executable)); 
                             auto async_id       = dg::network_exception_handler::nothrow_log(this->cuda_async_device->exec(std::move(async_task))); //this must be an error in the next sprint
 
-                            cuda_synchronizer.add(async_id);
+                            dg::network_exception_handler::nothrow_log(cuda_synchronizer.add(async_id));
                         } else if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
                             auto logit_hostptr  = dg::network_vmamap::get_host_ptr(logit_vmamap_reacquirer);
                             auto grad_hostptr   = dg::network_vmamap::get_host_ptr(grad_vmamap_reacquirer);
                             auto executable     = [=]() noexcept{ //the noexcept here is questionable
                                 dg::network_tileops_host_poly::grad_update(logit_hostptr, grad_hostptr, tileops_dp_code, TILEOPS_POSTOPERATION_ZERO);
                             };
-                            auto async_task     = dg::network_asynchronous::virtualize_async_task(std::move(executable));
+                            auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
                             auto async_id       = dg::network_exception_handler::nothrow_log(this->host_async_device->exec(std::move(async_task))); //this must be an error in the next sprint
 
-                            host_synchronizer.add(async_id);
+                            dg::network_exception_handler::nothrow_log(host_synchronizer.add(async_id));
                         } else{
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -5895,9 +5831,8 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tileops_host_poly::aggregator_exec(arg);
                     };
                     auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
-                    auto affine_hint    = dg::memult::region_idx(key, dg::network_uma::memregion_size());
                     this->restrict_synchronizer->add(host_ptr_vec.begin(), host_ptr_vec.end());
-                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)), affine_hint); //handle error next sprint - we must assume that device does not work 
+                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task))); //handle error next sprint - we must assume that device does not work 
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };

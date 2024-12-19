@@ -1,0 +1,39 @@
+alrights, let's put the application compass here ONCE - so we dont need to remind ourselves of where we are steering and the minimal viable products
+objections about the designs should be spoken now or forever silent 
+
+core API:
+- tile_lifetime: init + orphan + deinit
+- operations: signal forward_do and signal init_ping
+- ingestions of leaf_logits: via internal_comm
+- training of leaf_logits: via crit and memregion_frequency to accumulate gradients (abstractize the update_grad() function - user does not need to know about this)
+- extraction of certain layers: via msgrfwd + msgrbwd (which are delivered via internal_comm)
+- error_message: via designated logs (log_id in tiles)
+
+master_controller API: 
+- a cluster of cores 
+- responsible for opening user session
+- responsible for tile_lifetime by using shared_ptr
+
+storage_engine API:
+- distributed CRUD operation for tiles 
+- atomicity by using anchor
+
+ingestion_accelerator API:
+- accumulates storage data and push all storage data as a single transaction
+- responsible for fast ingestion from storage_engine - core and core - storage_engine by using internal_comm 
+
+client API: 
+- internal_comm
+- Flask to take in client request via rest endpoints
+- responsible for communicating to master_controller, ingestion_accelerator
+- main use_case: users specify model - users specify datasource (which is on-the-fly or already in-storage) - users want to extract output layer, or users want to train brain logits
+
+Main Machine Learning Model:
+- compression g(x) -> y and f(g(x)) -> x
+- no activations
+- no discrete operations
+- only continuous functions
+- reduce range of g(x) by decreasing compression rate (compression rate == 0% => g(x) range == 0)
+- want to compress 1GB of input -> 1MB of input (from lossless -> lossy)
+- want to do context expansion by f(x) -> y
+- want to do context compression by g(x) -> y
