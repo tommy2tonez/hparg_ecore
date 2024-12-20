@@ -76,7 +76,7 @@ namespace dg::network_host_asynchronous{
         private:
 
             Lambda lambda;
-        
+
         public:
 
             static_assert(std::is_nothrow_destructible_v<Lambda>);
@@ -123,6 +123,7 @@ namespace dg::network_host_asynchronous{
                     auto [pending_mtx, fetching_addr] = std::move(this->waiting_vec.front());
                     *fetching_addr = std::move(wo);
                     this->waiting_vec.pop_front();
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
                     pending_mtx->unlock();
                     return dg::network_exception::SUCCESS;
                 }
