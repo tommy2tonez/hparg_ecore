@@ -25,42 +25,6 @@
 
 namespace dg::network_memcommit_resolutor{
 
-    //alright - this week goal is again - this component 
-    //this time - we want to focus on pairs optimization (pair is the most important)
-    //especially one-many relations - we want to be able to dispatch one-many by efficient radixing without breaking the code
-    //we want to put frequency on backwards regions
-    //we want to put frequency on forward msgrfwd + msgrbwd regions that are on cuda or highway_ramp from fsys -> cuda or host   
-    
-    //another design question is to whether abstractize observer_array in the initialization part - this would affect future reconsiderations + friends 
-    //if we aren't abstractizing observers - or reverse bindings - then forwards could be done in the traditional fashion - which is forward_init_do the first_layers
-    //this requires acceptance of adopted as a valid forward state
-
-    //we can assume that tile states are correct at any given time
-    //an operation on a tile must snap it from a correct state -> correct state to maintain induction proof
-    //because the tile_addrs are static, a check on two random tiles compatibility should last for program-duration - we dont need to worry about this - this is in design specs so we can assume this
-    //there might exist a case where user reinitialize a tile that shares the same operatable_id - and mishaps happen - such is a forward_init supposed to be for the previous version accidentally happens for the current version - yet the forward | backward is proceeded anyways - there is no error in terms of program crashing of incompatibility - but there is undetected logic error
-
-    //we want to meet the design goals of 1 << 30 cuda dispatches/ core * s - for every kind of tiles - this is a very hard goal
-    //we want to reduce eviction rate of cuda_fsys_ptr + host_fsys_ptr by using vectorization approach
-
-    //we can't centralize + distribute the virtual_memory_event_t before the dispatches because it would impose too much access serialization overheads or affinity overheads
-    //we rely on chances solely - that events that happen to be closer together in the dispatch_event * are semantically relevant in terms of memory_locality 
-
-    //alrights - let's assume we want to use pow2 rules on memregions
-    //1Hz - 2Hz - 4Hz - 8Hz - 16Hz - etc.
-    //we want to calculate the delta latency (latency overheads) - wrt to the traditional forward approachs
-    //assume we time the forwards from first layer -> last layer -  WLOG - 1s  - 3s - 5s - 7s
-    //the latency of the traditional approach is 7s
-    //assume we want to calculate adjecent deltas and place these guys on ceiled fuzzy match frequency regions - such is 1Hz - 2Hz - 2Hz - 2Hz 
-    //then the latency is actually the sum(all_pairs_discretization_delta)
-    //so ideally - we want to use pow(1.01) on memregions - or even smaller - to achieve fast forwards and backwards
-
-    //alrights - I got the idea - we want low latency synchronization by leveraging hardware
-    //create an affined mutex associated with the thread - lock the component mutex update the synchronization id with the current thread mutex  - make sure the current thread mutex is always in lock state - release the component lock - relock the thread mutex  
-    //make sure that the affined mutexes aren't global otherwise we are risking hiearchical ordering - deadlocks - we want thread_affined mutex with respect to the component
-    //other producer consumer can use the kernel scheduling approach - because the chance of hitting an empty order is very low
-    //my Dad will live his life in good fortunes - I'm worried about you auntie
-
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> Address = 0;
@@ -3657,7 +3621,7 @@ namespace dg::network_memcommit_resolutor{
             struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, tileops_host_dispatch_t>>{
 
                 dg::network_host_asynchronous::Synchronizer * synchronizer;
-                dg::network_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
 
                 void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, tileops_host_dispatch_t> * data_arr, size_t sz) noexcept{
@@ -3959,7 +3923,7 @@ namespace dg::network_memcommit_resolutor{
             struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, tileops_host_dispatch_t>>{
 
                 dg::network_host_asynchronous::Synchronizer * synchronizer;
-                dg::network_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
 
                 void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, tileops_host_dispatch_t> * data_arr, size_t sz) noexcept{

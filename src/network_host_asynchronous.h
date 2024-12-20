@@ -123,7 +123,7 @@ namespace dg::network_host_asynchronous{
                     auto [pending_mtx, fetching_addr] = std::move(this->waiting_vec.front());
                     *fetching_addr = std::move(wo);
                     this->waiting_vec.pop_front();
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                    std::atomic_thread_fence(std::memory_order_release);
                     pending_mtx->unlock();
                     return dg::network_exception::SUCCESS;
                 }
@@ -150,7 +150,7 @@ namespace dg::network_host_asynchronous{
                         return rs;
                     }
 
-                    pending_mtx = std::make_shared<std::mutex>();
+                    pending_mtx = std::make_shared<std::mutex>(); //TODOs: internal allocations
                     pending_mtx->lock();
 
                     this->waiting_vec.push_back(std::make_pair(std::move(pending_mtx), &wo));

@@ -864,6 +864,8 @@ namespace dg::network_tileops_host_static::templated_ops{
 
         using x_math = coerced_x_math<casting_ops_t>; 
 
+        //alright fellas - Mom said this is not differentiable - only sum uacm makes sense
+
         static inline void max(dst_grad_value_t * dst, const dst_logit_value_t * dst_logit, const src_grad_value_t * src_grad, const src_logit_value_t * src_logit) noexcept{
 
             for (size_t i = 0u; i < SZ; ++i){

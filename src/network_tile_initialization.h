@@ -2299,7 +2299,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
 namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
-    //
+    //these aren't neccessarily invoked by clients - these are for providing a high level interface of the payload format - we'll reiterate this later
+    //we want to radix payload -> fast_payload and slow_payload which are handled by two different functions to avoid performance constraints by misuse of interfaces
 
     using payload_kind_t = uint8_t;
 
@@ -2404,7 +2405,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
         return rs;
     }
-    
+ 
     // auto virtualize_payload(InitCritPayLoad payload) noexcept -> VirtualPayLoad{
 
     //     VirtualPayLoad rs{};
@@ -2558,340 +2559,397 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitLeafPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitLeafPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_leaf;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_leaf;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitMonoPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitMonoPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_mono;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_mono;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitPairPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitPairPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_pair;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_pair;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitUACMPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitUACMPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_uacm;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_uacm;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitPACMPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitPACMPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_pacm;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_pacm;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitCritPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitCritPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_crit;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_crit;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitMsgrFwdPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitMsgrFwdPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_msgrfwd;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_msgrfwd;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitMsgrBwdPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitMsgrBwdPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_msgrbwd;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_msgrbwd;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitExtnSrcPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitExtnSrcPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_extnsrc;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_extnsrc;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitExtnDstPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitExtnDstPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_extndst;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_extndst;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto virtualize_payload(DeinitImmuPayLoad payload) noexcept -> VirtualPayLoad{
+    // auto virtualize_payload(DeinitImmuPayLoad payload) noexcept -> VirtualPayLoad{
 
-        VirtualPayLoad rs{};
-        rs.kind = payload_kind_deinit_immu;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
+    //     VirtualPayLoad rs{};
+    //     rs.kind = payload_kind_deinit_immu;
+    //     dg::network_trivial_serializer::serialize_into(rs.content.data(), payload);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    auto load_virtual_payload(VirtualPayLoad payload) noexcept -> exception_t{
+    auto devirtualize_init_mono_payload(VirtualPayLoad payload) noexcept -> InitMonoPayLoad{
 
-        switch (payload.kind){
-            // case payload_kind_init_leaf:
-            // {
-            //     InitLeafPayLoad devirt_payload{};
-            //     dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-            //     return load_int_leaf_payload(std::move(devirt_payload));
-            // }
-            case payload_kind_init_mono:
-            {
-                InitMonoPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_mono_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_pair:
-            {
-                InitPairPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_pair_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_uacm:
-            {
-                InitUACMPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_uacm_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_pacm:
-            {
-                InitPACMPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_pacm_payload(std::move(devirt_payload));
-            }
-            // case payload_kind_init_crit:
-            // {
-            //     InitCritPayLoad devirt_payload{};
-            //     dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-            //     return load_init_crit_payload(std::move(devirt_payload));
-            // }
-            case payload_kind_init_msgrfwd:
-            {
-                InitMsgrFwdPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_msgrfwd_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_msgrbwd:
-            {
-                InitMsgrBwdPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_msgrbwd_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_extnsrc:
-            {
-                InitExtnsrcPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_extnsrc_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_extndst:
-            {
-                InitExtndstPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_extndst_payload(std::move(devirt_payload));
-            }
-            case payload_kind_init_immu:
-            {
-                InitImmuPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_init_immu_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_leaf:
-            {
-                OrphanLeafPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_leaf_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_mono:
-            {
-                OrphanMonoPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_mono_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_pair:
-            {
-                OrphanPairPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_pair_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_uacm:
-            {
-                OrphanUACMPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_uacm_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_pacm:
-            {
-                OrphanPACMPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_pacm_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_crit:
-            {
-                OrphanCritPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_crit_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_msgrfwd:
-            {
-                OrhapnMsgrFwdPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_msgrfwd_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_msgrbwd:
-            {
-                OrphanMsgrBwdPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_msgrbwd_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_extnsrc:
-            {
-                OrphanExtnsrcPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_extnsrc_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_extndst:
-            {
-                OrphanExtndstPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_extndst_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan_immu:
-            {
-                OrphanImmuPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_immu_payload(std::move(devirt_payload));
-            }
-            case payload_kind_orphan:
-            {
-                OrphanPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_orphan_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_leaf:
-            {
-                DeinitLeafPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_leaf_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_mono:
-            {
-                DeinitMonoPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_mono_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_pair:
-            {
-                DeinitPairPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_pair_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_uacm:
-            {
-                DeinitUACMPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_uacm_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_pacm:
-            {
-                DeinitPACMPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_pacm_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_crit:
-            {
-                DeinitCritPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_crit_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_msgrfwd:
-            {
-                DeinitMsgrFwdPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_msgrfwd_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_msgrbwd:
-            {
-                DeinitMsgrBwdPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_msgrbwd_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_extnsrc:
-            {
-                DeinitExtnsrcPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_extnsrc_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_extndst:
-            {
-                DeinitExtndstPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_extndst_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit_immu:
-            {
-                DeinitImmuPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content.data());
-                return load_deinit_immu_payload(std::move(devirt_payload));
-            }
-            case payload_kind_deinit:
-            {
-                DeinitPayLoad devirt_payload{};
-                dg::network_trivial_serializer::deserialize_into(devirt_payload, payload.content,data());
-                return load_deinit_payload(std::move(devirt_payload));
-            }
-            default:
-            {
-                if constexpr(DEBUG_MODE_FLAG){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
-                } else{
-                    std::unreachable();
-                }
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_mono){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
             }
         }
+
+        InitMonoPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
     }
 
-    //alrights - we loads we have here are balanced loads
-    //we are expecting at least 1 << 28 virtual_loads/core*s for the optimized case - it is possible with the usage of heapstack 
-    //we are expecting at worst 1 << 23 virtual_loads/core*s for the worst case - this is fine
-    //the optimization we made does not affect the worst case performance within 5% margin - but allow 32x speedup for best case scenerio - so this optimization is a valid optimization
-    //we also want to fatten the tiles to adjust with the worst case overheads
-    //we'll do matmul demo N = 10 ** 6 sometimes soon via the usage of PACM (pair_accum) and pair tiles 
-    //we want multithreading to avoid mtx spinning overheads
+    auto devirtualize_init_pair_payload(VirtualPayLoad payload) noexcept -> InitPairPayLoad{
 
-    //we'll move on to the asynchronous implementation for now
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_pair){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
 
+        InitPairPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_init_uacm_payload(VirtualPayLoad payload) noexcept -> InitUACMPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_uacm){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        InitUACMPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_init_pacm_payload(VirtualPayLoad payload) noexcept -> InitPACMPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_pacm){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        InitPACMPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_init_msgrfwd_payload(VirtualPayLoad payload) noexcept -> InitMsgrFwdPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_msgrfwd){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        InitMsgrFwdPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_init_msgrbwd_payload(VirtualPayLoad payload) noexcept -> InitMsgrBwdPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_msgrbwd){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        InitMsgrBwdPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_init_extnsrc_payload(VirtualPayLoad payload) noexcept -> InitExtnSrcPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_extnsrc){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        InitExtnSrcPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_init_extndst_payload(VirtualPayLoad payload) noexcept -> InitExtnDstPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_init_extndst){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        InitExtnDstPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    // auto devirtualize_init_immu_payload(VirtualPayLoad payload) noexcept -> InitImmuPayLoad{
+
+    //     if constexpr(DEBUG_MODE_FLAG){
+    //         if (payload.kind != payload_kind_init_)
+    //     }
+    // }
+
+    auto devirtualize_orphan_leaf_payload(VirtualPayLoad payload) noexcept -> OrphanLeafPayLoad{
+        
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_leaf){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanLeafPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_mono_payload(VirtualPayLoad payload) noexcept -> OrphanMonoPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_mono){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanMonoPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_pair_payload(VirtualPayLoad payload) noexcept -> OrphanPairPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_pair){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanPairPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_uacm_payload(VirtualPayLoad payload) noexcept -> OrphanUACMPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_uacm){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanUACMPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_pacm_payload(VirtualPayLoad payload) noexcept -> OrphanPACMPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_pacm){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanPACMPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_crit_payload(VirtualPayLoad payload) noexcept -> OrphanCritPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_crit){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanCritPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_msgrfwd_payload(VirtualPayLoad payload) noexcept -> OrphanMsgrFwdPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_msgrfwd){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanMsgrFwdPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_msgrbwd_payload(VirtualPayLoad payload) noexcept -> OrphanMsgrBwdPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_msgrbwd){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanMsgrBwdPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_extnsrc_payload(VirtualPayLoad payload) noexcept -> OrphanExtnSrcPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_extnsrc){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanExtnSrcPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_extndst_payload(VirtualPayLoad payload) noexcept -> OrphanExtnDstPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_extndst){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanExtnDstPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+
+    auto devirtualize_orphan_immu_payload(VirtualPayLoad payload) noexcept -> OrphanImmuPayLoad{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (payload.kind != payload_kind_orphan_immu){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        OrphanImmuPayLoad rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, payload.content.data());
+
+        return rs;
+    }
+ 
     void load_virtual_payloads(VirtualPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
         constexpr size_t DISPATCH_DELIVERY_CAP = size_t{1} << 16;

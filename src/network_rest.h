@@ -5,6 +5,8 @@
 #include "network_rest_frame.h"
 
 namespace dg::network_rest{
+    
+    //Mom said to reconsider the API
 
     struct TokenGenerateBaseRequest{
         dg::string auth_payload;
