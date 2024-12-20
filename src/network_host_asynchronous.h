@@ -86,7 +86,10 @@ namespace dg::network_host_asynchronous{
 
             void run() noexcept{
 
+                //alright fellas - there are affined cases of memory - and such is dispatched to asynchronous device - so it's better to do a memory_transaction here
+                std::atomic_thread_fence(std::memory_order_seq_cst); //promote acquire -> seq_cst - modern CPU is atomic
                 this->lambda();
+                std::atomic_thread_fence(std::memory_order_seq_cst); //promote release -> seq_cst - modern CPU is atomic
             }
     };
 
