@@ -20,7 +20,7 @@ namespace dg::network_host_asynchronous{
         public:
 
             virtual ~WorkOrderContainerInterface() noexcept = default;
-            virtual void push(std::unique_ptr<WorkOrder>) noexcept = 0;
+            virtual void push(std::unique_ptr<WorkOrder>) noexcept -> exception_t = 0;
             virtual auto pop() -> std::unique_ptr<WorkOrder> = 0; 
     };
 
@@ -50,25 +50,10 @@ namespace dg::network_host_asynchronous{
         public:
 
             virtual ~AsynchronousDeviceXInterface() noexcept = default;
-            virtual auto exec(std::unique_ptr<WorkOrder>) noexcept -> std::expected<ticket_id_t, exception_t> = 0;
+            virtual auto exec(std::unique_ptr<WorkOrder>) noexcept -> std::expected<ticket_id_t, exception_t> = 0; //thing is we want RAII ticket_id_t here
             virtual void sync(ticket_id_t) noexcept = 0; //synchronization must be noexcept here
             virtual void close_ticket(ticket_id_t) noexcept = 0;
     };
-
-    //alright - I succumb for another interface just because of compiler devirtualization
-    class DistributedAsynchronousDeviceXInterface{
-
-        public:
-
-            virtual ~DistributedAsynchronousDeviceXInterface() noexcept = default;
-            virtual auto exec(std::unique_ptr<WorkOrder>) noexcept -> std::expected<distributed_ticket_id_t, exception_t> = 0;
-            virtual void sync(ticket_id_t) noexcept = 0;
-            virtual void close_ticket(ticket_id_t) noexcept = 0;
-    };
-
-    //alrights - because we are avoiding virtualization cost - we need to limit one interface/ component
-    //alright we want blocked + low latency container
-    //this is fine - we have low latency work_order_container - but the cap on WorkOrder is not implemented yet - we'll work on that later
 
     class WorkOrderContainer: public virtual WorkOrderContainerInterface{
 
@@ -76,17 +61,20 @@ namespace dg::network_host_asynchronous{
 
             dg::deque<std::unique_ptr<WorkOrder>> wo_vec;
             dg::vector<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec;
+            size_t wo_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
-        
+
         public:
 
             WorkOrderContainer(dg::deque<std::unique_ptr<WorkOrder>> wo_vec,
                                dg::vector<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec,
+                               size_t wo_vec_capacity,
                                std::unique_ptr<std::mutex> mtx) noexcept: wo_vec(std::move(wo_vec)),
                                                                           waiting_vec(std::move(waiting_vec)),
+                                                                          wo_vec_capacity(wo_vec_capacity),
                                                                           mtx(std::move(mtx)){}
 
-            void push(std::unique_ptr<WorkOrder> wo) noexcept{
+            auto push(std::unique_ptr<WorkOrder> wo) noexcept -> exception_t{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
@@ -95,10 +83,15 @@ namespace dg::network_host_asynchronous{
                     *fetching_addr = std::move(wo);
                     this->waiting_vec.pop_front();
                     pending_mtx->unlock();
-                    return;
+                    return dg::network_exception::SUCCESS;
+                }
+
+                if (this->wo_vec.size() == this->wo_vec_capacity){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
                 }
 
                 this->wo_vec.push_back(std::move(wo));
+                return dg::network_exception::SUCCESS;
             }
 
             auto pop() -> std::unique_ptr<WorkOrder>{
@@ -130,18 +123,42 @@ namespace dg::network_host_asynchronous{
 
         private:
 
-            std::shared_ptr<WorkOrderContainer> wo_container;
-        
+            std::shared_ptr<WorkOrderContainerInterface> wo_container;
+
         public:
 
-            AsyncOrderExecutor(std::shared_ptr<WorkOrderContainer> wo_container) noexcept: wo_container(std::move(wo_container)){}
+            AsyncOrderExecutor(std::shared_ptr<WorkOrderContainerInterface> wo_container) noexcept: wo_container(std::move(wo_container)){}
 
             bool run_one_epoch() noexcept{
 
                 std::unique_ptr<WorkOrder> wo = this->wo_container->pop();
-                if (wo){
-                    wo->run();
+
+                if (wo == nullptr){
+                    return false;
                 }
+
+                wo->run();
+                return true;
+            }
+    };
+
+    class AsynchronousDevice: public virtual AsynchronousDeviceInterface{
+
+        private:
+
+            std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+            std::shared_ptr<WorkOrderContainerInterface> wo_container;
+        
+        public:
+
+            AsynchronousDevice(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
+                               std::shared_ptr<WorkOrderContainerInterface> wo_container) noexcept: daemon_vec(std::move(daemon_vec)),
+                                                                                                    wo_container(std::move(wo_container)){}
+
+
+            auto exec(std::unique_ptr<WorkOrder> wo) noexcept -> exception_t{
+
+                return this->wo_container->push(std::move(wo));
             }
     };
 
@@ -221,7 +238,7 @@ namespace dg::network_host_asynchronous{
 
                 if (map_ptr == this->ticket_resource_map.end()){
                     return dg::network_exception::RESOURCE_ABSENT;
-                }                
+                }
 
                 if (map_ptr->second.is_completed){
                     mtx->unlock();
@@ -262,8 +279,8 @@ namespace dg::network_host_asynchronous{
         public:
 
             AsynchronousDeviceX(std::unique_ptr<AsynchronousDeviceInterface> async_device,
-                                std::unique_ptr<SynchronizationControllerInterface> async_controller) noexcept: async_device(std::move(async_device)),
-                                                                                                                sync_controller(std::move(sync_controller)){}
+                                std::unique_ptr<SynchronizationControllerInterface> sync_controller) noexcept: async_device(std::move(async_device)),
+                                                                                                               sync_controller(std::move(sync_controller)){}
 
             auto exec(std::unique_ptr<WorkOrder> work_order) noexcept -> std::expected<ticket_id_t, exception_t>{
 
@@ -306,7 +323,7 @@ namespace dg::network_host_asynchronous{
             }
     };
 
-    class DistributedAsynchronousDeviceX: public virtual DistributedAsynchronousDeviceXInterface{
+    class DistributedAsynchronousDeviceX: public virtual AsynchronousDeviceXInterface{
 
         private:
 
@@ -339,6 +356,55 @@ namespace dg::network_host_asynchronous{
             void close_ticket(ticket_id_t ticket_id) noexcept{
 
                 this->async_device_vec[ticket_id.async_device_idx]->close_ticket(ticket_id.ticket_id);
+            }
+    };
+
+    auto get_raii_ticket_id(std::shared_ptr<AsynchronousDeviceXInterface> async_device, ticket_id_t ticket_id) noexcept -> std::shared_ptr<ticket_id_t>{ //we use internal allocations so its safe to assume allocations aren't errors
+
+        auto destructor = [async_device_arg = std::move(async_device)](ticket_id_t * arg) noexcept{
+            async_device_arg->close_ticket(*arg);
+            delete arg;
+        };
+
+        return std::unique_ptr<ticket_id_t, decltype(destructor)>(new ticket_id_t(ticket_id), std::move(destructor)); //internal allocations
+    }
+
+    class Synchronizer{
+
+        private:
+
+            AsynchronousDeviceXInterface * async_device;
+            dg::vector<std::shared_ptr<ticket_id_t>> ticket_vec;
+
+        public:
+
+            Synchronizer(AsynchronousDeviceXInterface& async_device) noexcept: async_device(&async_device), 
+                                                                               ticket_vec(){}
+
+            ~Synchronizer() noexcept{
+
+                for (const auto& ticket_id_sptr: this->ticket_vec){
+                    this->async_device->sync(*ticket_id_sptr);
+                }
+            }
+
+            auto add(std::shared_ptr<ticket_id_t> ticket_id) noexcept -> exception_t{
+
+                if (ticket_id == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                this->ticket_vec.push_back(std::move(ticket_id));
+                return dg::network_exception::SUCCESS;
+            }
+
+            void sync() noexcept{
+
+                for (const auto& ticket_id_sptr: this->ticket_vec){
+                    this->async_device->sync(*ticket_id_sptr);
+                }
+
+                this->ticket_vec.clear();
             }
     };
 }
