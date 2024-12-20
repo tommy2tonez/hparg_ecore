@@ -14,11 +14,6 @@
 
 namespace dg::network_tile_lifetime::concurrent_unsafe{
 
-    //No Mom, I've thought long and hard to do distributed neural networks - and backprop synchronizations - there's just not a better approach
-    //we are training input token of size in GBs - which impose a very large overhead on the computation tree - you can't train the thing in the traditional approach
-    //if there are dispatching overheads or resolutor overheads - thats my bad - I'll tune the thing - by using better allocation and better producer_consumer approach - using a mutex to wait instead of sleep waiting
-    //the goal is the same, we want to provide the high level interface of memregion frequency
-
     using uma_ptr_t             = dg::network_pointer::uma_ptr_t; 
     using operatable_id_t       = dg::network_tile_metadata::operatable_id_t;
     using dispatch_control_t    = dg::network_tile_metadata::dispatch_control_t;
@@ -702,7 +697,6 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
         return dg::network_exception::SUCCESS;
     }
-
 }
 
 namespace dg::network_tile_lifetime::concurrent_safe_batch{
@@ -2895,8 +2889,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
     //we also want to fatten the tiles to adjust with the worst case overheads
     //we'll do matmul demo N = 10 ** 6 sometimes soon via the usage of PACM (pair_accum) and pair tiles 
     //we want multithreading to avoid mtx spinning overheads
-    
-    //we'll move on to the asynchronous implementation for now 
+
+    //we'll move on to the asynchronous implementation for now
 
     void load_virtual_payloads(VirtualPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
