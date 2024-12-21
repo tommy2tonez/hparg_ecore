@@ -7,6 +7,8 @@
 
 namespace dg::network_host_asynchronous{
 
+    //alrights fellas - this is an OK sketch - we'll be back later if there are more pull requests
+
     class WorkOrder{
 
         public:
@@ -52,6 +54,8 @@ namespace dg::network_host_asynchronous{
     };
 
     //we aren't limiting the interface to ticket_id_t because it's not good practice
+    //we'll improve the allocations speed later
+
     class AsyncDeviceXInterface{
 
         public:
@@ -63,6 +67,14 @@ namespace dg::network_host_asynchronous{
     };
 
     using load_balance_handle_t = LoadBalanceHandle;
+
+    class WorkLoadEstimatorInterface{
+
+        public:
+
+            virtual ~WorkLoadEstimatorInterface() noexcept = default;
+            virtual auto estimate(size_t est_flops) noexcept -> std::expected<size_t, exception_t> = 0;
+    };
 
     class LoadBalancerInterface{
 
@@ -418,7 +430,7 @@ namespace dg::network_host_asynchronous{
 
             void sync(void * handle) noexcept{
 
-                InternalHandle * internal_handle    = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle    = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 std::shared_ptr<std::mutex> mtx     = std::make_shared<std::mutex>();
                 mtx->lock(); //relaxed is sufficient
                 dg::network_exception_handler::nothrow_log(this->sync_controller->add_observer(internal_handle->ticket_id, mtx)); 
@@ -428,7 +440,7 @@ namespace dg::network_host_asynchronous{
             void close_handle(void * handle) noexcept{
 
                 //closing ticket before synchronization is undefined - we must check that
-                InternalHandle * internal_handle    = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 this->sync_controller->close_ticket(internal_handle->ticket_id);
                 delete internal_handle;
             }
@@ -438,7 +450,6 @@ namespace dg::network_host_asynchronous{
 
         //we encapsulate the std::unique_ptr<SynchronizationControllerInterface> here
     }
-
 
     //LoadBalancer imposes too much access serialization overheads
     //we should do distributed load_balancer + modulo - assume that the loads are reasonables - we can rely on the uniform distribution law on large numbers
@@ -457,7 +468,7 @@ namespace dg::network_host_asynchronous{
 
             struct InternalHandle{
                 async_device_id_t async_device_id;
-                UniformLoadBalanceHeapNode * heap_node;
+                UniformLoadBalancerHeapNode * heap_node;
                 size_t task_load;
             };
 
@@ -498,14 +509,14 @@ namespace dg::network_host_asynchronous{
 
             auto get_async_device_id(void * handle) noexcept{
 
-                return static_cast<InternalHandle *>(handle)->async_device_id;
+                return static_cast<InternalHandle *>(stdx::safe_ptr_access(handle))->async_device_id;
             } 
 
             void close_handle(void * handle) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                InternalHandle * internal_handle        = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle        = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 UniformLoadBalancerHeapNode * cur_node  = internal_handle->heap_node;
                 cur_node->current_load                 -= internal_handle->task_load;
                 this->push_up_at(cur_node->heap_idx);
@@ -543,7 +554,7 @@ namespace dg::network_host_asynchronous{
                 }
 
                 size_t c = (idx - 1) >> 1;
-                
+
                 if (this->load_balance_heap[c]->current_load < this->load_balance_heap[idx]->current_load){
                     return;
                 }
@@ -577,7 +588,7 @@ namespace dg::network_host_asynchronous{
 
                 assert(stdx::is_pow2(this->load_balancer_vec.size()));
 
-                size_t random_clue                                      = dg::network_randomizer::randomizer_uint<size_t>();
+                size_t random_clue                                      = dg::network_randomizer::randomize_int<size_t>();
                 size_t balancer_idx                                     = random_clue & (this->load_balancer_vec.size() - 1u);
                 std::expected<void *, exception_t> load_balancer_handle = this->load_balancer_vec[balancer_idx]->open_handle(est_flops);
 
@@ -593,13 +604,13 @@ namespace dg::network_host_asynchronous{
 
             auto get_async_device_id(void * handle) noexcept -> async_device_id_t{
 
-                InternalHandle * internal_handle = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 return this->load_balancer_vec[internal_handle->load_balancer_idx]->get_async_device_id(internal_handle->load_balancer_handle);
             }
 
             void close_handle(void * handle) noexcept{
 
-                InternalHandle * internal_handle = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 this->load_balancer_vec[internal_handle->load_balancer_idx]->close_handle(internal_handle->load_balancer_handle);
                 delete internal_handle;
             }
@@ -643,9 +654,9 @@ namespace dg::network_host_asynchronous{
 
                 std::expected<void *, exception_t> wo_handle = map_ptr->second->exec(std::move(work_order)); //alrights - we should convert container -> unordered_map for debugging purposes
 
-                if (!ticket_id.has_value()){
+                if (!wo_handle.has_value()){
                     this->load_balancer->close_load_handle(load_balance_handle.value());
-                    return std::unexpected(ticket_id.error());
+                    return std::unexpected(wo_handle.error());
                 }
 
                 InternalHandle * dynamic_handle = new InternalHandle{wo_handle.value(), load_balance_handle.value()};  //TODOs: internalize allocations
@@ -656,7 +667,7 @@ namespace dg::network_host_asynchronous{
 
             void sync(void * handle) noexcept{
                 
-                InternalHandle * internal_handle    = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle    = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle)); //we are guarding nullptrs
                 async_device_id_t async_device_id   = this->load_balancer->get_async_device_id(internal_handle->load_balancer_handle);
                 auto map_ptr                        = this->async_device_map.find(async_device_id);
 
@@ -672,7 +683,7 @@ namespace dg::network_host_asynchronous{
 
             void close_handle(void * handle) noexcept{
 
-                InternalHandle * internal_handle    = static_cast<InternalHandle *>(handle);
+                InternalHandle * internal_handle    = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 async_device_id_t async_device_id   = this->load_balancer->get_async_device_id(internal_handle->load_balancer_handle);
                 auto map_ptr                        = this->async_device_map.find(async_device_id);
 
@@ -724,7 +735,7 @@ namespace dg::network_host_asynchronous{
             ~TicketSynchronizer() noexcept{
 
                 this->async_device->sync(this->wo_handle);
-                this->async_device->close_ticket(this->wo_handle);
+                this->async_device->close_handle(this->wo_handle);
             }
 
             void sync() noexcept{
@@ -749,7 +760,7 @@ namespace dg::network_host_asynchronous{
             ~TicketXSynchronizer(){
                 
                 this->async_device->sync(this->wo_handle);
-                this->async_device->close_ticket(this->wo_handle);
+                this->async_device->close_handle(this->wo_handle);
             }
 
             void sync() noexcept{
@@ -760,7 +771,6 @@ namespace dg::network_host_asynchronous{
 
     auto to_unique_synchronizable(std::shared_ptr<AsyncDeviceXInterface> async_device, void * wo_handle) noexcept -> std::unique_ptr<Synchronizable>{ //we use internal allocations so its safe to assume allocations aren't errors
 
-        //this is a precond
         if constexpr(DEBUG_MODE_FLAG){
             if (async_device == nullptr){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -803,7 +813,9 @@ namespace dg::network_host_asynchronous{
 
             void sync() noexcept{
 
-                this->synchronizable_vec.clear();
+                for (auto& synchronizable: this->synchronizable_vec){
+                    synchronizable->sync();
+                }
             }
     };
 
