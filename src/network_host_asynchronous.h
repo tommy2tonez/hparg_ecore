@@ -863,7 +863,7 @@ namespace dg::network_host_asynchronous{
 
             void clear() noexcept{
 
-                this->synchronizable->sync();
+                // this->synchronizable->sync();
                 this->pointer_set.clear();
             }
     };
