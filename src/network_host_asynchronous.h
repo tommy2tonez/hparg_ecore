@@ -61,6 +61,27 @@ namespace dg::network_host_asynchronous{
             virtual void close_ticket(ticket_id_t) noexcept = 0;
     };
 
+    using load_balance_handle_t = LoadBalanceHandle;
+
+    class LoadBalancerInterface{
+
+        public:
+
+            virtual ~LoadBalancerInterface() noexcept = default;
+            virtual auto next(size_t est_flops) noexcept -> std::expected<load_balance_handle_t, exception_t> = 0;
+            virtual void complete_load(load_balance_handle_t) noexcept = 0;
+    };
+
+    class LoadBalancedAsyncDeviceXInterface{
+
+        public:
+
+            virtual ~LoadBalancedAsyncDeviceXInterface() noexcept = default;
+            virtual auto exec(std::unique_ptr<WorkOrder>, size_t est_flops) noexcept -> std::expected<ticketx_id_t, exception_t> = 0;
+            virtual void sync(ticketx_id_t) noexcept = 0;
+            virtual void close_ticket(ticketx_id_t) noexcept = 0; 
+    };
+
     template <class Lambda>
     class LambdaWrappedWorkOrder: public virtual WorkOrder{
 
@@ -406,39 +427,139 @@ namespace dg::network_host_asynchronous{
         //we encapsulate the std::unique_ptr<SynchronizationControllerInterface> here
     }
 
-    class DistributedAsyncDeviceX: public virtual AsyncDeviceXInterface{
+    struct UniformLoadBalanceHeapNode{
+        async_device_id_t async_device_id;
+        size_t current_load;
+        size_t max_load;
+        size_t heap_idx;
+    };
+
+    struct LoadBalanceHandle{
+        async_device_id_t async_id;
+        UniformLoadBalanceHeapNode * heap_node;
+        size_t task_load;
+    };
+
+    class UniformLoadBalancer: public virtual LoadBalancerInterface{
+
+        private:
+
+            dg::vector<std::unique_ptr<HeapNode>> load_balance_heap;
+            std::unique_ptr<WorkLoadEstimatorInterface> estimator;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            UniformLoadBalancer(dg::vector<std::unique_ptr<HeapNode>> load_balance_heap,
+                                std::unique_ptr<WorkLoadEstimatorInterface> estimator,
+                                std::unique_ptr<std::mutex> mtx) noexcept: load_balance_heap(std::move(load_balance_heap)),
+                                                                           estimator(std::move(estimator)),
+                                                                           mtx(std::move(mtx)){}
+
+            auto next(size_t est_flops) noexcept -> std::expected<LoadBalanceHandle, exception_t>{
+
+                stdx::xlock_guard lck_grd(*this->mtx);
+                size_t est_workload     = this->estimator->estimate(est_flops); 
+                HeapNode * front_node   = this->load_balance_heap.front().get();
+
+                if (front_node->current_load + est_work_load > front_node->max_load){
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
+
+                front_node->current_load += est_work_load;
+                this->push_down_at(0u);
+
+                return LoadBalanceHandle{front_node->async_device_id, front_node, est_workload};
+            }
+
+            void complete_load(LoadBalanceHandle handle) noexcept{
+
+                stdx::xlock_guard lck_grd(*this->mtx);
+                HeapNode * cur_node     = handle.heap_node;
+                cur_node->current_load  -= handle.task_load;
+                this->push_up_at(cur_node->heap_idx);
+            }
+
+        private:
+
+            void push_down_at(size_t idx) noexcept{
+
+                size_t c = idx * 2 + 1;
+
+                if (c >= this->load_balance_heap.size()){
+                    return;
+                }
+
+                if (c + 1 < this->load_balance_heap.size() && this->load_balance_heap[c + 1]->current_load < this->load_balance_heap[c]->current_load){
+                    c += 1;
+                }
+
+                if (this->load_balance_heap[idx]->current_load < this->load_balance_heap[c]->current_load){
+                    return;
+                }
+
+                std::swap(this->load_balance_heap[idx]->heap_idx, this->load_balance_heap[c]->heap_idx);
+                std::swap(this->load_balance_heap[idx], this->load_balance_heap[c]);
+                this->push_down_at(c);
+            }
+
+            void push_up_at(size_t idx) noexcept{
+
+                if (idx == 0u){
+                    return;
+                }
+
+                size_t c = (idx - 1) >> 1;
+                
+                if (this->load_balance_heap[c]->current_load < this->load_balance_heap[idx]->current_load){
+                    return;
+                }
+
+                std::swap(this->load_balance_heap[c]->heap_idx, this->load_balance_heap[idx]->heap_idx);
+                std::swap(this->load_balance_heap[c], this->load_balance_heap[idx]);
+                this->push_up_at(c);
+            }
+    };
+
+    class LoadBalancedAsyncDeviceX: public virtual LoadBalancedAsyncDeviceXInterface{
 
         private:
 
             const std::vector<std::unique_ptr<AsyncDeviceXInterface>> async_device_vec;
+            const std::unique_ptr<LoadBalancerInterface> load_balancer;
 
         public:
 
-            DistributedAsyncDeviceX(std::vector<std::unique_ptr<AsyncDeviceXInterface>> async_device_vec) noexcept: async_device_vec(std::move(async_device_vec)){}
+            LoadBalancedAsyncDeviceX(std::vector<std::unique_ptr<AsyncDeviceXInterface>> async_device_vec,
+                                     std::unique_ptr<LoadBalancerInterface> load_balancer) noexcept: async_device_vec(std::move(async_device_vec)){}
 
-            auto exec(std::unique_ptr<WorkOrder> work_order) noexcept -> std::expected<distributed_ticket_id_t, exception_t>{
+            auto exec(std::unique_ptr<WorkOrder> work_order, size_t est_flop) noexcept -> std::expected<ticketx_id_t, exception_t>{
 
-                assert(stdx::is_pow2(async_device_vec.size()));
+                std::expected<LoadBalanceHandle, exception_t> load_balance_handle = this->load_balancer->next(est_flop);
 
-                size_t random_clue = dg::network_randomizer::randomize_uint<size_t>(); 
-                size_t idx = random_clue & (async_device_vec.size() - 1u);
-                std::expected<ticket_id_t, exception_t> ticket_id = this->async_device_vec[idx]->exec(std::move(work_order));
+                if (!load_balance_handle.has_value()){
+                    return std::unexpected(load_balance_handle.error());
+                }
+
+                std::expected<ticket_id_t, exception_t> ticket_id = this->async_device_vec[load_balance_handle->async_id]->exec(std::move(work_order));
 
                 if (!ticket_id.has_value()){
+                    this->load_balancer->complete_load(load_balance_handle.value());
                     return std::unexpected(ticket_id.error());
                 }
 
-                return DistributedTicketId{idx, ticket_id.value()};
+                return TicketXID{load_balance_handle.value(), ticket_id.value()};
             }
 
-            void sync(distributed_ticket_id_t ticket_id) noexcept{
+            void sync(ticketx_id_t ticket_id) noexcept{
 
-                this->async_device_vec[ticket_id.async_device_idx]->sync(ticket_id.ticket_id);
+                this->async_device_vec->sync(ticket_id.ticket_id);
             }
 
-            void close_ticket(ticket_id_t ticket_id) noexcept{
+            void close_ticket(ticketx_id_t ticket_id) noexcept{
 
-                this->async_device_vec[ticket_id.async_device_idx]->close_ticket(ticket_id.ticket_id);
+                this->load_balancer->complete_load(ticket_id.load_balance_handle);
+                this->async_device_vec->close_ticket(ticket_id.ticket_id);
             }
     };
 
@@ -485,6 +606,31 @@ namespace dg::network_host_asynchronous{
             }
     };
 
+    class TicketXSynchronizer: public virtual Synchronizable{
+
+        private:
+
+            std::shared_ptr<LoadBalancedAsyncDeviceX> async_device;
+            ticketx_id_t ticket_id;
+        
+        public:
+
+            TicketXSynchronizer(std::shared_ptr<LoadBalancedAsyncDeviceX> async_device,
+                                ticketx_id_t ticket_id) noexcept: async_device(std::move(async_device)),
+                                                                  ticketx_id(ticketx_id){}
+                                                                 
+            ~TicketXSynchronizer(){
+                
+                this->async_device->sync(this->ticket_id);
+                this->async_device->close_ticket(this->ticket_id);
+            }
+
+            void sync() noexcept{
+
+                this->async_device->sync(this->ticket_id);
+            }
+    };
+
     auto to_unique_synchronizable(std::shared_ptr<AsyncDeviceXInterface> async_device, ticket_id_t ticket_id) noexcept -> std::unique_ptr<Synchronizable>{ //we use internal allocations so its safe to assume allocations aren't errors
 
         //this is a precond
@@ -498,6 +644,17 @@ namespace dg::network_host_asynchronous{
         return std::make_unique<TicketSynchronizer>(std::move(async_device), ticket_id);
     }
 
+    auto to_unique_synchronizable(std::shared_ptr<LoadBalancedAsyncDeviceX> async_device, ticket_id_t ticket_id) noexcept -> std::unique_ptr<Synchronizable>{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (async_device == nullptr){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        return std::make_unique<TicketXSynchronizer>(std::move(async_device), ticket_id);
+    }
     class BatchSynchronizer: public virtual Synchronizable{
 
         private:
@@ -533,7 +690,7 @@ namespace dg::network_host_asynchronous{
         public:
 
             RestrictPointerSynchronizer(Synchronizable& synchronizable) noexcept: synchronizable(&synchronizable),
-                                                                                  pointer_set(pointer_set){}
+                                                                                  pointer_set(){}
 
             template <class Iterator>
             auto add_range(Iterator first, Iterator last) noexcept -> exception_t{
