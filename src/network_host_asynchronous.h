@@ -7,13 +7,6 @@
 
 namespace dg::network_host_asynchronous{
 
-    //alright fellas - I think the asynchronous device is decently fast
-    //goal is to not pollute the L1 cache of the resolutors so we can hyperthread the thing - which is mainly used for dispatching cuda orders 
-    //alright - this is, for now, sufficient for asynchronous (in the sense of performance constraints)
-    //error communications are within the work_order - the async_device only provides a synchronization interface
-    //synchronization must be a through operation otherwise we are risking memory corruption - there is no timeout countdown or whatever, synchronization must happens or abort the program
-    //we'll circle back the implementation laters if there are pull requests
-
     class WorkOrder{
 
         public:
@@ -35,7 +28,7 @@ namespace dg::network_host_asynchronous{
         public:
 
             virtual ~WorkOrderContainerInterface() noexcept = default;
-            virtual void push(std::unique_ptr<WorkOrder>) noexcept -> exception_t = 0;
+            virtual auto push(std::unique_ptr<WorkOrder>) noexcept -> exception_t = 0;
             virtual auto pop() noexcept -> std::unique_ptr<WorkOrder> = 0; 
     };
 
@@ -58,8 +51,6 @@ namespace dg::network_host_asynchronous{
             virtual void close_ticket(ticket_id_t) noexcept = 0; 
     };
 
-    //we might want to use buffer and trivial serialization here - we'll think about this later 
-
     class AsyncDeviceXInterface{
 
         public:
@@ -80,11 +71,11 @@ namespace dg::network_host_asynchronous{
         public:
 
             static_assert(std::is_nothrow_destructible_v<Lambda>);
-            static_assert(std::is_nothrow_invocable_v<Lambda>);
+            // static_assert(std::is_nothrow_invocable_v<Lambda>);
 
             LambdaWrappedWorkOrder(Lambda lambda) noexcept(noexcept(std::is_nothrow_move_constructible_v<Lambda>)): lambda(std::move(lambda)){}
 
-            void run() noexcept{
+            void run() noexcept(noexcept(std::is_nothrow_invocable_v<Lambda>)){ //we let the compiler to solve the polymorphism overriding issue
 
                 //alright fellas - there are affined cases of memory - and such is dispatched to asynchronous device - so it's better to do a memory_transaction here
                 std::atomic_thread_fence(std::memory_order_seq_cst); //promote acquire -> seq_cst - modern CPU is atomic
@@ -94,7 +85,7 @@ namespace dg::network_host_asynchronous{
     };
 
     template <class Lambda>
-    auto make_virtual_work_order(Lambda lambda) noexcept(noexcept(std::is_nothrow_move_constructible<Lambda>)) -> std::unique_ptr<WorkOrder>{
+    auto make_virtual_work_order(Lambda lambda) noexcept(noexcept(std::is_nothrow_move_constructible_v<Lambda>)) -> std::unique_ptr<WorkOrder>{
 
         return std::make_unique<LambdaWrappedWorkOrder<Lambda>>(std::move(lambda)); //TODOs: internal allocations - we don't accept memory exhaustion because that's a major source of bugs - and we can't be too cautious catching every memory allocations - it clutters the code
     }
@@ -124,8 +115,8 @@ namespace dg::network_host_asynchronous{
 
                 if (!this->waiting_vec.empty()){
                     auto [pending_mtx, fetching_addr] = std::move(this->waiting_vec.front());
-                    *fetching_addr = std::move(wo);
                     this->waiting_vec.pop_front();
+                    *fetching_addr = std::move(wo);
                     std::atomic_thread_fence(std::memory_order_release);
                     pending_mtx->unlock();
                     return dg::network_exception::SUCCESS;
@@ -187,6 +178,45 @@ namespace dg::network_host_asynchronous{
             }
     };
 
+    class AsyncHeartBeatWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<WorkOrderContainerInterface> wo_container;
+            std::chrono::nanoseconds max_timeout;
+            std::shared_ptr<std::atomic<intmax_t>> last_heartbeat_in_utc_nanoseconds; //relaxed is sufficient
+
+        public:
+
+            AsyncHeartBeatWorker(std::shared_ptr<WorkOrderContainerInterface> wo_container,
+                                 std::chrono::nanoseconds max_timeout,
+                                 std::shared_ptr<std::atomic<intmax_t>> last_heartbeat_in_utc_nanoseconds) noexcept: wo_container(std::move(wo_container)),
+                                                                                                                     max_timeout(std::move(max_timeout)),
+                                                                                                                     last_heartbeat_in_utc_nanoseconds(std::move(last_heartbeat_in_utc_nanoseconds)){}
+
+            bool run_one_epoch() noexcept{
+
+                //we assume that the concurrency is not corrupted but the usage of asynchronous device is corrupted
+                //such can be bad asynchronous work_order (deadlocks or too compute heavy) and renders the asynchronous device useless - we avoid that by having a heartbeat worker to declare a certain latency
+
+                std::chrono::nanoseconds expiry = std::chrono::nanoseconds(last_heartbeat_in_utc_nanoseconds->load(std::memory_order_relaxed)) + this->max_timeout;
+                std::chrono::nanoseconds now    = stdx::utc_timestamp();
+
+                if (expiry < now){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort(); //there is no better resolution than to abort in this case - this is a severe error
+                }
+
+                auto task = [ticker = this->last_heartbeat_in_utc_nanoseconds]() noexcept{
+                    ticker->exchange(static_cast<intmax_t>(stdx::utc_timestamp().count()), std::memory_order_relaxed); //TODOs: assume intmax_t safe_cast
+                };
+                auto virtual_task = make_virtual_work_order(std::move(task));
+                this->wo_container->push(std::move(virtual_task)); //
+
+                return true;
+            }
+    };
+
     class AsyncDevice: public virtual AsyncDeviceInterface{
 
         private:
@@ -202,6 +232,8 @@ namespace dg::network_host_asynchronous{
 
 
             auto exec(std::unique_ptr<WorkOrder> wo) noexcept -> exception_t{
+
+                //this is responsible for making sure a through operation to be through - such is there is no SUCCESS and stuck - there must be an observer to observe wo_container
 
                 return this->wo_container->push(std::move(wo));
             }
@@ -240,7 +272,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
                 }
 
-                ticket_id_t next_ticket_id = this->available_ticket_vec.back();
+                ticket_id_t next_ticket_id = this->available_ticket_vec.front();
 
                 if constexpr(DEBUG_MODE_FLAG){
                     auto map_ptr = this->ticket_resource_map.find(next_ticket_id);
@@ -252,7 +284,7 @@ namespace dg::network_host_asynchronous{
                 }
 
                 this->ticket_resource_map.insert(std::make_pair(next_ticket_id, TicketResource{{}, false}));
-                this->available_ticket_vec.pop_back();
+                this->available_ticket_vec.pop_front();
 
                 return next_ticket_id;
             }
@@ -314,7 +346,7 @@ namespace dg::network_host_asynchronous{
                 }
 
                 this->ticket_resource_map.erase(map_ptr);
-                this->available_ticket_vec.push_front(ticket_id);
+                this->available_ticket_vec.push_back(ticket_id);
             }
     };
 
@@ -323,7 +355,7 @@ namespace dg::network_host_asynchronous{
         private:
 
             const std::unique_ptr<AsyncDeviceInterface> async_device;
-            const std::unique_ptr<SynchronizationControllerInterface> sync_controller;
+            const std::shared_ptr<SynchronizationControllerInterface> sync_controller;
 
         public:
 
@@ -339,11 +371,10 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(ticket_id.error());
                 }
 
-                auto task = [this, arg_ticket_id = ticket_id.value(), arg_work_order = std::move(work_order)]() noexcept{
-                    arg_work_order->run(); //actually the memory ordering responsibility is the work order responsibility - if the work order is a concurrent transaction - it must take concurrency precautions
-                    dg::network_exception_handler::nothrow_log(this->sync_controller->mark_completed(arg_ticket_id)); //we actually need to force noexcept here - close_ticket before synchronization is prohibited
+                auto task = [sync_controller_arg = this->sync_controller, ticket_id_arg = ticket_id.value(), work_order_arg = std::move(work_order)]() noexcept{
+                    work_order_arg->run(); //actually the memory ordering responsibility is the work order responsibility - if the work order is a concurrent transaction - it must take concurrency precautions
+                    dg::network_exception_handler::nothrow_log(sync_controller_arg->mark_completed(ticket_id_arg)); //we actually need to force noexcept here - close_ticket before synchronization is prohibited
                 };
-
                 auto virtual_task       = make_virtual_work_order(std::move(task));
                 exception_t async_err   = this->async_device->exec(std::move(virtual_task));
 
