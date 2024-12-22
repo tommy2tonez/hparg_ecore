@@ -309,8 +309,13 @@ namespace stdx{
 
             inline __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
-                this->mtx->test_and_set();
-                std::atomic_thread_fence(std::memory_order_seq_cst); //Mom told me this does not work on some compilers - this means we have to do function-style like std::atomic_thread_fence(), decltype(auto) rs = callable(), std::atomic_thread_fence(), return rs
+                while (!this->mtx->test_and_set(std::memory_order_relaxed)){}
+
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }       
            }
 
             xlock_guard(const self&) = delete;
@@ -318,8 +323,11 @@ namespace stdx{
 
             inline __attribute__((always_inline)) ~xlock_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-                this->mtx->clear();
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                }
+
+                this->mtx->clear(std::memory_order_release);
             }
 
             self& operator =(const self&) = delete;
@@ -332,7 +340,7 @@ namespace stdx{
         private:
 
             std::mutex * volatile mtx;
-        
+
         public:
 
             using self = xlock_guard;
@@ -340,7 +348,12 @@ namespace stdx{
             inline __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
 
                 this->mtx->lock();
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }       
             }
 
             xlock_guard(const self&) = delete;
@@ -348,7 +361,12 @@ namespace stdx{
 
             inline __attribute__((always_inline)) ~xlock_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }                       
+
                 this->mtx->unlock();
             }
 
@@ -372,7 +390,11 @@ namespace stdx{
 
             inline __attribute__((always_inline)) unlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }                   
             }
 
             unlock_guard(const self&) = delete;
@@ -380,7 +402,12 @@ namespace stdx{
 
             inline __attribute__((always_inline)) ~unlock_guard() noexcept{
                 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }                       
+                
                 this->mtx->unlock();
             }
 
@@ -401,7 +428,11 @@ namespace stdx{
 
             __attribute__((always_inline)) unlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }
             }
 
             unlock_guard(const self&) = delete;
@@ -409,7 +440,12 @@ namespace stdx{
 
             __attribute__((always_inline)) ~unlock_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }    
+
                 this->mtx->clear();
             }
 
@@ -444,7 +480,11 @@ namespace stdx{
 
             __attribute__((always_inline)) memtransaction_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }
             }
 
             memtransaction_guard(const memtransaction_guard&) = delete;
@@ -452,7 +492,11 @@ namespace stdx{
 
             __attribute__((always_inline)) ~memtransaction_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_acq_rel);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }
             }
 
             memtransaction_guard& operator =(const memtransaction_guard&) = delete;

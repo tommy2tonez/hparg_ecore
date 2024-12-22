@@ -125,12 +125,22 @@ namespace dg::network_memlock{
                                                              typename dg::network_memlock::MemoryLockInterface<T>::ptr_t<> ptr) noexcept: ptr(ptr){
 
                 dg::network_memlock::MemoryLockInterface<T>::acquire_wait(this->ptr);
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }            
             }
 
             inline __attribute__((always_inline)) ~lock_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }
+
                 dg::network_memlock::MemoryLockInterface<T>::acquire_release(this->ptr);
             }
 
@@ -244,13 +254,21 @@ namespace dg::network_memlock{
             
             inline __attribute__((always_inline)) recursive_lock_guard_many_x(const dg::network_memlock::MemoryRegionLockInterface<T> ins,
                                                                               Args... args) noexcept: resource(recursive_lock_guard_many(ins, args...)){
-                
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }       
             }
 
             inline __attribute__((always_inline)) ~recursive_lock_guard_many_x() noexcept{
-                
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }       
             }
 
             recursive_lock_guard_many_x(const self&) = delete;
@@ -502,8 +520,18 @@ namespace dg::network_memlock_impl1{
             } 
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
- 
-                while (!internal_acquire_try(table_idx)){}
+                
+                while (true){
+                    atomic_lock_t expected = MEMREGION_EMP_STATE;
+                    bool rs = lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
+
+                    if (!rs){
+                        continue;
+                    }
+
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    return;
+                }
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
@@ -527,7 +555,23 @@ namespace dg::network_memlock_impl1{
 
             static void internal_reference_wait(size_t table_idx) noexcept{
 
-                while (!internal_reference_try(table_idx)){}
+                while (true){
+                    atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
+
+                    if (cur_state == MEMREGION_ACQ_STATE){
+                        continue;
+                    }
+
+                    atomic_lock_t nxt_state  = cur_state + 1;
+                    bool rs = lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
+
+                    if (!rs){
+                        continue;
+                    }
+
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    return;
+                }
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{

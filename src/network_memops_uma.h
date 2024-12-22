@@ -43,12 +43,21 @@ namespace dg::network_memops_uma{
 
                 std::atomic_signal_fence(std::memory_order_acquire);
                 this->resource = dg::network_memlock::recursive_lock_guard_many(uma_lock_instance{}, args...);
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                }
             }
 
             inline __attribute__((always_inline)) ~memlock_guard() noexcept{
 
-                std::atomic_thread_fence(std::memory_order_seq_cst);
+                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                    std::atomic_thread_fence(std::memory_order_seq_cst);
+                } else{
+                    std::atomic_thread_fence(std::memory_order_release);
+                }
             }
 
             memlock_guard(const self&) = delete;

@@ -145,11 +145,23 @@ namespace dg::network_memlock_proxyspin{
             static auto internal_acquire_wait(size_t table_idx) noexcept -> proxy_id_t{
 
                 while (true){
-                    if (auto rs = internal_acquire_try(table_idx); rs.has_value()){
-                        return rs.value();
+                    lock_state_t cur = lck_table[table_idx].load(std::memory_order_relaxed);
+
+                    if (controller::refcount(cur) != controller::REFERENCE_EMPTY_VALUE){
+                        continue;
                     }
+
+                    proxy_id_t cur_proxy    = controller::proxy_id(cur);
+                    lock_state_t nxt        = controller::make(cur_proxy, controller::REFERENCE_ACQUIRED_VALUE);
+                    
+                    if (!lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_relaxed)){
+                        continue;
+                    }
+
+                    std::atomic_thead_fence(std::memory_order_acquire); //this is not supported by the current compiler YET - but languagely correct
+                    return cur_proxy;
                 }
-            } 
+            }
 
             static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id) noexcept{
                 
@@ -181,8 +193,28 @@ namespace dg::network_memlock_proxyspin{
 
             static void internal_reference_wait(size_t table_idx, proxy_id_t proxy_id) noexcept{
 
-                while (!internal_reference_try(table_idx, proxy_id)){}
-            } 
+                while (true){
+                    lock_state_t cur = lck_table[table_idx].load(std::memory_order_relaxed);
+
+                    if (controller::proxy_id(cur) != expected_proxy_id){
+                        continue;
+                    }
+
+                    if (controller::refcount(cur) == controller::REFERENCE_ACQUIRED_VALUE){
+                        continue;
+                    }
+
+                    lock_state_t nxt    = controller::make(expected_proxy_id, controller::refcount(cur) + 1);
+                    bool rs             = lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_relaxed);
+
+                    if (!rs){
+                        continue;
+                    }
+
+                    std::atomic_thread_fence(std::memory_order_acquire);
+                    return;
+                }
+            }
 
             static void internal_reference_release(size_t table_idx) noexcept{
                 

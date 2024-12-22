@@ -124,14 +124,14 @@ namespace dg::network_host_asynchronous{
         private:
 
             dg::deque<std::unique_ptr<WorkOrder>> wo_vec;
-            dg::vector<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec;
+            dg::deque<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec;
             size_t wo_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
             WorkOrderContainer(dg::deque<std::unique_ptr<WorkOrder>> wo_vec,
-                               dg::vector<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec,
+                               dg::deque<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec,
                                size_t wo_vec_capacity,
                                std::unique_ptr<std::mutex> mtx) noexcept: wo_vec(std::move(wo_vec)),
                                                                           waiting_vec(std::move(waiting_vec)),
