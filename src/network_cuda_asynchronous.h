@@ -90,15 +90,12 @@ namespace dg::network_cuda_asynchronous{
             }
     };
 
-    //or we can use a timed mutex - and a raii container here - whichever ways
-
     class WorkOrderContainer: public virtual WorkOrderContainerInterface{
 
         private:
 
             dg::deque<WorkOrder> workorder_vec;
-            dg::deque<std::pair<std::shared_ptr<std::mutex>, WorkOrder *>> waiting_queue; //we can still make this - if dg::vector<WorkOrder> is shared_ptr - I feel like this is not quantifiable task - we could have just aggregated the order somewhere else and turns it into one big asynchronous dispatch
-            size_t workorder_vec_capacity;
+            dg::deque<std::pair<std::shared_ptr<std::mutex>, WorkOrder *>> waiting_queue;
             std::unique_ptr<std::mutex> mtx;
 
         public:

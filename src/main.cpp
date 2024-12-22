@@ -12,7 +12,6 @@ void foo(Args ...args){
 
 int main(){
 
-    foo(size_t{1}, size_t{2}, size_t{3});
-    //alrights - let's have a demo for 10**6 x 10**6 linear in a week
-
+    //alrights fellas - we implemented relaxed memory ordering on memregions, we want to use this in conjunction with _mm_pause() because that's a virtue - which is the BASE of every uma_ptr_t operations - so there would be no issue with spinlocks destroying hardware performance
+    //we've reached 5MBs of raw code fellas - that's a major milestone
 }
