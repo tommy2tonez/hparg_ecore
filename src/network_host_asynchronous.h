@@ -181,6 +181,10 @@ namespace dg::network_host_asynchronous{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
+                if (wo == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
                 if (!this->waiting_vec.empty()){
                     auto [pending_mtx, fetching_addr] = std::move(this->waiting_vec.front());
                     this->waiting_vec.pop_front();
@@ -316,6 +320,10 @@ namespace dg::network_host_asynchronous{
             AsyncDeviceX(std::unique_ptr<AsyncDeviceInterface> async_device) noexcept: async_device(std::move(async_device)){}
 
             auto exec(std::unique_ptr<WorkOrder> work_order) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t>{
+
+                if (work_order == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
 
                 auto mtx_sptr           = std::make_shared<std::mutex>();
                 mtx_sptr->lock();
@@ -512,6 +520,10 @@ namespace dg::network_host_asynchronous{
                                                                                                      load_balancer(std::move(load_balancer)){}
 
             auto exec(std::unique_ptr<WorkOrder> work_order, size_t est_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t>{
+
+                if (work_order == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
 
                 std::expected<void *, exception_t> load_balance_handle = this->load_balancer->open_handle(est_flops);
 
