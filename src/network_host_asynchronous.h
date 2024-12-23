@@ -10,6 +10,8 @@ namespace dg::network_host_asynchronous{
     //alright fellas - code is clear - we'll move on
     //alright fellas - code actually wasn't clear - we'll now move on
 
+    using async_device_id_t = size_t;
+
     class WorkOrder{
 
         public:
@@ -43,9 +45,6 @@ namespace dg::network_host_asynchronous{
             virtual auto exec(std::unique_ptr<WorkOrder>) noexcept -> exception_t = 0;
     };
 
-    //actually - let's do it that way guys
-    //let's be a normal being doing normal synchronizations - no ticket this time
-
     class AsyncDeviceXInterface{
 
         public:
@@ -53,8 +52,6 @@ namespace dg::network_host_asynchronous{
             virtual ~AsyncDeviceXInterface() noexcept = default;
             virtual auto exec(std::unique_ptr<WorkOrder>) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t> = 0;
     };
-
-    using load_balance_handle_t = LoadBalanceHandle;
 
     class WorkLoadEstimatorInterface{
 
@@ -179,11 +176,11 @@ namespace dg::network_host_asynchronous{
 
             auto push(std::unique_ptr<WorkOrder> wo) noexcept -> exception_t{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
                 if (wo == nullptr){
                     return dg::network_exception::INVALID_ARGUMENT;
                 }
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (!this->waiting_vec.empty()){
                     auto [pending_mtx, fetching_addr] = std::move(this->waiting_vec.front());
@@ -194,12 +191,12 @@ namespace dg::network_host_asynchronous{
                     return dg::network_exception::SUCCESS;
                 }
 
-                if (this->wo_vec.size() == this->wo_vec_capacity){
-                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                if (this->wo_vec.size() < this->wo_vec_capacity){
+                    this->wo_vec.push_back(std::move(wo));
+                    return dg::network_exception::SUCCESS;
                 }
 
-                this->wo_vec.push_back(std::move(wo));
-                return dg::network_exception::SUCCESS;
+                return dg::network_exception::RESOURCE_EXHAUSTION;
             }
 
             auto pop() noexcept -> std::unique_ptr<WorkOrder>{
@@ -219,7 +216,7 @@ namespace dg::network_host_asynchronous{
                     pending_mtx = std::make_shared<std::mutex>(); //TODOs: internalize allocations
                     pending_mtx->lock();
 
-                    this->waiting_vec.push_back(std::make_pair(std::move(pending_mtx), &wo));
+                    this->waiting_vec.push_back(std::make_pair(pending_mtx, &wo));
                 }
 
                 stdx::xlock_guard<std::mutex> lck_grd(*pending_mtx);
@@ -256,7 +253,7 @@ namespace dg::network_host_asynchronous{
 
             std::shared_ptr<WorkOrderContainerInterface> wo_container;
             std::chrono::nanoseconds max_timeout;
-            std::shared_ptr<std::atomic<intmax_t>> last_heartbeat_in_utc_nanoseconds; //relaxed is sufficient
+            std::shared_ptr<std::atomic<intmax_t>> last_heartbeat_in_utc_nanoseconds;
 
         public:
 
@@ -293,9 +290,9 @@ namespace dg::network_host_asynchronous{
 
         private:
 
-            std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
-            std::shared_ptr<WorkOrderContainerInterface> wo_container;
-        
+            const std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+            const std::shared_ptr<WorkOrderContainerInterface> wo_container;
+
         public:
 
             AsyncDevice(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
@@ -325,7 +322,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto mtx_sptr           = std::make_shared<std::mutex>();
+                auto mtx_sptr           = std::make_shared<std::mutex>(); //TODOs: internalize allocations
                 mtx_sptr->lock();
                 auto task               = [mtx_sptr, work_order_arg = std::move(work_order)]() noexcept{
                     work_order_arg->run();
@@ -345,7 +342,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(async_err);
                 }
 
-                return std::unique_ptr<Synchronizable>(std::make_unique<TaskSynchronizer>(std::move(mtx_sptr)));
+                return std::unique_ptr<Synchronizable>(std::make_unique<TaskSynchronizer>(std::move(mtx_sptr))); //TODOs: internalize allocations
             }
     };
 
@@ -393,7 +390,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
                 }
 
-                front_node->current_load += est_workload.value();
+                front_node->current_load       += est_workload.value();
                 this->push_down_at(0u);
                 InternalHandle * dynamic_handle = new InternalHandle{front_node->async_device_id, front_node, est_workload.value()}; //TODOs: internalize allocation
                 void * void_dynamic_handle      = dynamic_handle;
@@ -415,7 +412,7 @@ namespace dg::network_host_asynchronous{
                 cur_node->current_load                 -= internal_handle->task_load;
                 this->push_up_at(cur_node->heap_idx);
 
-                delete internal_handle; //TODOs: internalize allocation
+                delete internal_handle;
             }
 
         private:
@@ -584,6 +581,25 @@ namespace dg::network_host_asynchronous{
             }
     };
 
+    //for the sake of simplicity, we want to declare 3 types of variables
+    //local variables: the normal variables that referenced by the current_thread, it's prefetch, postfetch, etc. fetch aren't dependent on another variables - WLOG, a = foo(); b = bar(); c = foobar(); bar() may or may not invoke concurrent transaction, foo() and bar() are normal functions then a, b, c are local variables
+    //atomic variables
+    //concurrent variables: the variables whose states are dependent on atomic variables (usually for serialized accesses)
+    //memory ordering is about concurrent variables, atomic variables and their relationships - we don't care about local variables
+
+    //this is actually hard
+    //assume two scenerios 
+    //first  - we are dispatching local variables -> asynchronous device
+    //second - we are dispatching concurrent variables -> asynchronous device
+    //we want to prove that the memory ordering stategy of this works - such is there is no mis-prefetch - if sync() is in the same scope of the local_variables
+
+    //(1): if we reference the local variable in the same scope of sync() - we are protected by std::memory_order_acquire
+    //     if we reference the local_variable in the outer scope w.r.t sync() - if the memory_ordering is seen by the compiler - compiler is responsible for flushing the assumptions of related local_variables - and the immediate subsequent acquisitions of those must issue brand new instructions
+    //                                                                        - if the memory_ordering is not seen by the compiler => function is not inlinable => compiler lost track of variables => compiler is responsible for equivalent action of std::atomic_signal_fence(memory_order_consume) of related local_variables post the function call  
+    //(2): if we want to access concurrent variables - we need to use concurrency precautions - such is lock_guard and std::memory_order_acquire and release in and out of the concurrent transaction
+    //we dont care about hardware because std::atomic_thread_fence(std::memory_order_etc) is a sufficient hardware instruction but not compiling instruction
+    //shit's hard fellas, don't come up with your own concurrent routine - even std makes mistakes 
+
     class MemorySafeSynchronizer{
 
         private:
@@ -591,13 +607,13 @@ namespace dg::network_host_asynchronous{
             dg::vector<std::unique_ptr<Synchronizable>> synchronizable_vec;
 
         public:
-            
+
             MemorySafeSynchronizer(): synchronizable_vec(){}
 
             inline __attribute__((always_inline)) ~MemorySafeSynchronizer() noexcept{
 
                 this->synchronizable_vec.clear();
-                
+
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
                 } else{
