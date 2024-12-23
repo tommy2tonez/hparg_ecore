@@ -31,6 +31,8 @@ namespace dg::network_cuda_asynchronous::exception{
 
 namespace dg::network_cuda_asynchronous{
 
+    //we'll write a bad sketch first then we'll be back for tuning
+
     using wo_ticketid_t         = uint64_t; 
     using launch_exception_t    = exception::launch_exception_t; 
 
@@ -43,27 +45,27 @@ namespace dg::network_cuda_asynchronous{
         wo_ticketid_t ticket_id;
         dg::vector<int> env; //this is very futuristic - because usually operations can only be operated in the same environment
         std::unique_ptr<VirtualExecutableInterface> executable;
-        size_t runtime_complexity;
     };
 
     struct WorkOrderContainerInterface{
         virtual ~WorkOrderContainerInterface() noexcept = default;
         virtual void push(WorkOrder) noexcept -> exception_t = 0;
-        virtual auto pop() noexcept -> WorkOrder = 0;
+        virtual auto pop(size_t sz) noexcept -> dg::vector<WorkOrder> = 0;
     };
 
+    //we are ditching ticket tmr
     struct WorkTicketControllerInterface{
         virtual ~WorkTicketControllerInterface() noexcept = default;
-        virtual auto next_ticket() noexcept -> std::expected<ticket_id_t, exception_t> = 0;
-        virtual void mark_completed(ticket_id_t, launch_exception_t) noexcept = 0;
-        virtual void add_observer(ticket_id_t, std::shared_ptr<std::mutex>) noexcept = 0;
-        virtual void close_ticket(ticket_id_t) noexcept = 0;
+        virtual auto next_ticket() noexcept -> std::expected<wo_ticketid_t, exception_t> = 0;
+        virtual auto mark_completed(wo_ticketid_t, launch_exception_t) noexcept -> exception_t = 0;
+        virtual auto add_observer(wo_ticketid_t, std::shared_ptr<std::mutex>) noexcept -> std::expected<launch_exception_t, exception_t> = 0;
+        virtual void close_ticket(wo_ticketid_t) noexcept = 0;
     };
 
     struct AsynchronousDeviceInterface{
         virtual ~AsynchronousDeviceInterface() noexcept = default;
-        virtual auto exec(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<void *, exception_t> = 0;
-        virtual auto sync(void *) noexcept -> launch_exception_t = 0;
+        virtual auto exec(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz) noexcept -> std::expected<void *, exception_t> = 0;
+        virtual auto sync(void *) noexcept -> launch_exception_t = 0; //sync must be a nothrow ops - in the sense that it syncs upon task completion to avoid memory corruption - it's supposed to be std::expected<launch_exception_t, exception_t> but because it is a must-sync - it returns the results POST the launch - which is launch_exception_t
         virtual void close_handle(void *) noexcept = 0;
     };
 
@@ -96,6 +98,7 @@ namespace dg::network_cuda_asynchronous{
 
             dg::deque<WorkOrder> workorder_vec;
             dg::deque<std::pair<std::shared_ptr<std::mutex>, WorkOrder *>> waiting_queue;
+            size_t workorder_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
@@ -121,34 +124,41 @@ namespace dg::network_cuda_asynchronous{
                     return dg::network_exception::SUCCESS;
                 }
 
-                if (this->workorder_vec.size() == this->workorder_vec_capacity){
-                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                if (this->workorder_vec.size() < this->workorder_vec_capacity){
+                    this->workorder_vec.push_back(std::move(wo));
+                    return dg::network_exception::SUCCESS;
                 }
 
-                this->workorder_vec.push_back(std::move(wo));
-                return dg::network_exception::SUCCESS;
+                return dg::network_exception::RESOURCE_EXHAUSTION;
             }
 
-            auto pop() noexcept -> WorkOrder{
+            auto pop(size_t sz) noexcept -> dg::vector<WorkOrder>{
 
                 std::shared_ptr<std::mutex> pending_mtx = {};
-                WorkOrder workorder = {};
-
+                WorkOrder pending_wo                    = {};
+                dg::vector<WorkOrder> rs                = {};
+                
                 {
                     stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                     if (!this->workorder_vec.empty()){
-                        auto rs = std::move(this->workorder_vec.front());
-                        this->workorder_vec.pop_front();
+                        size_t popping_sz   = std::min(sz, this->workorder_vec.size()); 
+                        auto first          = this->workorder_vec.begin();
+                        auto last           = std::next(first, popping_sz);
+                        std::copy(std::make_move_iterator(first), std::make_move_iterator(last), std::back_inserter(rs));
+                        this->workorder_vec.erase(first, last);
+
                         return rs;
                     }
 
                     pending_mtx = std::make_shared<std::mutex>();
-                    this->waiting_queue.push_back(std::make_pair(std::move(pending_mtx), &workorder));
+                    this->waiting_queue.push_back(std::make_pair(std::move(pending_mtx), &pending_wo));
                 }
 
                 stdx::xlock_guard<std::mutex> lck_grd(*pending_mtx);
-                return workorder;
+                rs.push_back(std::move(pending_wo));
+
+                return rs;
             }
     };
 
@@ -156,97 +166,167 @@ namespace dg::network_cuda_asynchronous{
 
         private:
 
-            size_t wo_sz;
-            dg::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map;
+            struct TicketResource{
+                dg::vector<std::shared_ptr<std::mutex>> observer_vec;
+                launch_exception_t launch_err;
+                bool is_completed;
+            };
+
+            dg::unordered_map<wo_ticketid_t, TicketResource> ticket_resource_map;
+            dg::deque<wo_ticketid_t> available_ticket_vec;
             std::unique_ptr<std::mutex> mtx;
 
         public:
-            
-            WorkTicketController(size_t wo_sz, 
-                                 dg::unordered_map<wo_ticketid_t, launch_exception_t> wo_status_map,
-                                 std::unique_ptr<std::mutex> mtx) noexcept: wo_sz(wo_sz),
-                                                                            wo_status_map(std::move(wo_status_map)),
+
+            WorkTicketController(dg::unordered_map<wo_ticketid_t, TicketResource> ticket_resource_map,
+                                 dg::deque<wo_ticketid_t> available_ticket_vec,
+                                 std::unique_ptr<std::mutex> mtx) noexcept: ticket_resource_map(std::move(ticket_resource_map)),
+                                                                            available_ticket_vec(std::move(available_ticket_vec)),
                                                                             mtx(std::move(mtx)){}
 
             auto next_ticket() noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
-                stdx::xlock_guard<stdx::mutex> lck_grd(*this->mtx);
-                wo_ticketid_t nxt_id    = dg::network_genult::safe_integer_cast<wo_ticketid_t>(this->wo_sz);
-                this->wo_sz             += 1;
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                if (this->available_ticket_vec.empty()){
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
+
+                ticket_id_t next_ticket_id = this->available_ticket_vec.front();
 
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (this->wo_status_map.find(nxt_id) != this->wo_status_map.end()){
+                    auto map_ptr = this->ticket_resource_map.find(next_ticket_id);
+
+                    if (map_ptr != this->ticket_resource_map.end()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
 
-                this->wo_status_map[nxt_id] = exception::make_from_syserr(dg::network_exception::SUCCESS);
-                return nxt_id;
+                this->ticket_resource_map.insert(std::make_pair(next_ticket_id, TicketResource{{}, QUEUED_ASYNC_ORDER, false}));
+                this->available_ticket_vec.pop_front();
+
+                return next_ticket_id;
             }
 
-            void set_status(wo_ticketid_t id, launch_exception_t err) noexcept{
+            auto mark_completed(wo_ticketid_t ticket_id, launch_exception_t launch_err) noexcept -> exception_t{
 
-                stdx::xlock_guard<stdx::mutex> lck_grd(*this->mtx);
-                auto map_ptr    = this->wo_status_map.find(id);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                auto map_ptr = this->ticket_resource_map.find(ticket_id); 
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (map_ptr == this->wo_status_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
+                if (map_ptr == this->ticket_resource_map.end()){
+                    return dg::network_exception::RESOURCE_ABSENT;
                 }
 
-                ptr->second = err;
+                if (map_ptr->second.is_completed){
+                    return dg::network_exception::ASYNC_DOUBLE_COMPLETION;
+                }
+
+                map_ptr->second.launch_err      = launch_err;
+                map_ptr->second.is_completed    = true;
+
+                for (const auto& mtx_sptr: map_ptr->second.observer_vec){
+                    mtx_sptr->unlock();
+                }
+
+                map_ptr->second.observer_vec.clear();
+                return dg::network_exception::SUCCESS;
             }
 
-            auto get_status(wo_ticketid_t id) noexcept -> launch_exception_t{
+            void add_observer(wo_ticketid_t ticket_id, std::shared_ptr<std::mutex> pending_mtx) noexcept -> exception_t{
 
-                stdx::xlock_guard<stdx::mutex> lck_grd(*this->mtx);
-                auto map_ptr    = this->wo_status_map.find(id);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (map_ptr == this->wo_status_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
+                if (pending_mtx == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
                 }
 
-                return map_ptr->second;
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                auto map_ptr = this->ticket_resource_map.find(ticket_id);
+
+                if (map_ptr == this->ticket_resource_map.end()){
+                    return dg::network_exception::RESOURCE_ABSENT;
+                }
+
+                if (map_ptr->second.is_completed){
+                    pending_mtx->unlock();
+                    return dg::network_exception::SUCCESS;
+                }
+
+                map_ptr->second.observer_vec.push_back(std::move(pending_mtx));
+                return dg::network_exception::SUCCESS;
             }
 
-            void close_ticket(wo_ticketid_t id) noexcept{
+            auto launch_status(wo_ticketid_t ticket_id) noexcept -> std::expected<launch_exception_t, exception_t>{
 
-                stdx::xlock_guard<stdx::mutex> lck_grd(*this->mtx);
-                auto map_ptr    = this->wo_status_map.find(id);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                auto map_ptr = this->ticket_resource_map.find(ticket_id);
+
+                if (map_ptr == this->ticket_resource_map.end()){
+                    return std::unexpected(dg::network_exception::RESOURCE_ABSENT);
+                }
+
+                return map_ptr->second.launch_err;
+            }
+
+            void close_ticket(wo_ticketid_t ticket_id) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                auto map_ptr = this->ticket_resource_map.find(ticket_id);
 
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (map_ptr == this->wo_status_map.end()){
+                    if (map_ptr == this->ticket_resource_map.end()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
+                        std::abort(); 
                     }
                 }
 
-                this->wo_status_map.erase(map_ptr);
+                if (!map_ptr->second.is_completed){
+                    for (const auto& mtx_sptr: map_ptr->second.observer_vec){
+                        mtx_sptr->unlock();
+                    }
+                }
+
+                this->ticket_resource_map.erase(map_ptr);
+                this->available_ticket_vec.push_back(ticket_id);
             }
     };
 
-    class KernelLaunchController: public virtual KernelLaunchControllerInterface{
+    //we are aiming to reduce latency of dispatches by removing cuda synchronization overheads
+    //we aggregate the orders and dispatch + guarantee consistency of interfaces for future maintaince
+
+    class CudaAsynchronousDevice: public virtual AsynchronousDeviceInterface{
 
         private:
+
+            struct InternalHandle{
+                wo_ticketid_t ticket_id;
+            };
 
             std::shared_ptr<WorkOrderContainerInterface> wo_container;
             std::shared_ptr<WorkTicketControllerInterface> ticket_controller;
         
         public:
 
-            KernelLaunchController(std::shared_ptr<WorkOrderContainerInterface> wo_container,
+            CudaAsynchronousDevice(std::shared_ptr<WorkOrderContainerInterface> wo_container,
                                    std::shared_ptr<WorkTicketControllerInterface> ticket_controller) noexcept: wo_container(std::move(wo_container)),
                                                                                                                ticket_controller(std::move(ticket_controller)){}
-            
-            auto launch(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
 
-                std::expected<bool, exception_t> env_status = dg::network_cuda_controller::cuda_is_valid_device(env, env_sz);
+            auto exec(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz) noexcept -> std::expected<void *, exception_t>{
+
+                if (executable == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                std::expected<bool, exception_t> cuda_status    = dg::network_cuda_controller::ping_cuda();
+
+                if (!cuda_status.has_value()){
+                    return std::unexpected(cuda_status.error())
+                }
+
+                if (!cuda_status.value()){
+                    return std::unexpected(dg::network_exception::CUDA_UNAVAILABLE);
+                }
+
+                std::expected<bool, exception_t> env_status     = dg::network_cuda_controller::cuda_is_valid_device(env, env_sz);
 
                 if (!env_status.has_value()){
                     return std::unexpected(env_status.error());
@@ -257,97 +337,91 @@ namespace dg::network_cuda_asynchronous{
                 }
 
                 std::expected<wo_ticketid_t, exception_t> ticket_id = this->ticket_controller->next_ticket();
-                
+
                 if (!ticket_id.has_value()){
                     return std::unexpected(ticket_id.error());
                 }
 
-                auto wo = WorkOrder{ticket_id.value(), std::move(executable), dg::vector<int>(env, env + env_sz), runtime_complexity};
-                this->wo_container->push(std::move(wo));
+                auto wo = WorkOrder{ticket_id.value(), std::move(executable), dg::vector<int>(env, env + env_sz)};
+                exception_t container_err = this->wo_container->push(std::move(wo));
 
-                return ticket_id.value();
+                if (dg::network_exception::is_failed(container_err)){
+                    this->ticket_controller->close_ticket(ticket_id.value());
+                    return std::unexpected(container_err);
+                }
+
+                InternalHandle * internal_handle    = new InternalHandle{ticket_id.value()}; //TODOs: internalize allocations
+                void * void_internal_handle         = internal_handle;
+
+                return void_internal_handle;
             }
 
-            auto status(wo_ticketid_t id) noexcept -> launch_exception_t{
+            auto sync(void * handle) noexcept -> launch_exception_t{
 
-                return this->ticket_controller->get_status(id);
+                InternalHandle * internal_handle        = static_cast<InternalHandle *>(handle);
+                std::shared_ptr<std::mutex> thread_mtx  = std::make_shared<std::mutex>();
+                thread_mtx->lock();
+                this->ticket_controller->add_observer(internal_handle->ticket_id, thread_mtx);
+                thread_mtx->lock();
+
+                return this->ticket_controller->launch_status(internal_handle->ticket_id);
             }
 
-            void close(wo_ticketid_t id) noexcept{
+            void close_handle(void * handle) noexcept{
 
-                this->ticket_controller->close_ticket(id);
+                InternalHandle * internal_handle        = static_cast<InternalHandle *>(handle);
+                this->ticket_controller->close_ticket(internal_handle->ticket_id);
+                delete internal_handle;
             }
     };
 
-    // template <size_t CONCURRENCY_SZ> //deprecate next iteration
-    // class ConcurrentKernelLaunchController: public virtual KernelLaunchControllerInterface{
+    //we are easing the access synchronization + cache invalidating of mutex by using "concurrent_async_device"
+    class ConcurrentCudaAsyncDevice: public virtual AsynchronousDeviceInterface{
 
-    //     private:
+        private:
 
-    //         dg::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec;
+            struct InternalHandle{
+                void * wo_handle;
+                size_t async_device_idx;
+            };
 
-    //     public:
+            const std::vector<std::unique_ptr<AsynchronousDeviceInterface>> async_device_vec; //we add constness because we are potentially in unprotected concurrent context
 
-    //         static_assert(CONCURRENCY_SZ != 0u);
-    //         static_assert(CONCURRENCY_SZ <= std::numeric_limits<uint8_t>::max());
+        public:
 
-    //         ConcurrentKernelLaunchController(dg::vector<std::unique_ptr<KernelLaunchControllerInterface>> controller_vec, 
-    //                                          std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: controller_vec(std::move(controller_vec)){}
+            ConcurrentCudaAsyncDevice(std::vector<std::unique_ptr<AsynchronousDeviceInterface>> async_device_vec) noexcept: async_device_vec(std::move(async_device_vec)){}
 
+            auto exec(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz) noexcept -> std::expected<void *, exception_t>{
+                
+                assert(stdx::is_pow2(this->async_device_vec.size()));
 
-    //         auto launch(std::unique_ptr<VirtualExecutableInterface> executable, int * env, size_t env_sz, size_t runtime_complexity) noexcept -> std::expected<wo_ticketid_t, exception_t>{
+                size_t random_clue                              = dg::network_randomizer::randomize_int<size_t>();
+                size_t async_device_idx                         = random_clue & (this->async_device_vec.size() - 1u);
+                std::expected<void *, exception_t> wo_handle    = this->async_device_vec[async_device_idx]->exec(std::move(executable), env, env_sz);
 
-    //             size_t thr_idx = dg::network_concurrency::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
-    //             std::expected<wo_ticketid_t, exception_t> rs = this->controller_vec[thr_idx]->launch(std::move(executable), env, env_sz, runtime_complexity);
+                if (!wo_handle.has_value()){
+                    return std::unexpected(wo_handle.error());
+                }
 
-    //             if (!rs.has_value()){
-    //                 return std::unexpected(rs.error());
-    //             }
+                InternalHandle * internal_handle                = new InternalHandle{wo_handle.value(), async_device_idx}; //TODOs: internalize allocations
+                void * void_internal_handle                     = internal_handle;
 
-    //             return this->encode(rs.value(), thr_idx);
-    //         }
+                return void_internal_handle;
+            }
 
-    //         auto status(wo_ticketid_t encoded_id) noexcept -> launch_exception_t{
+            auto sync(void * handle) noexcept -> launch_exception_t{
 
-    //             auto [id, thr_id] = this->decode(encoded_id);
-    //             return this->controller_vec[thr_id]->status(id);
-    //         }
+                InternalHandle * internal_handle = static_cast<InternalHandle *>(handle);
+                return this->async_device_vec[internal_handle->async_device_idx]->sync(internal_handle->wo_handle);
+            }
 
-    //         void close(wo_ticketid_t encoded_id) noexcept{
+            void close_handle(void * handle) noexcept{
 
-    //             auto [id, thr_id] = this->decode(encoded_id);
-    //             this->controller_vec[thr_id]->close(encoded_id);
-    //         }
-        
-    //     private:
-
-    //         auto encode(wo_ticketid_t id, uint8_t thr_id) noexcept -> wo_ticketid_t{
-
-    //             static_assert(std::is_unsigned_v<wo_ticketid_t>);
-    //             using promoted_t = dg::max_unsigned_t;
-    //             static_assert(sizeof(wo_ticketid_t) + sizeof(uint8_t) <= sizeof(promoted_t));
-    //             promoted_t encoded = (static_cast<promoted_t>(id) << (sizeof(uint8_t) * CHAR_BIT)) | static_cast<promoted_t>(thr_id);
-
-    //             return dg::network_genult::safe_integer_cast<wo_ticketid_t>(encoded);
-    //         }
-
-    //         auto decode(wo_ticketid_t encoded_id) noexcept -> std::pair<wo_ticketid_t, uint8_t>{
-
-    //             wo_ticketid_t id    = encoded_id >> (sizeof(uint8_t) * CHAR_BIT);
-    //             uint8_t thr_id      = encoded_id & low<wo_ticketid_t>(std::integral_constant<size_t, (sizeof(uint8_t) * CHAR_BIT)>{});
-
-    //             return {id, thr_id};
-    //         }
-    // };
-
-    //alrights - we still think aggregating the orders is this guy responsibility to reduce cuda synchronization overhead - so we'll build a component called leaky aggregator
-    //workers will try to pop() values of certain size and push data into this leaky containers - leaky containers is subcripted to a drainer - drainer after timeout will drain the leaky container and move it to another dispatcher of smaller vectorization_sz
-    //so we have vectorization_sz of 256 128 64 32 16 8 4 2 1 etc. 
-    //we try to vectorize 256 within 50ms - after 50ms the leaky container will be drained into worker of vectorization_sz 128, etc.
-    //we'll fill these today
-    //we are moving towards low latency dispatches - for most of the cases where the workload inbound is reasonable
-    //when the workload inbound is not reasonable - we move to high latency but still processes the orders
-    //we also want to aggregate the synchronizables into one sync() order - we'll be back
+                InternalHandle * internal_handle = static_cast<InternalHandle *>(handle);
+                this->async_device_vec[internal_handle->async_device_idx]->close_handle(internal_handle->wo_handle);
+                delete internal_handle;
+            }
+    };
 
     class CudaDispatcher: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -355,42 +429,39 @@ namespace dg::network_cuda_asynchronous{
 
             std::shared_ptr<WorkOrderContainerInterface> wo_container;
             std::shared_ptr<WorkTicketControllerInterface> ticket_controller;
-        
+            size_t dispatch_sz;
+
         public:
 
             CudaDispatcher(std::shared_ptr<WorkOrderContainerInterface> wo_container,
-                           std::shared_ptr<WorkTicketControllerInterface> ticket_controller) noexcept: wo_container(std::move(wo_container)),
-                                                                                                       ticket_controller(std::move(ticket_controller)){}
-            
+                           std::shared_ptr<WorkTicketControllerInterface> ticket_controller,
+                           size_t dispatch_sz) noexcept: wo_container(std::move(wo_container)),
+                                                         ticket_controller(std::move(ticket_controller)),
+                                                         dispatch_sz(dispatch_sz){}
+
             bool run_one_epoch() noexcept{
 
-                dg::vector<WorkOrder> wo_vec = this->wo_container->pop();
+                dg::vector<WorkOrder> wo_vec = this->wo_container->pop(this->dispatch_sz);
 
                 if (wo_vec.empty()){
                     return false;
                 }
 
                 auto env = this->extract_environment(wo_vec);
-                auto grd = dg::network_cuda_controller::lock_env_guard(env.data(), env.size());
-                dg::network_cuda_controller::cuda_synchronize();
+                auto grd = dg::network_cuda_controller::lock_env_guard(env.data(), env.size()); //cuda left a very very few design choices, we do mutex for now
 
                 for (auto& wo: wo_vec){
                     exception_t err = wo.executable->run();
 
                     if (dg::network_exception::is_failed(err)){
-                        this->ticket_controller->set_status(wo.ticket_id, exception::mark_completed(exception::make_from_syserr(err)));
+                        this->ticket_controller->mark_completed(wo.ticket_id, exception::mark_completed(exception::make_from_syserr(err)));
                     }
                 }
 
-                exception_t err = dg::network_cuda_controller::cuda_synchronize();
-
-                if (dg::network_exception::is_failed(err)){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(err)); //don't know what kind of error is returned/ to return here - rather abort - to avoid data races + undefined behaviors  
-                    std::abort();
-                }
+                dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::cuda_synchronize()); //don't know what kind of error is returned/ to return here - must abort - to avoid data races + undefined behaviors  
 
                 for (const auto& wo: wo_vec){
-                    this->ticket_controller->set_status(wo.ticket_id, exception::mark_completed(exception::make_from_syserr(dg::network_exception::SUCCESS)));
+                    this->ticket_controller->mark_completed(wo.ticket_id, exception::mark_completed(exception::make_from_syserr(dg::network_exception::SUCCESS)));
                 }
 
                 return true;
