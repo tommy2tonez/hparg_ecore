@@ -205,13 +205,15 @@ namespace dg::network_memlock{
     template <class T>
     auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr, std::memory_order success = std::memory_order_seq_cst) noexcept{
 
-        while (true){
-            if (auto rs = recursive_trylock_guard(lock_ins, ptr, success); static_cast<bool>(rs)){
-                return rs;
-            }
+        decltype(recursive_trylock_guard(lock_ins, ptr, success)) rs{}; 
 
-            _mm_pause();
-        }
+        auto lambda = [&]() noexcept{
+            rs = recursive_trylock_guard(lock_ins, ptr, success);
+            return static_cast<bool>(rs);
+        };
+
+        stdx::eventloop_spin_expbackoff(lambda);
+        return rs;
     }
 
     template <class T, class ...Args>
@@ -237,13 +239,15 @@ namespace dg::network_memlock{
     template <class T, class ...Args>
     auto recursive_lock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, std::memory_order success, Args... args) noexcept{
 
-        while (true){
-            if (auto rs = recursive_trylock_guard_many(lock_ins, success, args...); static_cast<bool>(rs)){
-                return rs;
-            }
-        
-            _mm_pause();
-        }
+        decltype(recursive_trylock_guard_many(lock_ins, success, args...)) rs{};
+
+        auto lambda = [&]() noexcept{
+            rs = recursive_trylock_guard_many(lock_ins, success, args...);
+            return static_cast<bool>(rs);
+        };
+
+        stdx::eventloop_spin_expbackoff(lambda);
+        return rs;
     }
 
     template <class T, class ...Args>
@@ -319,17 +323,12 @@ namespace dg::network_memlock_impl1{
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
 
-                while (true){
-                    bool rs = lck_table[table_idx].test_and_set(std::memory_order_relaxed);
+                auto lambda = [&]() noexcept{
+                    return lck_table[table_idx].test_and_set(std::memory_order_relaxed);
+                };
 
-                    if (!rs){
-                        _mm_pause();
-                        continue;
-                    }
-
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                    return;
-                }
+                stdx::eventloop_spin_expbackoff(lambda);
+                std::atomic_thread_fence(std::memory_order_acquire);
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
@@ -532,19 +531,14 @@ namespace dg::network_memlock_impl1{
             } 
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
-                
-                while (true){
+
+                auto lambda = [&]() noexcept{
                     atomic_lock_t expected = MEMREGION_EMP_STATE;
-                    bool rs = lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
+                    return lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
+                };
 
-                    if (!rs){
-                        _mm_pause();
-                        continue;
-                    }
-
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                    return;
-                }
+                stdx::eventloop_spin_expbackoff(lambda);
+                std::atomic_thread_fence(std::memory_order_acquire);
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
@@ -568,25 +562,15 @@ namespace dg::network_memlock_impl1{
 
             static void internal_reference_wait(size_t table_idx) noexcept{
 
-                while (true){
+                auto lambda = [&]() noexcept{
                     atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
-
-                    if (cur_state == MEMREGION_ACQ_STATE){
-                        _mm_pause();
-                        continue;
-                    }
-
                     atomic_lock_t nxt_state  = cur_state + 1;
-                    bool rs = lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
 
-                    if (!rs){
-                        _mm_pause();
-                        continue;
-                    }
+                    return cur_state != MEMREGION_ACQ_STATE && lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
+                };
 
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                    return;
-                }
+                stdx::eventloop_spin_expbackoff(lambda);
+                std::atomic_thread_fence(std::memory_order_acquire);
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{

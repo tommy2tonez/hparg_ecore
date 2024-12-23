@@ -581,6 +581,26 @@ namespace stdx{
         return static_cast<const T&>(obj);
     }
 
+    template <class Lambda>
+    inline __attribute__((always_inline)) void eventloop_spin_expbackoff(Lambda&& lambda) noexcept(noexcept(lambda())){
+
+        const size_t BASE                   = 2u;
+        const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
+        size_t current_sequential_pause     = 1u;
+
+        while (true){
+            if (lambda()){
+                return;
+            }
+
+            for (size_t i = 0u; i < current_sequential_pause; ++i){
+                _mm_pause();
+            }
+
+            current_sequential_pause = std::min(MAX_SEQUENTIAL_PAUSE, current_sequential_pause * BASE);
+        }
+    }
+
     template <class Destructor>
     inline auto resource_guard(Destructor destructor) noexcept{
         
