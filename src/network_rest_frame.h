@@ -207,8 +207,6 @@ namespace dg::network_rest_frame::client_impl1{
 
     using namespace dg::network_rest_frame::client; 
 
-    //alrights fellas - things look good - we'll implement this java fling
-
     class RequestResponse: public virtual ResponseObserverInterface,
                            public virtual ResponseInterface{
 
@@ -227,7 +225,6 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                                                    is_response_invoked(false){
                 this->mtx->lock();
             }
-
 
             RequestResponse(const RequestResponse&) = delete;
             RequestResponse(RequestResponse&&) = delete;
@@ -342,9 +339,6 @@ namespace dg::network_rest_frame::client_impl1{
                 return internal_request;
             }
     };
-
-    //ticket controller might needs preallocations + storing timed_mutex to wake up
-    //ticket controller must do preallocations + storing datas
 
     class TicketController: public virtual TicketControllerInterface{
 
@@ -470,21 +464,16 @@ namespace dg::network_rest_frame::client_impl1{
 
             bool run_one_epoch() noexcept{
 
-                std::optional<model::InternalRequest> request = this->request_container->pop();
-
-                if (!request.has_value()){
-                    return false;
-                }
-
-                std::expected<dg::network_kernel_mailbox::Address, exception_t> addr = dg::network_uri_encoder::extract_mailbox_addr(request->request.uri);
+                model::InternalRequest request = this->request_container->pop();
+                std::expected<dg::network_kernel_mailbox::Address, exception_t> addr = dg::network_uri_encoder::extract_mailbox_addr(request.request.uri);
 
                 if (!addr.has_value()){
                     dg::network_log_stackdump::error_fast(dg::network_exception::verbose(addr.error()));
                     return true;
                 }
 
-                auto bstream = dg::string(dg::network_compact_serializer::integrity_size(request.value()), ' ');
-                dg::network_compact_serializer::integrity_serialize_into(bstream.data(), request.value());
+                auto bstream = dg::string(dg::network_compact_serializer::integrity_size(request), ' ');
+                dg::network_compact_serializer::integrity_serialize_into(bstream.data(), request);
                 dg::network_kernel_mailbox::send(addr.value(), std::move(bstream), this->channel);
 
                 return true;

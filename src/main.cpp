@@ -15,5 +15,4 @@ void foo(Args ...args){
 
 int main(){
 
-    std::chrono::high_resolution_clock;
 }
