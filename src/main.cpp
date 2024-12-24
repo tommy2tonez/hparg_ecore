@@ -2,6 +2,7 @@
 #include <unordered_set>
 #include <atomic>
 #include <memory>
+#include <chrono>
 
 template <class ...Args>
 void foo(Args ...args){
@@ -14,4 +15,5 @@ void foo(Args ...args){
 
 int main(){
 
+    std::chrono::high_resolution_clock;
 }
