@@ -3,6 +3,7 @@
 #include <atomic>
 #include <memory>
 #include <chrono>
+#include <iterator>
 
 template <class ...Args>
 void foo(Args ...args){
@@ -15,7 +16,9 @@ void foo(Args ...args){
 
 int main(){
 
-    if (int c = 1; c == 1){
+    size_t a = 0;
+    std::move_iterator<size_t *> b = std::make_move_iterator(&a);
+    size_t c = b[0];
 
-    }
+    //we programmers only need one Hello
 }

@@ -122,7 +122,7 @@ namespace dg::network_rest_frame::client{
 
     struct RestControllerInterface{
         virtual ~RestControllerInterface() noexcept = default;
-        virtual auto request(model::Request) noexcept -> std::expected<std::shared_ptr<ResponseInterface>, exception_t> = 0;
+        virtual auto request(model::Request) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t> = 0;
     };
 
     auto make_raii_ticket(model::ticket_id_t ticket_id, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::shared_ptr<model::ticket_id_t>{
@@ -254,25 +254,6 @@ namespace dg::network_rest_frame::client_impl1{
 
                 std::atomic_thread_fence(std::memory_order_acquire);
                 return std::move(this->response);
-            }
-    };
-
-    class RAIITicketResponse: public virtual ResponseInterface{
-
-        private:
-
-            std::shared_ptr<ResponseInterface> base;
-            std::shared_ptr<model::ticket_id_t> ticket;
-        
-        public:
-
-            RaiiTicketResponse(std::shared_ptr<ResponseInterface> base, 
-                               std::shared_ptr<model::ticket_id_t> ticket) noexcept: base(std::move(base)),
-                                                                                     ticket(std::move(ticket)){}
-
-            auto response() noexcept -> std::expected<Response, exception_t>{
-
-                return this->base->response();
             }
     };
 
@@ -499,7 +480,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                              request_container(std::move(request_container)),
                                                                                              expiry_factory(std::move(expiry_factory)){}
 
-            auto request(model::Request rq) noexcept -> std::expected<std::shared_ptr<ResponseInterface>, exception_t>{
+            auto request(model::Request rq) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
 
                 auto timepoint = this->expiry_factory->get_expiry(rq.timeout);
 
@@ -522,8 +503,29 @@ namespace dg::network_rest_frame::client_impl1{
                     return std::unexpected(err);
                 }
 
-                return std::shared_ptr<ResponseInterface>(std::make_shared<RAIITicketResponse>(std::move(response), make_raii_ticket(ticket_id.value(), this->ticket_controller))); //fine - should be unique but we tell the user that ResponseInterface is shared reference
+                return std::unique_ptr<ResponseInterface>(std::make_unique<RAIITicketResponse>(std::move(response), make_raii_ticket(ticket_id.value(), this->ticket_controller)));
             }
+
+        private:
+
+            class RAIITicketResponse: public virtual ResponseInterface{
+
+                private:
+
+                    std::shared_ptr<ResponseInterface> base;
+                    std::shared_ptr<model::ticket_id_t> ticket;
+                
+                public:
+
+                    RaiiTicketResponse(std::shared_ptr<ResponseInterface> base, 
+                                       std::shared_ptr<model::ticket_id_t> ticket) noexcept: base(std::move(base)),
+                                                                                             ticket(std::move(ticket)){}
+
+                    auto response() noexcept -> std::expected<Response, exception_t>{
+
+                        return this->base->response();
+                    }
+            };
     };
 
     //we are reducing the serialization overheads of ticket_center
@@ -537,7 +539,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             DistributedRestController(std::vector<std::unique_ptr<RestControllerInterface>> rest_controller_vec) noexcept: rest_controller_vec(std::move(rest_controller_vec)){} 
 
-            auto request(model::Request rq) noexcept -> std::expected<std::shared_ptr<ResponseInterface>, exception_t>{
+            auto request(model::Request rq) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
 
                 assert(stdx::is_pow2(this->rest_controller_vec.size()));
 
