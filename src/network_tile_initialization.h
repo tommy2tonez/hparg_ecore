@@ -28,32 +28,30 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     auto init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id, void * logit_value, size_t logit_value_sz, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
-        using namespace dg::network_tile_member_getsetter;
-
         auto ptr_access = dg::network_tile_member_access::safecthrow_leaf_ptr_access(ptr);
 
         if (!ptr_access.has_value()){
             return ptr_access.error();
         }
 
-        size_t pointing_logit_sz = get_leaf_logit_group_size_nothrow(ptr);
-
-        if (pointing_logit_sz != logit_value_sz){
-            return dg::network_exception::INVALID_ARGUMENT;
+        if (exception_t err = check_leaf_logit(logit_value, logit_value_sz); dg::network_exception::is_failed(err)){
+            return err;
         }
 
-        set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
-        set_leaf_logit_nothrow(ptr, logit_value);
-        set_leaf_observer_array_size_nothrow(ptr, 0u);
-        set_leaf_operatable_id_nothrow(ptr, operatable_id);
-        set_leaf_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_leaf_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_leaf_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_leaf_logit_nothrow(ptr, logit_value, logit_value_sz);
+        dg::network_tile_member_getsetter::set_set_leaf_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
+        dg::network_tile_member_getsetter::set_leaf_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_mono(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
-
-        using namespace dg::network_tile_member_getsetter;
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_mono_ptr_access(ptr);
         
@@ -61,14 +59,26 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_mono_observer_array_size_nothrow(ptr, 0u);
-        set_mono_dispatch_control_nothrow(ptr, dispatch_control);
-        set_mono_operatable_id_nothrow(ptr, operatable_id);
-        set_mono_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_mono_descendant_nothrow(ptr, src);
-        set_mono_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
-    
+        if (exception_t err = check_mono_descendant(src); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_mono_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){ 
+            return err;
+        }
+
+        if (exception_t err = check_mono_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_mono_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_mono_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_mono_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_mono_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_mono_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_mono_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+
         return dg::network_exception::SUCCESS;
     }
 
@@ -82,21 +92,31 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_pair_observer_array_size_nothrow(ptr, 0u);
-        set_pair_operatable_id_nothrow(ptr, operatable_id);
-        set_pair_dispatch_control_nothrow(ptr, dispatch_control);
-        set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_pair_left_descendant_nothrow(ptr, lhs);
-        set_pair_right_descendant_nothrow(ptr, rhs);
-        set_pair_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_pair_descendant(lhs, rhs); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_pair_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_pair_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_pair_left_descendant_nothrow(ptr, lhs);
+        dg::network_tile_member_getsetter::set_pair_right_descendant_nothrow(ptr, rhs);
+        dg::network_tile_member_getsetter::set_pair_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_pair_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_pair_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
-    auto init_uacm(uma_ptr_t ptr, std::array<uma_ptr_t, UACM_ACM_SZ> src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
-
-        using namespace dg::network_tile_member_getsetter;
+    auto init_uacm(uma_ptr_t ptr, uma_ptr_t * src_arr, size_t src_arr_sz, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_uacm_ptr_access(ptr);
 
@@ -104,20 +124,30 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_uacm_observer_array_size_nothrow(ptr, 0u);
-        set_uacm_operatable_id_nothrow(ptr, operatable_id);
-        set_uacm_dispatch_control_nothrow(ptr, dispatch_control);
-        set_uacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_uacm_descendant_nothrow(ptr, src);
-        set_uacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_uacm_descendant(src_arr, src_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_uacm_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_uacm_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_uacm_observer_array_size_nothrow(ptr, 0u);
+        dg::network_tile_member_getsetter::set_uacm_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_uacm_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_uacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_uacm_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_uacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
-    auto init_pacm(uma_ptr_t ptr, std::array<uma_ptr_t, PACM_ACM_SZ> lhs, std::array<uma_ptr_t, PACM_ACM_SZ> rhs, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
-
-        using namespace dg::network_tile_member_getsetter;
+    auto init_pacm(uma_ptr_t ptr, uma_ptr_t * lhs_arr, uma_ptr_t * rhs_arr, size_t acm_sz, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_pacm_ptr_access(ptr);
 
@@ -125,21 +155,31 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_pacm_observer_array_size_nothrow(ptr, 0u);
-        set_pacm_operatable_id_nothrow(ptr, operatable_id);
-        set_pacm_dispatch_control_nothrow(ptr, dispatch_control);
-        set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_pacm_left_descendant_nothrow(ptr, lhs);
-        set_pacm_right_descendant_nothrow(ptr, rhs);
-        set_pacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_pacm_descendant(lhs, rhs, acm_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_pacm_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_pacm_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_pacm_left_descendant_nothrow(ptr, lhs, acm_sz);
+        dg::network_tile_member_getsetter::set_pacm_right_descendant_nothrow(ptr, rhs, acm_sz);
+        dg::network_tile_member_getsetter::set_pacm_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_pacm_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_pacm_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_pacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_crit(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, crit_kind_t crit_kind, void * clogit_value, size_t clogit_value_sz, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
-
-        using namespace dg::network_tile_member_getsetter;
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_crit_ptr_access(ptr);
 
@@ -147,50 +187,80 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        size_t pointing_clogit_value_sz = get_crit_clogit_group_size_nothrow(ptr);
-
-        if (pointing_clogit_value_sz != clogit_value_sz){
-            return dg::network_exception::INVALID_ARGUMENT;
+        if (exception_t err = check_crit_descendant(src); dg::network_exception::is_failed(err)){
+            return err;
         }
 
-        set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_crit_clogit_nothrow(ptr, clogit_value);
-        set_crit_observer_array_size_nothrow(ptr, 0u);
-        set_crit_operatable_id_nothrow(ptr, operatable_id);
-        set_crit_dispatch_control_nothrow(ptr, dispatch_control);
-        set_crit_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_crit_descendant_nothrow(ptr, src);
-        set_crit_kind_nothrow(ptr, crit_kind);
-        set_crit_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_crit_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_crit_kind(crit_kind); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_crit_clogit(clogit_value, clogit_value_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_crit_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_crit_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_crit_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_crit_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_crit_kind_nothrow(ptr, crit_kind);
+        dg::network_tile_member_getsetter::set_crit_clogit_nothrow(ptr, clogit_value, clogit_value_sz);
+        dg::network_tile_member_getsetter::set_crit_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_crit_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_msgrfwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, dst_info_t dst_info, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
-        using namespace dg::network_tile_member_getsetter;
+        // using namespace dg::network_tile_member_getsetter;
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(ptr);
 
         if (!ptr_access.has_value()){
             return ptr_access.error();
         }
+        
+        if (exception_t err = check_msgrfwd_descendant(src); dg::network_exception::is_failed(err)){
+            return err;
+        }
 
-        set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_msgrfwd_observer_array_size_nothrow(ptr, 0u);
-        set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
-        set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control);
-        set_msgrfwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_msgrfwd_descendant_nothrow(ptr, src);
-        set_msgrfwd_dst_info_nothrow(ptr, dst_info);
-        set_msgrfwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_msgrfwd_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrfwd_dst_info(dst_info); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrfwd_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_msgrfwd_observer_array_size_nothrow(ptr, 0u);
+        dg::network_tile_member_getsetter::set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_msgrfwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_msgrfwd_dst_info_nothrow(ptr, dst_info);
+        dg::network_tile_member_getsetter::set_msgrfwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_msgrbwd(uma_ptr_t ptr, uma_ptr_t src, dispatch_control_t dispatch_control, operatable_id_t operatable_id, timein_t timein, dst_info_t dst_info, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
-        using namespace dg::network_tile_member_getsetter;
+        // using namespace dg::network_tile_member_getsetter;
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(ptr);
         
@@ -198,63 +268,99 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_msgrbwd_observer_array_size_nothrow(ptr, 0u);
-        set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
-        set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control);
-        set_msgrbwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_msgrbwd_descendant_nothrow(ptr, src);
-        set_msgrbwd_dst_info_nothrow(ptr, dst_info);
-        set_msgrbwd_timein_nothrow(ptr, timein);
-        set_msgrbwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_msgrbwd_descendant(src); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrbwd_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrbwd_timein(timein); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrbwd_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_msgrbwd_observer_array_size_nothrow(ptr, 0u);
+        dg::network_tile_member_getsetter::set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_msgrbwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_msgrbwd_dst_info_nothrow(ptr, dst_info);
+        dg::network_tile_member_getsetter::set_msgrbwd_timein_nothrow(ptr, timein);
+        dg::network_tile_member_getsetter::set_msgrbwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
-    auto init_extnsrc(uma_ptr_t ptr, uma_ptr_t src, uma_ptr_t counterpart, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
+    auto init_extnsrc(uma_ptr_t ptr, uma_ptr_t src, uma_ptr_t counterpart, dispatch_control_t dispatch_control, operatable_id_t operatable_id) noexcept -> exception_t{
 
-        using namespace dg::network_tile_member_getsetter;
+        // using namespace dg::network_tile_member_getsetter;
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(ptr);
-        
+
         if (!ptr_access.has_value()){
             return ptr_access.error();
         }
 
-        set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_extnsrc_observer_array_size_nothrow(ptr, 0u);
-        set_extnsrc_operatable_id_nothrow(ptr, operatable_id);
-        set_extnsrc_dispatch_control_nothrow(ptr, dispatch_control);
-        set_extnsrc_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
-        set_extnsrc_descendant_nothrow(ptr, src);
-        set_extnsrc_counterpart_nothrow(ptr, counterpart);
-        set_extnsrc_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        if (exception_t err = check_extnsrc_descendant(src); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_extnsrc_counterpart(src); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_extnsrc_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_extnsrc_observer_array_size_nothrow(ptr, 0u);
+        dg::network_tile_member_getsetter::set_extnsrc_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_extnsrc_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_extnsrc_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_extnsrc_counterpart_nothrow(ptr, counterpart);
+        dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_extndst(uma_ptr_t ptr, uma_ptr_t counterpart, dispatch_control_t dispatch_control, operatable_id_t operatable_id, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
-        using namespace dg::network_tile_member_getsetter;
-
         auto ptr_access = dg::network_tile_member_access::safecthrow_extndst_ptr_access(ptr);
-        
+
         if (!ptr_access.has_value()){
             return ptr_access.error();
         }
 
-        set_extndst_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        set_extndst_observer_array_size_nothrow(ptr, 0u);
-        set_extndst_operatable_id_nothrow(ptr, operatable_id);
-        set_extndst_dispatch_control_nothrow(ptr, dispatch_control);
-        set_extndst_counterpart_nothrow(ptr, counterpart);
+        if (exception_t err = check_extndst_counterpart(counterpart); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_extndst_dispatch_control(dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_extndst_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_extndst_observer_array_size_nothrow(ptr, 0u);
+        dg::network_tile_member_getsetter::set_extndst_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_extndst_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_extndst_counterpart_nothrow(ptr, counterpart);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_immu(uma_ptr_t ptr, operatable_id_t operatable_id, void * logit_value, size_t logit_value_sz, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
-
-        using namespace dg::network_tile_member_getsetter;
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_immu_ptr_access(ptr);
 
@@ -262,16 +368,18 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return ptr_access.error();
         }
 
-        size_t pointing_logit_value_sz = get_immu_logit_group_size(ptr);
+        if (exception_t err = check_immu_logit(logit_value, logit_value_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
 
-        if (pointing_logit_value_sz != logit_value_sz){
-            return dg::network_exception::INVALID_ARGUMENT;
-        } 
+        if (exception_t err = check_immu_observer_array(observer_arr, observer_arr_sz); dg::network_exception::is_failed(err)){
+            return err;
+        }
 
-        set_immu_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
-        set_immu_logit_nothrow(ptr, logit_value);
-        set_immu_observer_array_size_nothrow(ptr, 0u);
-        set_immu_operatable_id_nothrow(ptr, operatable_id);
+        dg::network_tile_member_getsetter::set_immu_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
+        dg::network_tile_member_getsetter::set_immu_logit_nothrow(ptr, logit_value, logit_value_sz);
+        dg::network_tile_member_getsetter::set_immu_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_immu_operatable_id_nothrow(ptr, operatable_id);
 
         return dg::network_exception::SUCCESS;
     }
@@ -703,7 +811,12 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
 namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
-    //alrights - we are doing stack allocations - we'll reconsider the decision later 
+    //shit's hard - we want to leverage L1 + preallocated allocations - but we also want to store arrays of backward references
+    //because if things are dynamically allocated - we are wasting space - but I guess that's dynamic allocation problems
+    //we are moving towards dynamic allocations just for the sake of maintainability
+    //so no more trivial serializations for now
+    //we might want to adopt the stack buffer for dg::vector<> - like string
+    //we'll talk about that later
 
     struct InitLeafPayLoad{
         uma_ptr_t ptr;
@@ -726,17 +839,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         uma_ptr_t src;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, observer_arr);
         }
     };
 
@@ -746,17 +858,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         uma_ptr_t rhs;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, lhs, rhs, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, lhs, rhs, dispatch_control, operatable_id, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, lhs, rhs, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, lhs, rhs, dispatch_control, operatable_id, observer_arr);
         }
     };
 
@@ -765,17 +876,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         std::array<uma_ptr_t, UACM_ACM_SZ> src;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, observer_arr);
         }
     };
 
@@ -785,17 +895,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         std::array<uma_ptr_t, PACM_ACM_SZ> right_descendant;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, left_descendant, right_descendant, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, left_descendant, right_descendant, dispatch_control, operatable_id, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, left_descendant, right_descendant, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, left_descendant, right_descendant, dispatch_control, operatable_id, observer_arr);
         }
     };
 
@@ -824,17 +933,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
         dst_info_t dst_info;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, dst_info, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, dst_info, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, dst_info, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, dst_info, observer_arr);
         }
     };
 
@@ -845,17 +953,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
         timein_t timein;
         dst_info_t dst_info;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, timein, dst_info, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, timein, dst_info, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, timein, dst_info, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, src, dispatch_control, operatable_id, timein, dst_info, observer_arr);
         }
     };
 
@@ -867,12 +974,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, src, counterpart, dispatch_control, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, src, counterpart, dispatch_control, operatable_id);
         }
     };
@@ -882,34 +989,32 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         uma_ptr_t counterpart;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, counterpart, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, counterpart, dispatch_control, operatable_id, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, counterpart, dispatch_control, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, counterpart, dispatch_control, operatable_id, observer_arr);
         }
     };
 
     struct InitImmuPayLoad{
         uma_ptr_t ptr;
         operatable_id_t operatable_id;
-        std::array<uma_ptr_t, MAX_OBSERVER_ARRAY_SZ> observer_arr;
-        uint16_t observer_arr_sz;
+        dg::vector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ptr, operatable_id, observer_arr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, operatable_id, observer_arr, observer_arr_sz);
+        void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ptr, operatable_id, observer_arr);
         }
     };
 
@@ -918,12 +1023,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -933,12 +1038,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id; 
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -948,12 +1053,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -963,12 +1068,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -978,12 +1083,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -993,12 +1098,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1008,12 +1113,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1023,12 +1128,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1038,12 +1143,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1053,12 +1158,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1068,12 +1173,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1083,12 +1188,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1098,12 +1203,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1113,12 +1218,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1128,12 +1233,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1143,12 +1248,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1158,12 +1263,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1173,12 +1278,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1188,12 +1293,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1203,12 +1308,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1218,12 +1323,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1233,12 +1338,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(ptr, operatable_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(ptr, operatable_id);
         }
     };
@@ -1417,6 +1522,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         return DeinitPayLoad{ptr};
     }
+
+    //interfaces look fine 
 
     void load_init_leaf_payload(InitLeafPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
@@ -2395,15 +2502,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     struct VirtualPayLoad{
         payload_kind_t kind;
-        std::array<char, VIRTUAL_PAYLOAD_CONTENT_SZ> content;
+        dg::string content;
+        // std::array<char, VIRTUAL_PAYLOAD_CONTENT_SZ> content;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(kind, content);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector) noexcept{
             reflector(kind, content);
         }
     };

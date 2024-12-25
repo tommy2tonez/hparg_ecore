@@ -15,4 +15,7 @@ void foo(Args ...args){
 
 int main(){
 
+    if (int c = 1; c == 1){
+
+    }
 }
