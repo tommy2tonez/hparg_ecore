@@ -884,15 +884,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         uma_ptr_t ptr;
         operatable_id_t operatable_id;
         dg::string logit_value;
+        dg::svector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, operatable_id, logit_value);
+            reflector(ptr, operatable_id, logit_value, observer_arr);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, operatable_id, logit_value);
+            reflector(ptr, operatable_id, logit_value, observer_arr);
         }
     };
 
@@ -935,7 +936,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
     struct InitUACMPayLoad{
         uma_ptr_t ptr;
-        // std::array<uma_ptr_t, UACM_ACM_SZ> src;
         dg::svector<uma_ptr_t> src;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
@@ -954,22 +954,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
     struct InitPACMPayLoad{
         uma_ptr_t ptr;
-        // std::array<uma_ptr_t, PACM_ACM_SZ> left_descendant;
-        // std::array<uma_ptr_t, PACM_ACM_SZ> right_descendant;
-        dg::svector<uma_ptr_t> left_descendant;
-        dg::svector<uma_ptr_t> right_descendant;
+        dg::svector<std::pair<uma_ptr_t, uma_ptr_t>> descendant_vec;
         dispatch_control_t dispatch_control;
         operatable_id_t operatable_id;
         dg::svector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, left_descendant, right_descendant, dispatch_control, operatable_id, observer_arr);
+            reflector(ptr, descendant_vec, dispatch_control, operatable_id, observer_arr);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, left_descendant, right_descendant, dispatch_control, operatable_id, observer_arr);
+            reflector(ptr, descendant_vec, dispatch_control, operatable_id, observer_arr);
         }
     };
 
@@ -980,15 +977,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t operatable_id;
         crit_kind_t crit_kind;
         dg::string clogit_value;
+        dg::svector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, crit_kind, clogit_value);
+            reflector(ptr, src, dispatch_control, operatable_id, crit_kind, clogit_value, observer_arr);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, src, dispatch_control, operatable_id, crit_kind, clogit_value);
+            reflector(ptr, src, dispatch_control, operatable_id, crit_kind, clogit_value, observer_arr);
         }
     };
 
@@ -1070,16 +1068,17 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
     struct InitImmuPayLoad{
         uma_ptr_t ptr;
         operatable_id_t operatable_id;
+        dg::string logit_value;
         dg::svector<uma_ptr_t> observer_arr;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ptr, operatable_id, observer_arr);
+            reflector(ptr, operatable_id, logit_value, observer_arr);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ptr, operatable_id, observer_arr);
+            reflector(ptr, operatable_id, logit_value, observer_arr);
         }
     };
 

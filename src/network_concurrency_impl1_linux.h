@@ -147,6 +147,7 @@ namespace dg::network_concurrency_impl1_linux{
             void infloop() noexcept{
 
                 this->poison_pill->exchange(false, std::memory_order_relaxed);
+                std::atomic_thread_fence(std::memory_order_seq_cst); //hard-sync
 
                 while (!this->poison_pill->load(std::memory_order_relaxed)){
                     stdx::xlock_guard<std::atomic_flag> lck_grd(*this->mtx);
