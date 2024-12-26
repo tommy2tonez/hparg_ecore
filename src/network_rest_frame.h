@@ -223,7 +223,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                                                    response(),
                                                                                                                    timeout(timeout),
                                                                                                                    is_response_invoked(false){
-                this->mtx->lock();
+                this->mtx.lock();
             }
 
             RequestResponse(const RequestResponse&) = delete;
@@ -236,7 +236,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 this->response = std::move(response_arg);
                 std::atomic_thread_fence(std::memory_order_release);
-                this->mtx->unlock();
+                this->mtx.unlock();
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -245,7 +245,7 @@ namespace dg::network_rest_frame::client_impl1{
                     return std::unexpected(dg::network_exception::RESOURCE_UNAVAILABLE);
                 }
 
-                bool rs = this->mtx->try_lock_until(this->timeout);
+                bool rs = this->mtx.try_lock_until(this->timeout);
                 this->is_response_invoked = true;
 
                 if (!rs){

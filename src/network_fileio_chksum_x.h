@@ -122,11 +122,7 @@ namespace dg::network_fileio_chksum_x{
         if (!status.has_value()){
             return std::unexpected(status.error());
         }
-
-        if (!status.value()){
-            std::cout << metadata_path << std::endl;
-        }        
-        
+          
         return status.value();
     }
 
