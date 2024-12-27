@@ -232,7 +232,7 @@ namespace dg::network_rest_frame::client_impl1{
             RequestResponse& operator =(const RequestResponse&) = delete;
             RequestResponse& operator =(RequestResponse&&) = delete;
 
-            void update(Response response_arg){
+            void update(Response response_arg) noexcept{
 
                 this->response = std::move(response_arg);
                 std::atomic_thread_fence(std::memory_order_release);

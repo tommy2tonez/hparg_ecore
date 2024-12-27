@@ -61,6 +61,11 @@ namespace dg::memult{
         return {};
     }
     
+    template <class ptr_t>
+    constexpr auto next(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{
+
+    }
+
     // template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - this is DEFINED in C but not in C++ 
     
     template <class T>

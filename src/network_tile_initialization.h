@@ -26,6 +26,10 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     static inline constexpr UACM_ACM_SZ = dg::network_tile_metadata::UACM_ACM_SZ;
     static inline constexpr PACM_ACM_SZ = dg::network_tile_metadata::PACM_ACM_SZ;
 
+    //whether to include the reverse binding in the initializations is a tough question - but the council dediced that reverse bindings should be in the initializations - even though it breaches encapsulations 
+    //this includes pong_count_t for pair uacm pacm
+    //we aren't abstractizing these low-level details because it has a major performance impact - one could argue that this could be solved by fattening tiles - but that's another radix of optimizations
+
     auto init_leaf(uma_ptr_t ptr, operatable_id_t operatable_id, void * logit_value, size_t logit_value_sz, uma_ptr_t * observer_arr, size_t observer_arr_sz) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_leaf_ptr_access(ptr);
@@ -1520,11 +1524,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
     auto make_orphan_immu_payload(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> OrphanImmuPayLoad{
 
         // return OrphanImmuPayLoad{ptr};
-    }
-
-    auto make_orphan_payload(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> OrphanPayLoad{
-
-        // return OrphanPayLoad{ptr};
     }
 
     auto make_deinit_leaf_payload(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> DeinitLeafPayLoad{

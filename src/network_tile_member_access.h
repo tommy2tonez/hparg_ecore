@@ -95,7 +95,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -165,39 +165,39 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             } 
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -244,7 +244,7 @@ namespace dg::network_tile_member_access::implementation{
 
             static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
 
-                return idx * LOGIT_GROUP_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0>{}) + PADDING_SZ);
+                return idx * LOGIT_GROUP_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0u>{}) + PADDING_SZ);
             }
 
             static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
@@ -279,7 +279,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -354,44 +354,205 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return self::tile_logit_addr(ptr);
+            }
+
+            static inline auto rcu_lock_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return self::tile_logit_addr(ptr);
+            }
+    };
+
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
+    struct BlkrAddressLookup{
+
+        private:
+
+            using self          = BlkrAddressLookup;
+            using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
+
+            static inline uma_ptr_t head{};
+
+            static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
+
+                return dg::memult::distance(self::head, ptr);
+            }
+
+            static constexpr auto offset_id(size_t idx) noexcept -> size_t{
+
+                return idx;
+            }
+
+            static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
+
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+            }
+
+            template <size_t ARR_IDX>
+            static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
+
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+            }
+
+            static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
+
+                return idx * LOGIT_GROUP_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0u>{}) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
+
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
+
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+            }
+ 
+            static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
+
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+        public:
+
+            static void init(uma_ptr_t buf){
+
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
+            }
+
+            static void deinit() noexcept{
+
+                (void) self::head;
+            }
+
+            static consteval auto buf_size() -> size_t{
+
+                return self::offset_descendant_addr(TILE_COUNT) + ALIGNMENT_SZ - 1u;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+
+            static consteval auto init_status_size() -> size_t{
+
+                return INIT_STATUS_SZ;
+            }
+
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_GROUP_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
+            }
+
+            static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return access_ins::access(ptr);
+            }
+
+            static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+            }
+
+            template <size_t ARR_IDX>
+            static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+            }
+
+            static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept  -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(std::index(access_ins::access(ptr))));
+            }
+
+            static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -474,7 +635,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -554,46 +715,46 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t IDX>
             static inline auto descendant_addr(uma_ptr_t ptr, const std::integral_constant<size_t, IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(IDX < ACM_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, IDX>{}));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -682,7 +843,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -762,53 +923,53 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t IDX>
             static inline auto left_descendant_addr(uma_ptr_t ptr, const std::integral_constant<size_t, IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(IDX < ACM_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_left_descendant_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_left_descendant_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, IDX>{}));
             }
 
             template <size_t IDX>
             static inline auto right_descendant_addr(uma_ptr_t ptr, const std::integral_constant<size_t, IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(IDX < ACM_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_right_descendant_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_right_descendant_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, IDX>{}));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -895,7 +1056,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -970,49 +1131,49 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto left_descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_left_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_left_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto right_descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_right_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_right_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1104,7 +1265,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1184,54 +1345,54 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_clogit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_clogit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_clogit_addr(self::index(access_ins::access(ptr))));
             } 
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto crit_kind_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_crit_kind_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_crit_kind_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1318,7 +1479,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1398,49 +1559,49 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             } 
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dst_info_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dst_info_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dst_info_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1532,7 +1693,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(uma_ptr_t buf){
                 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1617,54 +1778,54 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
                 static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             } 
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dst_info_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dst_info_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dst_info_addr(self::index(access_ins::access(ptr))));
             } 
 
             static inline auto timein_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_timein_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_timein_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1741,7 +1902,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1811,42 +1972,42 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
                 
-                return dg::memult::advance(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto counterpart_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_counterpart_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_counterpart_addr(self::index(access_ins::access(ptr))));
             } 
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -1921,7 +2082,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -1991,38 +2152,38 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr))), std::integral_constant<size_t, ARR_IDX>{});
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr))), std::integral_constant<size_t, ARR_IDX>{});
             } 
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto counterpart_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_counterpart_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_counterpart_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -2082,7 +2243,7 @@ namespace dg::network_tile_member_access::implementation{
             static void init(){
 
                 self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
-                access_ins::init(self::head, dg::memult::advance(self::head, TILE_COUNT));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
             }
 
             static void deinit() noexcept{
@@ -2137,23 +2298,23 @@ namespace dg::network_tile_member_access::implementation{
 
             static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
             }
 
             template <size_t ARR_IDX>
             static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
             }
 
             static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
-                return dg::memult::advance(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
             }
 
             static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
@@ -2223,46 +2384,50 @@ namespace dg::network_tile_member_access{
         id_immu_16      = 1u,
         id_immu_32      = 2u,
         id_immu_64      = 3u,
-        id_leaf_8       = 4u,
-        id_leaf_16      = 5u,
-        id_leaf_32      = 6u,
-        id_leaf_64      = 7u,
-        id_mono_8       = 8u,
-        id_mono_16      = 9u,
-        id_mono_32      = 10u,
-        id_mono_64      = 11u,
-        id_crit_8       = 12u,
-        id_crit_16      = 13u,
-        id_crit_32      = 14u,
-        id_crit_64      = 15u,
-        id_msgrfwd_8    = 16u,
-        id_msgrfwd_16   = 17u,
-        id_msgrfwd_32   = 18u,
-        id_msgrfwd_64   = 19u,
-        id_msgrbwd_8    = 20u,
-        id_msgrbwd_16   = 21u,
-        id_msgrbwd_32   = 22u,
-        id_msgrbwd_64   = 23u,
-        id_extnsrc_8    = 24u,
-        id_extnsrc_16   = 25u,
-        id_extnsrc_32   = 26u,
-        id_extnsrc_64   = 27u,
-        id_extndst_8    = 28u,
-        id_extndst_16   = 29u,
-        id_extndst_32   = 30u,
-        id_extndst_64   = 31u,
-        id_pair_8       = 32u,
-        id_pair_16      = 33u,
-        id_pair_32      = 34u,
-        id_pair_64      = 35u,
-        id_uacm_8       = 36u,
-        id_uacm_16      = 37u,
-        id_uacm_32      = 38u,
-        id_uacm_64      = 39u,
-        id_pacm_8       = 40u,
-        id_pacm_16      = 41u,
-        id_pacm_32      = 42u,
-        id_pacm_64      = 43u,
+        id_blkr_8       = 4u,
+        id_blkr_16      = 5u,
+        id_blkr_32      = 6u,
+        id_blkr_64      = 7u,
+        id_leaf_8       = 8u,
+        id_leaf_16      = 9u,
+        id_leaf_32      = 10u,
+        id_leaf_64      = 11u,
+        id_mono_8       = 12u,
+        id_mono_16      = 13u,
+        id_mono_32      = 14u,
+        id_mono_64      = 15u,
+        id_crit_8       = 16u,
+        id_crit_16      = 17u,
+        id_crit_32      = 18u,
+        id_crit_64      = 19u,
+        id_msgrfwd_8    = 20u,
+        id_msgrfwd_16   = 21u,
+        id_msgrfwd_32   = 22u,
+        id_msgrfwd_64   = 23u,
+        id_msgrbwd_8    = 24u,
+        id_msgrbwd_16   = 25u,
+        id_msgrbwd_32   = 26u,
+        id_msgrbwd_64   = 27u,
+        id_extnsrc_8    = 28u,
+        id_extnsrc_16   = 29u,
+        id_extnsrc_32   = 30u,
+        id_extnsrc_64   = 31u,
+        id_extndst_8    = 32u,
+        id_extndst_16   = 33u,
+        id_extndst_32   = 34u,
+        id_extndst_64   = 35u,
+        id_pair_8       = 36u,
+        id_pair_16      = 37u,
+        id_pair_32      = 38u,
+        id_pair_64      = 39u,
+        id_uacm_8       = 40u,
+        id_uacm_16      = 41u,
+        id_uacm_32      = 42u,
+        id_uacm_64      = 43u,
+        id_pacm_8       = 44u,
+        id_pacm_16      = 45u,
+        id_pacm_32      = 46u,
+        id_pacm_64      = 47u
     };
 
     struct network_tile_member_access_signature{}; 
@@ -2271,6 +2436,11 @@ namespace dg::network_tile_member_access{
     using immu16_accessor_t         = ;
     using immu32_accessor_t         = ;
     using immu64_accessor_t         = ; 
+
+    using blkr8_accessor_t          = ;
+    using blkr16_accessor_t         = ;
+    using blkr32_accessor_t         = ;
+    using blkr64_accessor_t         = ; 
 
     using leaf8_accessor_t          = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_8,  PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_8_t),  LOGIT_COUNT_PER_TILE * sizeof(grad_8_t),  sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
     using leaf16_accessor_t         = dg::network_tile_member_access::implementation::LeafAddressLookup<network_tile_member_access_signature, TILE_COUNT_LEAF_16, PADDING_SZ, MEMREGION_SZ, sizeof(init_status_t), LOGIT_COUNT_PER_TILE * sizeof(logit_16_t), LOGIT_COUNT_PER_TILE * sizeof(grad_16_t), sizeof(observer_t), OBSERVER_ARRAY_SZ, sizeof(operatable_id_t), sizeof(dispatch_control_t), sizeof(pong_count_t)>;
@@ -2333,6 +2503,7 @@ namespace dg::network_tile_member_access{
     consteval auto get_memory_usage() -> size_t{
 
         return      immu8_accessor_t::buf_size() + immu16_accessor_t::buf_size() + immu32_accessor_t::buf_size() + immu64_accessor_t::buf_size()
+                +   blkr8_accessor_t::buf_size() + blkr16_accessor_t::buf_size() + blkr32_accessor_t::buf_size() + blkr64_accessor_t::buf_size()
                 +   leaf8_accessor_t::buf_size() + leaf16_accessor_t::buf_size() + leaf32_accessor_t::buf_size() + leaf64_accessor_t::buf_size()
                 +   mono8_accessor_t::buf_size() + mono16_accessor_t::buf_size() + mono32_accessor_t::buf_size() + mono64_accessor_t::buf_size()
                 +   pair8_accessor_t::buf_size() + pair16_accessor_t::buf_size() + pair32_accessor_t::buf_size() + pair64_accessor_t::buf_size()
@@ -2361,21 +2532,26 @@ namespace dg::network_tile_member_access{
             uma_ptr_t head = Accessor::get_head();
 
             for (size_t i = 0u; i < Accessor::tile_size(); ++i){
-                uma_ptr_t id_ptr                        = Accessor::id_addr(dg::memult::advance(head, i));
+                uma_ptr_t id_ptr                        = Accessor::id_addr(dg::memult::next(head, i));
                 uma_ptr_t id_region                     = dg::memult::region(id_ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
-                uma_ptr_t last_ptr                      = Accessor::id_addr(dg::memult::advance(head, Accessor::tile_size()));
+                uma_ptr_t last_ptr                      = Accessor::id_addr(dg::memult::next(head, Accessor::tile_size()));
                 size_t table_idx                        = dg::memult::distance(resource.region_id_table_head, id_ptr) / MEMREGION_SZ;
                 resource.region_idlast_map[id_region]   = {tile_polymorphic_id, last_ptr};
                 resource.region_id_table[table_idx]     = tile_polymorphic_id;
             }
 
-            return dg::memult::advance(cur, Accessor::buf_size());
+            return dg::memult::next(cur, Accessor::buf_size());
         };
 
         cur = initializer(immu8_accessor_t{}, cur, id_immu_8);
         cur = initializer(immu16_accessor_t{}, cur, id_immu_16);
         cur = initializer(immu32_accessor_t{}, cur, id_immu_32);
         cur = initializer(immu64_accessor_t{}, cur, id_immu_64);
+
+        cur = initializer(blkr8_accessor_t{}, cur, id_blkr_8);
+        cur = initializer(blkr16_accessor_t{}, cur, id_blkr_16);
+        cur = initializer(blkr32_accessor_t{}, cur, id_blkr_32);
+        cur = initializer(blkr64_accessor_t{}, cur, id_blkr_64);
 
         cur = initializer(leaf8_accessor_t{},  cur, id_leaf_8);
         cur = initializer(leaf16_accessor_t{}, cur, id_leaf_16);
@@ -2439,6 +2615,11 @@ namespace dg::network_tile_member_access{
         return (id == id_immu_8) || (id == id_immu_16) || (id == id_immu_32) || (id == id_immu_64);
     }
 
+    constexpr auto is_blkr_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return (id == id_blkr_8) || (id == id_blkr_16) || (id == id_blkr_32) || (id == id_blkr_64);
+    }
+
     constexpr auto is_leaf_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return (id == id_leaf_8) || (id == id_leaf_16) || (id == id_leaf_32) || (id == id_leaf_64);
@@ -2499,6 +2680,11 @@ namespace dg::network_tile_member_access{
         return id == id_leaf_8;
     }
 
+    constexpr auto is_blkr8_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_blkr_8;
+    }
+
     constexpr auto is_mono8_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_mono_8;
@@ -2552,6 +2738,11 @@ namespace dg::network_tile_member_access{
     constexpr auto is_leaf16_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_16;
+    }
+
+    constexpr auto is_blkr16_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_blkr_16;    
     }
 
     constexpr auto is_mono16_tile(tile_polymorphic_id_t id) noexcept -> bool{
@@ -2609,6 +2800,11 @@ namespace dg::network_tile_member_access{
         return id == id_leaf_32;
     }
 
+    constexpr auto is_blkr32_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_blkr_32;
+    }
+
     constexpr auto is_mono32_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_mono_32;
@@ -2662,6 +2858,11 @@ namespace dg::network_tile_member_access{
     constexpr auto is_leaf64_tile(tile_polymorphic_id_t id) noexcept -> bool{
 
         return id == id_leaf_64;
+    }
+
+    constexpr auto is_blkr64_tile(tile_polymorphic_id_t id) noexcept -> bool{
+
+        return id == id_blkr_64;
     }
 
     constexpr auto is_mono64_tile(tile_polymorphic_id_t id) noexcept -> bool{
@@ -2783,6 +2984,39 @@ namespace dg::network_tile_member_access{
     inline void get_leaf_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
 
         get_leaf_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
+    }
+
+    template <class CallBack>
+    inline void get_blkr_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr, tile_polymorphic_id_t id) noexcept{
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire);
+
+        if (is_blkr8_tile(id)){
+            static_assert(noexcept(cb(blkr8_accessor_t{})));
+            cb(blkr8_accesor_t{});
+        } else if(is_blkr16_tile(id)){
+            static_assert(noexcept(cb(blkr16_accessor_t{})));
+            cb(blkr16_accesor_t{});
+        } else if (is_blkr32_tile(id)){
+            static_assert(noexcept(cb(blkr32_accessor_t{})));
+            cb(blkr32_accessor_t{});
+        } else if (is_blkr64_tile(id)){
+            static_assert(noexcept(cb(blkr64_accessor_t{})));
+            cb(blkr64_accessor_t{});
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+            }
+        }
+    }
+
+    template <class CallBack>
+    inline void get_blkr_static_polymorphic_accessor(const CallBack& cb, uma_ptr_t ptr) noexcept{
+
+        get_blkr_static_polymorphic_accessor(cb, ptr, dg_typeid(ptr));
     }
 
     template <class CallBack>
@@ -3128,6 +3362,29 @@ namespace dg::network_tile_member_access{
         return ptr;
     }
 
+    inline auto safecthrow_blkr_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+        stdx::atomic_optional_signal_fence(std::memory_order_acquire);
+        uma_ptr_t id_region     = dg::memult::region(ptr, std::integral_constant<size_t, MEMREGION_SZ>{});
+        auto map_ptr            = stdx::to_const_reference(resource.region_id_map).find(id_region);
+
+        if (map_ptr == stdx::to_const_reference(resource.region_id_map).end()){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        auto [tile_kind, last]  = map_ptr->second;
+
+        if (!is_blkr_tile(tile_kind)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        if (!dg::memult::ptrcmp_less(ptr, last)){
+            return std::unexpected(dg::network_exception::BAD_ACCESS);
+        }
+
+        return ptr;
+    }
+
     inline auto safecthrow_mono_ptr_access(uma_ptr_t ptr) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
         stdx::atomic_optional_signal_fence(std::memory_order_acquire); 
@@ -3372,6 +3629,15 @@ namespace dg::network_tile_member_access{
         }
     }
 
+    inline auto safe_blkr_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+        if constexpr(IS_SAFE_ACCESS_ENABLED){
+            return dg::network_exception_handler::nothrow_log(safecthrow_blkr_ptr_access(ptr));
+        } else{
+            return ptr;
+        }
+    }
+
     inline auto safe_mono_ptr_access(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
         if constexpr(IS_SAFE_ACCESS_ENABLED){
@@ -3470,6 +3736,11 @@ namespace dg::network_tile_member_access{
     inline auto safethrow_leaf_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
 
         return dg::network_exception_handler::throw_log(safecthrow_leaf_ptr_access(ptr));
+    }
+
+    inline auto safethrow_blkr_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{
+
+        return dg::network_exception_handler::throw_log(safecthrow_blkr_ptr_access(ptr));
     }
 
     inline auto safethrow_mono_ptr_access(uma_ptr_t ptr) -> uma_ptr_t{

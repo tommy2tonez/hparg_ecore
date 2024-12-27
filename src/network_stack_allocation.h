@@ -214,6 +214,16 @@ namespace dg::network_stack_allocation{
                 std::destroy_at(this->data);
                 get_allocator()->exit_scope();
             }
+
+            auto data() const noexcept -> T *{
+
+                return this->data;
+            }
+
+            auto get() const noexcept -> T *{
+
+                return this->data;
+            }
     };
 
     template <class T>

@@ -439,7 +439,7 @@ namespace dg::network_postgres_db{
             pqxx::nontransaction transaction_handle{*pq_conn};
             auto query      = utility::query_format("SELECT * FROM SystemLog \
                                                      WHERE SystemLog.kind = {} \ 
-                                                           AND SystemLog.timestamp > {} AND SystemLog.timestamp < {} \
+                                                           AND SystemLog.timestamp >= {} AND SystemLog.timestamp < {} \
                                                      LIMIT {}", utility::quote(utility::encode_sql(kind)), utility::quote(utility::encode_timestamp(fr)), utility::quote(utility::encode_timestamp(to)), limit);
 
             auto log_vec    = dg::vector<model::SystemLogEntry>{};
@@ -484,7 +484,7 @@ namespace dg::network_postgres_db{
             auto query      = utility::query_format("SELECT * From UserLog \
                                                      WHERE UserLog.user_id = {} \
                                                            AND UserLog.kind = {} \
-                                                           AND UserLog.timestamp > {} AND UserLog.timestamp < {} \
+                                                           AND UserLog.timestamp >= {} AND UserLog.timestamp < {} \
                                                      LIMIT {}", utility::quote(utility::encode_sql(user_id)), 
                                                                 utility::quote(utility::encode_sql(kind)), 
                                                                 utility::quote(utility::encode_timestamp(fr)), 
