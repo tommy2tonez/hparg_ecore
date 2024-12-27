@@ -18,4 +18,6 @@ int main(){
     //with an arbitrary learning rate
     //WLOG, a valid training sequence is: group0 -> group0 -> group3 -> group2 -> group2, etc
     //this solution is proven to reasonably optimally approximate any neural network f(x) -> y
+    //
+    
 }

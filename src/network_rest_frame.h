@@ -262,14 +262,14 @@ namespace dg::network_rest_frame::client_impl1{
         private:
 
             dg::deque<model::InternalRequest> container;
-            dg::vector<std::pair<std::shared_ptr<std::mutex>, model::InternalRequest *>> waiting_queue;
+            dg::vector<std::pair<std::mutex *, model::InternalRequest *>> waiting_queue; //this is good but we should not be abusing this - this is only for low-latency applications - too many subcriptible mutexes would slow down the system
             size_t capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
             RequestContainer(dg::deque<model::InternalRequest> container,
-                             dg::vector<std::pair<std::shared_ptr<std::mutex>, model::InternalRequest *>> waiting_queue,
+                             dg::vector<std::pair<std::mutex *, model::InternalRequest *>> waiting_queue,
                              size_t capacity,
                              std::unique_ptr<std::mutex> mtx) noexcept: container(std::move(container)),
                                                                         waiting_queue(std::move(waiting_queue)),
@@ -299,7 +299,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto pop() noexcept -> model::InternalRequest{
 
-                std::shared_ptr<std::mutex> pending_mtx = {};
+                std::mutex pending_mtx{};
                 model::InternalRequest internal_request = {};
 
                 {
@@ -311,12 +311,11 @@ namespace dg::network_rest_frame::client_impl1{
                         return rs;
                     }
 
-                    pending_mtx = std::make_shared<std::mutex>();
-                    pending_mtx->lock();
-                    this->waiting_queue.push_back(std::make_pair(pending_mtx, &internal_request));
+                    pending_mtx.lock();
+                    this->waiting_queue.push_back(std::make_pair(&pending_mtx, &internal_request));
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*pending_mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(pending_mtx);
                 return internal_request;
             }
     };

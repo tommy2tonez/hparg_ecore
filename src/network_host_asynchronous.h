@@ -160,14 +160,14 @@ namespace dg::network_host_asynchronous{
         private:
 
             dg::deque<std::unique_ptr<WorkOrder>> wo_vec;
-            dg::deque<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec;
+            dg::deque<std::pair<std::mutex *, std::unique_ptr<WorkOrder> *>> waiting_vec;
             size_t wo_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
             WorkOrderContainer(dg::deque<std::unique_ptr<WorkOrder>> wo_vec,
-                               dg::deque<std::pair<std::shared_ptr<std::mutex>, std::unique_ptr<WorkOrder> *>> waiting_vec,
+                               dg::deque<std::pair<std::mutex *, std::unique_ptr<WorkOrder> *>> waiting_vec,
                                size_t wo_vec_capacity,
                                std::unique_ptr<std::mutex> mtx) noexcept: wo_vec(std::move(wo_vec)),
                                                                           waiting_vec(std::move(waiting_vec)),
@@ -201,7 +201,7 @@ namespace dg::network_host_asynchronous{
 
             auto pop() noexcept -> std::unique_ptr<WorkOrder>{
 
-                std::shared_ptr<std::mutex> pending_mtx = {};
+                std::mutex pending_mtx{};
                 std::unique_ptr<WorkOrder> wo = {};
 
                 {
@@ -213,13 +213,11 @@ namespace dg::network_host_asynchronous{
                         return rs;
                     }
 
-                    pending_mtx = std::make_shared<std::mutex>(); //TODOs: internalize allocations
-                    pending_mtx->lock();
-
-                    this->waiting_vec.push_back(std::make_pair(pending_mtx, &wo));
+                    pending_mtx.lock();
+                    this->waiting_vec.push_back(std::make_pair(&pending_mtx, &wo));
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*pending_mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(pending_mtx);
                 return wo;
             }
     };

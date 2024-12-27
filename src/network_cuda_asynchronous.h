@@ -129,14 +129,14 @@ namespace dg::network_cuda_asynchronous{
         private:
 
             dg::deque<WorkOrder> workorder_vec;
-            dg::deque<std::pair<std::shared_ptr<std::mutex>, WorkOrder *>> waiting_queue;
+            dg::deque<std::pair<std::mutex *, WorkOrder *>> waiting_queue;
             size_t workorder_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
             WorkOrderContainer(dg::deque<WorkOrder> workorder_vec,
-                               dg::deque<std::pair<std::shared_ptr<std::mutex>, WorkOrder *>> waiting_queue,
+                               dg::deque<std::pair<std::mutex *, WorkOrder *>> waiting_queue,
                                size_t workorder_vec_capacity,
                                std::unique_ptr<std::mutex> mtx) noexcept: workorder_vec(std::move(workorder_vec)),
                                                                           waiting_queue(std::move(waiting_queue)),
@@ -166,10 +166,10 @@ namespace dg::network_cuda_asynchronous{
 
             auto pop(size_t sz) noexcept -> dg::vector<WorkOrder>{
 
-                std::shared_ptr<std::mutex> pending_mtx = {};
-                WorkOrder pending_wo                    = {};
-                dg::vector<WorkOrder> rs                = {};
-                
+                std::mutex pending_mtx{};
+                WorkOrder pending_wo        = {};
+                dg::vector<WorkOrder> rs    = {};
+
                 {
                     stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
@@ -183,11 +183,11 @@ namespace dg::network_cuda_asynchronous{
                         return rs;
                     }
 
-                    pending_mtx = std::make_shared<std::mutex>();
-                    this->waiting_queue.push_back(std::make_pair(std::move(pending_mtx), &pending_wo));
+                    pending_mtx.lock();
+                    this->waiting_queue.push_back(std::make_pair(&pending_mtx, &pending_wo));
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*pending_mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(pending_mtx);
                 rs.push_back(std::move(pending_wo));
 
                 return rs;
