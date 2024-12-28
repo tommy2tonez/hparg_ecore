@@ -398,7 +398,56 @@ namespace dg::network_memops_cufs{
 
         dg::network_exception_handler::nothrow_log(memset_cufs(dst, c, sz));
     }
-} 
+}
+
+namespace dg::network_memops_cupm{
+
+    //host
+    //cuda
+    //fsys
+    //cufs
+    //cupm
+
+    auto memcpy_host_to_cupm(){
+
+    }
+
+    auto memcpy_cuda_to_cupm(){
+
+    }
+
+    auto memcpy_fsys_to_cupm(){
+
+    }
+
+    auto memcpy_cufs_to_cupm(){
+
+    }
+
+    auto memcpy_cupm_to_cupm(){
+
+    }
+
+    auto memcpy_cupm_to_host(){
+
+    }
+
+    auto memcpy_cupm_to_cuda(){
+
+    }
+
+    auto memcpy_cupm_to_fsys(){
+
+    }
+
+    auto memcpy_cupm_to_cufs(){
+
+    }
+
+    auto memset_cupm(){
+
+    }
+}
 
 namespace dg::network_memops_virt{
 

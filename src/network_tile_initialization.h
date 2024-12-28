@@ -12,8 +12,6 @@
 #include "stdx.h"
 #include "network_pointer.h"
 
-//alrights - we'll implement this tomorrow
-
 namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     using uma_ptr_t                 = dg::network_pointer::uma_ptr_t; 
@@ -1778,6 +1776,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size()); //we rather do advise here because it's not part of the official interface of concurrent_unsafe - it pollutes the interface in a negative way - we aren't hard-coding so we use consts here
             //the memory_platform is actually batch responsibility and vectorization responsibility (this guy) so it makes sense for this guy to do advise rather than the individual get/setters
             //we don't care if the calling code path actually uses the advise or not - it is not mandatory - so this optimization is only a hint
+            //there is an optimizable of remap_try - which we haven't discussed yet
+            //this is a huge optimization in terms of reducing atomic operations but we aren't worrying about that now - we are the only one spinning the lock due to the mem_grd
 
             for (size_t i = 0u; i < sz; ++i){
                 auto& [payload, exception_ptr] = payload_arr[i];

@@ -24,6 +24,14 @@ int main(){
     //we mostly do cuda memory transfer serially - via cuda_transfer_ptr_t (pinned_memory) -> cuda_ptr_t (device_memory)
     //the actual step of doing memory operation is to transfer device_memory to pinned_memory - write - transfer back to device_memory if requested or evicted (like fsys_ptr_t)
     //we mutual exclude the uma_ptr_t (-> vma_ptr_1, vma_ptr_t2, vma_ptr_t3) by using the serialization controller network_uma_tlb
-    
+
     //we'll close 2024 with a demo guys - stay tuned - this is gonna be epic
+    //alright - we are doing hybrid collectors
+    //we still do frequency but we kinda improve the speed by partially serialize the accesses
+    //minimum viable products:  - 100 cuda TB flops/ host_core*s (fwd + bwd) - this is mandatory
+    //                          - user designated logs - maybe rewrite postgres (or reconfig) if interfering too much with filesystem writing
+    //                          - 32 socket ports sat NIC 
+    //                          - allocating 1 << 30 tiles/s - ingesting leaf + immu + crit at 5GBs/ sec
+
+    //side notes: we are reaching 5MBs of raw code - this is a major milestone
 }

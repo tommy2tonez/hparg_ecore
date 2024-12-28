@@ -319,7 +319,7 @@ namespace dg::network_stack_allocation{
     };
 
     template <class T>
-    class NoExceptAllocation<T[]>: public Allocation<T>{
+    class NoExceptAllocation<T[]>: public Allocation<T[]>{
 
         public:
 

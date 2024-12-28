@@ -7,9 +7,6 @@
 
 namespace dg::network_host_asynchronous{
 
-    //alright fellas - code is clear - we'll move on
-    //alright fellas - code actually wasn't clear - we'll now move on
-
     using async_device_id_t = size_t;
 
     class WorkOrder{
