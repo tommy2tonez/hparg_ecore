@@ -405,11 +405,6 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    //we aren't adding prop_grad to the tiles' members because that's not good
-    //we are adding blkr because the blkr logic is clearer and easier to understand
-    //leaf -> blkr -> ... -> crit
-    //the only thing that we are considering is reversing the blkr logics - such is the tile that allows the gradient -> leaf rather than blocking gradient -> leaf
-
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
     struct BlkrAddressLookup{
 

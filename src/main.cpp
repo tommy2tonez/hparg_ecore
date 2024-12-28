@@ -7,15 +7,23 @@
 
 int main(){
 
-    //2025 is the year we are optimizing one thing: compressible_size/ neural_network_size
-    //we want to maximize the compressible_size/ neural_network_size - there is gradient descend problem but we aren't worrying about that now
-    //we want to stack 1024 f(g(x)) -> x
-    //the problem with gradient descends is the problem of uniform influence
-    //a random leaf logit has a certain influence on the output logits
-    //a group of equivalent influence can have the same training rate
-    //so we can describe the problem as finding the sequence of training of same influence groups
-    //WLOG, influence can be found by doing 1111111111 for output layer and memset(layer, ID, sizeof(layer)) then group gradients by discretization (this is an oversimplication - there is an entire research topics about setting intial values)
-    //with an arbitrary learning rate
-    //WLOG, a valid training sequence is: group0 -> group0 -> group3 -> group2 -> group2, etc
-    //this solution is proven to reasonably optimally approximate any neural network f(x) -> y
+    //okay - there are numerous complains about code management, spaghetti + friends 
+    //in this application, we assume all memory operations are serialized through: memlock -> uma_ptr_t -> vma_ptr_t -> cuda_ptr_t host_ptr_t, etc.
+    //we assume pointer reachability is guaranteed by allocators (tile_member_access or actual allocations - this is to avoid segment mapping for memcpy or memset - which is bad desicison - we rather allocate on different memregion_size)
+    //we assume that uma_ptr_t -> tile_kind, rcu_addr are fixed for program-duration 
+    //we assume maintainers are rational and read the design decisions (not doing std::make_unique<dg::network_stack_allocation::Allocation<char[]>> for example)
+    //we assume that most heavy-lifting workloads are done by cuda, host is only responsible for network_packets + memmapping + asynchronous device dispatching + initializations + msgrfwd + msgrbwds 
+    //I think we could reach 500 cuda TBs/core * s easily - if there are enough combinatorial operations (linear)  
+    //things aren't hard if you get the basics
+
+    //the hierarchical of memory operations are memlock -> uma_ptr_t
+    //every memlock operations must be in single payload and have clear exit strategies
+    //every uma_ptr_t maps must be in single payload and have clear exit strategies
+    //every uma_ptr_t acquistions if coupled with memlock acquisitions must preceded by memlock acquitions
+
+    //we mostly do cuda memory transfer serially - via cuda_transfer_ptr_t (pinned_memory) -> cuda_ptr_t (device_memory)
+    //the actual step of doing memory operation is to transfer device_memory to pinned_memory - write - transfer back to device_memory if requested or evicted (like fsys_ptr_t)
+    //we mutual exclude the uma_ptr_t (-> vma_ptr_1, vma_ptr_t2, vma_ptr_t3) by using the serialization controller network_uma_tlb
+    
+    //we'll close 2024 with a demo guys - stay tuned - this is gonna be epic
 }
