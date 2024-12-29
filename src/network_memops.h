@@ -408,43 +408,43 @@ namespace dg::network_memops_cupm{
     //cufs
     //cupm
 
-    auto memcpy_host_to_cupm(){
+    auto memcpy_host_to_cupm(cupm_ptr_t dst, void * src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cuda_to_cupm(){
+    auto memcpy_cuda_to_cupm(cupm_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_fsys_to_cupm(){
+    auto memcpy_fsys_to_cupm(cupm_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cufs_to_cupm(){
+    auto memcpy_cufs_to_cupm(cupm_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cupm_to_cupm(){
+    auto memcpy_cupm_to_cupm(cupm_ptr_t dst, cupm_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cupm_to_host(){
+    auto memcpy_cupm_to_host(void * dst, cupm_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cupm_to_cuda(){
+    auto memcpy_cupm_to_cuda(cuda_ptr_t dst, cupm_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cupm_to_fsys(){
+    auto memcpy_cupm_to_fsys(fsys_ptr_t dst, cupm_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memcpy_cupm_to_cufs(){
+    auto memcpy_cupm_to_cufs(cufs_ptr_t dst, cupm_ptr_t src, size_t sz) noexcept -> exception_t{
 
     }
 
-    auto memset_cupm(){
+    auto memset_cupm(cupm_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
 
     }
 }
@@ -456,7 +456,9 @@ namespace dg::network_memops_virt{
     auto memcpy(vma_ptr_t dst, vma_ptr_t src, size_t sz) noexcept -> exception_t{
 
         using namespace dg::network_virtual_device; 
-        
+
+        //alrights - we must set up for compiler switch case - this probably involes multiplication and remove &&
+
         if (is_host_ptr(dst) && is_host_ptr(src)){
             auto dst_ptr = devirtualize_host_ptr(dst);
             auto src_ptr = devirtualize_host_ptr(src);
@@ -468,7 +470,7 @@ namespace dg::network_memops_virt{
             auto src_ptr = devirtualize_cuda_ptr(src);
             return network_memops_clib::memcpy_cuda_to_host(dst_ptr, src_ptr, sz);
         }
-        
+
         if (is_host_ptr(dst) && is_fsys_ptr(src)){
             auto dst_ptr = devirtualize_host_ptr(dst);
             auto src_ptr = devirtualize_fsys_ptr(src);
@@ -480,7 +482,7 @@ namespace dg::network_memops_virt{
             auto src_ptr = devirtualize_cufs_ptr(src);
             return network_memops_cufs::memcpy_cufs_to_host(dst_ptr, src_ptr, sz);
         }
-        
+
         if (is_cuda_ptr(dst) && is_host_ptr(src)){
             auto dst_ptr = devirtualize_cuda_ptr(dst);
             auto src_ptr = devirtualize_host_ptr(src);
@@ -553,6 +555,69 @@ namespace dg::network_memops_virt{
             return network_memops_cufs::memcpy_cufs_to_cufs(dst_ptr, src_ptr, sz);
         }
 
+        if (is_host_ptr(dst) && is_cutf_ptr(src)){
+            auto dst_ptr = devirtualize_host_ptr(dst);
+            auto src_ptr = devirtualize_cutf_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_cupm_to_host(dst_ptr, static_cast<cupm_ptr_t>(src_ptr), sz);
+        }
+
+        if (is_cuda_ptr(dst) && is_cutf_ptr(src)){
+            auto dst_ptr = devirtualize_cuda_ptr(dst);
+            auto src_ptr = devirtualize_cutf_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_cupm_to_cuda(dst_ptr, static_cast<cupm_ptr_t>(src_ptr), sz);
+        }
+
+        if (is_fsys_ptr(dst) && is_cutf_ptr(src)){
+            auto dst_ptr = devirtualize_fsys_ptr(dst);
+            auto src_ptr = devirtualize_cutf_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_cupm_to_fsys(dst_ptr, static_cast<cupm_ptr_t>(src_ptr), sz);
+        }
+
+        if (is_cufs_ptr(dst) && is_cutf_ptr(src)){
+            auto dst_ptr = devirtualize_cufs_ptr(dst);
+            auto src_ptr = devirtualize_cutf_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_cupm_to_cufs(dst_ptr, static_cast<cupm_ptr_t>(src_ptr), sz);
+        }
+
+        if (is_cutf_ptr(dst) && is_cutf_ptr(src)){
+            auto dst_ptr = devirtualize_cutf_ptr(dst);
+            auto src_ptr = devirtualize_cutf_ptr(src); 
+
+            return dg::network_memops_cupm::mempy_cupm_to_cupm(static_cast<cupm_ptr_t>(dst_ptr), static_cast<cupm_ptr_t>(src_ptr), sz);
+        }
+
+        if (is_cutf_ptr(dst) && is_host_ptr(src)){
+            auto dst_ptr = devirtualize_cutf_ptr(dst);
+            auto src_ptr = devirtualize_host_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_host_to_cupm(static_cast<cupm_ptr_t>(dst_ptr), src_ptr, sz);
+        }
+
+        if (is_cutf_ptr(dst) && is_cuda_ptr(src)){
+            auto dst_ptr = devirtualize_cutf_ptr(dst);
+            auto src_ptr = devirtualize_cuda_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_cuda_to_cupm(static_cast<cupm_ptr_t>(dst_ptr), src_ptr, sz);
+        }
+
+        if (is_cutf_ptr(dst) && is_fsys_ptr(src)){
+            auto dst_ptr = devirtualize_cutf_ptr(dst);
+            auto src_ptr = devirtualize_fsys_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_fsys_to_cupm(static_cast<cupm_ptr_t>(dst_ptr), src_ptr, sz);
+        }
+
+        if (is_cutf_ptr(dst) && is_cufs_ptr(src)){
+            auto dst_ptr = devirtualize_cutf_ptr(dst);
+            auto src_ptr = devirtualize_cufs_ptr(src);
+
+            return dg::network_memops_cupm::memcpy_cufs_to_cupm(static_cast<cupm_ptr_t>(dst_ptr), src_ptr, sz);
+        }
+
         return dg::network_exception::INVALID_SERIALIZATION_FORMAT;
     }
 
@@ -583,6 +648,11 @@ namespace dg::network_memops_virt{
         if (is_cufs_ptr(dst)){
             auto dst_ptr = devirtualize_cufs_ptr(dst);
             return network_memops_cufs::memset_cufs(dst_ptr, c, sz);
+        }
+
+        if (is_cutf_ptr(dst)){
+            auto dst_ptr = devirtualize_cutf_ptr(dst);
+            return network_memops_cupm::memset_cupm(static_cast<cupm_ptr_t>(dst_ptr), c, sz);
         }
 
         return dg::network_exception::INVALID_SERIALIZATION_FORMAT;

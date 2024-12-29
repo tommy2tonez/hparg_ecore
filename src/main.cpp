@@ -40,4 +40,8 @@ int main(){
     //so we have to split the memregions into groups, which we serially process, so we can circumscribe the maximum possible flops and hit the advertised frequency
     //and for each group, we use power law to scale, says 1.5 Hz on memregion0, 2.25 on memregion1, 3.375 on memregion2, etc, you get the idea
     //this is one training strategy
+
+    //alrights
+    //we must compromise cuda device
+    //we might not compromise host_asynchronous because it's rarely faulty
 }

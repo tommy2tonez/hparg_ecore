@@ -31,7 +31,7 @@ namespace dg::network_cudamap_impl1::model{
 
         auto ptr() const noexcept -> cuda_pinned_ptr_t{
 
-            return dg::memult::next(mapped_region, this->off);
+            return dg::memult::next(this->mapped_region, this->off);
         }
     };
 
@@ -41,7 +41,7 @@ namespace dg::network_cudamap_impl1::model{
 
         auto ptr() const noexcept -> cuda_pinned_ptr_t{
 
-            return resource.ptr();
+            return this->resource.ptr();
         }
     };
 }
@@ -317,8 +317,8 @@ namespace dg::network_cudamap_impl1::implementation{
         public:
 
             RegionMapDistributor(dg::unrodered_unstable_map<cuda_ptr_t, size_t> region_id_map,
-                                size_t memregion_sz) noexcept: region_id_map(std::move(region_id_map)),
-                                                               memregion_sz(memregion_sz){}
+                                 size_t memregion_sz) noexcept: region_id_map(std::move(region_id_map)),
+                                                                memregion_sz(memregion_sz){}
 
             auto id(cuda_ptr_t cuda_ptr) noexcept -> std::expected<size_t, exception_t>{
 

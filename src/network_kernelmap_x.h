@@ -65,7 +65,7 @@ namespace dg::network_kernelmap_x{
         return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(map_rs.value(), map_release_lambda);
     }
 
-    auto map_nothrow_safe(fsys_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
+    auto map_safe_nothrow(fsys_ptr_t ptr) noexcept -> dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>{
 
         return dg::unique_resource<map_resource_handle_t, decltype(map_release_lambda)>(network_kernelmap_x::map_nothrow(ptr), map_release_lambda);
     }
