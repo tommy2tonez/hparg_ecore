@@ -63,6 +63,7 @@ namespace dg::network_cudamap_impl1::interface{
     struct MapInterface{
         virtual ~MapInterface() noexcept = default;
         virtual auto map(cuda_ptr_t) noexcept -> std::expected<MapResource, exception_t> = 0;
+        virtual auto evict_try(cuda_ptr_t) noexcept -> std::expected<bool, exception_t> = 0; //returns true if successfully not existed post the call - we dont care about the actual eviction
         virtual auto remap_try(MapResource, cuda_ptr_t) noexcept -> std::expected<std::optional<MapResource>, exception_t> = 0;
         virtual void unmap(MapResource) noexcept = 0;
     };
@@ -70,6 +71,7 @@ namespace dg::network_cudamap_impl1::interface{
     struct ConcurrentMapInterface{
         virtual ~ConcurrentMapInterface() noexcept = default;
         virtual auto map(cuda_ptr_t) noexcept -> std::expected<ConcurrentMapResource, exception_t> = 0;
+        virtual auto evict_try(cuda_ptr_t) noexcept -> std::expected<bool, exception_t> = 0;
         virtual auto remap_try(ConcurrentMapResource, cuda_ptr_t) noexcept -> std::expected<std::optional<ConcurrentMapResource>, exception_t> = 0;
         virtual void unmap(ConcurrentMapResource) noexcept = 0;
     };
@@ -155,7 +157,10 @@ namespace dg::network_cudamap_impl1::implementation{
 
         constexpr auto operator()(const ReferenceMemoryNode& lhs, const ReferenceMemoryNode& rhs) const noexcept -> bool{
 
-            return std::make_tuple(lhs.reference, lhs.last_modified) < std::make_tuple(rhs.reference, rhs.last_modified);
+            auto lhs = std::make_tuple(lhs.reference, lhs.cuda_ptr != dg::pointer_limits<cuda_ptr_t>::null_value(), lhs.last_modified);
+            auto rhs = std::make_tuple(rhs.reference, rhs.cuda_ptr != dg::pointer_limits<cuda_ptr_t>::null_value(), rhs.last_modified);
+
+            return lhs < rhs;
         }
     };
 
@@ -188,6 +193,12 @@ namespace dg::network_cudamap_impl1::implementation{
 
                 stdx::lock_guard<Lock> lck_grd(*this->mtx);
                 return this->internal_map(cuda_ptr);
+            }
+
+            auto evict_try(cuda_ptr_t cuda_ptr) noexcept -> std::expected<bool, exception_t>{
+
+                stdx::lock_guard<Lock> lck_grd(*this->mtx);
+                return this->internal_evict_try(cuda_ptr);
             }
 
             auto remap_try(MapResource resource, cuda_ptr_t new_ptr) noexcept -> std::expected<std::optional<MapResource>, exception_t>{
@@ -299,6 +310,29 @@ namespace dg::network_cudamap_impl1::implementation{
                 return MapResource{front, *front->cupinned_ptr, offset};
             }
 
+            auto internal_evict_try(cuda_ptr_t cuda_ptr) noexcept -> std::expected<bool, exception_t>{
+
+                cuda_ptr_t region   = dg::memult::region(cuda_ptr, this->memregion_sz);
+                auto map_ptr        = this->mapped_dict.find(region);
+
+                if (map_ptr == this->mapped_dict.end()){
+                    return true;
+                }
+
+                HeapNode * heap_node = map_ptr->second; 
+
+                if (heap_node->reference != 0u){
+                    return false;
+                }
+
+                this->memory_loader->unload(*heap_node);
+                this->mapped_dict.erase(map_ptr);
+                heap_node->last_modified = stdx::utc_timestamp();
+                this->push_up_at(heap_node->idx);
+
+                return true;
+            }
+
             void internal_unmap(MapResource map_resource) noexcept{
 
                 map_resource.node->reference    -= 1;
@@ -361,6 +395,17 @@ namespace dg::network_cudamap_impl1::implementation{
                 }
 
                 return ConcurrentMapResource{map_resource.value(), mapper_id.value()};
+            }
+
+            auto evict_try(cuda_ptr_t cuda_ptr) noexcept -> std::expected<bool, exception_t>{
+
+                std::expected<size_t, exception_t> mapper_id = this->map_distributor->id(cuda_ptr);
+
+                if (!mapper_id.has_value()){
+                    return std::unexpected(mapper_id.error());
+                }
+
+                return this->map_vec[mapper_id.value()]->evict_try(cuda_ptr);
             }
 
             auto remap_try(ConcurrentMapResource old_resource, cuda_ptr_t cuda_ptr) noexcept -> std::expected<std::optional<ConcurrentMapResource>, exception_t>{
