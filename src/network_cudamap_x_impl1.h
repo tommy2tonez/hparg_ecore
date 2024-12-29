@@ -9,6 +9,14 @@
 
 namespace dg::network_cudamap_impl1::model{
 
+    static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = false;
+
+    using cuda_pinned_ptr_t = dg::network_pointer::cuda_pinned_ptr_t;
+    using cuda_ptr_t        = dg::network_pointer::cuda_ptr_t;
+    using Lock              = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED, 
+                                                 std::atomic_flag,
+                                                 std::mutex>;
+
     struct MemoryNode{
         std::shared_ptr<cuda_pinned_ptr_t> cupinned_ptr;
         cuda_ptr_t cuda_ptr;
@@ -157,8 +165,8 @@ namespace dg::network_cudamap_impl1::implementation{
 
         constexpr auto operator()(const ReferenceMemoryNode& lhs, const ReferenceMemoryNode& rhs) const noexcept -> bool{
 
-            auto lhs = std::make_tuple(lhs.reference, lhs.cuda_ptr != dg::pointer_limits<cuda_ptr_t>::null_value(), lhs.last_modified);
-            auto rhs = std::make_tuple(rhs.reference, rhs.cuda_ptr != dg::pointer_limits<cuda_ptr_t>::null_value(), rhs.last_modified);
+            auto lhs = std::make_tuple(lhs.reference, lhs.last_modified.count()); //this increases eviction rate which we don't like
+            auto rhs = std::make_tuple(rhs.reference, rhs.last_modified.count());
 
             return lhs < rhs;
         }
@@ -171,23 +179,23 @@ namespace dg::network_cudamap_impl1::implementation{
             std::unique_ptr<MemoryLoaderInterface> memory_loader;
             dg::vector<std::unique_ptr<HeapNode>> priority_queue;
             dg::unordered_unstable_map<cuda_ptr_t, HeapNode *> mapped_dict;
-            std::unique_ptr<MemoryNode> tmp_memory_node;
-            size_t memregion_sz;
+            MemoryNode tmp_memory_node; //yeah - MemoryNode is sufficient
             std::unique_ptr<Lock> mtx;
+            stdx::hdi_container<size_t> memregion_sz;
 
         public:
 
             Map(std::unique_ptr<MemoryLoaderInterface> memory_loader,
                 dg::vector<std::unique_ptr<HeapNode>> priority_queue,
                 dg::unordered_unstable_map<cuda_ptr_t, HeapNode *> mapped_dict,
-                std::unique_ptr<MemoryNode> tmp_memory_node,
-                size_t memregion_sz,
-                std::unique_ptr<Lock> mtx) noexcept: memory_loader(std::move(memory_loader)),
-                                                     priority_queue(std::move(priority_queue)),
-                                                     mapped_dict(std::move(mapped_dict)),
-                                                     tmp_memory_node(std::move(tmp_memory_node)),
-                                                     memregion_sz(memregion_sz),
-                                                     mtx(std::move(mtx)){}
+                MemoryNode tmp_memory_node,
+                std::unique_ptr<Lock> mtx,
+                size_t memregion_sz) noexcept: memory_loader(std::move(memory_loader)),
+                                               priority_queue(std::move(priority_queue)),
+                                               mapped_dict(std::move(mapped_dict)),
+                                               tmp_memory_node(std::move(tmp_memory_node)),
+                                               mtx(std::move(mtx)),
+                                               memregion_sz(std::hdi_container<size_t>{memregion_sz}){}
 
             auto map(cuda_ptr_t cuda_ptr) noexcept -> std::expected<MapResource, exception_t>{
 
@@ -203,11 +211,11 @@ namespace dg::network_cudamap_impl1::implementation{
 
             auto remap_try(MapResource resource, cuda_ptr_t new_ptr) noexcept -> std::expected<std::optional<MapResource>, exception_t>{
 
-                if (!dg::memult::ptrcmp_equal(dg::memult::region(new_ptr, this->memregion_sz), resource.mapped_region)){
+                if (!dg::memult::ptrcmp_equal(dg::memult::region(new_ptr, this->memregion_sz.value), resource.mapped_region)){
                     return std::optional<MapResource>(std::nullopt);
                 }
 
-                return std::optional<MapResource>(MapResource{resource.node, resource.mapped_region, dg::memult::region_offset(new_ptr, this->memregion_sz)});
+                return std::optional<MapResource>(MapResource{resource.node, resource.mapped_region, dg::memult::region_offset(new_ptr, this->memregion_sz.value)});
             } 
 
             void unmap(MapResource map_resource) noexcept{
@@ -254,8 +262,8 @@ namespace dg::network_cudamap_impl1::implementation{
 
             auto internal_map(cuda_ptr_t cuda_ptr) noexcept -> std::expected<MapResource, exception_t>{
 
-                cuda_ptr_t region   = dg::memult::region(cuda_ptr, this->memregion_sz);
-                size_t offset       = dg::memult::region_offset(cuda_ptr, this->memregion_sz); 
+                cuda_ptr_t region   = dg::memult::region(cuda_ptr, this->memregion_sz.value);
+                size_t offset       = dg::memult::region_offset(cuda_ptr, this->memregion_sz.value); 
                 auto map_ptr        = this->mapped_dict.find(region);
 
                 if (map_ptr != this->mapped_dict.end()){
@@ -277,16 +285,16 @@ namespace dg::network_cudamap_impl1::implementation{
                 //reference == 0u;
 
                 if (front->cuda_ptr != dg::pointer_limits<cuda_ptr_t>::null_value()){
-                    exception_t err = this->memory_loader->load(*this->tmp_memory_node, region, this->memregion_sz);
+                    exception_t err = this->memory_loader->load(this->tmp_memory_node, region, this->memregion_sz.value);
 
                     if (dg::network_exception::is_failed(err)){
                         return std::unexpected(err);
                     }
 
-                    cuda_ptr_t removing_region = dg::memult::region(front->cuda_ptr, this->memregion_sz);
+                    cuda_ptr_t removing_region = front->cuda_ptr;
                     this->mapped_dict.erase(removing_region); 
                     this->memory_loader->unload(*front);
-                    std::swap(*this->tmp_memory_node, static_cast<MemoryNode&>(*front));
+                    std::swap(this->tmp_memory_node, static_cast<MemoryNode&>(*front));
                     this->mapped_dict.insert(std::make_pair(region, front)); //we are risking leaks - but we are doing noexcept allocations
                     front->reference    += 1;
                     front->last_modified = stdx::utc_timestamp(); 
@@ -296,7 +304,7 @@ namespace dg::network_cudamap_impl1::implementation{
                 }
 
                 //cuda_ptr == null
-                exception_t err = this->memory_loader->load(*front, region, this->memregion_sz);
+                exception_t err = this->memory_loader->load(*front, region, this->memregion_sz.value);
 
                 if (dg::network_exception::is_failed(err)){
                     return std::unexpected(err);
@@ -312,7 +320,7 @@ namespace dg::network_cudamap_impl1::implementation{
 
             auto internal_evict_try(cuda_ptr_t cuda_ptr) noexcept -> std::expected<bool, exception_t>{
 
-                cuda_ptr_t region   = dg::memult::region(cuda_ptr, this->memregion_sz);
+                cuda_ptr_t region   = dg::memult::region(cuda_ptr, this->memregion_sz.value);
                 auto map_ptr        = this->mapped_dict.find(region);
 
                 if (map_ptr == this->mapped_dict.end()){
@@ -328,7 +336,7 @@ namespace dg::network_cudamap_impl1::implementation{
                 this->memory_loader->unload(*heap_node);
                 this->mapped_dict.erase(map_ptr);
                 heap_node->last_modified = stdx::utc_timestamp();
-                this->push_up_at(heap_node->idx);
+                this->push_down_at(heap_node->idx);
 
                 return true;
             }

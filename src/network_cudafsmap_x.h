@@ -10,35 +10,66 @@ namespace dg::network_cudafsmap_x{
     using cufs_ptr_t            = dg::network_pointer::cufs_ptr_t; 
     using map_resource_handle_t = dg::network_cudafsmap_x_impl1::model::ConcurrentMapResource; 
 
-    inline std::unique_ptr<dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface> map_instance{};  
+    inline std::unique_ptr<dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface> map_instance;  
 
     void init(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_alias_map, 
-              const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map, //work on virtual path - virtual path is basically reinventing the wheel - actually not a path, part of a physical file, has aligned offset, etc.
+              const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map,
               size_t memregion_sz, 
               double ram_to_disk_ratio, 
               size_t distribution_factor){
 
+        stdx::memtransaction_guard tx_grd;
         map_instance = dg::network_cudafsmap_x_impl1::make(bijective_alias_map, gpu_platform_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
     }
 
     void deinit() noexcept{
 
+        stdx::memtransaction_guard tx_grd;
         map_instance = nullptr;
     }
 
+    auto get_map_instance() noexcept -> dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface *{
+
+        std::atomic_signal_fence(std::memory_order_acquire);
+        return map_instance.get();
+    } 
+
     auto map(cufs_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
 
-        return map_instance->map(ptr);
+        return get_map_instance()->map(ptr);
     }
 
     auto map_nothrow(cufs_ptr_t ptr) noexcept -> map_resource_handle_t{
 
-        return dg::network_exception_handler::nothrow_log(map_instance->map(ptr));
+        return dg::network_exception_handler::nothrow_log(get_map_instance()->map(ptr));
     }
 
     void map_release(map_resource_handle_t map_resource) noexcept{
 
-        map_instance->map_release(map_resource);
+        get_map_instance()->unmap(map_resource);
+    }
+
+    auto remap_try(map_resource_handle_t map_resource, cufs_ptr_t ptr) noexcept -> std::expected<std::optional<map_resource_handle_t>, exception_t>{
+
+        return get_map_instance()->remap_try(map_resource, ptr);
+    }
+
+    auto remap(map_resource_handle_t map_resource, cufs_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
+
+        auto _map_instance  = get_map_instance();
+        auto remap_rs       = _map_instance->remap_try(map_resource, ptr); 
+
+        if (remap_rs.has_value() && remap_rs.value().has_value()){
+            return map_rs.value().value();
+        }
+        
+        std::expected<map_resource_handle_t, exception_t> new_map_resource = _map_instance->map(ptr);
+
+        if (new_map_resource.has_value()){
+            _map_instance->unmap(map_resource);
+        }
+
+        return new_map_resource;
     }
 
     static inline auto map_release_lambda = [](map_resource_handle_t map_resource) noexcept{

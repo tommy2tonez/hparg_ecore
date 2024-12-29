@@ -424,7 +424,7 @@ namespace dg::network_host_asynchronous{
                     c += 1;
                 }
 
-                if (this->load_balance_heap[idx]->current_load < this->load_balance_heap[c]->current_load){
+                if (this->load_balance_heap[idx]->current_load <= this->load_balance_heap[c]->current_load){
                     return;
                 }
 
@@ -441,7 +441,7 @@ namespace dg::network_host_asynchronous{
 
                 size_t c = (idx - 1) >> 1;
 
-                if (this->load_balance_heap[c]->current_load < this->load_balance_heap[idx]->current_load){
+                if (this->load_balance_heap[c]->current_load <= this->load_balance_heap[idx]->current_load){
                     return;
                 }
 

@@ -16,6 +16,7 @@ namespace dg::network_cudamap_x{
     //we are wasting memory transferring cutf_ptr_t -> cuda_ptr_t and cuda_ptr_t -> cutf_ptr_t
     //the logic gets messy if we try to solve it here (which is fine - even though we aren't doing this cleanly - uma_ptr_t acquisition guarantees serialization accesses for that case)
     //we need to add the logic evict memory for cudamap_x
+    //we are maintaining evict_try for this map but not other map because it would limit future implementations
 
     inline std::unique_ptr<dg::network_cuda_impl1::interface::ConcurrentMapInterface> map_instance; 
     using map_resource_handle_t = dg::network_cudamap_impl1::model::ConcurrentMapResource; 

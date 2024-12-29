@@ -44,5 +44,4 @@ int main(){
     //alrights
     //we must compromise cuda device
     //we might not compromise host_asynchronous because it's rarely faulty
-
 }
