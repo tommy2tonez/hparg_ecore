@@ -34,4 +34,10 @@ int main(){
     //                          - allocating 1 << 30 tiles/s - ingesting leaf + immu + crit at 5GBs/ sec
 
     //side notes: we are reaching 5MBs of raw code - this is a major milestone
+
+    //alrights - we are brainstorming the collector ideas
+    //we have the idea of frequency on memregion - and we have to adhere to the advertised frequency - there are computation limits, overheads, delays, kernel scheduling, etc.
+    //so we have to split the memregions into groups, which we serially process, so we can circumscribe the maximum possible flops and hit the advertised frequency
+    //and for each group, we use power law to scale, says 1.5 Hz on memregion0, 2.25 on memregion1, 3.375 on memregion2, etc, you get the idea
+    //this is one training strategy
 }
