@@ -112,7 +112,7 @@ namespace dg::network_mempress_collector{
                     return false;
                 }
 
-                auto event_arr          = std::make_unique<event_t[]>(this->collect_cap); //TODOs:
+                dg::network_stack_allocation::NoExceptAllocation<event_t[]> event_arr(this->collect_cap);
                 size_t event_arr_sz     = 0u;
                 size_t range_sz         = this->range_press->size();
 
@@ -176,7 +176,7 @@ namespace dg::network_mempress_collector{
                     return false;
                 }
 
-                auto event_arr          = std::make_unique<event_t[]>(this->collect_cap); //TODOs:
+                dg::network_stack_allocation::NoExceptAllocation<event_t[]> event_arr(this->collect_cap);
                 size_t event_arr_sz     = 0u;
                 size_t range_sz         = this->range_press->size(); 
 
@@ -247,7 +247,7 @@ namespace dg::network_mempress_collector{
                     return false;
                 }
 
-                auto event_arr          = std::make_unique<event_t[]>(this->collect_cap); //TODOs:
+                dg::network_stack_allocation::NoExceptAllocation<event_t[]> event_arr(this->collect_cap);
                 size_t event_arr_sz     = {};
                 size_t range_sz         = this->range_press->size();
 

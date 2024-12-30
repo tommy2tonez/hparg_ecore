@@ -25,6 +25,12 @@
 
 namespace dg::network_memcommit_resolutor{
 
+    //we are trying to event_push everything in a single payload - to avoid fragmentations of memregion Hz which would lead to fragmented memmap 
+    //we are being very memory sensitive - trying to reduce potentially 4x sizeof(payload) - 4 denotes the number of moving the event around -> 1.02 x sizeof(payload) - max 2 x sizeof(payload)
+    //this is the very very crucial part of this machine - we want to push 1 << 30 - 1 << 40 events/ seconds - we want direct memory access with literally O(1) access time for uma_ptr_t -> lightweight class members (whose uma_ptr_t must be bijective to void *) + we want the advertised frequency sole variable is the asynchronous device latency + compute power
+    //we'll publish the benchmarks later guys - stay tuned
+    //we aren't polymorphic these guys - create a virtual base and resolute the events - because it's slow and not maintainable - 
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> Address = 0;
@@ -57,6 +63,100 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
+    class ForwardPingBlkrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+
+        public:
+
+            ForwardPingBlkrSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                           size_t delivery_capacity,
+                                           size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                              delivery_capacity(delivery_capacity),
+                                                                              vectorization_sz(vectorization_sz){}
+
+            void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR = 1u;
+                size_t max_possible_event_sz    = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_cap     = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_cap, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
+
+                        if (!ptrchk.has_value()){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                            continue;
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
+                        uma_ptr_t lck_addr  = dg::memult::reigon(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingSignalEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t ptr               = event_arr[i].dst;
+                        init_status_t init_status   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_ADOPTED:
+                            {
+                                uma_ptr_t descendant = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(ptr);
+                                virtual_memory_event_t event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(event));
+                                dg::network_tile_member_getsetter::set_blkr_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED); 
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+    };
+
     class ForwardPingMonoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         private:
@@ -75,12 +175,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR = 1u;
+                size_t max_possible_event_sz    = sz * EVENT_SCALE_FACTOR; 
+                size_t trimmed_delivery_cap     = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_cap, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
@@ -93,7 +201,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -161,12 +269,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 2u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR; 
+                size_t trimmed_delivery_cap         = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_cap, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
@@ -179,7 +295,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr      = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_region    = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_region, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_region, event_arr[i]);
                     }
                 }
             }
@@ -251,12 +367,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = UACM_ACM_SZ;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);                
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
@@ -269,7 +393,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -340,13 +464,21 @@ namespace dg::network_memcommit_resolutor{
                                                                               vectorization_sz(vectorization_sz){}
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
-
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                
+                const size_t EVENT_SCALE_FACTOR     = PACM_ACM_SZ * 2;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].dst);
@@ -359,7 +491,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -434,12 +566,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz); 
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
@@ -452,7 +592,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -526,14 +666,22 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
                     InternalResolutor internal_resolutor{};
-                    internal_resolutor.uma_ip_retriever          = this->uma_ip_retriever->get();
-                    internal_resolutor.host_ip_retriever         = this->host_ip_retriever->get();
-                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    internal_resolutor.uma_ip_retriever             = this->uma_ip_retriever->get();
+                    internal_resolutor.host_ip_retriever            = this->host_ip_retriever->get();
+                    internal_resolutor.request_delivery_handle      = delivery_handle.get();
+                    size_t trimmed_vectorization_sz                 = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); //we are risking 0s - we will fix this later
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
@@ -546,7 +694,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -620,12 +768,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get())); //concurrent memory is sensitive Mom - you code kernel for 40 years
 
                 {
                     InternalResolutor internal_resolutor{};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz); 
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
@@ -638,7 +794,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -688,6 +844,16 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
+    class ForwardPingImmuResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
+
+        public:
+
+            void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
+
+                (void) event_arr;
+            }
+    };
+
     class ForwardPingMsgrFwdResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         private:
@@ -705,13 +871,21 @@ namespace dg::network_memcommit_resolutor{
                                                                            vectorization_sz(vectorization_sz){}
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
-
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
@@ -724,7 +898,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -791,13 +965,21 @@ namespace dg::network_memcommit_resolutor{
                                                                            vectorization_sz(vectorization_sz){}
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
-
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
@@ -810,7 +992,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i].dst);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
                 }
             }
@@ -860,22 +1042,14 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    class ForwardPingImmuResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
-
-        public:
-
-            void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
-
-                (void) event_arr;
-            }
-    };
-
     class ForwardPingSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         private:
 
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> leaf_resolutor;
             const size_t leaf_dispatch_sz;
+            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> blkr_resolutor;
+            const size_t blkr_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> mono_resolutor;
             const size_t mono_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> pair_resolutor;
@@ -901,6 +1075,8 @@ namespace dg::network_memcommit_resolutor{
 
             ForwardPingSignalResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> leaf_resolutor,
                                        size_t leaf_dispatch_sz,
+                                       std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> blkr_resolutor,
+                                       size_t blkr_dispatch_sz,
                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> mono_resolutor,
                                        size_t mono_dispatch_sz,
                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> pair_resolutor,
@@ -922,6 +1098,8 @@ namespace dg::network_memcommit_resolutor{
                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> immu_resolutor,
                                        size_t immu_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
                                                                           leaf_dispatch_sz(leaf_dispatch_sz),
+                                                                          blkr_resolutor(std::move(blkr_resolutor)),
+                                                                          blkr_dispatch_sz(blkr_dispatch_sz),
                                                                           mono_resolutor(std::move(mono_resolutor)),
                                                                           mono_dispatch_sz(mono_dispatch_sz),
                                                                           pair_resolutor(std::move(pair_resolutor)),
@@ -945,17 +1123,54 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->leaf_resolutor.get(), this->leaf_dispatch_sz));
-                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->mono_resolutor.get(), this->mono_dispatch_sz));
-                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->pair_resolutor.get(), this->pair_dispatch_sz));
-                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->uacm_resolutor.get(), this->uacm_dispatch_sz));
-                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->pacm_resolutor.get(), this->pacm_dispatch_sz));
-                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->extnsrc_resolutor.get(), this->extnsrc_dispatch_sz));
-                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->extndst_resolutor.get(), this->extndst_dispatch_sz));
-                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->crit_resolutor.get(), this->crit_dispatch_sz));
-                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->msgrfwd_resolutor.get(), this->msgrfwd_dispatch_sz));
-                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->msgrbwd_resolutor.get(), this->msgrbwd_dispatch_sz));
-                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->immu_resolutor.get(), this->immu_dispatch_sz));
+                size_t trimmed_leaf_dispatch_sz = std::min(this->leaf_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz));
+
+                size_t trimmed_blkr_dispatch_sz = std::min(this->blkr_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz));
+
+                size_t trimmed_mono_dispatch_sz = std::min(this->mono_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_resolutor.get(), trimmed_mono_dispatch_sz));
+
+                size_t trimmed_pair_dispatch_sz = std::min(this->pair_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_resolutor.get(), trimmed_pair_dispatch_sz)); 
+
+                size_t trimmed_uacm_dispatch_sz = std::min(this->uacm_dispatch_sz, sz);;
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz));
+
+                size_t trimmed_pacm_dispatch_sz = std::min(this->pacm_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz));
+
+                size_t trimmed_crit_dispatch_sz = std::min(this->crit_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_resolutor.get(), trimmed_crit_dispatch_sz)); 
+
+                size_t trimmed_immu_dispatch_sz = std::min(this->immu_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_resolutor.get(), trimmed_immu_dispatch_sz)); 
+
+                size_t trimmed_extnsrc_dispatch_sz = std::min(this->extnsrc_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
+
+                size_t trimmed_extndst_dispatch_sz = std::min(this->extndst_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz)); 
+
+                size_t trimmed_msgrfwd_dispatch_sz = std::min(this->msgrfwd_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
+
+                size_t trimmed_msgrbwd_dispatch_sz = std::min(this->msgrbwd_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
+
+                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
+                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
+                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
+                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
+                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
+                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
+                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
+                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
+                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
+                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
+                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
+                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst); 
@@ -969,6 +1184,11 @@ namespace dg::network_memcommit_resolutor{
                         case TILE_KIND_LEAF:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_BLKR:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
                             break;
                         }
                         case TILE_KIND_MONO:
@@ -991,6 +1211,16 @@ namespace dg::network_memcommit_resolutor{
                             dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
                             break;
                         }
+                        case TILE_KIND_CRIT:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_IMMU:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
                         case TILE_KIND_EXTNSRC:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
@@ -1001,11 +1231,6 @@ namespace dg::network_memcommit_resolutor{
                             dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
                             break;
                         }
-                        case TILE_KIND_CRIT:
-                        {
-                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
-                            break;
-                        }
                         case TILE_KIND_MSGRFWD:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
@@ -1014,11 +1239,6 @@ namespace dg::network_memcommit_resolutor{
                         case TILE_KIND_MSGRBWD:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
-                            break;
-                        }
-                        case TILE_KIND_IMMU:
-                        {
-                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
                             break;
                         }
                         default:
@@ -1055,12 +1275,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].requestee);
@@ -1118,6 +1346,101 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
+    class ForwardPongBlkrRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+        
+        public:
+
+            ForwardPongBlkrRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                            size_t delivery_capacity,
+                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                               delivery_capacity(delivery_capacity),
+                                                                               vectorization_sz(vectorization_sz){}
+
+            void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++I){
+                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].requestee);
+
+                        if (!ptrchk.has_value()){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                            continue;
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].requestee);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPongRequestEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
+                        init_status_t init_status   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED:
+                            {
+                                dg::network_tile_member_getsetter::controller_blkr_push_observer_nothrow(requestee, requestor);
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+    };
+
     class ForwardPongMonoRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>{
 
         private:
@@ -1136,12 +1459,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].requestee);
@@ -1223,12 +1554,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR; 
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz); 
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].requestee);
@@ -1309,13 +1648,21 @@ namespace dg::network_memcommit_resolutor{
                                                                                vectorization_sz(vectorization_sz){}
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
-
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz)); 
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].requestee);
@@ -1397,12 +1744,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].requestee);
@@ -1494,12 +1849,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].requestee);
@@ -1581,12 +1944,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].requestee);
@@ -1668,12 +2039,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz); 
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].requestee);
@@ -1755,12 +2134,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].requestee);
@@ -1842,12 +2229,20 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->delivery_capacity));
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz)); //
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); //
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
@@ -1911,6 +2306,8 @@ namespace dg::network_memcommit_resolutor{
 
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> leaf_resolutor;
             const size_t leaf_dispatch_sz;
+            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> blkr_resolutor;
+            const size_t blkr_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> mono_resolutor;
             const size_t mono_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> pair_resolutor;
@@ -1936,6 +2333,8 @@ namespace dg::network_memcommit_resolutor{
 
             ForwardPongRequestResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> leaf_resolutor,
                                         size_t leaf_dispatch_sz,
+                                        std::unique_ptr<dg::network_producer_consumer::Consumerinterface<ForwardPongRequestEvent>> blkr_resolutor,
+                                        size_t blkr_dispatch_sz,
                                         std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> mono_resolutor,
                                         size_t mono_dispatch_sz,
                                         std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> pair_resolutor,
@@ -1957,6 +2356,8 @@ namespace dg::network_memcommit_resolutor{
                                         std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> immu_resolutor,
                                         size_t immu_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
                                                                            leaf_dispatch_sz(leaf_dispatch_sz),
+                                                                           blkr_resolutor(std::move(blkr_resolutor)),
+                                                                           blkr_dispatch_sz(blkr_dispatch_sz),
                                                                            mono_resolutor(std::move(mono_resolutor)),
                                                                            mono_dispatch_sz(mono_dispatch_sz),
                                                                            pair_resolutor(std::move(pair_resolutor)),
@@ -1980,17 +2381,54 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->leaf_resolutor.get(), this->leaf_dispatch_sz));
-                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->mono_resolutor.get(), this->mono_dispatch_sz));
-                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->pair_resolutor.get(), this->pair_dispatch_sz));
-                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->uacm_resolutor.get(), this->uacm_dispatch_sz));
-                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->pacm_resolutor.get(), this->pacm_dispatch_sz));
-                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->extnsrc_resolutor.get(), this->extnsrc_dispatch_sz));
-                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->extndst_resolutor.get(), this->extndst_dispatch_sz));
-                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->crit_resolutor.get(), this->crit_dispatch_sz));
-                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->msgrfwd_resolutor.get(), this->msgrfwd_dispatch_sz));
-                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->msgrbwd_resolutor.get(), this->msgrbwd_dispatch_sz));
-                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->immu_resolutor.get(), this->immu_dispatch_sz));
+                size_t trimmed_leaf_dispatch_sz = std::min(this->leaf_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz));
+
+                size_t trimmed_blkr_dispatch_sz = std::min(this->blkr_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz)); 
+
+                size_t trimmed_mono_dispatch_sz = std::min(this->mono_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_resolutor.get(), trimmed_mono_dispatch_sz));
+
+                size_t trimmed_pair_dispatch_sz = std::min(this->pair_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_resolutor.get(), trimmed_pair_dispatch_sz));
+
+                size_t trimmed_uacm_dispatch_sz = std::min(this->uacm_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz));
+
+                size_t trimmed_pacm_dispatch_sz = std::min(this->pacm_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz));
+
+                size_t trimmed_crit_dispatch_sz = std::min(this->crit_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_resolutor.get(), trimmed_crit_dispatch_sz));
+
+                size_t trimmed_immu_dispatch_sz = std::min(this->immu_dispatch_sz, sz); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_resolutor.get(), trimmed_immu_dispatch_sz));
+
+                size_t trimmed_extnsrc_dispatch_sz = std::min(this->extnsrc_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
+
+                size_t trimmed_extndst_dispatch_sz = std::min(this->extndst_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz));
+
+                size_t trimmed_msgrfwd_dispatch_sz = std::min(this->msgrfwd_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
+
+                size_t trimmed_msgrbwd_dispatch_sz = std::min(this->msgrbwd_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
+
+                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
+                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
+                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
+                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
+                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
+                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
+                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
+                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
+                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
+                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
+                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
+                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].requestee);
@@ -2004,6 +2442,11 @@ namespace dg::network_memcommit_resolutor{
                         case TILE_KIND_LEAF:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_BLKR:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
                             break;
                         }
                         case TILE_KIND_MONO:

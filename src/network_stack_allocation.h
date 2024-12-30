@@ -128,24 +128,27 @@ namespace dg::network_stack_allocation{
         }
     };
 
-    inline std::unique_ptr<ConcurrentAllocator> allocator;
+    inline ConcurrentAllocator * volatile allocator;
 
     void init(size_t scope_size, size_t buf_sz){
 
         stdx::memtransaction_guard tx_grd;
-        allocator = ComponentFactory::spawn_concurrent_allocator(scope_size, buf_sz);
+        auto tmp_allocator  = ComponentFactory::spawn_concurrent_allocator(scope_size, buf_sz);
+        allocator           = tmp_allocator.get();
+        tmp_allocator.release();
     }
 
     void deinit() noexcept{
 
         stdx::memtransaction_guard tx_grd;
-        allocator = nullptr;
+        // allocator = nullptr;
+        delete allocator;
     }
 
     auto get_allocator() noexcept -> ConcurrentAllocator *{
 
         std::atomic_signal_fence(std::memory_order_acquire);
-        return allocator.get(); //should've been volatile - but volatile is deprecating - so we must issue a memory flushes for concurrent devices - at the very beginning - and memory_order_acquire signal here 
+        return allocator; //should've been volatile - but volatile is deprecating - so we must issue a memory flushes for concurrent devices - at the very beginning - and memory_order_acquire signal here 
     }
 
     struct internal_init_tag{};
@@ -308,6 +311,60 @@ namespace dg::network_stack_allocation{
     };
 
     template <class T>
+    class RawAllocation{};
+
+    template <>
+    class RawAllocation<char[]>{ //we are adding char specialization for raw_allocation
+
+        private:
+
+            char * arr;
+
+        public:
+
+            using self = RawAllocation;
+
+            RawAllocation(size_t sz){
+
+                if (sz == 0u){
+                    this->arr = nullptr;
+                    return;
+                }
+
+                ConcurrentAllocator * allocator_ins     = get_allocator();
+                exception_t err                         = allocator_ins->enter_scope();
+
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_exception::throw_exception(err);
+                }
+
+                std::expected<void *, exception_t> buf  = allocator_ins->allocate(sz);
+
+                if (!buf.has_value()){
+                    allocator_ins->exit_scope();
+                    dg::network_exception::throw_exception(buf.error());
+                }
+
+                this->arr = static_cast<char *>(buf.value());
+            }
+
+            RawAllocation(const self&) = delete;
+            RawAllocation(self&&) = delete;
+
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
+
+            ~RawAllocation() noexcept{
+
+                if (this->arr == nullptr){ //!arr
+                    return;
+                }
+
+                get_allocator()->exit_scope();
+            }
+    };
+
+    template <class T>
     class NoExceptAllocation: public Allocation<T>{
 
         public:
@@ -325,6 +382,26 @@ namespace dg::network_stack_allocation{
 
             NoExceptAllocation(size_t sz) noexcept: Allocation(sz){}
     };
+
+    template <class T>
+    class NoExceptRawAllocation: public RawAllocation<T>{
+
+        public:
+
+            NoExceptRawAllocation() noexcept: RawAllocation(){}
+
+            template <class ...Args>
+            NoExceptRawAllocation(const std::in_place_t, Args&& ...args) noexcept: RawAllocation(std::in_place_t{}, std::forward<Args>(args)...){}
+    };
+
+    template <class T>
+    class NoExceptRawAllocation<T[]>: public RawAllocation<T[]>{
+
+        public:
+
+            NoExceptRawAllocation(size_t sz) noexcept: RawAllocation(sz){}
+    };
+
 } 
 
 #endif

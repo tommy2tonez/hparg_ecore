@@ -32,6 +32,13 @@ namespace dg::network_tile_member_access::implementation{
         return fwd_blk_sz & bit_mask;
     }
 
+    //rcu_addr
+    //init_status
+    //grad_status
+    //backward_dispatch_control
+    //logit_addr
+    //grad_addr
+    //group_operatable_id
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ>
     struct LeafAddressLookup{
 
@@ -211,6 +218,10 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //rcu_addr
+    //init_status
+    //descendant
+    //group_operatable_id
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
     struct MonoAddressLookup{
 
@@ -405,6 +416,7 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
     struct BlkrAddressLookup{
 
@@ -566,6 +578,10 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //descendant
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t ACM_SZ>
     struct UACMAddressLookup{
         
@@ -768,6 +784,11 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //rcu
+    //init_status
+    //left_descendant
+    //right_descendant
+    //group_operatable_id
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t ACM_SZ>
     struct PACMAddressLookup{
 
@@ -983,6 +1004,12 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //left_descendant
+    //right_descendant
+    //pong_count
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ>
     struct PairAddressLookup{
 
@@ -1187,6 +1214,17 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //descendant
+    //observer_array
+    //logit_addr
+    //grad_addr
+    //clogit_addr
+    //learning rate
+    //dispatch_control
+    //grad_status
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t CRIT_KIND_SZ>
     struct CritAddressLookup{
 
@@ -1406,6 +1444,10 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //descendant
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ>
     struct MsgrFwdAddressLookup{
 
@@ -1615,6 +1657,13 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //descendant
+    //logit_addr
+    //observer_array
+    //dispatch_control
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t DST_INFO_SZ, size_t TIMEIN_SZ>
     struct MsgrBwdAddressLookup{
 
@@ -1839,6 +1888,12 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //descendant
+    //counterpart
+    
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t COUNTERPART_SZ>
     struct ExtnSrcAddressLookup{
 
@@ -2021,6 +2076,10 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
+    //counterpart
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t COUNTERPART_SZ>
     struct ExtnDstAddressLookup{
 
@@ -2197,6 +2256,9 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
+    //group_operatable_id
+    //rcu_addr
+    //init_status
     template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ>
     struct ImmuAddressLookup{
 

@@ -54,7 +54,7 @@ int main(){
     //the optimization of transfer and evict is not optional in this case
 
     //we've been getting feedbacks about overfitting - we'll try to increase the compression_rate/neural_network_size
-    //we aren't using linear in this projects - only addnear
+    //we aren't using linear in this projects - only addnear - we assume addnear is an arbitrary operation that is superior to linear for now - we'll invent the operation
     //we'll do paths + friends and train this model at roughly 1/10000 cost of the current models
 
     //we got 50% of the infra done guys - including memories - transportation - initializations - burning tiles - network packet infrastructure - allocations - memlock infrastructure 
