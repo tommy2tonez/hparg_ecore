@@ -44,4 +44,19 @@ int main(){
     //alrights
     //we must compromise cuda device
     //we might not compromise host_asynchronous because it's rarely faulty
+    //we'll try 1k - 1k5 LOC per day in 2025 guys
+
+    //alrights
+    //been trying to think long and hard on not circular logic for uma_ptr_t
+    //there isn't
+    //the current logic is probably the cleanest possible (we want the serialized access that uma_ptr_t access provides)
+    //as long as the cuda_ptr_t that is referenced by the vma_ptr_t1 is cuda_ptr_t referenced by cutf_ptr_t (vma_ptr_t2), and they have injective property with uma_ptr_t
+    //the optimization of transfer and evict is not optional in this case
+
+    //we've been getting feedbacks about overfitting - we'll try to increase the compression_rate/neural_network_size
+    //we aren't using linear in this projects - only addnear
+    //we'll do paths + friends and train this model at roughly 1/10000 cost of the current models
+
+    //we got 50% of the infra done guys - including memories - transportation - initializations - burning tiles - network packet infrastructure - allocations - memlock infrastructure 
+    //the other 50% must be from cuda wizards
 }

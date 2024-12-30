@@ -275,6 +275,10 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
 
             auto internal_map(cufs_ptr_t ptr) noexcept -> std::expected<MapResource, exception_t>{
 
+                //this is called induction coding
+                //we assume what we want - and we make sure that every exit strategy would snap what we want -> what we want (valid state -> valid state)
+                //let's say I'm assuming allocation dict is storing valid mapped references 
+
                 cufs_ptr_t ptr_region   = dg::memult::region(ptr, this->memregion_sz.value);
                 size_t ptr_offset       = dg::memult::region_offset(ptr, this->memregion_sz.value);
                 auto dict_ptr           = this->allocation_dict.find(ptr_region);
@@ -312,6 +316,9 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                     return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
                 }
 
+                //I was trying to prove that if cand->fsys_ptr == null_value then reference == 0u
+                //then I make this an assumption and make sure my every code path follows the rule
+
                 exception_t err = this->fsys_loader->load(*cand, ptr_region, this->memregion_sz.value);
 
                 if (dg::network_exception::is_failed(err)){
@@ -329,7 +336,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
             void internal_unmap(MapResource map_resource) noexcept{
 
                 map_resource.node->reference -= 1;
-                map_resource.node->last_modified = dg::network_genult::unix_timestamp();
+                map_resource.node->last_modified = stdx::unix_timestamp();
                 heap_push_up_at(map_resource.node->idx);
             } 
     };
@@ -472,7 +479,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
                 node.cuptr          = off_cuptr(memblk, i * memregion_sz);
                 node.fsys_ptr       = dg::pointer_limits<cufs_ptr_t>::null_value();
                 node.reference      = 0u;
-                node.last_modified  = dg::network_genult::unix_timestamp();
+                node.last_modified  = stdx::unix_timestamp();
                 registered_stable_ptr.push_back(std::make_pair(*node.cuptr, memregion_sz));
                 priority_queue.push_back(std::make_unique<HeapNode>(std::move(node)));
             }
@@ -482,7 +489,7 @@ namespace dg::network_cudafsmap_x_impl1::implementation{
             tmp.cuptr           = off_cuptr(memblk, memory_node_count * memregion_sz);
             tmp.fsys_ptr        = dg::pointer_limits<cufs_ptr_t>::null_value();
             tmp.reference       = 0u;
-            tmp.last_modifed    = dg::network_genult::unix_timestamp(); 
+            tmp.last_modifed    = stdx::unix_timestamp(); 
             auto lck            = std::make_unique<Lock>();
             registered_stable_ptr.push_back(std::make_pair(*tmp.cuptr, memregion_sz));
 

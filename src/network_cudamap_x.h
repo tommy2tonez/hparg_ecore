@@ -18,7 +18,7 @@ namespace dg::network_cudamap_x{
     //we need to add the logic evict memory for cudamap_x
     //we are maintaining evict_try for this map but not other map because it would limit future implementations
 
-    inline std::unique_ptr<dg::network_cuda_impl1::interface::ConcurrentMapInterface> map_instance; 
+    inline dg::network_cuda_impl1::interface::ConcurrentMapInterface * volatile map_instance; 
     using map_resource_handle_t = dg::network_cudamap_impl1::model::ConcurrentMapResource; 
 
     void init(){
@@ -29,13 +29,13 @@ namespace dg::network_cudamap_x{
     void deinit() noexcept{
 
         stdx::memtransaction_guard tx_grd;
-        map_instance = nullptr;
+        delete map_instance;
     }
 
     auto get_map_instance() noexcept -> dg::network_cuda_impl1::interface::ConcurrentMapInterface *{
 
         std::atomic_signal_fence(std::memory_order_acquire); //
-        return map_instance.get();
+        return map_instance;
     }
 
     auto map(cuda_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{

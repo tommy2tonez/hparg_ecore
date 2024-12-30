@@ -10,7 +10,7 @@ namespace dg::network_cudafsmap_x{
     using cufs_ptr_t            = dg::network_pointer::cufs_ptr_t; 
     using map_resource_handle_t = dg::network_cudafsmap_x_impl1::model::ConcurrentMapResource; 
 
-    inline std::unique_ptr<dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface> map_instance;  
+    inline dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface * volatile map_instance;  
 
     void init(const dg::unordered_map<cufs_ptr_t, std::filesystem::path>& bijective_alias_map, 
               const dg::unordered_map<std::filesystem::path, int>& gpu_platform_map,
@@ -19,19 +19,21 @@ namespace dg::network_cudafsmap_x{
               size_t distribution_factor){
 
         stdx::memtransaction_guard tx_grd;
-        map_instance = dg::network_cudafsmap_x_impl1::make(bijective_alias_map, gpu_platform_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        auto tmp_map_instance   = dg::network_cudafsmap_x_impl1::make(bijective_alias_map, gpu_platform_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        map_instance            = tmp_map_instance.get();
+        tmp_map_instance.release();
     }
 
     void deinit() noexcept{
 
         stdx::memtransaction_guard tx_grd;
-        map_instance = nullptr;
+        delete map_instance;
     }
 
     auto get_map_instance() noexcept -> dg::network_cudafsmap_x_impl1::interface::ConcurrentMapInterface *{
 
-        std::atomic_signal_fence(std::memory_order_acquire);
-        return map_instance.get();
+        std::atomic_signal_fence(std::memory_order_acquire); //we are doing double protection
+        return map_instance;
     } 
 
     auto map(cufs_ptr_t ptr) noexcept -> std::expected<map_resource_handle_t, exception_t>{
