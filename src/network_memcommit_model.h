@@ -273,7 +273,7 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
-    constexpr auto devirtualize_forward_pinppong_request_event(VirtualEvent event) noexcept -> ForwardPingPongRequestEvent{
+    constexpr auto devirtualize_forward_pingpong_request_event(VirtualEvent event) noexcept -> ForwardPingPongRequestEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (event.event_kind != event_kind_forward_pingpong_request){
