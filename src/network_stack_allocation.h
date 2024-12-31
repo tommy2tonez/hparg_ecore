@@ -308,6 +308,11 @@ namespace dg::network_stack_allocation{
 
                 return this->arr;
             }
+
+            auto operator[](size_t idx) const noexcept -> T&{
+
+                return this->arr[idx];
+            }
     };
 
     template <class T>
@@ -361,6 +366,21 @@ namespace dg::network_stack_allocation{
                 }
 
                 get_allocator()->exit_scope();
+            }
+
+            auto data() const noexcept -> char *{
+
+                return this->arr;
+            }
+
+            auto get() const noexcept -> char *{
+
+                return this->arr;
+            }
+
+            auto operator[](size_t idx) const noexcept -> char&{
+
+                return this->arr[idx];
             }
     };
 
