@@ -24,87 +24,93 @@ namespace dg::network_memcommit_factory{
 
     struct ForwardPingSignalEvent{
         uma_ptr_t dst;
+        operatable_id_t operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
     };
 
     struct ForwardPongSignalEvent{
         uma_ptr_t dst;
+        operatable_id_t operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
     };
 
     struct ForwardPongRequestEvent{
         uma_ptr_t requestee;
         uma_ptr_t requestor;
+        operatable_id_t operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(requestee, requestor);
+            reflector(requestee, requestor, operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(requestee, requestor);
+            reflector(requestee, requestor, operatable_id);
         }
     };
 
     struct ForwardPingPongRequestEvent{
         uma_ptr_t requestee;
         uma_ptr_t requestor;
+        operatable_id_t operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(requestee, requestor);
+            reflector(requestee, requestor, operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(requestee, requestor);
+            reflector(requestee, requestor, operatable_id);
         }
     };
 
     struct ForwardDoSignalEvent{
         uma_ptr_t dst;
+        operatable_id_t operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
     };
 
     struct BackwardDoSignalEvent{
         uma_ptr_t dst;
+        operatable_id_t operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(dst);
+            reflector(dst, operatable_id);
         }
     };
 
@@ -127,34 +133,34 @@ namespace dg::network_memcommit_factory{
 
     using virtual_memory_event_t    = VirtualEvent;
 
-    constexpr auto make_event_forward_ping_signal(uma_ptr_t dst) noexcept -> ForwardPingSignalEvent{
+    constexpr auto make_event_forward_ping_signal(uma_ptr_t dst, operatable_id_t operatable_id) noexcept -> ForwardPingSignalEvent{
 
-        return ForwardPingSignalEvent{dst};
+        return ForwardPingSignalEvent{dst, operatable_id};
     }
 
-    constexpr auto make_event_forward_pong_request(uma_ptr_t requestee, uma_ptr_t requestor) noexcept -> ForwardPongRequestEvent{
+    constexpr auto make_event_forward_pong_signal(uma_ptr_t dst, operatable_id_t operatable_id) noexcept -> ForwardPongSignalEvent{
 
-        return ForwardPongRequestEvent{requestee, requestor};
-    }
-
-    constexpr auto make_event_forward_pingpong_request(uma_ptr_t requestee, uma_ptr_t requestor) noexcept -> ForwardPingPongRequestEvent{
-
-        return ForwardPingPongRequestEvent{requestee, requestor};
-    }
-
-    constexpr auto make_event_forward_pong_signal(uma_ptr_t dst) noexcept -> ForwardPongSignalEvent{
-
-        return ForwardPongSignalEvent{dst};
+        return ForwardPongSignalEvent{dst, operatable_id};
     } 
 
-    constexpr auto make_event_forward_do_signal(uma_ptr_t dst) noexcept -> ForwardDoSignalEvent{
+    constexpr auto make_event_forward_pong_request(uma_ptr_t requestee, uma_ptr_t requestor, operatable_id_t operatable_id) noexcept -> ForwardPongRequestEvent{
 
-        return ForwardDoSignalEvent{dst};
+        return ForwardPongRequestEvent{requestee, requestor, operatable_id};
     }
 
-    constexpr auto make_event_backward_do_signal(uma_ptr_t dst) noexcept -> BackwardDoSignalEvent{
+    constexpr auto make_event_forward_pingpong_request(uma_ptr_t requestee, uma_ptr_t requestor, operatable_id_t operatable_id) noexcept -> ForwardPingPongRequestEvent{
 
-        return BackwardDoSignalEvent{dst};
+        return ForwardPingPongRequestEvent{requestee, requestor, operatable_id};
+    }
+
+    constexpr auto make_event_forward_do_signal(uma_ptr_t dst, operatable_id_t operatable_id) noexcept -> ForwardDoSignalEvent{
+
+        return ForwardDoSignalEvent{dst, operatable_id};
+    }
+
+    constexpr auto make_event_backward_do_signal(uma_ptr_t dst, operatable_id_t operatable_id) noexcept -> BackwardDoSignalEvent{
+
+        return BackwardDoSignalEvent{dst, operatable_id};
     }
 
     constexpr auto virtualize_event(ForwardPingSignalEvent event) noexcept -> VirtualEvent{

@@ -25,23 +25,19 @@
 
 namespace dg::network_memcommit_resolutor{
 
-    //we are trying to event_push everything in a single payload - to avoid fragmentations of memregion Hz which would lead to fragmented memmap 
-    //we are being very memory sensitive - trying to reduce potentially 4x sizeof(payload) - 4 denotes the number of moving the event around -> 1.02 x sizeof(payload) - max 2 x sizeof(payload)
-    //this is the very very crucial part of this machine - we want to push 1 << 30 - 1 << 40 events/ seconds - we want direct memory access with literally O(1) access time for uma_ptr_t -> lightweight class members (whose uma_ptr_t must be bijective to void *) + we want the advertised frequency sole variable is the asynchronous device latency + compute power
-    //we'll publish the benchmarks later guys - stay tuned
-    //we aren't polymorphic these guys - create a virtual base and resolute the events - because it's slow and not maintainable - 
-    //we will polymorphic these guys to achieve localities of different tile kinds - after certain phases of architect
-    //computer science has always been the same for years 
-
-    //you have different kinds (structs)
-    //you want polymorphic base to resolute an event
-    //or you process the event individually
-    //we don't want polymorphism base because it's not maintainable + extensible
-    //so we write individual code first - after a year or two - we want to polymorphic those bases (we are certain that the use cases are only that) to avoid instruction cache fetch - which is unlikely
+    //alrights - been doing technical analysis - and I think this would work out well - we are expecting 100TB cuda flops/core*s - with proper tuning + allocations + locality + memregion_frequency - we'll achieve the goal
+    //code-wise - hard to read but clear and efficient - need to do branch profile guided optimizations - expecting at least 1 << 28 mem_events/core * s - we are dispatching 256x256 tiles
+    //we solved 5 major problems:
+    //backward prop synchronization
+    //efficient cluster computation (forwards and backwards) (1 << 20 computation nodes) + data transfer by using memregion frequencies + cutf_ptr_t
+    //memory problems - we aren't doing rumtime memories - we allocate things once and leave things be
+    //concurrent training ingestion problems - we aren't waiting - we ingest things and invoke forward_init and leave things be 
+    //box problem - this is the problem that most machine learning framework has - we do unit
+    //diamond hands guys - we aint selling - we'll be rich
 
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
-        virtual auto ip(uma_ptr_t) noexcept -> Address = 0;
+        virtual auto ip(uma_ptr_t) noexcept -> std::expected<Address, exception_t> = 0;
     };
 
     struct HostIPRetrieverInterface{
@@ -51,7 +47,7 @@ namespace dg::network_memcommit_resolutor{
 
     struct ForeignTileAliasGetterInterface{
         virtual ~ForeignTileAliasGetterInterface() noexcept = default;
-        virtual auto alias(uma_ptr_t) noexcept -> std::optional<uma_ptr_t> = 0; //reduce lock_collisions by using distributed hash_map
+        virtual auto alias(uma_ptr_t) noexcept -> std::expected<std::optional<uma_ptr_t>, exception_t> = 0; //reduce lock_collisions by using distributed hash_map
     };
 
     template <class T>
@@ -131,8 +127,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                   = event_arr[i].dst;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id; 
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -225,8 +227,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                   = event_arr[i].dst;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -319,8 +327,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                   = event_arr[i].dst;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -417,8 +431,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_uacm_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -515,8 +535,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -616,8 +642,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -720,8 +752,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -818,8 +856,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -922,8 +966,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -973,7 +1023,7 @@ namespace dg::network_memcommit_resolutor{
                                                                            vectorization_sz(vectorization_sz){}
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
-                
+
                 const size_t EVENT_SCALE_FACTOR     = 1u;
                 size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
                 size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
@@ -1016,8 +1066,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr               = event_arr[i].dst;
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(ptr);
+                        uma_ptr_t ptr                       = event_arr[i].dst;
+                        operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1325,8 +1381,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1414,8 +1477,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1509,8 +1579,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1604,8 +1681,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1699,8 +1783,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1794,8 +1885,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1899,8 +1997,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1994,8 +2099,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2089,8 +2201,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2184,8 +2303,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2279,8 +2405,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2583,8 +2716,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2672,8 +2812,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2793,8 +2940,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2914,8 +3068,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3037,8 +3198,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3162,8 +3330,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3289,8 +3464,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3410,8 +3592,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3499,8 +3688,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3645,8 +3841,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3771,8 +3974,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3892,8 +4102,15 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [requestee, requestor] = std::make_tuple(event_arr[i].requestee, event_arr[i].requestor);
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -4235,7 +4452,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, std::next(descendant_arr.get(), i)));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, std::next(descendant_arr.get(), i)));
                     }
                 }
 
@@ -4268,22 +4485,28 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
                         auto key                = std::make_tuple(dst_lck_addr, src_lck_addr); //we rather use non_unique_representations
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value()));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value(), event_arr[i].operatable_id));
                     }
                 }
             }
 
         private:
 
-            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, std::optional<uma_ptr_t> *>>{
+            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, std::optional<uma_ptr_t> *> data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *> data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [ptr, fecthing_ptr]    = data_arr[i];
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
+                        auto [ptr, expected_ops_id, fecthing_ptr]   = data_arr[i];
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(ptr);
+
+                        if (expected_ops_id != current_ops_id){
+                            *fetching_ptr = std::nullopt;
+                            continue;
+                        } 
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -4320,12 +4543,13 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
 
                 void push(cuda_ptr_t key, std::tuple<cuda_ptr_t, cuda_ptr_t, tileops_cuda_dispatch_t> * data_arr, size_t sz) noexcept{
-
-                    auto aggregator                 = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_mono(sz));
-                    auto dispatching_cudaptr_vec    = dg::vector<cuda_ptr_t>(sz * 2);
+                    
+                    size_t dispatching_cudaptr_vec_sz = sz * 2;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> dispatching_cudaptr_vec(dispatching_cudaptr_vec_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_mono(sz));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst_logit_cudaptr, src_logit_cudaptr,  tileops_dp_code]   = data_arr[i];
+                        auto [dst_logit_cudaptr, src_logit_cudaptr, tileops_dp_code]    = data_arr[i];
                         dispatching_cudaptr_vec[i * 2]                                  = dst_logit_cudaptr;
                         dispatching_cudaptr_vec[i * 2  + 1]                             = src_logit_cudaptr;
                         dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_add(aggregator, dst_logit_cudaptr, src_logit_cudaptr, tileops_dp_code));
@@ -4335,7 +4559,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tileops_cuda_poly::aggregator_exec(arg);
                     };
 
-                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(dispatching_cudaptr_vec.begin(), dispatching_cudaptr_vec.end()));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(dispatching_cudaptr_vec.get(), std::next(dispatching_cudaptr_vec.get(), dispatching_cudaptr_vec_sz)));
                     auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
                     auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task))); //this requires an error issue - we'll work on this later - next sprint
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
@@ -4350,8 +4574,9 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, tileops_host_dispatch_t> * data_arr, size_t sz) noexcept{
 
-                    auto aggregator                 = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_mono(sz));
-                    auto dispatching_hostptr_vec    = dg::vector<host_ptr_t>(sz * 2);
+                    size_t dispatching_hostptr_vec_sz   = sz * 2;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> dispatching_host_ptr_vec(dispatching_hostptr_vec_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_mono(sz));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst_logit_hostptr, src_logit_hostptr, tileops_dp_code]    = data_arr[i];
@@ -4364,14 +4589,14 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tileops_host_poly::aggregator_exec(arg);
                     };
 
-                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(dispatching_hostptr_vec.begin(), dispatching_hostptr_vec.end()));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(dispatching_hostptr_vec.get(), std::next(dispatching_hostptr_vec.get(), dispatching_hostptr_vec_sz)));
                     auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
                     auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task))); //this requires an error issue - we'll work on this later - next sprint
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
 
-            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t>>{
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, operatable_id_t>>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_emmory_event_t> * request_delivery_handle;
                 size_t vectorization_sz;
@@ -4411,32 +4636,33 @@ namespace dg::network_memcommit_resolutor{
                     auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_host_resolutor, hdh_trimmed_vectorization_sz, hdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, src]                     = data_arr[i];
+                        auto [dst, src, expected_ops_id]    = data_arr[i];
 
                         //we know that these guys are verified earilier - so it's fine to make such assumption here
                         //for best practices - we do this
                         dg::network_tile_member_access::safe_mono_ptr_access(dst);
 
-                        uma_ptr_t dst_src                   = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(dst);
-                        init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
-                        dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_mono_dispatch_control_nothrow(dst); 
-                        uma_ptr_t dst_logit_umaptr          = dg::network_tile_member_getsetter::get_mono_logit_addr_nothrow(dst); 
-                        size_t dst_observer_arr_sz          = dg::network_tile_member_getsetter::get_mono_observer_arr_size_nothrow(dst);
+                        uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_mono_forward_operatable_id_nothrow(dst);
+                        init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_mono_dispatch_control_nothrow(dst); 
+                        uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_mono_logit_addr_nothrow(dst); 
+                        size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_mono_observer_arr_size_nothrow(dst);
 
                         //we are moving towards our stack
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SIZE);
                         dg::network_tile_member_getsetter::get_mono_observer_arr_nothrow(dst, dst_observer_arr.get());
 
                         //we don't know if these guys have these members (forward requirements for this) - so we must do polymorphic guards here
-                        std::expected<operatable_id_t, exception_t> src_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_id(src);
-                        std::expected<init_status_t, exception_t> src_init_status       = dg::network_tile_member_getsetter::get_tile_init_status(src);
-                        std::expected<uma_ptr_t, exception_t> src_logit_umaptr          = dg::network_tile_member_getsetter::get_tile_logit_addr(src);
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(src);
+                        std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
+                        std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src);
 
                         //because this is a feature - initializers intend for this to happen - so we must not issue errors here - this is a soft pass - there are cases where we can forward and not backward - and there are cases we can backward but not forward
                         //we must declare expectations of forward here and do a soft pass
 
-                        if (!src_operatable_id.has_value() || !src_init_status.has_value() || !src_logit_umaptr.has_value()){
+                        if (!src_fwd_operatable_id.has_value() || !src_init_status.has_value() || !src_logit_umaptr.has_value()){
                             continue;
                         }
 
@@ -4444,7 +4670,11 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_operatable_id != src_operatable_id.value()){
+                        if (dst_operatable_id != expected_ops_id){
+                            continue;
+                        }
+
+                        if (dst_fwd_operatable_id != src_fwd_operatable_id.value()){
                             continue;
                         }
 
@@ -4542,7 +4772,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                dg::network_stack_allocation::NoExceptAllocation<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>> descendant_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>[]> descendant_arr(sz);
                 const size_t EVENT_SCALE_FACTOR             = MAX_OBSERVER_ARR_SZ;
                 size_t max_possible_event_sz                = sz * EVENT_SCALE_FACTOR;
                 size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz); 
@@ -4569,7 +4799,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, std::next(descendant_arr.get(), i)));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, std::next(descendant_arr.get(), i)));
                     }
                 }
 
@@ -4606,22 +4836,28 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t right_lck_addr    = dg::memult::region(right_rcu_addr.value(), lck_region_sz);
                         auto key                    = std::make_tuple(dst_lck_addr, left_lck_addr, right_lck_addr);
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(dst, left, right));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(dst, left, right, event_arr[i].operatable_id));
                     }
                 }
             }
 
         private:
 
-            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, std::add_pointer_t<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>>>>{
+            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::add_pointer_t<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>>>>{
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, std::optional<std::tuple<uma_ptr_t, uma_ptr_t>> *> * data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t, std::optional<std::tuple<uma_ptr_t, uma_ptr_t>> *> * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, fetching_addr]   = data_arr[i];
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
+                        auto [dst, expected_ops_id, fetching_addr]  = data_arr[i];
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(dst);
+
+                        if (expected_ops_id != current_ops_id){
+                            *fetching_addr = std::nullopt;
+                            continue;
+                        } 
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -4667,9 +4903,10 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
 
                 void push(cuda_ptr_t key, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, tileops_cuda_dispatch_t> * data_arr, size_t sz) noexcept{
-
-                    auto pair_aggregator    = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_pair(sz));
-                    auto cuda_ptr_vec       = dg::vector<cuda_ptr_t>(sz * 3);
+                    
+                    size_t cuda_ptr_vec_sz  = sz * 3;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_vec(cuda_ptr_vec_sz);
+                    auto pair_aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_pair(sz));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, lhs, rhs, tileops_dp_code]   = data_arr[i];
@@ -4684,8 +4921,8 @@ namespace dg::network_memcommit_resolutor{
                     };
                     auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
 
-                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_vec.begin(), cuda_ptr_vec.end()));
-                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_vec.get(), std::next(cuda_ptr_vec.get(), cuda_ptr_vec_sz)));
+                    auto async_id = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
@@ -4698,8 +4935,9 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, tileops_host_dispatch_t> * data_arr, size_t sz) noexcept{
 
+                    size_t host_ptr_vec_sz  = sz * 3;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_vec(host_ptr_vec_sz);
                     auto pair_aggregator    = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_pair(sz));
-                    auto host_ptr_vec       = dg::vector<host_ptr_t>(sz * 3);
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, lhs, rhs, tileops_dp_code]   = data_arr[i];
@@ -4709,13 +4947,13 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_add(pair_aggregator, dst, lhs, rhs, tileops_dp_code));
                     }
 
-                    auto executable     = [arg = std::move(pair_aggregator)]() noexcept{
+                    auto executable = [arg = std::move(pair_aggregator)]() noexcept{
                         dg::network_tileops_host_poly::aggregator_exec(arg);
                     };
-                    auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
+                    auto async_task = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
 
-                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_vec.begin(), host_ptr_vec.end()));
-                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_vec.get(), std::next(host_ptr_vec.get(), host_ptr_vec_sz)));
+                    auto async_id = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
@@ -4763,28 +5001,29 @@ namespace dg::network_memcommit_resolutor{
                     auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_host_resolutor, trimmed_host_vectorization_sz, hdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, lhs, rhs]                = data_arr[i];
+                        auto [dst, lhs, rhs, expected_ops_id]   = data_arr[i];
                         dg::network_tile_member_access::safe_pair_ptr_access(dst);
-                        uma_ptr_t dst_lhs                   = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(dst);
-                        uma_ptr_t dst_rhs                   = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(dst);
-                        init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
-                        uma_ptr_t dst_logit_umaptr          = dg::network_tile_member_getsetter::get_pair_logit_addr_nothrow(dst);
-                        dispatch_major_t dst_dispatch_major = dg::network_tile_member_getsetter::get_pair_dispatch_major_nothrow(dst);
-                        size_t dst_observer_arr_sz          = dg::network_tile_member_getsetter::get_pair_observer_array_size_nothrow(dst);
-                        dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_pair_dispatch_control_nothrow(dst);
+                        uma_ptr_t dst_lhs                       = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(dst);
+                        uma_ptr_t dst_rhs                       = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_pair_forward_operatable_id_nothrow(dst);
+                        init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
+                        uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_pair_logit_addr_nothrow(dst);
+                        dispatch_major_t dst_dispatch_major     = dg::network_tile_member_getsetter::get_pair_dispatch_major_nothrow(dst);
+                        size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_pair_observer_array_size_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_pair_dispatch_control_nothrow(dst);
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_pair_observer_array_nothrow(dst, dst_observer_arr.get());
 
-                        std::expected<operatable_id_t, exception_t> lhs_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_id(lhs);
-                        std::expected<uma_ptr_t, exception_t> lhs_logit_umaptr          = dg::network_tile_member_getsetter::get_tile_logit_addr(lhs);
-                        std::expected<init_status_t, exception_t> lhs_init_status       = dg::network_tile_member_getsetter::get_tile_init_status(lhs);
+                        std::expected<operatable_id_t, exception_t> lhs_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(lhs); //
+                        std::expected<uma_ptr_t, exception_t> lhs_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(lhs);
+                        std::expected<init_status_t, exception_t> lhs_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(lhs);
 
-                        std::expected<operatable_id_t, exception_t> rhs_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_id(rhs);
-                        std::expected<uma_ptr_t, exception_t> rhs_logit_umaptr          = dg::network_tile_member_getsetter::get_tile_logit_addr(rhs);
-                        std::expected<init_status_t, exception_t> rhs_init_status       = dg::network_tile_member_getsetter::get_tile_init_status(rhs);
+                        std::expected<operatable_id_t, exception_t> rhs_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(rhs); //
+                        std::expected<uma_ptr_t, exception_t> rhs_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(rhs);
+                        std::expected<init_status_t, exception_t> rhs_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(rhs);
 
-                        if (!lhs_operatable_id.has_value() || !lhs_logit_uma_ptr.has_value() || !lhs_init_status.has_value() || !rhs_operatable_id.has_value() || !rhs_logit_umaptr.has_value() || !rhs_init_status.has_value()){
+                        if (!lhs_fwd_operatable_id.has_value() || !lhs_logit_uma_ptr.has_value() || !lhs_init_status.has_value() || !rhs_fwd_operatable_id.has_value() || !rhs_logit_umaptr.has_value() || !rhs_init_status.has_value()){
                             continue;
                         }
 
@@ -4796,11 +5035,15 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_operatable_id != lhs_operatable_id.value()){
+                        if (dst_operatable_id != expected_ops_id){
                             continue;
                         }
 
-                        if (dst_operatable_id != rhs_operatable_id.value()){
+                        if (dst_fwd_operatable_id != lhs_fwd_operatable_id.value()){
+                            continue;
+                        }
+
+                        if (dst_fwd_operatable_id != rhs_fwd_operatable_id.value()){
                             continue;
                         }
 
@@ -5141,7 +5384,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, std::next(descendant_arr.get(), i)));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, std::next(descendant_arr.get(), i)));
                     }
                 }
 
@@ -5175,32 +5418,38 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
                         auto key                = std::make_tuple(dst_rep_addr, src_rep_addr);
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value()));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value(), event_arr[i].operatable_id));
                     }
                 }
             }
 
         private:
 
-            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, std::optional<uma_ptr_t> *>>{
+            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t *> * data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *> * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, fetching_addr]   = data_arr[i];
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
+                        auto [dst, expected_ops_id_fetching_addr]   = data_arr[i];
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(dst);
+
+                        if (expected_ops_id != current_ops_id){
+                            *fetching_addr = std::nullopt;
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                             case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 *fetching_addr  = std::nullopt;
                                 break;
                             }
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 *fetching_addr  = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(dst);
@@ -5222,9 +5471,9 @@ namespace dg::network_memcommit_resolutor{
 
             struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, uma_ptr_t, tileops_dispatch_control>>{
 
-                dg::network_producer_consumer::DeliveryHandle<Request<external_virtual_memory_event_t>> * request_delivery_handle;
-                UnifiedMemoryIPRetriverInterface * uma_ip_retriever;
-                HostIPRetrieverInterface * host_ip_retriever;
+                dg::network_producer_consumer::DeliveryHandle<Request<external_virtual_memory_event_t>> * request_delivery_handle; //bad
+                UnifiedMemoryIPRetriverInterface * uma_ip_retriever; //bad
+                HostIPRetrieverInterface * host_ip_retriever; //bad
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
                 dg::network_host_asynchronous::Synchronizer * synchronizer;
                 dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
@@ -5233,7 +5482,7 @@ namespace dg::network_memcommit_resolutor{
 
                     size_t host_ptr_vec_sz = sz * 2;
                     dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> host_ptr_vec(host_ptr_vec_sz);
-                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn(sz)); // 
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn(sz));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, counterpart, tileops_dispatch_control] = data_arr[i];
@@ -5241,8 +5490,8 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_vec[i * 2 + 1] = src;
 
                         auto tile_executable = [dst, src, counterpart, tileops_dispatch_control, 
-                                                arg_uma_ip_retriever = this->uma_ip_retriever, arg_host_ip_retriever = this->host_ip_retriever
-                                                arg_request_delivery_handle = this->request_delivery_handle]() noexcept{
+                                                arg_uma_ip_retriever = this->uma_ip_retriever, arg_host_ip_retriever = this->host_ip_retriever //bad
+                                                arg_request_delivery_handle = this->request_delivery_handle]() noexcept{ //bad
 
                             dg::network_tileops_host_poly::forward_mono(dst, src, tileops_dispatch_control);
                             auto serialized                                 = dg::string(dst, dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::get_tile_size(tileops_dispatch_control)));
@@ -5272,7 +5521,7 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
 
-            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t>>{
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, operatable_id_t>>{
 
                 dg::network_producer_consumer::DeliveryHandle<Request<external_virtual_memory_event_t>> * request_delivery_handle;
                 UnifiedMmeoryIPRetrieverInterface * uma_ip_retriever;
@@ -5297,19 +5546,20 @@ namespace dg::network_memcommit_resolutor{
                     auto host_vectorizer_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_raiihandle(&internal_host_resolutor, trimmed_forward_vectorization_sz, hvdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, src]                     = ptr_arr[i];
-                        uma_ptr_t dst_src                   = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(dst);
-                        init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
-                        operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(dst);
-                        dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_extnsrc_dispatch_control_nothrow(dst);
-                        uma_ptr_t dst_logit_umaptr          = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(dst);
-                        uma_ptr_t dst_counterpart           = dg::network_tile_member_getsetter::get_extnsrc_counterpart_nothrow(dst);
+                        auto [dst, src, expected_ops_id]        = ptr_arr[i];
+                        uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(dst);
+                        init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_forward_operatable_id_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extnsrc_dispatch_control_nothrow(dst);
+                        uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(dst);
+                        uma_ptr_t dst_counterpart               = dg::network_tile_member_getsetter::get_extnsrc_counterpart_nothrow(dst);
 
-                        std::expected<operatable_id_t, exception_t> src_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_id(src);
-                        std::expected<init_status_t, exception_t> src_init_status       = dg::network_tile_member_getsetter::get_tile_init_status(src);
-                        std::expected<uma_ptr_t, exception_t> src_logit_umaptr          = dg::network_tile_member_getsetter::get_tile_logit_addr(src); 
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(src);
+                        std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
+                        std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src); 
 
-                        if (!src_operatable_id.has_value() || !src_init_status.has_value() || !src_logit_umaptr.has_value()){
+                        if (!src_fwd_operatable_id.has_value() || !src_init_status.has_value() || !src_logit_umaptr.has_value()){
                             continue;
                         }
 
@@ -5317,11 +5567,15 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_operatable_id != src_operatable_id.value()){
+                        if (dst_operatable_id != expected_ops_id){
                             continue;
                         }
 
-                        if (dst_init_status != TILE_INIT_STATUS_DECAYED){
+                        if (dst_fwd_operatable_id != src_fwd_operatable_id.value()){
+                            continue;
+                        }
+
+                        if (dst_init_status != TILE_INIT_STATUS_DECAYED && dst_init_status != TILE_INIT_STATUS_ADOPTED){
                             continue;
                         }
 
@@ -5343,7 +5597,7 @@ namespace dg::network_memcommit_resolutor{
 
                         if (!dg::network_vmamap::reacquirer_is_region_reacquirable(dst_logit_vmamap_reacquirer, dst_logit_vmaptr) 
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(src_logit_vmamap_reacquirer, src_logit_umaptr.value())){
-                            
+
                             dg::network_producer_consumer::delvrsrv_clear(host_vectorizer_delivery_handle.get());
                             synchronizer.sync();
                             restrict_synchronizer.clear();
@@ -5406,7 +5660,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> descendant_arr(sz); 
+                dg::network_stack_allocation::NoExceptAllocation<std::optional<uma_ptr_t>[]> descendant_arr(sz); 
 
                 const size_t EVENT_SCALE_FACTOR     = MAX_OBSERVER_ARR_SZ;
                 size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
@@ -5416,20 +5670,18 @@ namespace dg::network_memcommit_resolutor{
                 auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalDescendantAddressFetcher fetcher{};
-                    fetcher.alias_getter = this->alias_getter->get();
-                    auto vectorized_delivery_handle = dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&fetcher, this->vectorization_sz);
-
-                    if (!vectorized_delivery_handle.has_value()){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(vectorized_delivery_handle.error()));
-                        return;
-                    }
+                    InternalDescendantAddressFetcher fetcher    = {};
+                    fetcher.alias_getter                        = this->alias_getter->get();
+                    size_t trimmed_addrfetch_vectorization_sz   = std::min(this->addrfetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&fetcher, trimmed_addrfetch_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost); 
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
 
                         if (!ptrchk.has_value()){
-                            descendant_arr[i] = dg::pointer_limits<uma_ptr_t>::null_value();
+                            descendant_arr[i] = std::nullopt;
                             dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
                             continue;
                         }
@@ -5437,62 +5689,78 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memregion_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle->get(), lck_addr, std::make_pair(event_arr[i].dst, std::next(descendant_arr.get(), i)));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, std::next(descendant_arr.get(), i)));
                     }
                 }
 
                 {
-                    InternalResolutor internal_resolutor{};
-                    internal_resolutor.request_delivery_handle = delivery_handle->get();
-                    auto vectorized_delivery_handle = dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->vectorization_sz);
-
-                    if (!vectorized_delivery_handle.has_value()){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(vectorized_delivery_handle.error()));
-                        return;
-                    }
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+                    size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz); 
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        if (descendant_arr[i] == dg::pointer_limits<uma_ptr_t>::null_value()){
+                        if (!descendant_arr[i].has_value()){
                             continue;
                         }
 
-                        uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(ptr_arr[i]);
-                        uma_ptr_t src_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr_nothrow(descendant_arr[i]); 
+                        size_t lck_region_sz    = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size(), static_cast<size_t>(dg::network_uma::memregion_size())));
+                        uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].dst);
+                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, lck_region_sz); 
+                        
+                        std::expected<uma_ptr_t, exception_t> src_rcu_addr = dg::network_tile_member_getsetter::get_tile_rcu_addr(descendant_arr[i].value()); 
+                        
+                        if (!src_rcu_addr.has_value()){
+                            continue;
+                        }
+                        
+                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
+                        auto key                = std::make_tuple(dst_lck_addr, src_lck_addr);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value(), event_arr[i].operatable_id));
                     }
                 }
             }
 
         private:
 
-            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::ConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, uma_ptr_t *>>{
+            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::ConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
 
                 ForeignTileAliasGetterInterface * alias_getter;
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t *> * data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *> * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, fetching_addr]   = data_arr[i];
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(dst);
+                        auto [dst, expected_ops_id, fetching_addr]  = data_arr[i];
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(dst);
+
+                        if (expected_ops_id != current_ops_id){
+                            *fetching_addr = std::nullopt;
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                             case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                *fetching_addr  = dg::pointer_limits<uma_ptr_t>::null_value();
+                                *fetching_addr = std::nullopt;
                                 break;
                             }
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
                             case TILE_INIT_STATUS_DECAYED:
-                            {   
-                                std::optional<uma_ptr_t> alias = this->alias_getter->alias(dg::network_tile_member_getsetter::get_extndst_counterpart_nothrow(dst));
+                            {
+                                std::expected<std::optional<uma_ptr_t>, exception_t> alias = this->alias_getter->alias(dg::network_tile_member_getsetter::get_extndst_counterpart_nothrow(dst));
 
                                 if (!alias.has_value()){
-                                    *fetching_addr  = dg::pointer_limits<uma_ptr_t>::null_value();
+                                    //
+                                    *fetching_addr = std::nullopt;
                                 } else{
-                                    *fetching_addr  = alias.value();
+                                    *fetching_addr = alias.value();
                                 }
 
                                 break;
