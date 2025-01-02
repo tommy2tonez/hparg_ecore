@@ -7,12 +7,4 @@
 
 int main(){
     
-    //abcd
-    // bcde
-    
-    //bcd + e
-    //a + bcd
-
-    //
-
 }

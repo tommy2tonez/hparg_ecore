@@ -35,6 +35,28 @@ namespace dg::network_memcommit_resolutor{
     //box problem - this is the problem that most machine learning framework has - we do unit
     //diamond hands guys - we aint selling - we'll be rich
 
+    //consider these scenrios:
+    //(1): users ingest leafs - define forward_operatable_id, backward_operatable_id and super_memevent_operatable_id
+    //(2): users allocate tiles: - define forward_operatable_id, backward_operatable_id and memevent_operatable_id 
+    //(3): users ingest input and expected: immu and crit
+    //(4): users want to train logits: - signal forward_inits at base (with memevent_operatable_id) or forward_pings at crit
+    //(5): users reallocate tiles to train logits
+    //(6): users extract leafs by using msgrfwd
+        //- trainning successful in expected way - forward -> crit -> backward -> leaf update
+        //- training not successful: things dont crash
+        //- we need to time the update for all crit tiles to backprop to leafs - then define a circular training ingestion - says - tile0 -> tile1 -> tile2 -> tile1 -> tile0
+        //                                                                                                                          tile0 -> tile11 -> tile12 -> tile11 -> tile0
+        //                                                                                                                          tile0 -> tile1 -> tile2 -> tile1 -> tile0
+        //pros: we dont wait for training to complete - we ingest the database at once to train - on 1 << 20 computation nodes
+
+    //-------------------------
+    //(7): users reingest leafs
+    //(8): rinse and repeat
+    //(9): users want to train groups of logits by using blkr or backward_operatable_id
+
+    //-------------------------
+    //(10): users want to alter path - user branch the current tree and do their operations
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> std::expected<Address, exception_t> = 0;
@@ -58,6 +80,16 @@ namespace dg::network_memcommit_resolutor{
     };
 
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
+
+        public:
+
+            void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
+
+                (void) event_arr;
+            }
+    };
+
+    class ForwardPingImmuResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         public:
 
@@ -130,7 +162,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                   = event_arr[i].dst;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id; 
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -147,7 +179,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(ptr);
-                                virtual_memory_event_t event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant));
+                                virtual_memory_event_t event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(event));
                                 dg::network_tile_member_getsetter::set_blkr_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED); 
                                 break;
@@ -230,7 +262,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                   = event_arr[i].dst;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -247,7 +279,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -330,7 +362,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                   = event_arr[i].dst;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -348,8 +380,8 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 uma_ptr_t left_descendant   = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(ptr);
                                 uma_ptr_t right_descendant  = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(ptr);
-                                auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, ptr));
-                                auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, ptr));
+                                auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, ptr, current_ops_id));
+                                auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, ptr, current_ops_id));
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
@@ -434,7 +466,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_uacm_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_uacm_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -450,10 +482,11 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_ADOPTED:
                             {
-                                std::array<uma_ptr_t, UACM_ACM_SZ> descendant_arr = dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(ptr); //TODOs - use internal heap_stack - or dynamic allocation and pointer instead of actual stack
+                                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> descendant_arr(UACM_ACM_SZ);
+                                dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(ptr, descendant_arr.get());
 
                                 for (size_t i = 0u; i < UACM_ACM_SZ; ++i){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], ptr));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], ptr, current_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -538,7 +571,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_memevent_operatable_id_nothrow(ptr); //this is memevent_operatable_id_t + forward_operatable_id + backward_operatable_id
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -554,12 +587,14 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_ADOPTED:
                             {
-                                std::array<uma_ptr_t, PACM_ACM_SZ> left_descendant_arr  = dg::network_tile_member_getsetter::get_pacm_left_descendant_nothrow(ptr); //TODOs: use affined-heap-stack
-                                std::array<uma_ptr_t, PACM_ACM_SZ> right_descendant_arr = dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(ptr); //TODOs: use affined-heap-stack
+                                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> left_descendant_arr(PACM_ACM_SZ);
+                                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> right_descendant_arr(PACM_ACM_SZ);
+                                dg::network_tile_member_getsetter::get_pacm_left_descendant_nothrow(ptr, left_descendant_arr.get());
+                                dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(ptr, right_descendant_arr.get());
 
                                 for (size_t i = 0u; i < PACM_ACM_SZ; ++i){
-                                    auto decay_signal_event_1 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], ptr));
-                                    auto decay_signal_event_2 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], ptr));
+                                    auto decay_signal_event_1 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], ptr, current_ops_id));
+                                    auto decay_signal_event_2 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], ptr, current_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
                                 }
@@ -645,7 +680,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extnsrc_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -662,7 +697,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -755,7 +790,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -775,7 +810,7 @@ namespace dg::network_memcommit_resolutor{
                                 auto request            = Request<external_virtual_memory_event_t>{};
                                 request.requestee       = this->uma_ip_retriever->ip(counterpart);
                                 request.requestor       = this->host_ip_retriever->ip();
-                                request.content         = dg::network_external_memcommit_factory::virtualize_event(dg::network_external_memcommit_factory::make_event_forward_pingpong_request(counterpart, ptr)); //alright I admit src could be broadcasting to multiple endpoints
+                                request.content         = dg::network_external_memcommit_factory::virtualize_event(dg::network_external_memcommit_factory::make_event_forward_pingpong_request(counterpart, ptr, current_ops_id));
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(request));
                                 dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
@@ -859,7 +894,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_crit_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -876,7 +911,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -894,16 +929,6 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             };
-    };
-
-    class ForwardPingImmuResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
-
-        public:
-
-            void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
-
-                (void) event_arr;
-            }
     };
 
     class ForwardPingMsgrFwdResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
@@ -969,7 +994,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -986,7 +1011,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -1069,7 +1094,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1086,7 +1111,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -1385,9 +1410,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_memevent_operatable_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (!is_subset_id(expected_ops_id, current_ops_id)){
                             continue;
                         }
 
@@ -1399,7 +1424,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -1412,6 +1437,102 @@ namespace dg::network_memcommit_resolutor{
                                 }
                             }
                         } 
+                    }
+                }
+            };
+    };
+
+    class ForwardPongImmuRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+
+        public:
+
+            ForwardPongImmuRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                            size_t delivery_capacity,
+                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                               delivery_capacity(delivery_capacity),
+                                                                               vectorization_sz(vectorization_sz){}
+
+            void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); //
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
+
+                        if (!ptrchk.has_value()){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                            continue;
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPongRequestEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_memevent_operatable_id_nothrow(requestee);
+
+                        if (expected_ops_id != current_ops_id){ //I'm tempted to make this an exception like leaf but it's too confusing
+                            continue;
+                        }
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
                     }
                 }
             };
@@ -1481,7 +1602,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1501,7 +1622,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -1583,7 +1704,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1603,7 +1724,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -1685,7 +1806,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1705,7 +1826,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -1787,7 +1908,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1807,7 +1928,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -1889,7 +2010,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1909,7 +2030,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2001,7 +2122,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2021,7 +2142,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2103,7 +2224,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2123,7 +2244,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2205,7 +2326,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2225,7 +2346,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2307,7 +2428,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2327,103 +2448,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
-                                break;
-                            }
-                            default:
-                            {
-                                if constexpr(DEBUG_MODE_FLAG){
-                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                    std::abort();
-                                } else{
-                                    std::unreachable();
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-    };
-
-    class ForwardPongImmuRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>{
-
-        private:
-
-            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-            const size_t delivery_capacity;
-            const size_t vectorization_sz;
-
-        public:
-
-            ForwardPongImmuRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                            size_t delivery_capacity,
-                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                               delivery_capacity(delivery_capacity),
-                                                                               vectorization_sz(vectorization_sz){}
-
-            void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
-
-                const size_t EVENT_SCALE_FACTOR     = 1u;
-                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
-                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
-                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
-                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
-
-                {
-                    InternalResolutor internal_resolutor        = {};
-                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
-                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); //
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
-
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
-                        }
-
-                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
-                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
-
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
-                    }
-                }
-            }
-
-        private:
-
-            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPongRequestEvent>{
-
-                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
-
-                void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
-
-                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_id_nothrow(requestee);
-
-                        if (expected_ops_id != current_ops_id){
-                            continue;
-                        }
-
-                        switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED:
-                            {
-                                break;
-                            }
-                            case TILE_INIT_STATUS_INITIALIZED:
-                            {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2722,6 +2747,102 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_operatable_id_nothrow(requestee);
 
+                        if (!is_subset_id(expected_ops_id, current_ops_id)){
+                            continue;
+                        }
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+    };
+
+    class ForwardPingPongImmuRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+
+        public:
+
+            ForwardPingPongImmuRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                                size_t delivery_capacity,
+                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                   delivery_capacity(delivery_capacity),
+                                                                                   vectorization_sz(vectorization_sz){}
+
+            void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR         = 1u;
+                size_t max_possible_event_sz            = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity        = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost               = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
+                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
+
+                        if (!ptrchk.has_value()){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                            continue;
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingPongRequestEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t> * event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t requestee             = event_arr[i].requestee;
+                        uma_ptr_t requestor             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_id_nothrow(requestee);
+
                         if (expected_ops_id != current_ops_id){
                             continue;
                         }
@@ -2734,7 +2855,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2836,7 +2957,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2861,7 +2982,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_blkr_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -2964,7 +3085,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -2989,7 +3110,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_mono_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3092,7 +3213,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -3118,8 +3239,8 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 uma_ptr_t left_descendant   = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(requestee);
                                 uma_ptr_t right_descendant  = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, requestee)));
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_pair_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3222,7 +3343,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -3246,10 +3367,11 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_ADOPTED:
                             {
-                                std::array<uma_ptr_t, UACM_ACM_SZ> descendant_arr = dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(ptr); //TODOs: deprecate array usage
+                                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> descendant_arr(UACM_ACM_SZ);
+                                dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(ptr, descendant_arr.get());
 
                                 for (size_t i = 0u; i < UACM_ACM_SZ; ++i){
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], requestee)));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], requestee, current_ops_id)));
                                 }
 
                                 dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
@@ -3354,7 +3476,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -3378,12 +3500,14 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_ADOPTED:
                             {
-                                std::array<uma_ptr_t, PACM_ACM_SZ> left_descendant_arr  = dg::network_tile_member_getsetter::get_pacm_left_descendant_nothrow(requestee); //TODOs: deprecate array usage
-                                std::array<uma_ptr_t, PACM_ACM_SZ> right_descendant_arr = dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(requestee); //TODOs: deprecate array usage
+                                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> left_descendant_arr(PACM_ACM_SZ);
+                                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> right_descendant_arr(PACM_ACM_SZ);
+                                dg::network_tile_member_getsetter::get_pacm_left_descendant_nothrow(requestee, left_descendant_arr.get());
+                                dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(requestee, right_descendant_arr.get());
 
                                 for (size_t i = 0u; i < PACM_ACM_SZ; ++i){
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], requestee)));
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], requestee)));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], requestee, current_ops_id)));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], requestee, current_ops_id)));
                                 }
 
                                 dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
@@ -3468,9 +3592,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(requestee); 
 
-                        if (expected_ops_id != current_ops_id){
+                        if (expected_ops_id != current_ops_id){ //this is not clear
                             continue;
                         }
 
@@ -3488,7 +3612,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -3513,104 +3637,8 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_crit_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
-                                break;
-                            }
-                            default:
-                            {
-                                if constexpr(DEBUG_MODE_FLAG){
-                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                    std::abort();
-                                } else{
-                                    std::unreachable();
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-    };
-
-    class ForwardPingPongImmuRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
-
-        private:
-
-            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-            const size_t delivery_capacity;
-            const size_t vectorization_sz;
-
-        public:
-
-            ForwardPingPongImmuRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                                size_t delivery_capacity,
-                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                   delivery_capacity(delivery_capacity),
-                                                                                   vectorization_sz(vectorization_sz){}
-
-            void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
-
-                const size_t EVENT_SCALE_FACTOR         = 1u;
-                size_t max_possible_event_sz            = sz * EVENT_SCALE_FACTOR;
-                size_t trimmed_delivery_capacity        = std::min(this->delivery_capacity, max_possible_event_sz);
-                size_t dh_allocation_cost               = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
-                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
-
-                {
-                    InternalResolutor internal_resolutor        = {};
-                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
-                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
-                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
-
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
-                        }
-
-                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
-                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
-
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
-                    }
-                }
-            }
-
-        private:
-
-            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingPongRequestEvent>{
-
-                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
-
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t> * event_arr, size_t sz) noexcept{
-
-                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_id_nothrow(requestee);
-
-                        if (expected_ops_id != current_ops_id){
-                            continue;
-                        }
-
-                        switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED:
-                            {
-                                break;
-                            }
-                            case TILE_INIT_STATUS_INITIALIZED:
-                            {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
                                 break;
                             }
                             default:
@@ -3712,7 +3740,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -3737,7 +3765,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3865,7 +3893,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -3893,7 +3921,7 @@ namespace dg::network_memcommit_resolutor{
                                 auto ping_request       = Request<external_virtual_memory_event_t>{};
                                 ping_request.to         = this->uma_ip_retriever->ip(counterpart);
                                 ping_request.fr         = this->host_ip_retriever->ip();
-                                ping_request.content    = dg::network_external_memcommit_factory::make_event_forward_ping_signal(counterpart);
+                                ping_request.content    = dg::network_external_memcommit_factory::make_event_forward_ping_signal(counterpart, current_ops_id);
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->outbound_delivery_handle, std::move(ping_request));
                                 dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
@@ -3998,7 +4026,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -4023,7 +4051,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -4126,7 +4154,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
                                 break;
                             }
                             default:
@@ -4151,7 +4179,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
                                 dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
