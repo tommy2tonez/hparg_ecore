@@ -25,40 +25,46 @@
 
 namespace dg::network_memcommit_resolutor{
 
-    //alrights - been doing technical analysis - and I think this would work out well - we are expecting 100TB cuda flops/core*s - with proper tuning + allocations + locality + memregion_frequency - we'll achieve the goal
-    //code-wise - hard to read but clear and efficient - need to do branch profile guided optimizations - expecting at least 1 << 28 mem_events/core * s - we are dispatching 256x256 tiles
-    //we solved 5 major problems:
-    //backward prop synchronization
-    //efficient cluster computation (forwards and backwards) (1 << 20 computation nodes) + data transfer by using memregion frequencies + cutf_ptr_t
-    //memory problems - we aren't doing rumtime memories - we allocate things once and leave things be
-    //concurrent training ingestion problems - we aren't waiting - we ingest things and invoke forward_init and leave things be 
-    //box problem - this is the problem that most machine learning framework has - we do unit
-    //diamond hands guys - we aint selling - we'll be rich
+    //alrights - been doing technical analysis
+    //assume this successful serialized process:
+    //user ingests brain
+    //user allocates tiles
+    //user signals
+    //user invalidates signals
+    //user allocates tiles
+    //per client requests - we are doing 1024 x 1024 tiles - moving up to 8192 x 8192 tiles
+    //we want concurrent training on 100.000 GPU clusters as testing phase
+    //we want to leverage memregion frequencies to avoid backward synchro problem + packet backward problems
+    //after the testing phase - we'll open source this to be the community version (people sell their hardware to the cause and actually get paid (bid | ask) for something that's actually meaningful - not for mining coins)
+    //everyone can have their own super lab model from their devices
 
-    //consider these scenrios:
-    //(1): users ingest leafs - define forward_operatable_id, backward_operatable_id and super_memevent_operatable_id
-    //(2): users allocate tiles: - define forward_operatable_id, backward_operatable_id and memevent_operatable_id 
-    //(3): users ingest input and expected: immu and crit
-    //(4): users want to train logits: - signal forward_inits at base (with memevent_operatable_id) or forward_pings at crit
-    //(5): users reallocate tiles to train logits
-    //(6): users extract leafs by using msgrfwd
-        //- trainning successful in expected way - forward -> crit -> backward -> leaf update
-        //- training not successful: things dont crash
-        //- we need to time the update for all crit tiles to backprop to leafs - then define a circular training ingestion - says - tile0 -> tile1 -> tile2 -> tile1 -> tile0
-        //                                                                                                                          tile0 -> tile11 -> tile12 -> tile11 -> tile0
-        //                                                                                                                          tile0 -> tile1 -> tile2 -> tile1 -> tile0
-        //pros: we dont wait for training to complete - we ingest the database at once to train - on 1 << 20 computation nodes
+    //I was thinking of init - reinit (reusing computation tree) without orphan in between - and the result is permuted computation tree that would dangerously lead to not a number
+    //orphan acts as the signal interceptor of the previous computation tree (such does not allow to corrupt the tree - but to stop the computation gracefully)
 
-    //-------------------------
-    //(7): users reingest leafs
-    //(8): rinse and repeat
-    //(9): users want to train groups of logits by using blkr or backward_operatable_id
+    //we only care about what happened in between the time slice [entry_of_first_orphan_node, exit_of_last_orphan_node)
+    //we dont care about pre-orphan or post-orphan 
 
-    //-------------------------
-    //(10): users want to alter path - user branch the current tree and do their operations
+    //because pre-orphan is guaranteed to be correct
+    //and post-orphan is guaranteed to invalidate the signals
 
-    //this prolly takes 20000 lines of raw code - including proper error handing + user logs + efficient tuning + hardware cache tuning + branch tuning
-    //this is probably gonna take a week or two - but we'll be on time
+    //let's do code path analysis
+    //we have a computation tree - we signal - it forwards - it backwards - exits successfully - everyone's happy
+
+    //we have a computation tree - we signal - it forwards mid way - we change the tree - it does not exit successfuly - everyone's not happy
+    //- if we change the tree by using init and the descendant and the root share the same operatable_forward_id but not operatable_memevent_id - we are risking tree corruptions - we have permutated computation tree - such is the old and the new tree are both valid (i'm talking recursively)
+    //- if we change the tree by using orphan and the descendant and the root are not the orphaned nodes - it continuing forwards correctly - the computation tree is not altered
+    //- if we change the tree by using orphan and one of the descendants is orphaned - the computation tree is not corrupted but stopped
+    //- if we change the tree by using orphan and the root is orphaned - the computation tree is not corrupted but stopped   
+
+    //- backward wise:
+    //- assume that g(x) = y, where x = root, is a self sufficient gradient in terms of update, every interval I
+    //- we would want to orphan the tiles from bottom to top (level-wise)
+    //- we want to prove that this does not interfere with training process
+    //- let's on focus on the base (not leafs)
+    //- assume that we invoke orphan on an arbitrary node
+    //- because every leaf update is a sufficient update (atomicity - assumption) - then an orphan of the base nodes at any point in time (we are talking in terms of the alloted time) is a valid operation
+    //- this requires the base_node to be a variant of mono tile, says inverse_blkr tile whose descendants are leaf_tiles - and the leaf tile has uniform distribution or detached distribution of influence on the output - this is another research topic
+    //- because the update every interval I happens atomically in this sense for the leaf nodes - so an orphan/deinit order at any point in time is a valid operation 
 
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
@@ -165,7 +171,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                   = event_arr[i].dst;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id; 
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -265,7 +271,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                   = event_arr[i].dst;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -282,7 +288,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -365,7 +371,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                   = event_arr[i].dst;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -383,8 +389,8 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 uma_ptr_t left_descendant   = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(ptr);
                                 uma_ptr_t right_descendant  = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(ptr);
-                                auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, ptr, current_ops_id));
-                                auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, ptr, current_ops_id));
+                                auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, ptr, expected_ops_id));
+                                auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, ptr, expected_ops_id));
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
@@ -469,7 +475,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_uacm_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -489,7 +495,7 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(ptr, descendant_arr.get());
 
                                 for (size_t i = 0u; i < UACM_ACM_SZ; ++i){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], ptr, current_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], ptr, expected_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -574,7 +580,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_memevent_operatable_id_nothrow(ptr); //this is memevent_operatable_id_t + forward_operatable_id + backward_operatable_id
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(ptr); //this is operatable_memevent_id_t + operatable_forward_id + operatable_backward_id
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -596,8 +602,8 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(ptr, right_descendant_arr.get());
 
                                 for (size_t i = 0u; i < PACM_ACM_SZ; ++i){
-                                    auto decay_signal_event_1 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], ptr, current_ops_id));
-                                    auto decay_signal_event_2 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], ptr, current_ops_id));
+                                    auto decay_signal_event_1 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], ptr, expected_ops_id));
+                                    auto decay_signal_event_2 = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], ptr, expected_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
                                 }
@@ -683,7 +689,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extnsrc_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -700,7 +706,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -793,7 +799,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -813,7 +819,7 @@ namespace dg::network_memcommit_resolutor{
                                 auto request            = Request<external_virtual_memory_event_t>{};
                                 request.requestee       = this->uma_ip_retriever->ip(counterpart);
                                 request.requestor       = this->host_ip_retriever->ip();
-                                request.content         = dg::network_external_memcommit_factory::virtualize_event(dg::network_external_memcommit_factory::make_event_forward_pingpong_request(counterpart, ptr, current_ops_id));
+                                request.content         = dg::network_external_memcommit_factory::virtualize_event(dg::network_external_memcommit_factory::make_event_forward_pingpong_request(counterpart, ptr, expected_ops_id));
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(request));
                                 dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
@@ -897,7 +903,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_crit_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -914,7 +920,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -997,7 +1003,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1014,7 +1020,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -1097,7 +1103,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(ptr);
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(ptr);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1114,7 +1120,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(ptr);
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, current_ops_id));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
                                 break;
@@ -1409,11 +1415,11 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_memevent_operatable_id_nothrow(requestee);
+                        uma_ptr_t requestee                     = event_arr[i].requestee;
+                        uma_ptr_t requestor                     = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id         = event_arr[i].operatable_id;
+                        init_status_t init_status               = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        set_operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_leaf_set_operatable_memevent_id_nothrow(requestee);
 
                         if (!is_subset_id(expected_ops_id, current_ops_id)){
                             continue;
@@ -1509,7 +1515,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){ //I'm tempted to make this an exception like leaf but it's too confusing
                             continue;
@@ -1523,7 +1529,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -1605,7 +1611,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1707,7 +1713,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1727,7 +1733,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -1809,7 +1815,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1829,7 +1835,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -1911,7 +1917,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -1931,7 +1937,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -2013,7 +2019,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2033,7 +2039,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -2125,7 +2131,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2145,7 +2151,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -2227,7 +2233,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2247,7 +2253,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -2329,7 +2335,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2349,7 +2355,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -2431,7 +2437,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2451,7 +2457,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -2638,6 +2644,16 @@ namespace dg::network_memcommit_resolutor{
                             dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
                             break;
                         }
+                        case TILE_KIND_CRIT:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_IMMU:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
                         case TILE_KIND_EXTNSRC:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
@@ -2648,11 +2664,6 @@ namespace dg::network_memcommit_resolutor{
                             dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
                             break;
                         }
-                        case TILE_KIND_CRIT:
-                        {
-                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
-                            break;
-                        }
                         case TILE_KIND_MSGRFWD:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
@@ -2661,11 +2672,6 @@ namespace dg::network_memcommit_resolutor{
                         case TILE_KIND_MSGRBWD:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
-                            break;
-                        }
-                        case TILE_KIND_IMMU:
-                        {
-                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
                             break;
                         }
                         default:
@@ -2744,11 +2750,11 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_operatable_id_nothrow(requestee);
+                        uma_ptr_t requestee                     = event_arr[i].requestee;
+                        uma_ptr_t requestor                     = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id         = event_arr[i].operatable_id;
+                        init_status_t init_status               = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        set_operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_leaf_set_operatable_memevent_id_nothrow(requestee);
 
                         if (!is_subset_id(expected_ops_id, current_ops_id)){
                             continue;
@@ -2844,7 +2850,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -2858,7 +2864,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3068,7 +3074,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -3088,7 +3094,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3113,7 +3119,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id)));
                                 dg::network_tile_member_getsetter::set_mono_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3196,7 +3202,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -3216,7 +3222,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3242,8 +3248,8 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 uma_ptr_t left_descendant   = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(requestee);
                                 uma_ptr_t right_descendant  = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, requestee, current_ops_id)));
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant, requestee, expected_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant, requestee, expected_ops_id)));
                                 dg::network_tile_member_getsetter::set_pair_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3326,7 +3332,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -3346,7 +3352,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3374,7 +3380,7 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(ptr, descendant_arr.get());
 
                                 for (size_t i = 0u; i < UACM_ACM_SZ; ++i){
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], requestee, current_ops_id)));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant_arr[i], requestee, expected_ops_id)));
                                 }
 
                                 dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
@@ -3459,7 +3465,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -3479,7 +3485,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3509,8 +3515,8 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(requestee, right_descendant_arr.get());
 
                                 for (size_t i = 0u; i < PACM_ACM_SZ; ++i){
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], requestee, current_ops_id)));
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], requestee, current_ops_id)));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(left_descendant_arr[i], requestee, expected_ops_id)));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(right_descendant_arr[i], requestee, expected_ops_id)));
                                 }
 
                                 dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
@@ -3595,7 +3601,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_id_nothrow(requestee); 
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee); 
 
                         if (expected_ops_id != current_ops_id){ //this is not clear
                             continue;
@@ -3615,7 +3621,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3640,7 +3646,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id)));
                                 dg::network_tile_member_getsetter::set_crit_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3723,7 +3729,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -3743,7 +3749,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3768,7 +3774,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id)));
                                 dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3876,7 +3882,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -3896,7 +3902,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -3924,7 +3930,7 @@ namespace dg::network_memcommit_resolutor{
                                 auto ping_request       = Request<external_virtual_memory_event_t>{};
                                 ping_request.to         = this->uma_ip_retriever->ip(counterpart);
                                 ping_request.fr         = this->host_ip_retriever->ip();
-                                ping_request.content    = dg::network_external_memcommit_factory::make_event_forward_ping_signal(counterpart, current_ops_id);
+                                ping_request.content    = dg::network_external_memcommit_factory::make_event_forward_ping_signal(counterpart, expected_ops_id);
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->outbound_delivery_handle, std::move(ping_request));
                                 dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
@@ -4009,7 +4015,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -4029,7 +4035,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -4054,7 +4060,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id)));
                                 dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -4137,7 +4143,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestor             = event_arr[i].requestor;
                         operatable_id_t expected_ops_id = event_arr[i].operatable_id;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_id_nothrow(requestee);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
 
                         if (expected_ops_id != current_ops_id){
                             continue;
@@ -4157,7 +4163,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
                                 break;
                             }
                             default:
@@ -4182,7 +4188,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 uma_ptr_t descendant = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, current_ops_id)));
+                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id)));
                                 dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -4424,6 +4430,339 @@ namespace dg::network_memcommit_resolutor{
 
                 (void) event_arr;
             }
+    };
+
+    class ForwardDoBlkrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
+            const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
+            const size_t request_delivery_capacity;
+            const size_t addrfetch_vectorization_sz;
+            const size_t region_vectorization_sz;
+            const size_t forward_vectorization_sz;
+        
+        public:
+
+            ForwardDoBlkrSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                         std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                         std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                         size_t request_delivery_capacity,
+                                         size_t addrfetch_vectorization_sz,
+                                         size_t region_vectorization_sz,
+                                         size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                    cuda_async_device(std::move(cuda_async_device)),
+                                                                                    host_async_device(std::move(host_async_device)),
+                                                                                    request_delivery_capacity(request_delivery_capacity),
+                                                                                    addrfetch_vectorization_sz(addrfetch_vectorization_sz),
+                                                                                    region_vectorization_sz(region_vectorization_sz),
+                                                                                    forward_vectorization_sz(forward_vectorization_sz){}
+
+            void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+                dg::network_stack_allocation::NoExceptAllocation<std::optional<uma_ptr_t[]>> descendant_arr(sz);
+
+                const size_t EVENT_SCALE_FACTOR             = MAX_OBSERVER_ARR_SZ;
+                size_t max_possible_event_sz                = sz * MAX_OBSERVER_ARR_SZ;
+                size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz);
+                size_t rdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_request_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rdh_mem(rdh_allocation_cost);
+                auto request_delivery_handle                = dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(this->request_box.get(), trimmed_request_delivery_capacity, rdh_mem.get());
+
+                {
+                    InternalAddressFetcher fetcher              = {};
+                    size_t trimmed_addrfetch_vectorization_sz   = std::min(this->addrfetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&fetcher, trimmed_addrfetch_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
+
+                        if (!ptrchk.has_value()){
+                            descendant_arr[i] = std::nullopt;
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                            continue;
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, std::next(descendant_arr.get(), i)));
+                    }
+                }
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
+                    internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
+                    internal_resolutor.host_async_device        = this->host_async_device.get();
+                    internal_resolutor.vectorization_sz         = this->forward_vectorization_sz;
+
+                    size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_resoltor, trimmed_region_vectorization_sz, vdh_mem.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!descendant_arr[i].has_value()){
+                            continue;
+                        }
+
+                        size_t lck_region_sz    = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
+                        uma_ptr_t dst_rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
+                        std::expected<uma_ptr_t, exception_t> src_rcu_addr = dg::network_tile_member_getsetter::get_tile_rcu_addr(descendant_arr[i].value());
+
+                        if (!src_rcu_addr.has_value()){
+                            continue;
+                        }
+
+                        uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, lck_region_sz);
+                        uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
+                        auto key                = std::make_tuple(dst_lck_addr, src_lck_addr);
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value(), event_arr[i].operatable_id));
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
+
+                void push(uma_ptr_t lck_addr, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *> data_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, expected_ops_id, fetching_addr]  = data_arr[i];
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(dst);
+
+                        if (expected_ops_id != current_ops_id){
+                            *fetching_addr = std::nullopt;
+                            continue;
+                        }
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                *fetching_addr = std::nullopt;
+                                break;
+                            }
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED:
+                            {
+                                *fetching_addr = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(dst);
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t>>{
+
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
+                dg::network_host_asynchronous::Synchronizer * synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
+
+                void push(host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t host_ptr_vec_sz = sz * 2;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_vec(host_ptr_vec_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_mono(sz)); 
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, src, tileop_dispatch_control]    = data_arr[i];
+                        host_ptr_vec[i * 2]                         = dst;
+                        host_ptr_vec[i * 2 + 1]                     = src;
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_add(aggreagtor, dst, src, tileops_dispatch_control)); //we'll abstract the implementation for now - we want to do virtual and lambdas
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_vec.get(), std::next(host_ptr_vec.get(), host_ptr_vec_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
+                }
+            };
+
+            struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t>>{
+
+                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+
+                void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    //we must compromise cuda devices - we'll work on that later
+
+                    size_t cuda_ptr_vec_sz = sz * 2;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_vec(cuda_ptr_vec_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_mono(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, src, tileops_dispatch_control]   = data_arr[i];
+                        cuda_ptr_vec[i * 2]                         = dst;
+                        cuda_ptr_vec[i * 2 + 1]                     = src;
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_add(aggregator, dst, src, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_vec.get(), std::next(cuda_ptr_vec.get(), cuda_ptr_vec_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
+                }
+            };
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, operatable_id_t>>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
+                dg::network_cuda_controller::AsynchronousDeviceInterface * cuda_async_device;
+                size_t vectorization_sz;
+
+                void push(std::tuple<uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t, operatable_id_t> * data_arr, size_t sz) noexcept{
+                    
+                    dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr));
+
+                    auto umamap_reacquirer                  = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{});
+                    auto dst_vmamap_reacquirer              = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto src_vmamap_reacquirer              = dg::network_vmamap::reacquirer_raii_initialize();
+                    
+                    auto cuda_synchronizer                  = dg::network_cuda_controller::Synchronizer{};
+                    auto cuda_restrict_synchronizer         = dg::network_cuda_controller::RestrictPointerSynchronizer(cuda_synchronizer);
+                    auto cuda_resolutor                     = InternalCudaResolutor{};
+                    cuda_resolutor.async_device             = this->cuda_async_device;
+                    cuda_resolutor.synchronizer             = &cuda_synchronizer;
+                    cuda_resolutor.restrict_synchronizer    = &cuda_restrict_synchronizer;
+
+                    auto host_synchronizer                  = dg::network_host_asynchronous::Synchronizer{};
+                    auto host_restrict_synchronizer         = dg::network_host_asynchronous::RestrictPointerSynchronizer(host_synchronizer);
+                    auto host_resolutor                     = InternalHostResolutor{};
+                    host_resolutor.async_device             = this->host_async_device;
+                    host_resolutor.synchronizer             = &host_synchronizer;
+                    host_resolutor.restrict_synchronizer    = &host_restrict_synchronizer;
+
+                    size_t trimmed_cuda_vectorization_sz    = std::min(this->vectorization_sz, sz);
+                    size_t cdh_allocation_cost              = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&cuda_resolutor, trimmed_cuda_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> cdh_mem(cdh_allocation_cost);
+                    auto cuda_delivery_handle               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&cuda_resolutor, trimmed_cuda_vectorization_sz, cdh_mem.get()));
+
+                    size_t trimmed_host_vectorization_sz    = std::min(this->vectorization_sz, sz);
+                    size_t hdh_allocation_cost              = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&host_resolutor, trimmed_host_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> hdh_mem(hdh_allocation_cost);
+                    auto host_delivery_handle               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&host_resolutor, trimmed_host_vectorization_sz, hdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, src, expected_ops_id]        = data_arr[i];
+                        uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_blkr_operatable_forward_id_nothrow(dst);
+                        init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(dst);
+                        uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_blkr_logit_addr_nothrow(dst);
+                        size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_blkr_observer_array_size_nothrow(dst);
+                        dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
+                        dg::network_tile_member_getsetter::get_blkr_observer_array_nothrow(dst, dst_observer_arr.get()); 
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_blkr_dispatch_control_nothrow(dst);
+
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(src);
+                        std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
+                        std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src);
+
+                        if (dst_src != src){
+                            continue;
+                        }
+
+                        if (dst_operatable_id != expected_ops_id){
+                            continue;
+                        }
+
+                        if (dst_fwd_operatable_id != src_fwd_operatable_id.value()){
+                            continue;
+                        }
+
+                        if (dst_init_status != TILE_INIT_STATUS_DECAYED && dst_init_status != TILE_INIT_STATUS_ADOPTED){
+                            continue;
+                        }
+
+                        if (src_init_status.value() != TILE_INIT_STATUS_INITIALIZED){
+                            continue;
+                        }
+
+                        if (!dg::network_uma::reacquirer_fixedsize_is_region_reacquirable(umamap_reacquirer, {{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr.value(), src_vd_id}})){
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
+                            cuda_synchronizer.sync();
+                            host_synchronizer.sync();
+                            cuda_restrict_synchronizer.clear();
+                            host_restrict_synchronizer.clear();
+                        }
+
+                        dg::network_uma::reacquirer_fixedsize_reacquire_nothrow(umamap_reacquirer, {{dst_logit_umaptr, dst_vd_id}, {src_logit_umaptr.value(), src_vd_id}});
+                        vma_ptr_t dst_map_vmaptr    = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
+                        vma_ptr_t src_map_vmaptr    = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
+
+                        if (!dg::network_vmamap::reacquirer_is_region_reacquirable(dst_vmamap_reacquirer, dst_map_vmaptr) 
+                            || ! dg::network_vmamap::reacquirer_is_region_reacquirable(src_vmamap_reacquirer, src_map_vmaptr)){
+                            
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
+                            cuda_synchronizer.sync();
+                            host_synchronizer.sync();
+                            cuda_restrict_synchronizer.clear();
+                            host_restrict_synchronizer.clear();
+                        }
+
+                        dg::network_vmamap::reacquirer_reacquire_nothrow(dst_vmamap_reacquirer, dst_map_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire_nothrow(src_vmamap_reacquirer, src_map_vmaptr);
+
+                        if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
+                            cuda_ptr_t dst_logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(dst_vmamap_reacquirer);
+                            cuda_ptr_t src_logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(src_vmamap_reacquirer);
+
+                            dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), src_logit_cudaptr, std::make_tuple(dst_logit_cudaptr, src_logit_cudaptr, tileops_dp_code));
+                        } else if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
+                            host_ptr_t dst_logit_hostptr    = dg::network_vmamap::get_host_ptr(dst_vmamap_reacquirer);
+                            host_ptr_t src_logit_hostptr    = dg::network_vmamap::get_host_ptr(src_vmamap_reacquirer);
+
+                            dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), src_logit_hostptr, std::make_tuple(dst_logit_hostptr, src_logit_hostptr, tileops_dp_code)); 
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+
+                        for (size_t j = 0u; j < dst_observer_arr_sz; ++j){
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], expected_ops_id)));
+                        }
+
+                        dg::network_tile_member_getsetter::set_blkr_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
+                    }
+                }
+            };
     };
 
     class ForwardDoMonoSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
@@ -4674,8 +5013,8 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tile_member_access::safe_mono_ptr_access(dst);
 
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(dst);
-                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_mono_forward_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_mono_operatable_forward_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
                         dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_mono_dispatch_control_nothrow(dst); 
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_mono_logit_addr_nothrow(dst); 
@@ -4686,7 +5025,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tile_member_getsetter::get_mono_observer_arr_nothrow(dst, dst_observer_arr.get());
 
                         //we don't know if these guys have these members (forward requirements for this) - so we must do polymorphic guards here
-                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(src);
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
                         std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src);
 
@@ -4764,7 +5103,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         for (size_t j = 0u; j < dst_observer_arr_sz; ++j){
-                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], dst_operatable_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], expected_ops_id)));
                         }
 
                         dg::network_tile_member_getsetter::set_mono_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
@@ -4927,17 +5266,17 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
 
-            struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t>>{
+            struct InternalCudaMixedResolutor: dg::network_producer_consumer::ConsumerInterface<std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t>>{
 
-                dg::network_cuda_controller::CudaSynchronizer * synchronizer;
-                dg::network_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
                 dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
 
-                void push(cuda_ptr_t key, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
-                    
+                void push(std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
                     size_t cuda_ptr_vec_sz  = sz * 3;
                     dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_vec(cuda_ptr_vec_sz);
-                    auto pair_aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_pair(sz));
+                    auto pair_aggregator    = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_pair(sz));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, lhs, rhs, tileops_dp_code]   = data_arr[i];
@@ -4947,24 +5286,39 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_add(pair_aggregator, dst, lhs, rhs, tileops_dp_code));
                     }
 
-                    auto executable = [arg = std::move(pair_aggregator)]() noexcept{
-                        dg::network_tileops_cuda_poly::aggregator_exec(arg); //exceptions -
+                    auto executable = [arg_pair_aggregator = std::move(pair_aggregator)]() noexcept{
+                        dg::network_tileops_cuda_poly::aggregator_exec(arg_pair_aggregator);
                     };
                     auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
-
                     dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_vec.get(), std::next(cuda_ptr_vec.get(), cuda_ptr_vec_sz)));
-                    auto async_id = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
 
-            struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t>>{
+            struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t>>{
+
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+
+                void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    auto base_resolutor                     = InternalCudaMixedResolutor{};
+                    base_resolutor.synchronizer             = this->synchronizer;
+                    base_resolutor.restrict_synchronizer    = this->restrict_synchronizer;
+                    base_resolutor.async_device             = this->async_device;
+                    base_resolutor.push(data_arr, sz);  
+                }
+            };
+
+            struct InternalHostMixedResolutor: dg::network_producer_consumer::ConsumerInterface<std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t>>{
 
                 dg::network_host_asynchronous::Synchronizer * synchronizer;
                 dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
 
-                void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+                void push(std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
 
                     size_t host_ptr_vec_sz  = sz * 3;
                     dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_vec(host_ptr_vec_sz);
@@ -4989,6 +5343,22 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
 
+            struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t>>{
+
+                dg::network_host_asynchronous::Synchronizer * synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
+
+                void push(host_ptr_t key, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    auto base_resolutor                     = InternalHostMixedResolutor{};
+                    base_resolutor.synchronizer             = this->synchronizer;
+                    base_resolutor.restrict_synchronizer    = this->restrict_synchronizer;
+                    base_resolutor.async_device             = this->async_device;
+                    base_resolutor.push(data_arr, sz);
+                }
+            };
+
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
@@ -5000,44 +5370,63 @@ namespace dg::network_memcommit_resolutor{
 
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr), std::get<2>(lck_addr));
 
-                    auto umamap_reacquirer                          = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{});
-                    auto dst_vmamap_reacquirer                      = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto lhs_vmamap_reacquirer                      = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto rhs_vmamap_reacquirer                      = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto umamap_reacquirer                              = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{});
+                    auto dst_vmamap_reacquirer                          = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto lhs_vmamap_reacquirer                          = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto rhs_vmamap_reacquirer                          = dg::network_vmamap::reacquirer_raii_initialize();
                     
-                    auto cuda_synchronizer                          = dg::network_cuda_controller::CudaSynchronizer(this->cuda_async_device);
-                    auto host_synchronizer                          = dg::network_host_asynchronous::Synchronizer(this->host_async_device);
-                    auto cuda_restrict_synchronizer                 = dg::network_controller::RestrictPointerSynchronizer(cuda_synchronizer);
-                    auto host_restrict_synchronizer                 = dg::network_controller::RestrictPointerSynchronizer(host_synchronizer);
+                    auto cuda_synchronizer                              = dg::network_cuda_controller::CudaSynchronizer(this->cuda_async_device);
+                    auto host_synchronizer                              = dg::network_host_asynchronous::Synchronizer(this->host_async_device);
+                    auto cuda_restrict_synchronizer                     = dg::network_controller::RestrictPointerSynchronizer(cuda_synchronizer);
+                    auto host_restrict_synchronizer                     = dg::network_controller::RestrictPointerSynchronizer(host_synchronizer);
 
-                    auto internal_cuda_resolutor                    = InternalCudaResolutor();
-                    auto internal_host_resolutor                    = InternalHostResolutor();
+                    auto internal_cuda_resolutor                        = InternalCudaResolutor();
+                    internal_cuda_resolutor.restrict_synchronizer       = &cuda_restrict_synchronizer;
+                    internal_cuda_resolutor.synchronizer                = &cuda_synchronizer;
+                    internal_cuda_resolutor.async_device                = this->cuda_async_device;
 
-                    internal_cuda_resolutor.restrict_synchronizer   = &cuda_restrict_synchronizer;
-                    internal_cuda_resolutor.synchronizer            = &cuda_synchronizer;
-                    internal_cuda_resolutor.async_device            = this->cuda_async_device;
+                    auto internal_host_resolutor                        = InternalHostResolutor();
+                    internal_host_resolutor.restrict_synchronizer       = &host_restrict_synchronizer;
+                    internal_host_resolutor.synchronizer                = &host_synchronizer;
+                    internal_host_resolutor.async_device                = this->host_async_device;
 
-                    internal_host_resolutor.restrict_synchronizer   = &host_restrict_synchronizer;
-                    internal_host_resolutor.synchronizer            = &host_synchronizer;
-                    internal_host_resolutor.async_device            = this->host_async_device;
+                    auto internal_cuda_mixed_resolutor                  = InternalCudaMixedResolutor{};
+                    internal_cuda_mixed_resolutor.restrict_synchronizer = &cuda_restrict_synchronizer;
+                    internal_cuda_mixed_resolutor.synchronizer          = &cuda_synchronizer;
+                    internal_cuda_mixed_resolutor.async_device          = this->cuda_async_device;
 
-                    size_t trimmed_cuda_vectorization_sz            = std::min(this->vectorization_sz, sz);
-                    size_t cdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_cuda_resolutor, trimmed_cuda_vectorization_sz);
+                    auto internal_host_mixed_resolutor                  = InternalHostMixedResolutor{};
+                    internal_host_mixed_resolutor.restrict_synchronizer = &host_restrict_synchronizer;
+                    internal_host_mixed_resolutor.synchronizer          = &host_synchronizer;
+                    internal_host_mixed_resolutor.async_device          = this->host_async_device;
+
+                    size_t trimmed_cuda_vectorization_sz                = std::min(this->vectorization_sz, sz);
+                    size_t cdh_allocation_cost                          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_cuda_resolutor, trimmed_cuda_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> cdh_mem(cdh_allocation_cost);
-                    auto cuda_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_cuda_resolutor, trimmed_cuda_vectorization_sz, cdh_mem.get()));
+                    auto cuda_delivery_handle                           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_cuda_resolutor, trimmed_cuda_vectorization_sz, cdh_mem.get()));
 
-                    size_t trimmed_host_vectorization_sz            = std::min(this->vectorization_sz, sz);
-                    size_t hdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_host_resolutor, trimmed_host_vectorization_sz);
+                    size_t trimmed_host_vectorization_sz                = std::min(this->vectorization_sz, sz);
+                    size_t hdh_allocation_cost                          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_host_resolutor, trimmed_host_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> hdh_mem(hdh_allocation_cost);
-                    auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_host_resolutor, trimmed_host_vectorization_sz, hdh_mem.get())); 
+                    auto host_delivery_handle                           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_host_resolutor, trimmed_host_vectorization_sz, hdh_mem.get())); 
+
+                    size_t trimmed_cuda_mixed_vectorization_sz          = std::min(this->vectorization_sz, sz);
+                    size_t cmdh_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&internal_cuda_mixed_resolutor, trimmed_cuda_mixed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> cmdh_mem(cmdh_allocation_cost);
+                    auto cuda_mixed_delivery_handle                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_cuda_mixed_resolutor, trimmed_cuda_mixed_vectorization_sz, cmdh_mem.get())); 
+
+                    size_t trimmed_host_mixed_vectorization_sz          = std::min(this->vectorization_sz, sz);
+                    size_t hmdh_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&internal_host_mixed_resolutor, trimmed_host_mixed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> hmdh_mem(hmdh_allocation_cost);
+                    auto host_mixed_delivery_handle                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_host_mixed_resolutor, trimmed_host_mixed_vectorization_sz, hmdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, lhs, rhs, expected_ops_id]   = data_arr[i];
                         dg::network_tile_member_access::safe_pair_ptr_access(dst);
                         uma_ptr_t dst_lhs                       = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(dst);
                         uma_ptr_t dst_rhs                       = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(dst);
-                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_pair_forward_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_pair_operatable_forward_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_pair_logit_addr_nothrow(dst);
                         dispatch_major_t dst_dispatch_major     = dg::network_tile_member_getsetter::get_pair_dispatch_major_nothrow(dst);
@@ -5046,11 +5435,11 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_pair_observer_array_nothrow(dst, dst_observer_arr.get());
 
-                        std::expected<operatable_id_t, exception_t> lhs_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(lhs); //
+                        std::expected<operatable_id_t, exception_t> lhs_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(lhs); //
                         std::expected<uma_ptr_t, exception_t> lhs_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(lhs);
                         std::expected<init_status_t, exception_t> lhs_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(lhs);
 
-                        std::expected<operatable_id_t, exception_t> rhs_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(rhs); //
+                        std::expected<operatable_id_t, exception_t> rhs_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(rhs); //
                         std::expected<uma_ptr_t, exception_t> rhs_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(rhs);
                         std::expected<init_status_t, exception_t> rhs_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(rhs);
 
@@ -5094,7 +5483,9 @@ namespace dg::network_memcommit_resolutor{
 
                         if (!dg::network_uma::reacquirer_fixedsize_is_region_reacquirable(umamap_reacquirer, {{dst_logit_umaptr, dst_vd_id}, {lhs_logit_umaptr.value(), lhs_vd_id}, {rhs_logit_umaptr.value(), rhs_vd_id}})){
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_mixed_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_mixed_delivery_handle.get());
                             cuda_synchronizer.sync();
                             cuda_restrict_synchronizer.clear();
                             host_synchronizer.sync();
@@ -5112,7 +5503,9 @@ namespace dg::network_memcommit_resolutor{
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_vmamap_reacquirer, rhs_vmaptr)){
                             
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_mixed_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_mixed_delivery_handle.get());
                             cuda_synchronizer.sync();
                             cuda_restrict_synchronizer.clear();
                             host_synchronizer.sync();
@@ -5132,6 +5525,8 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), rhs_cudaptr, std::make_tuple(dst_cudaptr, lhs_cudaptr, rhs_cudaptr, tileops_dp_code));
                             } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_LEFT){
                                 dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), lhs_cudaptr, std::make_tuple(dst_cudaptr, lhs_cudaptr, rhs_cudaptr, tileops_dp_code));
+                            } else if (dst_dispatch_major = PAIR_DISPATCH_MAJOR_MIXED){
+                                dg::network_producer_consumer::delvrsrv_deliver(cuda_mixed_delivery_handle.get(), std::make_tuple(dst_cudaptr, lhs_cudaptr, rhs_cudaptr, tileops_dp_code));
                             } else{
                                 if constexpr(DEBUG_MODE_FLAG){
                                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -5149,6 +5544,8 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), rhs_hostptr, std::make_tuple(dst_hostptr, lhs_hostptr, rhs_hostptr, tileops_dp_code));
                             } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_LEFT){
                                 dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), lhs_hostptr, std::make_tuple(dst_hostptr, lhs_hostptr, rhs_hostptr, tileops_dp_code));
+                            } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_MIXED){
+                                dg::network_producer_consumer::delvrsrv_deliver(host_mixed_delivery_handle.get(), std::make_tuple(dst_hostptr, lhs_hostptr, rhs_hostptr, tileops_dp_code));
                             } else{
                                 if constexpr(DEBUG_MODE_FLAG){
                                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -5167,7 +5564,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         for (size_t j = 0u; j < dst_observer_arr_sz; ++j){
-                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], dst_operatable_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], expected_ops_id)));
                         }
 
                         dg::network_tile_member_getsetter::set_pair_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED); //bad assumption in asynchronous context
@@ -5574,12 +5971,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
                         operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(dst);
-                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_forward_operatable_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_operatable_forward_id_nothrow(dst);
                         dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extnsrc_dispatch_control_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(dst);
                         uma_ptr_t dst_counterpart               = dg::network_tile_member_getsetter::get_extnsrc_counterpart_nothrow(dst);
 
-                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(src);
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
                         std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src); 
 
@@ -5671,7 +6068,6 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    //we do forward cuda + forward host for this
     class ForwardDoExtnDstSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
@@ -5838,7 +6234,26 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
 
                 void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+                    
+                    size_t cuda_ptr_arr_sz = sz * 2;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_arr(cuda_ptr_arr_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_mono(sz));
 
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, src, tileops_dispatch_control]   = data_arr[i];
+                        cuda_ptr_arr[i * 2]                         = dst;
+                        cuda_ptr_arr[i * 2 + 1]                     = src;
+                        
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_add(aggregator, dst, src, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_arr.get(), std::next(cuda_ptr_arr.get(), cuda_ptr_arr_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
 
@@ -5850,6 +6265,25 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
 
+                    size_t host_ptr_arr_sz = sz * 2;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_arr(host_ptr_arr_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_mono(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, src, tileops_dispatch_control]   = data_arr[i];
+                        host_ptr_arr[i * 2]                         = dst;
+                        host_ptr_arr[i * 2 + 1]                     = src;
+                        
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_add(aggregator, dst, src, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_arr.get(), std::next(host_ptr_arr.get(), host_ptr_arr_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
 
@@ -5865,8 +6299,8 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr)); //we move the guard post the allocations
 
                     auto umamap_reacquirer                  = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{});
-                    auto dst_logit_vmamap_reacquirer        = dg::network_vmamap::reacquirer_initialize(); 
-                    auto src_logit_vmamap_reacquirer        = dg::network_vmamap::reacquirer_initialize();
+                    auto dst_logit_vmamap_reacquirer        = dg::network_vmamap::reacquirer_raii_initialize(); 
+                    auto src_logit_vmamap_reacquirer        = dg::network_vmamap::reacquirer_raii_initialize();
 
                     dg::network_cuda_controller::Synchronizer cuda_synchronizer{};
                     dg::network_cuda_controlled::RestrictPointerSynchronizer cuda_restrict_synchronizer(cuda_synchronizer);
@@ -5896,11 +6330,15 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]        = ptr_arr[i];
                         uma_ptr_t dst_counterpart               = dg::network_tile_member_getsetter::get_extndst_counterpart_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(dst);
-                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extndst_forward_operatable_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extndst_operatable_forward_id_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_extndst_logit_addr_nothrow(dst);
-                        
+                        size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_extndst_observer_array_size_nothrow(dst);
+                        dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
+                        dg::network_tile_member_getsetter::get_extndst_observer_array_nothrow(dst, dst_observer_arr.get());
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extndst_dispatch_control_nothrow(dst);
+
                         std::expected<uma_ptr_t, exception_t> extnsrc_ptr_access = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(src);
 
                         if (!extnsrc_ptr_access.has_value()){
@@ -5908,7 +6346,7 @@ namespace dg::network_memcommit_resolutor{
                         } 
 
                         uma_ptr_t src_selfaddr                  = dg::network_tile_member_getsetter::get_extnsrc_selfaddr_nothrow(src);
-                        operatable_id_t src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_forward_operatable_id_nothrow(src);
+                        operatable_id_t src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_operatable_forward_id_nothrow(src);
                         init_status_t src_init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(src);
                         uma_ptr_t src_logit_umaptr              = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(src);
 
@@ -5962,13 +6400,13 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_vmamap::reacquirer_reacquire_nothrow(src_logit_vmamap_reacquirer, src_logit_vmaptr);
 
                         if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
-                            auto dst_logit_cudaptr  = dg::network_vmamap::get_cuda_ptr(dst_logit_vmamap_reacquirer);
-                            auto src_logit_cudaptr  = dg::network_vmamap::get_cuda_ptr(src_logit_vmamap_reacquirer);
+                            cuda_ptr_t dst_logit_cudaptr = dg::network_vmamap::get_cuda_ptr(dst_logit_vmamap_reacquirer);
+                            cuda_ptr_t src_logit_cudaptr = dg::network_vmamap::get_cuda_ptr(src_logit_vmamap_reacquirer);
 
                             dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), src_logit_cudaptr, std::make_tuple(dst_logit_cudaptr, src_logit_cudaptr, tileops_dp_code)); //we have to vectorize to avoid synchronization overheads - not necessarily because this is a feature
                         } else if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
-                            auto dst_logit_hostptr  = dg::network_vmamap::get_host_ptr(dst_logit_vmamap_reacquirer);
-                            auto src_logit_hostptr  = dg::network_vmamap::get_host_ptr(src_logit_vmamap_reacquirer);
+                            host_ptr_t dst_logit_hostptr = dg::network_vmamap::get_host_ptr(dst_logit_vmamap_reacquirer);
+                            host_ptr_t src_logit_hostptr = dg::network_vmamap::get_host_ptr(src_logit_vmamap_reacquirer);
 
                             dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), src_logit_hostptr, std::make_tuple(dst_logit_hostptr, src_logit_hostptr, tileops_dp_code));
                         } else{
@@ -5983,7 +6421,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
 
                         for (size_t j = 0u; j < dst_observer_arr_sz; ++j){
-                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_init_signal(dst_observer_arr[j], dst_operatable_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_init_signal(dst_observer_arr[j], expected_ops_id)));
                         }
                     }
                 }
@@ -6264,7 +6702,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, expected_ops_id, fetching_addr]  = ptr_arr[i];
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(dst);
-                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(dst);
 
                         if (expected_ops_id != current_ops_id){
                             *fetching_addr = std::nullopt;
@@ -6383,8 +6821,8 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]        = data_arr[i];
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(dst);
-                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_msgrfwd_forward_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_msgrfwd_operatable_forward_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_msgrfwd_logit_addr_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_msgrfwd_observer_array_size_nothrow(dst);
@@ -6394,7 +6832,7 @@ namespace dg::network_memcommit_resolutor{
                         tile_id_t dst_tile_id                   = dg::network_tile_member_getsetter::get_msgrfwd_tile_id_nothrow(dst);
                         dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_msgrfwd_dispatch_control_nothrow(dst);
                         
-                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(src);
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
                         std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src);
 
@@ -6403,6 +6841,10 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         if (dst_src != src){
+                            continue;
+                        }
+
+                        if (dst_operatable_id != expected_ops_id){
                             continue;
                         }
 
@@ -6468,7 +6910,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
 
                         for (size_t j = 0u; j < dst_observer_arr_sz; ++j){
-                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], dst_operatable_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], expected_ops_id)));
                         }
                     }
 
@@ -6602,7 +7044,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, expected_ops_id, fetching_addr]  = data[i];
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(dst);
-                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(dst);
 
                         if (expected_ops_id != current_ops_id){
                             *fetching_addr = std::nullopt;
@@ -6678,8 +7120,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]        = data_arr[i];
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(dst);
-                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_msgrbwd_forward_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_msgrbwd_operatable_forward_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_msgrbwd_logit_addr_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_msgrbwd_observer_array_size_nothrow(dst);
@@ -6688,7 +7130,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_msgrbwd_observer_array_nothrow(dst, dst_observer_arr.get());
 
-                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_forward_operatable_id(src);
+                        std::expected<operatable_id_t, exception_t> src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
                         std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src); 
 
@@ -6763,7 +7205,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         for (size_t j = 0u; j < dst_observer_arr_sz; ++j){
-                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], dst_operatable_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(dst_observer_arr[j], expected_ops_id)));
                         }
 
                         set_init_status_msgrbwd_nothrow(dst, TILE_INIT_STATUS_INITIALIZED);
@@ -7013,10 +7455,14 @@ namespace dg::network_memcommit_resolutor{
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                InternalResolutor internal_resolutor{};
+                InternalResolutor internal_resolutor    = {};
                 internal_resolutor.cuda_async_device    = this->cuda_async_device.get();
                 internal_resolutor.host_async_device    = this->host_async_device.get();
-                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->region_vectorization_sz));
+                
+                size_t trimmed_region_vectorization_sz  = std::min(this->region_vectorization_sz, sz);
+                size_t dh_allocation_cost               = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].dst);
@@ -7030,7 +7476,7 @@ namespace dg::network_memcommit_resolutor{
                     uma_ptr_t rcu_addr      = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
                     uma_ptr_t lck_addr      = dg::memult::region(rcu_addr, lck_region_sz);
 
-                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, event_arr[i].dst);
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id));
                 }
             }
 
@@ -7041,23 +7487,28 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_cuda_controller::AsynchronousDeviceInterface * cuda_async_device;
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
 
-                void push(uma_ptr_t rcu_addr, uma_ptr_t * ptr_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t> * ptr_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     auto umamap_reacquirer          = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{});
                     auto grad_vmamap_reacquirer     = dg::network_vmamap::reacquirer_raii_initialize();
                     auto logit_vmamap_reacquirer    = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto cuda_synchronizer          = dg::network_cuda_controller::CudaSynchronizer(this->cuda_async_device);
+                    auto cuda_synchronizer          = dg::network_cuda_controller::CudaSynchronizer{};
                     auto host_synchronizer          = dg::network_host_asynchronous::Synchronizer(this->host_async_device);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t ptr                       = ptr_arr[i];
+                        auto [ptr, expected_ops_id]         = ptr_arr[i];
+                        set_operatable_id_t operatable_id   = dg::network_tile_member_getsetter::get_leaf_set_operatable_memevent_id_nothrow(ptr); //we are doing compact set by using interval [first, last)
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(ptr);
                         grad_status_t grad_status           = dg::network_tile_member_getsetter::get_leaf_grad_status_nothrow(ptr);
                         dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_leaf_backward_dispatch_control_nothrow(ptr); //
                         uma_ptr_t logit_umaptr              = dg::network_tile_member_getsetter::get_leaf_logit_addr_nothrow(ptr);
                         uma_ptr_t grad_umaptr               = dg::network_tile_member_getsetter::get_leaf_grad_addr_nothrow(ptr);
+
+                        if (!is_subset_id(expected_ops_id, operatable_id)){
+                            continue;
+                        }
 
                         if (init_status != TILE_INIT_STATUS_INITIALIZED){
                             continue;
@@ -7080,6 +7531,7 @@ namespace dg::network_memcommit_resolutor{
 
                         if (!dg::network_vmamap::reacquirer_is_region_reacquirable(logit_vmamap_reacquirer, logit_vmaptr) 
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(grad_vmamap_reacquirer, grad_vmaptr)){
+                            
                             cuda_synchronizer.sync();
                             host_synchronizer.sync();
                         }
@@ -7101,7 +7553,7 @@ namespace dg::network_memcommit_resolutor{
                             auto logit_hostptr  = dg::network_vmamap::get_host_ptr(logit_vmamap_reacquirer);
                             auto grad_hostptr   = dg::network_vmamap::get_host_ptr(grad_vmamap_reacquirer);
                             auto executable     = [=]() noexcept{ //the noexcept here is questionable
-                                dg::network_tileops_host_poly::grad_update(logit_hostptr, grad_hostptr, tileops_dp_code, TILEOPS_POSTOPERATION_ZERO);
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::grad_update(logit_hostptr, grad_hostptr, tileops_dp_code, TILEOPS_POSTOPERATION_ZERO));
                             };
                             auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
                             auto async_id       = dg::network_exception_handler::nothrow_log(this->host_async_device->exec(std::move(async_task))); //this must be an error in the next sprint
@@ -7132,8 +7584,8 @@ namespace dg::network_memcommit_resolutor{
             const size_t request_delivery_capacity;
             const size_t addrfetch_vectorization_sz;
             const size_t region_vectorization_sz;
-            const size_t tileops_vectorization_sz;
-        
+            const size_t backward_vectorization_sz;
+
         public:
 
             BackwardDoMonoSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
@@ -7142,22 +7594,32 @@ namespace dg::network_memcommit_resolutor{
                                             size_t request_delivery_capacity,
                                             size_t addrfetch_vectorization_sz,
                                             size_t region_vectorization_sz,
-                                            size_t tileops_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                       cuda_async_device(std::move(cuda_async_device)),
-                                                                                       host_async_device(std::move(host_async_device)),
-                                                                                       request_delivery_capacity(request_delivery_capacity),
-                                                                                       addrfetch_vectorization_sz(addrfetch_vectorization_sz),
-                                                                                       region_vectorization_sz(region_vectorization_sz),
-                                                                                       tileops_vectorization_sz(tileops_vectorization_sz){}
+                                            size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                        cuda_async_device(std::move(cuda_async_device)),
+                                                                                        host_async_device(std::move(host_async_device)),
+                                                                                        request_delivery_capacity(request_delivery_capacity),
+                                                                                        addrfetch_vectorization_sz(addrfetch_vectorization_sz),
+                                                                                        region_vectorization_sz(region_vectorization_sz),
+                                                                                        backward_vectorization_sz(backward_vectorization_sz){}
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                auto request_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->request_delivery_capacity));
-                auto descendant_arr             = std::make_unique<std::optional<uma_ptr_t>[]>(sz);
+                dg::network_stack_allocation::NoExceptAllocation<std::optional<uma_ptr_t>[]> descendant_arr(sz);
+
+                const size_t EVENT_SCALE_FACTOR             = 1u;
+                size_t max_possible_event_sz                = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz);
+                size_t rdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_request_delivery_capacity); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rdh_mem(rdh_allocation_cost);
+                auto request_delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_request_delivery_capacity, rdh_mem.get()));
 
                 {
-                    InternalDescendantAddressFetcher fetcher{};
-                    auto vectorized_delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&fetcher, this->addrfetch_vectorization_sz));
+                    InternalDescendantAddressFetcher fetcher    = {};
+
+                    size_t trimmed_addrfetch_vectorization_sz   = std::min(this->addrfetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&fetcher, trimmed_addrfetch_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
@@ -7171,17 +7633,21 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, std::next(descendant_arr.get(), i)));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, std::next(descendant_arr.get(), i)));
                     }
                 }
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
-                    internal_resolutor.vectorization_sz         = this->tileops_vectorization_sz;
+                    internal_resolutor.vectorization_sz         = this->backward_vectorization_sz;
                     internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
                     internal_resolutor.host_async_device        = this->host_async_device.get();
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->region_vectorization_sz));
+
+                    size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!descendant_arr[i].has_value()){
@@ -7199,24 +7665,30 @@ namespace dg::network_memcommit_resolutor{
 
                         uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        auto key                = dg::utility::to_unique_representation(dst_lck_addr, src_lck_addr);
+                        auto key                = std::make_tuple(dst_lck_addr, src_lck_addr);
 
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(descendant_arr[i].value(), event_arr[i].dst));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, descendant_arr[i].value(), event_arr[i].operatable_id));
                     }
                 }
             }
 
         private:
 
-            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, std::optional<uma_ptr_t> *>>{
+            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, std::optional<uma_ptr_t> *> * data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *> * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, fetching_addr]   = data_arr[i];
-                        init_status_t init_status   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
+                        auto [dst, expected_ops_id, fetching_addr]  = data_arr[i];
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(dst);
+
+                        if (expected_ops_id != current_ops_id){
+                            *fetching_addr = std::nullopt;
+                            continue;
+                        }
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -7270,7 +7742,7 @@ namespace dg::network_memcommit_resolutor{
                     };
                     auto async_task     = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
                     this->restrict_synchronizer->add(cuda_ptr_vec.begin(), cuda_ptr_vec.end());
-                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task))); //handle error next sprint - we must assume that device does not work 
+                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
@@ -7299,7 +7771,7 @@ namespace dg::network_memcommit_resolutor{
                     };
                     auto async_task     = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
                     this->restrict_synchronizer->add(host_ptr_vec.begin(), host_ptr_vec.end());
-                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task))); //handle error next sprint - we must assume that device does not work 
+                    auto async_id       = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
                 }
             };
@@ -7311,7 +7783,7 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
                 dg::network_cuda_controller::AsynchronousDeviceInterface * cuda_async_device;
 
-                void push(std::tuple<uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t> * ptr_arr, size_t sz) noexcept{
+                void push(std::tuple<uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t, operatable_id_t> * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr));
 
@@ -7335,15 +7807,44 @@ namespace dg::network_memcommit_resolutor{
                     internal_host_resolutor.synchronizer            = &host_synchronizer;
                     internal_host_resolutor.restrict_synchronizer   = &host_restrict_synchronizer;
 
-                    auto cuda_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_cuda_resolutor, this->vectorization_sz));
-                    auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_host_resolutor, this->vectorization_sz)); 
+                    size_t trimmed_cuda_vectorization_sz            = std::min(this->vectorization_sz, sz);
+                    size_t cdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_cuda_resolutor, trimmed_cuda_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> cdh_mem(cdh_allocation_cost);
+                    auto cuda_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_cuda_resolutor, trimmed_cuda_vectorization_sz, cdh_mem.get()));
+
+                    size_t trimmed_host_vectorization_sz            = std::min(this->vectorization_sz, sz);
+                    size_t hdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_host_resolutor, trimmed_host_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> hdh_mem(hdh_allocation_cost);
+                    auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_host_resolutor, trimmed_host_vectorization_sz, hdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, src, expected_ops_id]        = data_arr[i];
+                        uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_bwd_operatable_id   = dg::network_tile_member_getsetter::get_mono_operatable_backward_id_nothrow(dst);
+                        init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
+                        grad_status_t dst_grad_status           = dg::network_tile_member_getsetter::get_mono_grad_status_nothrow(dst);
+                        uma_ptr_t dst_grad_umaptr               = dg::network_tile_member_getsetter::get_mono_grad_addr_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_mono_backward_dispatch_control_nothrow(dst);
+
+                        std::expected<operatable_id_t, exception_t> src_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(src);
+                        std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
+                        std::expected<uma_ptr_t, exception_t> src_grad_umaptr               = dg::network_tile_member_getsetter::get_tile_grad_addr(src);
+                        std::expected<uma_ptr_t, exception_t> src_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(src);
+
+                        if (!src_bwd_operatable_id.has_value() || !src_init_status.has_value() || !src_grad_umaptr.has_value() || !src_logit_umaptr.has_value()){
+                            continue;
+                        }
+
                         if (dst_src != src){
                             continue;
                         }
 
-                        if (dst_operatable_id != src_operatable_id){
+                        if (dst_operatable_id != expected_ops_id){
+                            continue;
+                        }
+
+                        if (dst_bwd_operatable_id != src_bwd_operatable_id.value()){
                             continue;
                         }
 
@@ -7351,7 +7852,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
+                        if (src_init_status.value() != TILE_INIT_STATUS_INITIALIZED){
                             continue;
                         }
 
@@ -7361,7 +7862,7 @@ namespace dg::network_memcommit_resolutor{
 
                         auto [src_grad_vd_id, src_logit_vd_id, dst_grad_vd_id, dp_device, tileops_dp_code] = dg::network_dispatch_control::decode_bwd_mono(dispatch_control);
 
-                        if (dg::network_uma::reacquirer_fixedsize_is_region_reacquirable(umamap_reacquirer, {{src_grad_umaptr, src_grad_vd_id}, {src_logit_umaptr, src_logit_vd_id}, {dst_grad_umaptr, dst_grad_vd_id}})){
+                        if (dg::network_uma::reacquirer_fixedsize_is_region_reacquirable(umamap_reacquirer, {{src_grad_umaptr.value(), src_grad_vd_id}, {src_logit_umaptr.value(), src_logit_vd_id}, {dst_grad_umaptr, dst_grad_vd_id}})){
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
                             cuda_synchronizer.sync();
@@ -7370,7 +7871,7 @@ namespace dg::network_memcommit_resolutor{
                             host_restrict_synchronizer.clear();
                         }
 
-                        dg::network_uma::reacquirer_reacquire(umamap_reacquirer, {{src_grad_umaptr, src_grad_vd_id}, {src_logit_umaptr, src_logit_vd_id}, {dst_grad_umaptr, dst_grad_vd_id}});
+                        dg::network_uma::reacquirer_reacquire(umamap_reacquirer, {{src_grad_umaptr.value(), src_grad_vd_id}, {src_logit_umaptr.value(), src_logit_vd_id}, {dst_grad_umaptr, dst_grad_vd_id}});
                         vma_ptr_t src_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
                         vma_ptr_t src_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
                         vma_ptr_t dst_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 2u>{}); 
@@ -7414,7 +7915,7 @@ namespace dg::network_memcommit_resolutor{
 
                         dg::network_tile_member_getsetter::set_mono_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
                         dg::network_tile_member_getsetter::set_tile_grad_status_nothrow(src, TILE_GRAD_STATUS_HAS_VALUE);
-                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src)));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, dst_operatable_id)));
                     }
                 }
             };
@@ -7430,7 +7931,7 @@ namespace dg::network_memcommit_resolutor{
             const size_t request_delivery_capacity;
             const size_t addrfetch_vectorization_sz;
             const size_t region_vectorization_sz;
-            const size_t tileops_vectorization_sz;
+            const size_t backward_vectorization_sz;
         
         public:
 
@@ -7440,22 +7941,31 @@ namespace dg::network_memcommit_resolutor{
                                             size_t request_delivery_capacity,
                                             size_t addrfetch_vectorization_sz,
                                             size_t region_vectorization_sz,
-                                            size_t tileops_vectorization_sz) noexcept:  request_box(std::move(request_box)),
+                                            size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                         cuda_async_device(std::move(cuda_async_device)),
                                                                                         host_async_device(std::move(host_async_device)),
                                                                                         request_delivery_capacity(request_delivery_capacity),
                                                                                         addrfetch_vectorization_sz(addrfetch_vectorization_sz),
                                                                                         region_vectorization_sz(region_vectorization_sz),
-                                                                                        tileops_vectorization_sz(tileops_vectorization_sz){}
+                                                                                        backward_vectorization_sz(backward_vectorization_sz){}
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
-
-                auto request_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_raiihandle(this->request_box.get(), this->request_delivery_capacity));
-                auto descendant_arr             = std::make_unique<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>[]>(sz);
+                
+                dg::network_stack_allocation::NoExceptAllocation<std::optional<std::tuple<uma_ptr_t, uma_ptr_t>>> descendant_arr(sz);
+                
+                const size_t EVENT_SCALE_FACTOR             = 2u;
+                size_t max_possible_event_sz                = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz);
+                size_t rdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_request_delivery_capacity); 
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rdh_mem(rdh_allocation_cost);
+                auto request_delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_request_delivery_capacity, rdh_mem.get()));
 
                 {
-                    InternalDescendantAddressFetcher fetcher{};
-                    auto vectorized_delivery_handle = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&fetcher, this->addrfetch_vectorization_sz));
+                    InternalDescendantAddressFetcher fetcher    = {};
+                    size_t trimmed_addrfetch_vectorization_sz   = std::min(this->addrfetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&fetcher, trimmed_addrfetch_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
@@ -7474,12 +7984,16 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
                     internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
                     internal_resolutor.host_async_device        = this->host_async_device.get();
-                    internal_resolutor.vectorization_sz         = this->tileops_vectorization_sz;
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, this->region_vectorization_sz));
+                    internal_resolutor.vectorization_sz         = this->backward_vectorization_sz;
+
+                    size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!descendant_arr[i].has_value()){
@@ -7500,15 +8014,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         uma_ptr_t lhs_lck_addr  = dg::memult::region(lhs_rcu_addr.value(), lck_region_sz);
                         uma_ptr_t rhs_lck_addr  = dg::memult::region(rhs_rcu_addr.value(), lck_region_sz);
-                        auto key                = dg::utility::to_unique_representation(dst_lck_addr, lhs_lck_addr, rhs_lck_addr); 
+                        auto key                = std::make_tuple(dst_lck_addr, lhs_lck_addr, rhs_lck_addr); 
 
-                        //left major (shared left, no shared right)  a + b
-                        //right major (shared right, no shared left) a ^ b
-                        //left right major (shared some right, shared some left)
-                        //worst case scenerio: all shared right or left - synchronization overheads = # of dispatches - this is not expensive if we are dispatching host_asynchronous device - but very expensive if we are dispatching cuda_asynchronous - because the synchronization overheads would slow down the resolutor to do other tasks 
-                        //by splitting "major" - we also increase locality of dispatches - not only reducing synchronization overheads
-
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, lhs_ptr, rhs_ptr));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, lhs_ptr, rhs_ptr, event_arr[i].operatable_id));
                     }
                 }
             }
@@ -7556,50 +8064,200 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
 
-            struct InternalResolutor: dg::network_producer_consumer:KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>>{
+            //we'll come up with the naming convention later
+            //we'll be adding readability by using named structs later 
+
+            struct InternalCudaMixedResolutor: dg::network_producer_consumer::ConsumerInterface<std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t>>{
+
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+
+                void push(std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t cuda_ptr_arr_sz = sz * 5;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_arr(cuda_ptr_arr_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggergator_raiispawn_backward_pair(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [lhs_logit_ptr, lhs_grad_ptr, rhs_logit_ptr, rhs_grad_ptr, dst_grad_ptr, tileops_dispatch_control] = data_arr[i];
+                        cuda_ptr_arr[i * 5]         = lhs_logit_ptr;
+                        cuda_ptr_arr[i * 5 + 1]     = lhs_grad_ptr;
+                        cuda_ptr_arr[i * 5 + 2]     = rhs_logit_ptr;
+                        cuda_ptr_arr[i * 5 + 3]     = rhs_grad_ptr;
+                        cuda_ptr_arr[i * 5 + 4]     = dst_grad_ptr;
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_add(aggregator, lhs_logit_ptr, lhs_grad_ptr, rhs_logit_ptr, rhs_grad_ptr, dst_grad_ptr, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_arr.get(), std::next(cuda_ptr_arr.get(), cuda_ptr_arr_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
+                }
+            };
+
+            struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t>>{
+
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+            
+                void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    auto base_resolutor                     = InternalCudaMixedResolutor{};
+                    base_resolutor.synchronizer             = this->synchronizer;
+                    base_resolutor.restrict_synchronizer    = this->restrict_synchronizer;
+                    base_resolutor.async_device             = this->async_device;
+                    base_resolutor.push(data_arr, sz);
+                }
+            };
+
+            struct InternalHostMixedResolutor: dg::network_producer_consumer::ConsumerInterface<std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t>>{
+
+                dg::network_host_asynchronous::Synchronoizer * synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
+
+                void push(std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t host_ptr_arr_sz = sz * 5;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_arr(host_ptr_arr_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_backward_pair(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [lhs_logit_ptr, lhs_grad_ptr, rhs_logit_ptr, rhs_grad_ptr, dst_grad_ptr, tileops_dispatch_control] = data_arr[i];
+                        host_ptr_arr[i * 5]     = lhs_logit_ptr;
+                        host_ptr_arr[i * 5 + 1] = lhs_grad_ptr;
+                        host_ptr_arr[i * 5 + 2] = rhs_logit_ptr;
+                        host_ptr_arr[i * 5 + 3] = rhs_grad_ptr;
+                        host_ptr_arr[i * 5 + 4] = dst_grad_ptr;
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_add(aggregator, lhs_logit_ptr, lhs_grad_ptr, rhs_logit_ptr, rhs_grad_ptr, dst_grad_ptr, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_exec(arg_aggregator));  
+                    };
+                    auto async_task = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_arr.get(), std::next(host_ptr_arr.get(), host_ptr_arr_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
+                }
+            };
+
+            struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t>>{
+
+                dg::network_host_asynchronous::Synchronizer * synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
+
+                void push(host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    auto base_resolutor                     = InternalHostMixedResolutor{};
+                    base_resolutor.synchronizer             = this->synchronizer;
+                    base_resolutor.restrict_synchronzier    = this->restrict_synchronizer;
+                    base_resolutor.async_device             = this->async_device;
+                    base_resolutor.push(data_arr, sz);
+                }
+            };
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t, operatable_id_t>>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
                 size_t vectorization_sz;
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
                 dg::network_cuda_controller::AsynchronousDeviceInterface * cuda_async_device;
 
-                void push(std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t> * data_arr, size_t sz) noexcept{
+                void push(std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t, operatable_id_t> * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr), std::get<2>(lck_addr));
 
-                    //alright guys - things is hard - we can assume these guys must have a rcu_lock to proceed - but we cant assume that all descendants have gradients (immu)
-                    //we want to safeguard our assumption by doing polymorphic access and a no-err continue - this is defined behavior
-                    //we are safe to assume that the tile state is correct at any given time - but we cant assume that certain tiles have certain members
-                    //there isn't a better approach than just copy and paste these - it seems funny but this is for the best
-                    //thing is actually hard if we cripple a gradient here
+                    auto umamap_reacquirer                              = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 5u>{});
+                    auto dst_grad_vmamap_reacquirer                     = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto lhs_grad_vmamap_reacquirer                     = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto lhs_logit_vmamap_reacquirer                    = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto rhs_grad_vmamap_reacquirer                     = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto rhs_logit_vmamap_reacquirer                    = dg::network_vmamap::reacquirer_raii_initialize();
 
-                    auto umamap_reacquirer                          = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 5u>{});
-                    auto dst_grad_vmamap_reacquirer                 = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto lhs_grad_vmamap_reacquirer                 = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto lhs_logit_vmamap_reacquirer                = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto rhs_grad_vmamap_reacquirer                 = dg::network_vmamap::reacquirer_raii_initialize();
-                    auto rhs_logit_vmamap_reacquirer                = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto cuda_synchronizer                              = dg::network_cuda_controller::CudaSynchronizer(this->cuda_async_device);
+                    auto host_synchronizer                              = dg::network_host_asynchronous::Synchronizer(this->host_async_device);
+                    auto cuda_restrict_synchronizer                     = dg::network_controller::RestrictPointerSynchronizer(cuda_synchronizer);
+                    auto host_restrict_synchronizer                     = dg::network_controller::RestrictPointerSynchronizer(host_synchronizer);
 
-                    auto cuda_synchronizer                          = dg::network_cuda_controller::CudaSynchronizer(this->cuda_async_device);
-                    auto host_synchronizer                          = dg::network_host_asynchronous::Synchronizer(this->host_async_device);
-                    auto cuda_restrict_synchronizer                 = dg::network_controller::RestrictPointerSynchronizer(cuda_synchronizer);
-                    auto host_restrict_synchronizer                 = dg::network_controller::RestrictPointerSynchronizer(host_synchronizer);
+                    auto cuda_internal_resolutor                        = CudaInternalResolutor();
+                    cuda_internal_resolutor.synchronizer                = &cuda_synchronizer;
+                    cuda_internal_resolutor.restrict_synchronizer       = &cuda_restrict_synchronizer;
+                    cuda_internal_resolutor.async_device                = this->cuda_async_device;
 
-                    auto cuda_internal_resolutor                    = CudaInternalResolutor();
-                    auto host_internal_resolutor                    = HostInternalResolutor();
+                    auto host_internal_resolutor                        = HostInternalResolutor();
+                    host_internal_resolutor.synchronizer                = &host_synchronizer;
+                    host_internal_resolutor.restrict_synchronizer       = &host_restrict_synchronizer;
+                    host_internal_resolutor.async_device                = this->host_async_device;  
 
-                    cuda_internal_resolutor.synchronizer            = &cuda_synchronizer;
-                    cuda_internal_resolutor.restrict_synchronizer   = &cuda_restrict_synchronizer;
-                    cuda_internal_resolutor.async_device            = this->cuda_async_device;
+                    auto cuda_mixed_internal_resolutor                  = InternalCudaMixedResolutor{};
+                    cuda_mixed_internal_resolutor.synchronizer          = &cuda_synchronizer;
+                    cuda_mixed_internal_resolutor.restrict_synchronizer = &cuda_restrict_synchronizer;
+                    cuda_mixed_internal_resolutor.async_device          = this->cuda_async_device;
 
-                    host_internal_resolutor.synchronizer            = &host_synchronizer;
-                    host_internal_resolutor.restrict_synchronizer   = &host_restrict_synchronizer;
-                    host_internal_resolutor.async_device            = this->host_async_device;  
+                    auto host_mixed_internal_resolutor                  = InternalHostMixedResolutor{};
+                    host_mixed_internal_resolutor.synchronizer          = &host_synchronizer;
+                    host_mixed_internal_resolutor.restrict_synchronizer = &host_restrict_synchronizer;
+                    host_mixed_internal_resolutor.async_device          = this->host_async_device;
 
-                    auto cuda_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&cuda_internal_resolutor, this->vectorization_sz));
-                    auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&host_internal_resolutor, this->vectorization_sz));
+                    size_t trimmed_cuda_vectorization_sz                = std::min(this->vectorization_sz, sz);
+                    size_t cdh_allocation_cost                          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&cuda_internal_resolutor, trimmed_cuda_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> cdh_mem(cdh_allocation_cost);
+                    auto cuda_delivery_handle                           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&cuda_internal_resolutor, trimmed_cuda_vectorization_sz, cdh_mem.get()));
+
+                    size_t trimmed_host_vectorization_sz                = std::min(this->vectorization_sz, sz);
+                    size_t hdh_allocation_cost                          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&host_internal_resolwutor, trimmed_host_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> hdh_mem(hdh_allocation_cost);
+                    auto host_delivery_handle                           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&host_internal_resolutor, trimmed_host_vectorization_sz, hdh_mem.get()));
+
+                    size_t trimmed_cuda_mixed_vectorization_sz          = std::min(this->vectorization_sz, sz);
+                    size_t vmdh_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&cuda_mixed_internal_resolutor, trimmed_cuda_mixed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vmdh_mem(vmdh_allocation_cost);
+                    auto cuda_mixed_delivery_handle                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&cuda_mixed_internal_resolutor, trimmed_cuda_mixed_vectorization_sz, vmdh_mem.get()));
+
+                    size_t trimmed_host_mixed_vectorization_sz          = std::min(this->vectorization_sz, sz);
+                    size_t hmdh_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&host_mixed_internal_resolutor, trimmed_host_mixed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> hmdh_mem(hmdh_allocation_cost);
+                    auto host_mixed_delivery_handle                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&host_mixed_internal_resolutor, trimmed_host_mixed_vectorization_sz, hmdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
+                        auto [dst, lhs, rhs, expected_ops_id]       = data_arr[i];
+                        uma_ptr_t dst_lhs                           = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(dst);
+                        uma_ptr_t dst_rhs                           = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(dst);
+                        operatable_id_t dst_operatable_id           = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_bwd_operatable_id       = dg::network_tile_member_getsetter::get_pair_operatable_backward_id_nothrow(dst);
+                        dispatch_control_t dst_dispatch_control     = dg::network_tile_member_getsetter::get_pair_backward_dispatch_control_nothrow(dst);
+                        init_status_t dst_init_status               = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
+                        grad_status_t dst_grad_status               = dg::network_tile_member_getsetter::get_pair_grad_status_nothrow(dst);
+                        uma_ptr_t dst_grad_umaptr                   = dg::network_tile_member_getsetter::get_pair_grad_addr_nothrow(dst);
+                        dispatch_major_t dst_dispatch_major         = dg::network_tile_member_getsetter::get_pair_dispatch_major_nothrow(dst);
+
+                        std::expected<operatable_id_t, exception_t> lhs_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(lhs);
+                        std::expected<uma_ptr_t, exception_t> lhs_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(lhs);
+                        std::expected<uma_ptr_t, exception_t> lhs_grad_umaptr               = dg::network_tile_member_getsetter::get_tile_grad_addr(lhs);
+                        std::expected<init_status_t, exception_t> lhs_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(lhs);
+
+                        std::expected<operatable_id_t, exception_t> rhs_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(rhs);
+                        std::expected<uma_ptr_t, exception_t> rhs_logit_umaptr              = dg::network_tile_member_getsetter::get_tile_logit_addr(rhs);
+                        std::expected<uma_ptr_t, exception_t> rhs_grad_umaptr               = dg::network_tile_member_getsetter::get_tile_grad_addr(rhs);
+                        std::expected<init_status_t, exception_t> rhs_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(rhs);
+
+                        if (!lhs_bwd_operatable_id.has_value() || !lhs_logit_umaptr.has_value() || !lhs_grad_umaptr.has_value() || !lhs_init_status.has_value() 
+                            || rhs_bwd_operatable_id.has_value() || !rhs_logit_umaptr.has_value() || !rhs_grad_umaptr.has_value() || !rhs_init_status.has_value()){
+                            
+                            continue;
+                        }
+
+                        if (dst_operatable_id != expected_ops_id){
+                            continue;
+                        }
+
                         if (dst_lhs != lhs){
                             continue;
                         }
@@ -7608,11 +8266,11 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_operatable_id != lhs_operatable_id){
+                        if (dst_bwd_operatable_id != lhs_bwd_operatable_id.value()){
                             continue;
                         }
 
-                        if (dst_operatable_id != rhs_operatable_id){
+                        if (dst_bwd_operatable_id != rhs_bwd_operatable_id.value()){
                             continue;
                         }
 
@@ -7620,11 +8278,11 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (lhs_init_status != TILE_INIT_STATUS_INITIALIZED){
+                        if (lhs_init_status.value() != TILE_INIT_STATUS_INITIALIZED){
                             continue;
                         }
 
-                        if (rhs_init_status != TILE_INIT_STATUS_INITIALIZED){
+                        if (rhs_init_status.value() != TILE_INIT_STATUS_INITIALIZED){
                             continue;
                         }
 
@@ -7632,93 +8290,126 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (!dg::network_uma::reacquirer_is_reacquirable(umamap_reacquirer, {{lhs_logit_umaptr, dispatch_info.lhs_logit_vd_id}, {lhs_grad_umaptr, dispatch_info.lhs_grad_vd_id}, {rhs_logit_umaptr, dispatch_info.rhs_logit_vd_id}, {rhs_grad_umaptr, dispatch_info.rhs_grad_vd_id}, {dst_grad_umaptr, dispatch_info.dst_grad_vd_id}})){;
+                        if (!dg::network_uma::reacquirer_is_reacquirable(umamap_reacquirer, {{lhs_logit_umaptr.value(), dispatch_info.lhs_logit_vd_id}, 
+                                                                                             {lhs_grad_umaptr.value(), dispatch_info.lhs_grad_vd_id}, 
+                                                                                             {rhs_logit_umaptr.value(), dispatch_info.rhs_logit_vd_id}, 
+                                                                                             {rhs_grad_umaptr.value(), dispatch_info.rhs_grad_vd_id}, 
+                                                                                             {dst_grad_umaptr, dispatch_info.dst_grad_vd_id}})){
+
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_mixed_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_mixed_delivery_handle.get());
                             cuda_synchronizer.sync();
-                            cuda_restrict_synchronizer.clear();
                             host_synchronizer.sync();
+                            cuda_restrict_synchronizer.clear();
                             host_restrict_synchronizer.clear();
                         }
 
-                        // dg::network_uma::reacquirer_reacquire(umamap_reacquirer, {{lhs_logit_umaptr, dispatch_info.lhs_logit_vd_id}, {lhs_grad_umaptr, dispatch_info.lhs_grad_vd_id}, {rhs_logit_umaptr, dispatch_info.rhs_logit_vd_id}, {rhs_grad_umaptr, dispatch_info.rhs_grad_vd_id}, {dst_grad_umaptr, dispatch_info.dst_grad_vd_id}});
-                        // vma_ptr_t lhs_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
-                        // vma_ptr_t lhs_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
-                        // vma_ptr_t rhs_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 2u>{});
-                        // vma_ptr_t rhs_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 3u>{});
-                        // vma_ptr_t dst_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 4u>{});
+                        dg::network_uma::reacquirer_reacquire(umamap_reacquirer, {{lhs_logit_umaptr.value(), dispatch_info.lhs_logit_vd_id}, 
+                                                                                  {lhs_grad_umaptr.value(), dispatch_info.lhs_grad_vd_id}, 
+                                                                                  {rhs_logit_umaptr.value(), dispatch_info.rhs_logit_vd_id}, 
+                                                                                  {rhs_grad_umaptr.value(), dispatch_info.rhs_grad_vd_id}, 
+                                                                                  {dst_grad_umaptr, dispatch_info.dst_grad_vd_id}});
+                        
+                        vma_ptr_t lhs_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
+                        vma_ptr_t lhs_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
+                        vma_ptr_t rhs_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 2u>{});
+                        vma_ptr_t rhs_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 3u>{});
+                        vma_ptr_t dst_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 4u>{});
 
-                        // if (!dg::network_vmamap::reacquirer_is_region_reacquirable(lhs_logit_vmamap_reacquirer, lhs_logit_vmaptr)
-                        //     || !dg::network_vmamap::reacquirer_is_region_reacquirable(lhs_grad_vmamap_reacquirer, lhs_grad_vmaptr)
-                        //     || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr)
-                        //     || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr)
-                        //     || !dg::network_vmamap::reacquirer_is_region_reacquirable(dst_grad_vmamap_reacquirer, dst_grad_vmaptr)){
-                                
-                        //     synchronizer.sync();
-                        //     restrict_synchronizer.clear();
-                        // }
+                        if (!dg::network_vmamap::reacquirer_is_region_reacquirable(lhs_logit_vmamap_reacquirer, lhs_logit_vmaptr)
+                            || !dg::network_vmamap::reacquirer_is_region_reacquirable(lhs_grad_vmamap_reacquirer, lhs_grad_vmaptr)
+                            || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr)
+                            || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr)
+                            || !dg::network_vmamap::reacquirer_is_region_reacquirable(dst_grad_vmamap_reacquirer, dst_grad_vmaptr)){
+                            
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(cuda_mixed_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
+                            dg::network_producer_consumer::delvrsrv_clear(host_mixed_delivery_handle.get());
+                            cuda_synchronizer.sync();
+                            host_synchronizer.sync();
+                            cuda_restrict_synchronizer.clear();
+                            host_restrict_synchronizer.clear();
+                        }
 
-                        // dg::network_vmamap::reacquirer_reacquire(lhs_logit_vmamap_reacquirer, lhs_logit_vmaptr);
-                        // dg::network_vmamap::reacquirer_reacquire(lhs_grad_vmamap_reacquirer, lhs_grad_vmaptr);
-                        // dg::network_vmamap::reacquirer_reacquire(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr);
-                        // dg::network_vmamap::reacquirer_reacquire(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr);
-                        // dg::network_vmamap::reacquirer_reacquire(dst_grad_vmamap_reacquirer, dst_grad_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(lhs_logit_vmamap_reacquirer, lhs_logit_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(lhs_grad_vmamap_reacquirer, lhs_grad_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(dst_grad_vmamap_reacquirer, dst_grad_vmaptr);
 
-                        // if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.dp_device)){  //hmm - this is difficult - let's assume they must be on the same platform for now - to not overcomplicate things
-                        //     auto lhs_logit_cudaptr  = dg::network_vmamap::get_cuda_ptr(lhs_logit_vmamap_reacquirer);
-                        //     auto lhs_grad_cudaptr   = dg::network_vmamap::get_cuda_ptr(lhs_grad_vmamap_reacquirer);
-                        //     auto rhs_logit_cudaptr  = dg::network_vmamap::get_cuda_ptr(rhs_logit_vmamap_reacquirer);
-                        //     auto rhs_grad_cudaptr   = dg::network_vmamap::get_cuda_ptr(rhs_grad_vmamap_reacquirer);
-                        //     auto dst_grad_cudaptr   = dg::network_vmamap::get_cuda_ptr(dst_grad_vmamap_reacquirer);
+                        if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.dp_device)){
+                            cuda_ptr_t lhs_logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(lhs_logit_vmamap_reacquirer);
+                            cuda_ptr_t lhs_grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(lhs_grad_vmamap_reacquirer);
+                            cuda_ptr_t rhs_logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(rhs_logit_vmamap_reacquirer);
+                            cuda_ptr_t rhs_grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(rhs_grad_vmamap_reacquirer);
+                            cuda_ptr_t dst_grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(dst_grad_vmamap_reacquirer);
+                            auto work_order                 = std::make_tuple(lhs_logit_cudaptr, lhs_grad_cudaptr, rhs_logit_cudaptr, rhs_grad_cudaptr, dst_grad_cudaptr, tileops_dispatch_code);
 
-                        //     restrict_synchronizer.add(lhs_logit_cudaptr, lhs_grad_cudaptr, rhs_logit_cudaptr, rhs_grad_cudaptr, dst_grad_cudaptr);
-                        //     auto left_task          = dg::network_tileops_cuda_poly::async_make_task(this->async_device, );
+                            if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_RIGHT){
+                                dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), rhs_logit_cudaptr, work_order);
+                            } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_LEFT){
+                                dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), lhs_logit_cudaptr, work_order);
+                            } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_MIXED){
+                                dg::network_producer_consumer::delvrsrv_deliver(cuda_mixed_delivery_handle.get(), work_order);
+                            } else{
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.dp_device)){
+                            host_ptr_t lhs_logit_hostptr    = dg::network_vmamap::get_host_ptr(lhs_logit_vmamap_reacquirer);
+                            host_ptr_t lhs_grad_hostptr     = dg::network_vmamap::get_host_ptr(lhs_grad_vmamap_reacquirer);
+                            host_ptr_t rhs_logit_hostptr    = dg::network_vmamap::get_host_ptr(rhs_logit_vmamap_reacquirer);
+                            host_ptr_t rhs_grad_hostptr     = dg::network_vmamap::get_host_ptr(rhs_grad_vmamap_reacquirer);
+                            host_ptr_t dst_grad_hostptr     = dg::network_vmamap::get_host_ptr(dst_grad_vmamap_reacquirer);
+                            auto work_order                 = std::make_tuple(lhs_logit_hostptr, lhs_grad_hostptr, rhs_logit_hostptr, rhs_grad_hostptr, dst_grad_hostptr, tileops_dispatch_code);
 
-                        //     if (!left_task.has_value()){
-                        //         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(left_task.error()));
-                        //         continue;
-                        //     }
+                            if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_RIGHT){
+                                dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), rhs_logit_hostptr, work_order);
+                            } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_LEFT){
+                                dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), lhs_logit_hostptr, work_order);
+                            } else if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_MIXED){
+                                dg::network_producer_consumer::delvrsrv_deliver(host_mixed_delivery_handle.get(), work_order);
+                            } else{
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
 
-                        //     auto right_task         = dg::network_tileops_cuda_poly::async_make_task(this->async_device, );
+                        exception_t lhs_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(lhs, TILE_GRAD_STATUS_HAS_VALUE);
+                        
+                        if (dg::network_exception::is_failed(lhs_set_err)){
+                            // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(lhs_set_err));
+                        } else{
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(lhs, expected_ops_id)));
+                        }
 
-                        //     if (!right_task.has_value()){
-                        //         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(right_task.error()));
-                        //         continue;
-                        //     }
+                        exception_t rhs_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(rhs, TILE_GRAD_STATUS_HAS_VALUE);
 
-                        //     //we must rely on callee's asynchronous atomicity - we offload the bug there 
+                        if (dg::network_exception::is_failed(rhs_set_err)){
+                            // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(rhs_set_err));
+                        } else{
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(rhs, expected_ops_id)));
+                        }
 
-                        //     auto async_id           = dg::network_tileops_cuda_poly::async_exec(std::move(left_task.value()), std::move(right_task.value()));
-
-                        //     if (!async_id.has_value()){
-                        //         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(async_id.error()));
-                        //         continue;
-                        //     }
-
-                        //     synchronizer.add(async_id.value());
-                        // } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.dp_device)){
-                        //     auto lhs_logit_hostptr  = dg::network_vmamap::get_host_ptr(lhs_logit_vmamap_reacquirer);
-                        //     auto lhs_grad_hostptr   = dg::network_vmamap::get_host_ptr(lhs_grad_vmamap_reacquirer);
-                        //     auto rhs_logit_hostptr  = dg::network_vmamap::get_host_ptr(rhs_logit_vmamap_reacquirer);
-                        //     auto rhs_grad_hostptr   = dg::network_vmamap::get_host_ptr(rhs_grad_vmamap_reacquirer);
-                        //     auto dst_grad_hostptr   = dg::network_vmamap::get_host_ptr(dst_grad_vmamap_reacquirer);
-
-                        //     dg::network_tileops_host_poly::bwd_pair_lhs();
-                        //     dg::network_tileops_host_poly::bwd_pair_rhs();
-                        // } else{
-                        //     if constexpr(DEBUG_MODE_FLAG){
-                        //         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        //         std::abort();
-                        //     } else{
-                        //         std::unreachable();
-                        //     }
-                        // }
-
-                        // dg::network_tile_member_getsetter::set_tile_grad_status_nothrow(lhs, TILE_GRAD_STATUS_HAS_VALUE);
-                        // dg::network_tile_member_getsetter::set_tile_grad_status_nothrow(rhs, TILE_GRAD_STATUS_HAS_VALUE);
-                        // dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
-                        // dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(lhs)));
-                        // dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(rhs)));
+                        dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
                     }
                 }
             };         

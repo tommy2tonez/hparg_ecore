@@ -85,6 +85,7 @@
         "bitset": "cpp",
         "ranges": "cpp",
         "cerrno": "cpp",
-        "cursor": "cpp"
+        "cursor": "cpp",
+        "source_location": "cpp"
     }
 }
