@@ -62,3 +62,6 @@
 //things gonna be tough and bumpy
 //we are talking in terms of "without loss of generality" - we'll work on a synthetic solution
 //the true formula cannot be described in words but rather through experiments - so we'll get there by instruments and benchmarks
+
+//alrights - I had another feedback
+//instead of doing rowxcolumn - we are doing row x row render rules for fast forward - and tradeoff backward speed
