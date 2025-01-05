@@ -76,7 +76,7 @@ namespace dg::network_memcommit_resolutor{
     //^^^
 
     //we are declaring dependency injection expectations
-    //users of the resolutors must coerce (implements) interface by compositing of std::shared_ptr<>
+    //users of the resolutors must coerce (implements) interface by composition of std::shared_ptr<>
 
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;

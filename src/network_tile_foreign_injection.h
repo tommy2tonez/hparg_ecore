@@ -49,14 +49,14 @@ namespace dg::network_tile_foreign_injection{
                 size_t next_idx = map_ptr->second.cursor_dict.value.fetch_add(1u, std::memory_order_relaxed); //this is relaxed ordering - we are allocating tile addreses - we aren't responsible for the tile content at this level - it's memlock responsibility - we dont want to thrash core here
 
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (!stdx::is_pow2(map_ptr->second.allocation_vec.size())){
+                    if (!stdx::is_pow2(map_ptr->second.allocation_vec.value.size())){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
 
-                size_t idx = next_idx & (map_ptr->second.allocation_vec.size() - 1u);  
-                return map_ptr->second.allocation_vec[idx];
+                size_t idx = next_idx & (map_ptr->second.allocation_vec.value.size() - 1u);  
+                return map_ptr->second.allocation_vec.value[idx];
             }
 
             void deallocate(uma_ptr_t ptr) noexcept{
