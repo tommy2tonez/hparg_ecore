@@ -72,4 +72,16 @@
 
 //consider this extreme scenerios - we are dispatching 1x1 tiles - and we are dispatching 8192 x 8192 tiles
 //the former scenerio is purely pair operations + path optimizations
-//the latter scenerio trade off context distribution for locality (this is only for combinatorial operations + dimension reduction operations) - so we must improve the context distribution of those operations 
+//the latter scenerio trade off context distribution for locality (this is only for combinatorial operations + dimension reduction operations) - so we must improve the context distribution of those operations
+//alrights - that is first cut optimization
+//the second cut optimization is the base operations
+//we assume that add, sub, mul, div, and, or, xor, exp, log, sin, cos, inv, neg, dsc (math_approx.py) are sufficient - right, it's sufficient to approx every f(x) - but not sufficient to increase logit information densitiy (which is very important for intellect)
+//after getting the two optimizations done, you'd unlock true artificial intelligent - hint, it's hard
+//the third cut optimization is discrete math - and logit group training
+//the fourth cut optimization is discrete initial values
+
+//(1) and (2) could be done via traditional approaches - says scaled rule of logits - we want to maximize logit density
+//(3) and (4) must be done via logit mining - billions, trillions of cores spin to find the sweet spot 
+
+//I wasn't joking when I said people that could solve the problems would rule the world
+//those optimizations would take a normal person 10 years of doctoral to solve cleanly, accurately
