@@ -12,7 +12,7 @@
 //Without loss of generality
 //assume that we have a sphere function f(x) -> y, 3d euclidean coordinate
 //the possibility of the plan that passed through y1, y2, y3 (within a reasonable uncertainty) by circumscribing the coordinate, is more than 1
-
+    
 //one way to describe this one dimensionally is by discretizing spheres within a sphere
 //consider this volumn eqn: 4/3*pi*r^3
 //assume our unit sphere is r/2
@@ -65,3 +65,11 @@
 
 //alrights - I had another feedback
 //instead of doing rowxcolumn - we are doing row x row render rules for fast forward - and tradeoff backward speed
+//the problems that we currently have are: - uacm (unordered_accum) operations are too basic - (add, min, max) - do not fully reflect the power of dimensional reductions (which is WLOG described above through sphere projections) - we want synthetic solutions and good approximations to reduce the compute overheads 
+//                                         - we probably want oacm (ordered_accum)
+//                                         - combinatorial pacm (pair_accum) operations are too basic (linear) - we want spheroids, non-mathematical projections (ideal projections)
+//                                         - we are avoiding query optimizations - cublas_x - we want jit or runtime compilations - we probably want shared_process memories (this is hard)
+
+//consider this extreme scenerios - we are dispatching 1x1 tiles - and we are dispatching 8192 x 8192 tiles
+//the former scenerio is purely pair operations + path optimizations
+//the latter scenerio trade off context distribution for locality (this is only for combinatorial operations + dimension reduction operations) - so we must improve the context distribution of those operations 

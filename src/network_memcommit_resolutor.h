@@ -32,7 +32,7 @@ namespace dg::network_memcommit_resolutor{
     //user signals
     //user invalidates signals
     //user allocates tiles
-    //per client requests - we are doing 1024 x 1024 tiles - moving up to 8192 x 8192 tiles
+    //per client requests - we are doing 1024 x 1024 tiles - or 512x512 tiles - we admit that matrix dispatch locality is matrix's responsisiblity - yet we still do vectorized optimizations because that's another radix of optimizations (in particular, synchronization optimizations - we dont want restriction to increase the spinlock overhead which would slowdown the system) (we can't say that fattening the matrix and changing dispatch_control_t would solve everything - it's partially true - but not optimization-wise true) - we'll work on the matrix part later - maybe involving jit and and bytecode or runtime compilations - we'll discuss that part later 
     //we want concurrent training on 100.000 GPU clusters as testing phase
     //we want to leverage memregion frequencies to avoid backward synchro problem + packet backward problems
     //after the testing phase - we'll open source this to be the community version (people sell their hardware to the cause and actually get paid (bid | ask) for something that's actually meaningful - not for mining coins)
@@ -162,6 +162,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+   
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -176,7 +177,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
-                        uma_ptr_t lck_addr  = dg::memult::reigon(rcu_addr, dg::network_memops_uma::memlock_region_size());
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
                     }
@@ -199,7 +200,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -262,6 +263,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -299,7 +301,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -362,6 +364,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -399,7 +402,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -466,6 +469,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+  
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -503,7 +507,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -563,14 +567,15 @@ namespace dg::network_memcommit_resolutor{
                 
                 const size_t EVENT_SCALE_FACTOR     = PACM_ACM_SZ * 2;
                 size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
-                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz); 
-                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity); 
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
                 auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -606,9 +611,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                       = event_arr[i].dst;
                         operatable_id_t expected_ops_id     = event_arr[i].operatable_id;
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(ptr); //this is operatable_memevent_id_t + operatable_forward_id + operatable_backward_id
+                        operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -680,6 +685,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz); 
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -717,7 +723,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -788,6 +794,7 @@ namespace dg::network_memcommit_resolutor{
                     internal_resolutor.uma_ip_retriever             = this->uma_ip_retriever->get();
                     internal_resolutor.host_ip_retriever            = this->host_ip_retriever->get();
                     internal_resolutor.request_delivery_handle      = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz                 = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -827,7 +834,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -889,11 +896,12 @@ namespace dg::network_memcommit_resolutor{
                 size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
                 size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity); 
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
-                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get())); //concurrent memory is sensitive Mom - you code kernel for 40 years
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
 
                 {
-                    InternalResolutor internal_resolutor{};
+                    InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz); 
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -931,7 +939,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -994,6 +1002,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -1031,7 +1040,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -1094,6 +1103,7 @@ namespace dg::network_memcommit_resolutor{
                 {
                     InternalResolutor internal_resolutor        = {};
                     internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
                     size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz); 
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -1131,7 +1141,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status           = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -1543,7 +1553,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){ //I'm tempted to make this an exception like leaf but it's too confusing
+                        if (current_ops_id != expected_ops_id){ //I'm tempted to make this an exception like leaf but it's too confusing
                             continue;
                         }
 
@@ -1639,7 +1649,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -1741,7 +1751,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -1843,7 +1853,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -1945,7 +1955,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2047,7 +2057,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2159,7 +2169,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2261,7 +2271,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2363,7 +2373,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2465,7 +2475,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2878,7 +2888,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -2974,7 +2984,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -3102,7 +3112,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -3230,7 +3240,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -3360,7 +3370,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -3493,7 +3503,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -3629,7 +3639,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee); 
 
-                        if (expected_ops_id != current_ops_id){ //this is not clear
+                        if (current_ops_id != expected_ops_id){ //this is not clear
                             continue;
                         }
 
@@ -3757,7 +3767,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -3910,7 +3920,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -4043,7 +4053,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -4171,7 +4181,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             continue;
                         }
 
@@ -4567,7 +4577,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(dst);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(dst);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         }
@@ -4899,7 +4909,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(ptr);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(ptr);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_ptr = std::nullopt;
                             continue;
                         } 
@@ -5250,7 +5260,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(dst);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_pair_operatable_id_nothrow(dst);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         } 
@@ -5890,7 +5900,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_extnsrc_operatable_id_nothrow(dst);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         }
@@ -6212,7 +6222,7 @@ namespace dg::network_memcommit_resolutor{
 
                         //branch optimization opportunity - I think clang would do this better
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         }
@@ -6730,7 +6740,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(dst);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(dst);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         }
@@ -7072,7 +7082,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(dst);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(dst);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         } 
@@ -7711,7 +7721,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_mono_operatable_id_nothrow(dst);
 
-                        if (expected_ops_id != current_ops_id){
+                        if (current_ops_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
                             continue;
                         }
@@ -8594,7 +8604,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, expected_ops_id, fetching_addr]  = data_arr[i];
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
-                        operatable_id_t operatable_id               = dg::network_tile_member_getsetter::get_extnsrc_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t operatable_id               = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(dst);
 
                         if (expected_ops_id != operatable_id){
                             *fetching_addr = std::nullopt;
@@ -8743,7 +8753,7 @@ namespace dg::network_memcommit_resolutor{
                         auto [src, dst, localcounterpart, expected_ops_id] = data_arr[i];
                         
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extnsrc_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_bwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_backward_operatable_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
                         dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extnsrc_backward_dispatch_control_nothrow(dst);
@@ -8771,7 +8781,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         uma_ptr_t localcounterpart_counterpart          = dg::network_tile_member_getsetter::get_extndst_counterpart_nothrow(localcounterpart);
-                        operatable_id_t localcounterpart_operatable_id  = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(localcounterpart);
+                        operatable_id_t localcounterpart_operatable_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(localcounterpart);
                         init_status_t localcounterpart_init_status      = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(localcounterpart);
                         grad_status_t localcounterpart_grad_status      = dg::network_tile_member_getsetter::get_extndst_grad_status_nothrow(localcounterpart);
                         uma_ptr_t localcounterpart_grad_umaptr          = dg::network_tile_member_getsetter::get_extndst_grad_addr_nothrow(localcounterpart);
@@ -9289,7 +9299,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, expected_ops_id, fetching_addr]  = ptr_arr[i];
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(dst);
-                        operatable_id_t operatable_id               = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t operatable_id               = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(dst);
 
                         if (operatable_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
@@ -9404,7 +9414,7 @@ namespace dg::network_memcommit_resolutor{
                         auto [dst, src, expected_ops_id]        = data_arr[i];
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(dst);
                         operatable_id_t dst_bwd_operatable_id   = dg::network_tile_member_getsetter::get_msgrfwd_backward_operatable_id_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(dst);
                         uma_ptr_t dst_grad_umaptr               = dg::network_tile_member_getsetter::get_msgrfwd_grad_addr_nothrow(dst);
                         grad_status_t dst_grad_status           = dg::network_tile_member_getsetter::get_msgrfwd_grad_status_nothrow(dst);
@@ -9610,7 +9620,7 @@ namespace dg::network_memcommit_resolutor{
                         if (!src_rcu_addr.has_value()){
                             continue;
                         }
-             
+
                         uma_ptr_t dst_lck_addr  = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         uma_ptr_t src_lck_addr  = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
                         auto key                = std::make_tuple(dst_lck_addr, src_lck_addr);
@@ -9622,7 +9632,7 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVCosnumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, uma_ptr_t *>>{
+            struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVCosnumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
 
                 void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t, uma_ptr_t *> * ptr_arr, size_t sz) noexcept{
 
@@ -9631,7 +9641,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, expected_ops_id, fetching_addr]  = ptr_arr[i];
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(dst);
-                        operatable_id_t operatable_id               = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t operatable_id               = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(dst);
 
                         if (operatable_id != expected_ops_id){
                             *fetching_addr = std::nullopt;
@@ -9664,6 +9674,68 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
 
+            struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, grad_status_t, cuda_tileops_dispatch_control_t>>{
+
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+
+                void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, grad_status_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t cuda_ptr_arr_sz = sz * 3;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_arr(cuda_ptr_arr_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_raiispawn_backward_mono(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [src_grad_cudaptr, src_logit_cudaptr, dst_grad_cudaptr, src_grad_status, tileops_dispatch_control] = data_arr[i];
+                        cuda_ptr_arr[i * 3]     = src_grad_cudaptr;
+                        cuda_ptr_arr[i * 3 + 1] = src_logit_cudaptr;
+                        cuda_ptr_arr[i * 3 + 2] = dst_grad_cudaptr;
+
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_add(aggregator, src_grad_cudaptr, src_logit_cudaptr, dst_grad_cudaptr, src_grad_status, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_cuda_controller::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_arr.get(), std::next(cuda_ptr_arr.get(), cuda_ptr_arr_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
+                }
+            };
+
+            struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, grad_status_t, host_tileops_dispatch_control_t>>{
+
+                dg::network_host_asynchronous::Synchronizer * synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
+
+                void push(host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, grad_status_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t host_ptr_arr_sz = sz * 3;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_arr(host_ptr_arr_sz);
+                    auto aggregator = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_raiispawn_backward_mono(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [src_grad_hostptr, src_logit_hostptr, dst_grad_hostptr, src_grad_status, tileops_dispatch_control] = data_arr[i];
+                        host_ptr_arr[i * 3]     = src_grad_hostptr;
+                        host_ptr_arr[i * 3 + 1] = src_logit_hostptr;
+                        host_ptr_arr[i * 3 + 2] = dst_grad_hostptr;
+
+                        dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::aggregator_add(aggregator, src_grad_hostptr, src_logit_hostptr, dst_grad_hostptr, src_grad_status, tileops_dispatch_control));
+                    }
+
+                    auto executable = [arg_aggregator = std::move(aggregator)]() noexcept{
+                        dg::network_exception_handler::nothrow_log(dg::network_tileosp_host_poly::aggregator_exec(arg_aggregator));
+                    };
+                    auto async_task = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_arr.get(), std::next(host_ptr_arr.get(), host_ptr_arr_sz)));
+                    auto async_id   = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(async_task)));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(async_id));
+                }
+            };
+
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<std::tuple<uma_ptr_t, uma_ptr_t>, std::tuple<uma_ptr_t, uma_ptr_t>>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
@@ -9689,7 +9761,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]        = data_arr[i];
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(dst);
-                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_bwd_operatable_id   = dg::network_tile_member_getsetter::get_msgrbwd_backward_operatable_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(dst);
                         grad_status_t dst_grad_status           = dg::network_tile_member_getsetter::get_msgrbwd_grad_status_nothrow(dst);
