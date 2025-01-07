@@ -111,4 +111,12 @@
 //8th optimization strategy: plot twist - our oval operation is not actually well defined - it is actually circle + uint4_t linear
 //9th optimization strategy: just write the 8 previous suggestions and you'd be successful
 
+//alrights - let's talk about 2nd optimization strategy
+//everything starts with an assumption, assume that f(x) groups semantically equivalent context in the euclidian coordinate
+//Without loss of generality, assume we 1 dimensionalize the x space as in f(x), recursively split the logit space right in the middle (mergesort way)
+//we want to find the recursive resolution for this
+//assume the resolution is resolution_sz (resolution is the discretized space of the descendant context space)
+//the recursion resolution is resolution_sz * resolution_sz
+//we probably want to stack them together by using addition operation
+
 //we'll post the result later guys - stay tuned
