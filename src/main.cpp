@@ -102,13 +102,13 @@
 //so instead of producing 1 value like linear with one logit value, we are producing 2 values pair (x, y) with a slight cost of 100 base 10 space complexity
 //legend says that people discretize value in logarits + tile size in logarits to find the sweet spots between cuda computation locality benefits and logit density 
 
-//2nd optimization strategy: positional suffix array mapping, we discretize the space -> 1 dimensional grid and store suffix array for n! base 10 space (this is not differentiable - so we have to use heuristic approach)
+//2nd optimization strategy: positional suffix array mapping, we discretize the vector x, as in f(x), space -> 1 dimensional grid and store suffix array for n! base 10 space (this is not differentiable and very hard to get right!!! - so we have to use good heuristic approach)
 //3rd optimization strategy: recursively deflate tree node computation - we want to deflate node computation by running math_approx (we invent a new operation that is denser)
 //4th optimization strategy: random-sequence of logit group training of same influence groups
 //5th optimization strategy: discrete operations, rinse and repeat 1,2,3 (this is expensive)
 //6th optimization strategy: find an escape velocity and let AI optimizes itself once it is smarter than the coder
 //7th optimization strategy: coerce every leaf logit to uint4_t and randomize the seeds 
 //8th optimization strategy: plot twist - our oval operation is not actually well defined - it is actually circle + uint4_t linear
-//9th optimization strategy: just write the 8 previous suggesstion and you'd be successful
+//9th optimization strategy: just write the 8 previous suggestions and you'd be successful
 
 //we'll post the result later guys - stay tuned
