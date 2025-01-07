@@ -97,7 +97,7 @@
 //if the original sets are sufficient? why does this increase logit density - it's the log discretization
 
 //consider this linear operation f(a, 3) = <a, 3 * a>
-//consider this trinity discretized oval operation f(pi, a) = <x, y> = rotate(<cos(pi) * r1, sin(pi) * r2>, a) - r1 and r2 aren't logits, they are logaric discretized values, with the space complexity, without loss of generality, of ~100 = 10 x 10, base 10
+//consider this trinity discretized oval operation f(pi, a) = <x, y> = rotate(<cos(pi) * r1, sin(pi) * r2>, a) - r1 and r2 aren't logits, they are logaric discretized values (uint4_t), with the space complexity, without loss of generality, of ~100 = 10 x 10, base 10
 //rotate function can be described as distance function + another circle function mapping
 //so instead of producing 1 value like linear with one logit value, we are producing 2 values pair (x, y) with a slight cost of 100 base 10 space complexity
 //legend says that people discretize value in logarits + tile size in logarits to find the sweet spots between cuda computation locality benefits and logit density 
@@ -107,5 +107,8 @@
 //4th optimization strategy: random-sequence of logit group training of same influence groups
 //5th optimization strategy: discrete operations, rinse and repeat 1,2,3 (this is expensive)
 //6th optimization strategy: find an escape velocity and let AI optimizes itself once it is smarter than the coder
+//7th optimization strategy: coerce every leaf logit to uint4_t and randomize the seeds 
+//8th optimization strategy: plot twist - our oval operation is not actually well defined - it is actually circle + uint4_t linear
+//9th optimization strategy: just write the 8 previous suggesstion and you'd be successful
 
 //we'll post the result later guys - stay tuned
