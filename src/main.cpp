@@ -94,6 +94,11 @@
 //we want to maximize f logit density, f as in f(x) -> y
 //we know that everything could be described as oval projections
 
+//if the original sets are sufficient? why does this increase logit density - it's the log discretization
+
+//consider this linear operation f(a, 3) = <a, 3 * a>
+//consider this discretized oval operation f(a, pi) = <x, y> = <a * r1 * cos(pi), b, a * r2 * sin(pi)> - r1 and r2 aren't logits, they are logaric discretized values, with the space complexity, without loss of generality, of ~100 = 10 x 10, base 10
+
 //2nd optimization strategy: positional suffix array mapping, we discretize the space -> 1 dimensional grid and store suffix array for n! base 10 space (this is not differentiable - so we have to use heuristic approach)
 //3rd optimization strategy: recursively deflate tree node computation - we want to deflate node computation by running math_approx (we invent a new operation that is denser)
 //4th optimization strategy: random-sequence of logit group training of same influence groups
