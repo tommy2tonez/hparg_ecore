@@ -83,5 +83,21 @@
 //(1) and (2) could be done via traditional approaches - says scaled rule of logits - we want to maximize logit density
 //(3) and (4) must be done via logit mining - billions, trillions of cores spin to find the sweet spot 
 
-//I wasn't joking when I said people that could solve the problems would rule the world
-//those optimizations would take a normal person 10 years of doctoral to solve cleanly, accurately
+//alrights - let's talk about how we could do this (increase leaf logit density) - opti stategies
+//we are talking in terms of pair operations of 1x1 tiles
+
+//mathematically speaking 1st optimization strategy: log discretization of const initial values of continous oval projection f 
+//we have plus/minus - which is y axis offset
+//we have multiply/divide - which is y axis expansion/shrink
+//we have sin/cos - which is circle projection
+//these are the basic operations to approx f of f(x) -> y
+//we want to maximize f logit density, f as in f(x) -> y
+//we know that everything could be described as oval projections
+
+//2nd optimization strategy: positional suffix array mapping, we discretize the space -> 1 dimensional grid and store suffix array for n! base 10 space (this is not differentiable - so we have to use heuristic approach)
+//3rd optimization strategy: recursively deflate tree node computation - we want to deflate node computation by running math_approx (we invent a new operation that is denser)
+//4th optimization strategy: random-sequence of logit group training of same influence groups
+//5th optimization strategy: discrete operations, rinse and repeat 1,2,3 (this is expensive)
+//6th optimization strategy: find an escape velocity and let AI optimizes itself once it is smarter than the coder
+
+//we'll post the result later guys - stay tuned
