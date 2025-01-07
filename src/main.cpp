@@ -116,7 +116,22 @@
 //Without loss of generality, assume we 1 dimensionalize the x space as in f(x), recursively split the logit space right in the middle (mergesort way)
 //we want to find the recursive resolution for this
 //assume the resolution is resolution_sz (resolution is the discretized space of the descendant context space)
-//the recursion resolution is resolution_sz * resolution_sz
+//the worst recursion resolution is resolution_sz * resolution_sz
 //we probably want to stack them together by using addition operation
+
+//so what is machine learning, really?
+//machine learning is another words for grouping + oval continuous projections
+//we want to group semantically equivalent context together - and map them by using oval continous projections - we are assuming semantically equivalent context means closer euclidian distance - this is a part of the recursive definition
+//every f(x) -> y can be described as f(w(x)) -> y - this is the recursive definition
+//w(x) is a bijective "rearrange" function - mapping x -> (discretized n)! space
+//f(x) is an oval continous mapping function
+//what does this mean precisely? it means that the rearrange algorithm complexity must never precede sorting complexity - precisely n * log(n) complexity - we should be talking in terms of bits - we assume bit is the universally absolute unit (which is not)
+//here is the twist - to have absolute accuracy - the output logit must touch every input logit
+//this is the principle of neural network
+
+//so how do we change the definition of w(x) 
+//w(x) is the rearrange and context redistributor function - responsible for grouping semantically equivalent context together - which is a necessary, not mandatory, build up for combinatorial operations (either linear or whatever_sphere_near operation)
+//                                                         - responsible for diffracting uniform influence of every input logit x
+//                                                         - w(x) is defined by f(x) - this is where the recursion happens
 
 //we'll post the result later guys - stay tuned
