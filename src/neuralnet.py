@@ -4,6 +4,8 @@
 #alright so what happens here
 #we are trying to build a uniform input logit diffraction
 #we are using addition operation to be forgiving on the output space - says we circumscribing the sphere -> multiple spheres which have constructive interference | or f(x) static activations (we can say that hash(logit_vec) mod MODULO) to avoid saturated training rate
+#alright - to avoid training destructive interference - we must use hash(unique_representation(x)) - x is the unique representation of the base input logit 
+#this is a very very important note 
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
