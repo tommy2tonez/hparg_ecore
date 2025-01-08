@@ -14,6 +14,9 @@
 #alrights - so what do we learn? we learn that intelligence system has low logit density - but good at retaining informations
 #                                we learn that intelligent system has high logit density and good at making bullshits - you tell them Aurora 6pm Seattle netflix and chill
 #we have 3 weeks to build this guys
+#we'll be rich guys - stay tuned
+#we'll probably be the firsts to build a distributed network for 1M personal devices (with this rate - people will include top-of-the-line GPUs in iphones soon enough) - which compete for logit density solutions
+#we'll build a bid/ask system that is powered by the people, run by the people - just to move logits around
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
