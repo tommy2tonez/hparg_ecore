@@ -134,4 +134,28 @@
 //                                                         - responsible for diffracting uniform influence of every input logit x
 //                                                         - w(x) is defined by f(x) - this is where the recursion happens
 
-//we'll post the result later guys - stay tuned
+//the question of using whether radian or euclidean coordinate is probably the famous historic round eathers vs flat earther conspiracy theorists 
+//the round earthers can deflate the earth to certain resolution to fuzzy approx the positions of all Earhthic particles
+//the flat eathers tilt the plane and fit all beings on the plane 
+
+//I'm trying to formalize a proof that is hard to prove
+//it's the nature of y as in f(x) -> y and position(x) - semantic space so we speak - does the semantic space shape like a sphere - or it shapes like a plane? - or best yet - is it a spheroid (which best fits sphere and plane) 
+//or is there a synthetic shape - that is neither sphere nor plane that best fits the semantic space?
+//what we are really aiming is the uniform distribution of output on the x or logit density of y on x - avg_projected_counter(x)/ delta_x is uniformly distributed over the range
+
+//the round eathers' way of writing sphere is:
+//<x.cos(alpha), y.sin(alpha).cos(theta), y.sin(alpha).sin(theta)>
+
+//the flat earthers' way of writing sphere is:
+//<x.cos(a1), y.sin(a2).sin(a3), y.sin(a4).sin(a5)>
+
+//to prove the theory, without loss of generality - we can say that circle increases density by passing everything twice (on the y-axis) 
+//we can radix the input -> odd and even - if it is even then we train it on the left range
+//                                       - if it is odd then we train it on the right range
+//so instead of being unforgiven like linear - which position(x) must map x -> the designated region (within certain uncertainty) - circle has two designated regions
+
+//okay - so let's get back to the f(w(x)) -> y and w(x) = f(x1) + f(x2)
+//we can assume that w(x) has uniform semantic space
+//but we can't assume f(x) has uniform semantic space
+//f(x) only has uniform semantic space only when we are doing compression
+//alrights, too many words - let's describe this via functions
