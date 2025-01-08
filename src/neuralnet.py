@@ -3,7 +3,7 @@
 #it has to look like this
 #alright so what happens here
 #we are trying to build a uniform input logit diffraction
-#we are using addition operation to be forgiving on the output space - says we circumscribing the sphere -> multiple spheres which have constructive interference
+#we are using addition operation to be forgiving on the output space - says we circumscribing the sphere -> multiple spheres which have constructive interference | or f(x) static activations (we can say that hash(logit_vec) mod MODULO) to avoid saturated training rate
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
@@ -24,9 +24,19 @@ def pos(x: list[bool], f_properties: object) -> list[bool]:
     #mix is essentially linear or sphere transformation - or multi-layer perceptrons
     #the complexity of this does not precede sorting algorithms' - which is O(n * log(n)) 
 
+    #okay - people ask where the activator function is
+    #activator function is, actually, not what people think - hint it is not if else activation per se in the sense of training
+    #it is the bad leaf logit density diffraction - in another words, it has the equivalent terrible job of our circle implementation (left | right) 
+    #the true discrete operation is hard to implement - I dont know if there is a reasonable implementation than just random seeds
+
+    #because all our functions are - recursively defined and symmetric - it is equivalently described as above 
+    #the only purpose of activators is to resource utilize the leaf logits efficiently
+    #such is there is no all in one basket (says I want to utilize 3 out of 15 logits for a certain set of input, another 3 out of 15 logits for another set of inputs etc.) 
+    #not for the cause that we stated in math_approx.py
+
     (lhs, rhs)      = half_split(x) #without loss of generality
     lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz) #recursive definition - we need to define what we are approxing - so we could write the recursive resolution - is it repeated context diffraction - this is for the parallel processing purposes
     rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz) #recursive definition
     mixed_semantic  = mix(lhs_semantic, rhs_semantic, f_properties, mix_approx_sz) #uniform input logit diffraction - this function is probably the most important
 
-    return mixed_semantic #return mixed semantic
+    return mixed_semantic #return mixed semantic - which is now wave-liked instead of euclidean-liked shape - this is a hint that our euclidian semantic coordinate is probably not correct - unless our operation window is on euclidean coordinate - which is an output assumption
