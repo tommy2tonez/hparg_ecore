@@ -10,6 +10,10 @@
 #yet the logit density does not scale - this is the most important in intelligent system not intelligence system
 #logit density can be briefly described as training_data_sz/ neural_network_size for the same discretized loss_rate 
 #we'll spend 10 years of doctoral to study logit density
+#these are tough materials - the study of the shapes
+#alrights - so what do we learn? we learn that intelligence system has low logit density - but good at retaining informations
+#                                we learn that intelligent system has high logit density and good at making bullshits - you tell them Aurora 6pm Seattle netflix and chill
+#we have 3 weeks to build this guys
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
@@ -19,6 +23,15 @@ def f(x: list[bool], f_properties: object) -> list[bool]:
 def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
 
     #let's switch up a little here 
+    #okay - so static_exclusion and sum are constructive interference operations 
+    #imagine that Earth has Adam and Eva
+    #func_vec[0] would describe Adam's coordinate
+    #func_vec[1] would describe Eva's coordinate
+    #func_vec[0] + func_vec[1] would describe Adam and Eva coordinates
+
+    #imagine that Mars has tommy2tonez
+    #we want to do static distributed hashmap
+    #and do func_vec[2] which would describe Tommy's coordinate on Mars 
 
     func_vec        = [f(x, f_properties, cursor) for _ in range(approx_sz)]
     inclusive_vec   = static_exclusion(func_vec, initial_input_unique_representation, f_properties) #leaf logits diffraction
@@ -29,7 +42,7 @@ def pos(x: list[bool], f_properties: object) -> list[bool]:
 
     #this is where the recursion happens - this is precisely the quicksort (mergesort) algorithm
     #for sorting algorithms - we assume that f(x) sorts the array
-    #for neural network algorithms - we assume that f(x) groups the context semantically and diffract the context by the replication factor of K 
+    #for neural network algorithms - we assume that f(x) groups the context semantically and diffract the context by the replication factor of K (okay - when we diffract the context - we are wasting leaf logits to move things around - this is the argument between locality and logit_density)
     #Ok, this is the important part - for locality purposes - K must be uniformly diffracted all over the output range (like photon and double-slit experiment) - we want this to maximize cuda parallel processing  
     #so a zip of lhs and rhs is essentially a reinvented static merge_sort zip (without comparisons) before we transform it again by mix(lhs, rhs, args...)
     #mix is essentially linear or sphere transformation - or multi-layer perceptrons
@@ -44,7 +57,7 @@ def pos(x: list[bool], f_properties: object) -> list[bool]:
     #the only purpose of activators is to resource utilize the leaf logits efficiently
     #such is there is no all in one basket (says I want to utilize 3 out of 15 logits for a certain set of input, another 3 out of 15 logits for another set of inputs etc.) 
     #not for the cause that we stated in math_approx.py
-  
+
     (lhs, rhs)      = half_split(x) #without loss of generality - the state of the art transformer actually split this row_sz - and do concurrent parallel semantic mixing then do transpose(0, 1) which is a mixed_semantic - then another MLP 
     lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz) #recursive definition - we need to define what we are approxing - so we could write the recursive resolution - is it repeated context diffraction - this is for the parallel processing purposes
     rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz) #recursive definition
