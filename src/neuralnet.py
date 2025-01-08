@@ -6,6 +6,10 @@
 #we are using addition operation to be forgiving on the output space - says we circumscribing the sphere -> multiple spheres which have constructive interference | or f(x) static activations (we can say that hash(logit_vec) mod MODULO) to avoid saturated training rate
 #alright - to avoid training destructive interference - we must use hash(unique_representation(x)) - x is the unique representation of the base input logit 
 #this is a very very important note 
+#alrights - our model can scale - such that there is no such a thing as saturated loss_rate
+#yet the logit density does not scale - this is the most important in intelligent system not intelligence system
+#logit density can be briefly described as training_data_sz/ neural_network_size for the same discretized loss_rate 
+#we'll spend 10 years of doctoral to study logit density
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
@@ -14,7 +18,12 @@ def f(x: list[bool], f_properties: object) -> list[bool]:
 
 def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
 
-    return sum([f(x, f_properties) for _ in range(approx_sz)]) #stacking f(x) - gradients of f(x) and f1(x) and f2(x) f3(x) are the trainingly equivalents - these are semantically equivalent groups - we want uniform training rate for the group - or combinatorial blkr to approx the best results 
+    #let's switch up a little here 
+
+    func_vec        = [f(x, f_properties, cursor) for _ in range(approx_sz)]
+    inclusive_vec   = static_exclusion(func_vec, initial_input_unique_representation, f_properties) #leaf logits diffraction
+
+    return sum(inclusive_vec)  #stacking f(x) - gradients of f(x) and f1(x) and f2(x) f3(x) are the trainingly equivalents - these are semantically equivalent groups - we want uniform training rate for the group - or combinatorial blkr to approx the best results 
 
 def pos(x: list[bool], f_properties: object) -> list[bool]:
 
@@ -35,8 +44,8 @@ def pos(x: list[bool], f_properties: object) -> list[bool]:
     #the only purpose of activators is to resource utilize the leaf logits efficiently
     #such is there is no all in one basket (says I want to utilize 3 out of 15 logits for a certain set of input, another 3 out of 15 logits for another set of inputs etc.) 
     #not for the cause that we stated in math_approx.py
-
-    (lhs, rhs)      = half_split(x) #without loss of generality
+  
+    (lhs, rhs)      = half_split(x) #without loss of generality - the state of the art transformer actually split this row_sz - and do concurrent parallel semantic mixing then do transpose(0, 1) which is a mixed_semantic - then another MLP 
     lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz) #recursive definition - we need to define what we are approxing - so we could write the recursive resolution - is it repeated context diffraction - this is for the parallel processing purposes
     rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz) #recursive definition
     mixed_semantic  = mix(lhs_semantic, rhs_semantic, f_properties, mix_approx_sz) #uniform input logit diffraction - this function is probably the most important
