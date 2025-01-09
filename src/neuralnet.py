@@ -74,11 +74,30 @@
 #so we actually map the chad -> frequency -> the euclidean coordinate then do projection
 #the mapping is continuous and pretrained - without further training (immu logits)
 
-#we assume literally everything is ordered discretized chad - from x to f(x) - we leverage the continuity of euclidean (or radian) coordinate by mapping f(euclid(x)) - note that the function is euclid_continuous but the output is chad (this is an assumption)
+#we assume literally everything is ordered avg discretized chad - from x to f(x) - we leverage the continuity of euclidean (or radian) coordinate by mapping f(euclid(x)) - note that the function is euclid_continuous but the output is chad (this is an assumption)
 #other than that I don't really see the whys
 
 #a good coder is a good assumer - they break the function responsibiliies correctly 
 #we assume this does that that does other things - then we use recursion resolution to solve the problem
+
+#alrights - we assume everything as unordered_bag of context - it's kinda lossless in the sense
+#if the context already encodes the orderness - then lossless unordered_bag is essentially lossless ordered_bag
+#if the context does not already encode the orderness - then we have to invent a way to encode the order of x and y - which is preprocessing the data and make it lossless unordered bag compatible
+#we do this by using one sign bit 
+#says 10 10 -> 010 110 
+#this is not good for constructive interference - but we are talking about lossless compression 
+
+#alright - so we just learned that converting to the chad coordinate to do add operation (constructive interference) has better numerical stability - and convert it back to frequency domain then fixed euclid semantic coordinate and do continuous mapping is a good way to do things
+#this is easily described not easily written
+
+#* chad coordinate is essentially x1, x2, x3, x4
+#x1's range is [0, 5)
+#y1 is area/deltax = 2
+#x2's range is [5, 10)
+#x2 avg is 4
+#etc.
+
+#chad is good - but we'll probably have other coordinates to do this better
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
