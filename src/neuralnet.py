@@ -18,23 +18,49 @@
 #we'll probably be the firsts to build a distributed network for 1M personal devices (with this rate - people will include top-of-the-line GPUs in iphones soon enough) - which compete for logit density solutions
 #we'll build a bid/ask system that is powered by the people, run by the people - just to move logits around
 
+#alrights - Dad got a point - the initial input is actually skewed - in the semantic space
+#so it has a synthetic shape - because human is not good at diffracting semantic languagely
+#we can either - enhance the semantic - or we can best fit a synthetic shape (that is not sphere or linear for the initial layers)
+#context diffractor or mix(x) is actually the transformer layers - x + f(x) + g(x + f(x)) - in a wave-like property (the recursion candy) - thus add
+#we want to train the layers by blocking other layers - to approx the semantic space for a certain layer then we train others to continue to approx semantic space, etc.
+#what we are missing is actually static projection (or blkr + initial values) - if we aren't forcing it to be of a certain shape - then we aren't hitting the inital requirement of f(x) being a semantic mapper
+
+#alrights - let's start from a clean slate
+#assume we have x and f(x)
+#x semantic space is uniformly distributed (has a sphere shape)
+#f(x) semantic space is uniformly distributed (has a sphere shape)
+#sizeof(f(x)) < sizeof(x) 
+#yeah - we are doing semantic compression
+
+#we would want to do f(mix(x)) = y - mix is the transformer layer and f is the output
+#the training question is whether we could appropriately train given the semantic layer x and g(x), g(x) as in f(g(x)), as we could train x and f(x) 
+#or the semantic layer x and k(x), k(x) as in f(g(k(x))) for that matter
+#alrights - consider this - we have an appropriate f(x) layer - we block the f(x) layer to train the g(x) layer - g(x) is now the direct f(x) proxy - and we train x g(x) as we train x f(x)
+#g(x) now produce random semantic space - which is uniformly distributed - according to our f(x) shape - and now we block g(x) layer to train f(x) layer
+#so g(x) is our new x input - and we are again doing f(x)
+
+#so what's the catch - the catch is our training loss must be 0% in order for this to work
+#the only reason that it is not 0% is because we have completely densified the logit - and we solve that by adding another semantic mapper layer 
+#okay - so this is the solution we mentioned in app_compass
+#we have completed one revolution of training - yay
+#we'll be back with path + results - this is just theoretically speakings - the path prunables
+
+#Mom - mathematical operations arent sufficient as base operations - and I hope that people would come up with a synthetic solution for the base operations (we want to use math_approx for that)
+#we know that our coordinate is probably not correct - a coordinate that could describe things as waves-like and Hz as x as in f(x) is preferred in the cuda-environment
+#we know that the ideal semantic space is continuous and has good distribution: projection_counter(x)/dx = avg - somewhat looks like a sphere
+#we know that the input semantic space is skewed and does not have good distribution: projection_counter(x)/dx != avg
+#we know that locality trades for logit density
+#we know that log discretizations (uint3_t base 5) are important for neural network training
+#we know that group logit training is important for neural network training
+#we know that neural network is only good for compression and training f(x) -> x
+#we know that all the above things are logit mining - there is not a real solution than to just spin the core and mine the logit density
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
                                                        #second of pos(x) responsibility is to bijectively rearrange x input space -> (discretized n)! space - 1234 -> 3214, 2134, 4321, etc. 
 
 def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
-
-    #let's switch up a little here 
-    #okay - so static_exclusion and sum are constructive interference operations 
-    #imagine that Earth has Adam and Eva
-    #func_vec[0] would describe Adam's coordinate
-    #func_vec[1] would describe Eva's coordinate
-    #func_vec[0] + func_vec[1] would describe Adam and Eva coordinates
-
-    #imagine that Mars has tommy2tonez
-    #we want to do static distributed hashmap
-    #and do func_vec[2] which would describe Tommy's coordinate on Mars 
 
     func_vec        = [f(x, f_properties, cursor) for _ in range(approx_sz)]
     inclusive_vec   = static_exclusion(func_vec, initial_input_unique_representation, f_properties) #leaf logits diffraction
