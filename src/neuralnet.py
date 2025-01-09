@@ -55,6 +55,15 @@
 #we know that neural network is only good for compression and training f(x) -> x
 #we know that all the above things are logit mining - there is not a real solution than to just spin the core and mine the logit density
 
+#it's not underestimated when people said FFT (fast fourier transform) is probably the most important convention
+#because it allows the addition operation to have constructive interference without breaking numerical stability
+#alright consider this dummy solution
+#says tommy is on sin(x), thomas is on sin(2x)
+#we discretize the frequency - add them together - and now we have perfect encoding without losing numerical stability
+#alright - let's talk about frequency discretization
+#we have <x, x1, x2> without loss of generality - x represents unit frequency of range 0-10Hz, x1 represents unit frequency of range 0-100Hz, x2 represent frequency of range 0-1000Hz
+#ok - now we have frequency vector - we want to map this dude to the semantic euclidean u(x) - where closer in x means closer integral((f(x) - f'(x)).dx) - how tf do we map this dude - alright - its the math_approx.py guys - good luck
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
