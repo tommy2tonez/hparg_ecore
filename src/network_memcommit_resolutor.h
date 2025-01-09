@@ -8282,9 +8282,6 @@ namespace dg::network_memcommit_resolutor{
 
                     //alrights - we'll be noexcept those guys later - but let's stick to the except open, except operation and noexcept close for now (things that we cant guarantee the exceptability - common interfaces) - just for the sake of std-sanity 
                     //after painting the picture of what couldve been working - we'll be back to unexcept common exceptions + do log tracing + we add users' id to tiles and send requests with error callback instead of mailbox with no exception - then do a database write of errors
-                    //it's really really hard to code without leaks - we need to guarantee the tile members to be correct at all times before and after transaction payloads  
-                    //so we have to approach this a different way - then we'll be adding readability + exceptability later
-                    //in another words - we don't know YET where to compromise the exceptions - we have to noexcept them at some point
                     //we'll load balance the thing to avoid DDos attack - which is a good idea
                     //but I've yet to decide whether that is the application level or the controller level
 
@@ -8403,7 +8400,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        auto dispatch_info = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_pair_backward_control(dispatch_control));
+                        auto dispatch_info = dg::network_dispatch_control::decode_pair_backward_control(dispatch_control);
 
                         if (!dg::network_uma::reacquirer_is_reacquirable(umamap_reacquirer, {{lhs_logit_umaptr.value(), dispatch_info.lhs_logit_vd_id},
                                                                                              {lhs_grad_umaptr.value(), dispatch_info.lhs_grad_vd_id},
@@ -8421,12 +8418,12 @@ namespace dg::network_memcommit_resolutor{
                             host_restrict_synchronizer.clear();
                         }
 
-                        dg::network_uma::reacquirer_reacquire_nothrow(umamap_reacquirer, {{lhs_logit_umaptr.value(), dispatch_info.lhs_logit_vd_id}, 
-                                                                                          {lhs_grad_umaptr.value(), dispatch_info.lhs_grad_vd_id}, 
-                                                                                          {rhs_logit_umaptr.value(), dispatch_info.rhs_logit_vd_id}, 
-                                                                                          {rhs_grad_umaptr.value(), dispatch_info.rhs_grad_vd_id}, 
-                                                                                          {dst_grad_umaptr, dispatch_info.dst_grad_vd_id}});
-
+                        dg::network_uma::reacquirer_reacquire(umamap_reacquirer, {{lhs_logit_umaptr.value(), dispatch_info.lhs_logit_vd_id}, 
+                                                                                  {lhs_grad_umaptr.value(), dispatch_info.lhs_grad_vd_id}, 
+                                                                                  {rhs_logit_umaptr.value(), dispatch_info.rhs_logit_vd_id}, 
+                                                                                  {rhs_grad_umaptr.value(), dispatch_info.rhs_grad_vd_id}, 
+                                                                                  {dst_grad_umaptr, dispatch_info.dst_grad_vd_id}});
+                        
                         vma_ptr_t lhs_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
                         vma_ptr_t lhs_grad_vmaptr   = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
                         vma_ptr_t rhs_logit_vmaptr  = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 2u>{});
@@ -8438,7 +8435,7 @@ namespace dg::network_memcommit_resolutor{
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr)
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr)
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(dst_grad_vmamap_reacquirer, dst_grad_vmaptr)){
-
+                            
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(cuda_mixed_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
@@ -8449,19 +8446,19 @@ namespace dg::network_memcommit_resolutor{
                             host_restrict_synchronizer.clear();
                         }
 
-                        dg::network_vmamap::reacquirer_reacquire_nothrow(lhs_logit_vmamap_reacquirer, lhs_logit_vmaptr);
-                        dg::network_vmamap::reacquirer_reacquire_nothrow(lhs_grad_vmamap_reacquirer, lhs_grad_vmaptr);
-                        dg::network_vmamap::reacquirer_reacquire_nothrow(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr);
-                        dg::network_vmamap::reacquirer_reacquire_nothrow(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr);
-                        dg::network_vmamap::reacquirer_reacquire_nothrow(dst_grad_vmamap_reacquirer, dst_grad_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(lhs_logit_vmamap_reacquirer, lhs_logit_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(lhs_grad_vmamap_reacquirer, lhs_grad_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(rhs_logit_vmamap_reacquirer, rhs_logit_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(rhs_grad_vmamap_reacquirer, rhs_grad_vmaptr);
+                        dg::network_vmamap::reacquirer_reacquire(dst_grad_vmamap_reacquirer, dst_grad_vmaptr);
 
-                        if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.dispatch_platform)){
+                        if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.dp_device)){
                             cuda_ptr_t lhs_logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(lhs_logit_vmamap_reacquirer);
                             cuda_ptr_t lhs_grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(lhs_grad_vmamap_reacquirer);
                             cuda_ptr_t rhs_logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(rhs_logit_vmamap_reacquirer);
                             cuda_ptr_t rhs_grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(rhs_grad_vmamap_reacquirer);
                             cuda_ptr_t dst_grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(dst_grad_vmamap_reacquirer);
-                            auto work_order                 = std::make_tuple(lhs_logit_cudaptr, lhs_grad_cudaptr, rhs_logit_cudaptr, rhs_grad_cudaptr, dst_grad_cudaptr, dispatch_info.tileops_cuda_dispatch_control);
+                            auto work_order                 = std::make_tuple(lhs_logit_cudaptr, lhs_grad_cudaptr, rhs_logit_cudaptr, rhs_grad_cudaptr, dst_grad_cudaptr, tileops_dispatch_code);
 
                             if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_RIGHT){
                                 dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), rhs_logit_cudaptr, work_order);
@@ -8477,13 +8474,13 @@ namespace dg::network_memcommit_resolutor{
                                     std::unreachable();
                                 }
                             }
-                        } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.dispatch_platform)){
+                        } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.dp_device)){
                             host_ptr_t lhs_logit_hostptr    = dg::network_vmamap::get_host_ptr(lhs_logit_vmamap_reacquirer);
                             host_ptr_t lhs_grad_hostptr     = dg::network_vmamap::get_host_ptr(lhs_grad_vmamap_reacquirer);
                             host_ptr_t rhs_logit_hostptr    = dg::network_vmamap::get_host_ptr(rhs_logit_vmamap_reacquirer);
                             host_ptr_t rhs_grad_hostptr     = dg::network_vmamap::get_host_ptr(rhs_grad_vmamap_reacquirer);
                             host_ptr_t dst_grad_hostptr     = dg::network_vmamap::get_host_ptr(dst_grad_vmamap_reacquirer);
-                            auto work_order                 = std::make_tuple(lhs_logit_hostptr, lhs_grad_hostptr, rhs_logit_hostptr, rhs_grad_hostptr, dst_grad_hostptr, dispatch_info.tileops_host_dispatch_control);
+                            auto work_order                 = std::make_tuple(lhs_logit_hostptr, lhs_grad_hostptr, rhs_logit_hostptr, rhs_grad_hostptr, dst_grad_hostptr, tileops_dispatch_code);
 
                             if (dst_dispatch_major == PAIR_DISPATCH_MAJOR_RIGHT){
                                 dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), rhs_logit_hostptr, work_order);
@@ -8508,13 +8505,14 @@ namespace dg::network_memcommit_resolutor{
                             }
                         }
 
-                        exception_t lhs_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(lhs, TILE_GRAD_STATUS_HAS_VALUE); //this is a leak with async exception
-
+                        exception_t lhs_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(lhs, TILE_GRAD_STATUS_HAS_VALUE);
+                        
                         if (dg::network_exception::is_failed(lhs_set_err)){
                             // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(lhs_set_err));
                         }
 
-                        exception_t rhs_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(rhs, TILE_GRAD_STATUS_HAS_VALUE); //this is a leak with async exception
+
+                        exception_t rhs_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(rhs, TILE_GRAD_STATUS_HAS_VALUE);
 
                         if (dg::network_exception::is_failed(rhs_set_err)){
                             // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(rhs_set_err));
@@ -8608,7 +8606,7 @@ namespace dg::network_memcommit_resolutor{
 
                 {
                     InternalDescendantAddressFetcher fetcher    = {};
-                    fetcher.alias_getter                        = this->alias_getter.get();
+                    fetcher.alias_getter                        = this->alias_getter->get();
 
                     size_t trimmed_addrfetch_vectorization_sz   = std::min(this->addrfetch_vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&fetcher, trimmed_addrfetch_vectorization_sz);
@@ -8648,8 +8646,10 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        uma_ptr_t descendant                                                = descendant_localcounterpart_arr[i]->first;
-                        uma_ptr_t local_counterpart                                         = descendant_localcounterpart_arr[i]->second;
+                        size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
+                        uma_ptr_t descendant                = descendant_local_counterpart_arr[i]->first;
+                        uma_ptr_t local_counterpart         = descendant_local_counterpart_arr[i]->second;
+                        uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].dst); 
                         std::expected<uma_ptr_t, exception_t> descendant_rcu_addr           = dg::network_tile_member_getsetter::get_tile_rcu_addr(descendant);
                         std::expected<uma_ptr_t, exception_t> local_counterpart_rcu_addr    = dg::network_tile_member_getsetter::get_tile_rcu_addr(local_counterpart);
 
@@ -8657,12 +8657,10 @@ namespace dg::network_memcommit_resolutor{
                             continue;                            
                         }
 
-                        size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
-                        uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t descendant_lck_addr       = dg::memult::region(descendant_rcu_addr.value(), lck_region_sz);
                         uma_ptr_t dst_lck_addr              = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         uma_ptr_t localcounterpart_lck_addr = dg::memult::region(local_counterpart_rcu_addr.value(), lck_region_sz);
-                        auto key                            = std::make_tuple(descendant_lck_addr, dst_lck_addr, localcounterpart_lck_addr);
+                        auto key                            = std::make_tuple(descendant_lck_addr, dst_lck_addr, localcounterpart_lck_addr); 
 
                         dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(descendant, event_arr[i].dst, local_counterpart, event_arr[i].operatable_id));
                     }
@@ -8728,7 +8726,7 @@ namespace dg::network_memcommit_resolutor{
 
                 dg::network_cuda_controller::Synchronizer * synchronizer;
                 dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
-                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+                dg::network_cuda_controler::AsynchronousDeviceInterface * async_device;
 
                 void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_tileops_dispatch_control_t, grad_status_t> * data_arr, size_t sz) noexcept{
 
@@ -8793,22 +8791,25 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t> lck_addr, std::tuple<uma_ptr_t, uma_ptr_t, uma_ptr_t, operatable_id_t> * data_arr, size_t sz) noexcept{
 
+                    //we'll reiterate to get the requirements - and the failsafes - there are tons of bugs right now that I haven't skimmed through just yet
+                    //engineering is that ma, we just keep coding 1000-1500 lines of code per day - we don't really ask questions
+
                     dg::network_memops_uma::memlock_guard mem_grd(std::get<0>(lck_addr), std::get<1>(lck_addr), std::get<2>(lck_addr));
 
-                    auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
-                    auto src_logit_vmamap_reacquirer                = dg::network_exception_handler::nothrow_log(dg::network_vmamap::reacquirer_raii_initialize());
-                    auto src_grad_vmamap_reacquirer                 = dg::network_exception_handler::nothrow_log(dg::network_vmamap::reacquirer_raii_initialize());
-                    auto localcounterpart_grad_vmamap_reacquirer    = dg::network_exception_handler::nothrow_log(dg::network_vmamap::reacquirer_raii_initialize());
+                    auto umamap_reacquirer                          = dg::network_uma::reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{});
+                    auto src_logit_vmamap_reacquirer                = dg::network_vmamap::reacquirer_raii_initialize();
+                    auto src_grad_vmamap_reacquirer                 = dg::network_vmamap::reacquirer_raii_initialize(); 
+                    auto localcounterpart_grad_vmamap_reacquirer    = dg::network_vmamap::reacquirer_raii_initialize();
 
-                    auto cuda_synchronizer                          = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_cuda_controller::Synchronizer>());
-                    auto cuda_restrict_synchronizer                 = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_cuda_controller::RestrictPointerSynchronizer>(&cuda_synchronizer));
+                    auto cuda_synchronizer                          = dg::network_cuda_controller::Synchronizer();
+                    auto cuda_restrict_synchronizer                 = dg::network_cuda_controller::RestrictPointerSynchronizer(&cuda_synchronizer); 
                     auto cuda_internal_resolutor                    = InternalCudaResolutor{};
                     cuda_internal_resolutor.synchronizer            = &cuda_synchronizer;
                     cuda_internal_resolutor.restrict_synchronizer   = &cuda_restrict_synchronizer;
                     cuda_internal_resolutor.async_device            = this->cuda_async_device;
 
-                    auto host_synchronizer                          = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_host_asynchronous::Synchronizer>());
-                    auto host_restrict_synchronizer                 = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_host_asynchronous::RestrictPointerSynchronizer>(&host_synchronizer));
+                    auto host_synchronizer                          = dg::network_host_asynchronous::Synchronizer();
+                    auto host_restrict_synchronizer                 = dg::network_host_asynchronous::RestrictPointerSynchronizer(&host_synchronizer);
                     auto host_internal_resolutor                    = InternalHostResolutor{};
                     host_internal_resolutor.synchronizer            = &host_synchronizer;
                     host_internal_resolutor.restrict_synchronizer   = &host_restrict_synchronizer;
@@ -8826,7 +8827,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [src, dst, localcounterpart, expected_ops_id] = data_arr[i];
-
+                        
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(dst);
                         operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_bwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_backward_operatable_id_nothrow(dst);
@@ -8848,7 +8849,7 @@ namespace dg::network_memcommit_resolutor{
                         //compatibility check required - we cant rely on users to rationally call orphan/deinit orders
                         //we can, however, rely on the system to have correct tile states at all time (such is a misoperation does not crash)
 
-                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(localcounterpart);
+                        std::expected<uma_ptr_t, exception_t> prchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(localcounterpart);
 
                         if (!ptrchk.has_value()){
                             //err
@@ -8899,12 +8900,11 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        auto dispatch_info = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extnsrc_backward_control(dispatch_control));
-                        // auto [dst_vd_id, src_vd_id, dp_device, tileops_dp_code] = dg::network_dispatch_control::decode_bwd_extnsrc(dispatch_control); //we'll work on the dispatch_kind later - extnsrc and extndst must be device_transparent - we'll work through the requirements - 
+                        auto [dst_vd_id, src_vd_id, dp_device, tileops_dp_code] = dg::network_dispatch_control::decode_bwd_extnsrc(dispatch_control); //we'll work on the dispatch_kind later - extnsrc and extndst must be device_transparent - we'll work through the requirements - 
 
-                        if (!dg::network_uma::reacquirer_is_reacquirable(umamap_reacquirer, {{src_grad_umaptr.value(), dispatch_info.src_grad_vd_id},
-                                                                                             {src_logit_umaptr.value(), dispatch_info.src_logit_vd_id},
-                                                                                             {localcounterpart_grad_umaptr, dispatch_info.dst_grad_vd_id}})){
+                        if (!dg::network_uma::reacquirer_is_reacquirable(umamap_reacquirer, {{src_grad_umaptr.value(), src_grad_vd_id},
+                                                                                             {src_logit_umaptr.value(), src_logit_vd_id},
+                                                                                             {localcounterpart_grad_umaptr, localcounterpart_vd_id}})){
 
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
@@ -8914,9 +8914,9 @@ namespace dg::network_memcommit_resolutor{
                             host_restrict_synchronizer.clear();
                         }
 
-                        dg::network_uma::reacquirer_reacquire_nothrow(umamap_reacquirer, {{src_grad_umaptr.value(), dispatch_info.src_grad_vd_id},
-                                                                                          {src_logit_umaptr.value(), dispatch_info.src_logit_vd_id},
-                                                                                          {localcounterpart_grad_umaptr, dispatch_info.dst_grad_vd_id}});
+                        dg::network_uma::reacquirer_reacquire_nothrow(umamap_reacquirer, {{src_grad_umaptr.value(), src_grad_vd_id},
+                                                                                          {src_logit_umaptr.value(), src_logit_vd_id},
+                                                                                          {localcounterpart_grad_umaptr, localcounterpart_vd_id}});
 
                         vma_ptr_t src_logit_vmaptr              = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 0u>{});
                         vma_ptr_t src_grad_vmaptr               = dg::network_uma::get_vma_ptr(umamap_reacquirer, std::integral_constant<size_t, 1u>{});
@@ -8938,18 +8938,18 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_vmamap::reacquirer_reacquire_nothrow(src_logit_vmamap_reacquirer, src_logit_vmaptr);
                         dg::network_vmamap::reacquirer_reacquire_nothrow(localcounterpart_grad_vmamap_reacquirer, localcounterpart_grad_vmaptr);
 
-                        if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.dispatch_platform)){
+                        if (dg::network_dispatch_control::is_cuda_dispatch(dp_device)){
                             cuda_ptr_t src_grad_cudaptr                 = dg::network_vmamap::get_cuda_ptr(src_grad_vmamap_reacquirer);
                             cuda_ptr_t src_logit_cudaptr                = dg::network_vmamap::get_cuda_ptr(src_logit_vmamap_reacquirer);
                             cuda_ptr_t localcounterpart_grad_cudaptr    = dg::network_vmamap::get_cuda_ptr(localcounterpart_grad_vmamap_reacquirer);
 
-                            dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), src_logit_cudaptr, std::make_tuple(src_grad_cudaptr, src_logit_cudaptr, localcounterpart_grad_cudaptr, dispatch_info.tileops_cuda_dispatch_control, src_grad_status.value()));                
-                        } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.dispatch_platform)){
+                            dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), src_logit_cudaptr, std::make_tuple(src_grad_cudaptr, src_logit_cudaptr, localcounterpart_grad_cudaptr, tileops_dispatch_code, src_grad_status.value()));                
+                        } else if (dg::network_dispatch_control::is_host_dispatch(dp_device)){
                             host_ptr_t src_grad_hostptr                 = dg::network_vmamap::get_host_ptr(src_grad_vmamap_reacquirer);
                             host_ptr_t src_logit_hostptr                = dg::network_vmamap::get_host_ptr(src_logit_vmamap_reacquirer);
                             host_ptr_t localcounterpart_grad_hostptr    = dg::network_vmamap::get_host_ptr(localcounterpart_grad_vmamap_reacquirer);
 
-                            dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), src_logit_hostptr, std::make_tuple(src_grad_hostptr, src_logit_hostptr, localcounterpart_grad_hostptr, dispatch_info.tileops_host_dispatch_control, src_grad_status.value()));
+                            dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), src_logit_hostptr, std::make_tuple(src_grad_hostptr, src_logit_hostptr, localcounterpart_grad_hostptr, tileops_dispatch_code, src_grad_status.value()));
                         } else{
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::INTERNAL_CORRUPTION);
@@ -8966,7 +8966,7 @@ namespace dg::network_memcommit_resolutor{
                             //
                         }
 
-                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id)));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle->get(), dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id)));
                     }
                 }
             };

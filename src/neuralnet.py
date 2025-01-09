@@ -63,6 +63,22 @@
 #alright - let's talk about frequency discretization
 #we have <x, x1, x2> without loss of generality - x represents unit frequency of range 0-10Hz, x1 represents unit frequency of range 0-100Hz, x2 represent frequency of range 0-1000Hz
 #ok - now we have frequency vector - we want to map this dude to the semantic euclidean u(x) - where closer in x means closer integral((f(x) - f'(x)).dx) - how tf do we map this dude - alright - its the math_approx.py guys - good luck
+#or we have a pretrained static continuous transformation p(x) -> euclidean
+#we dont train the data on those leaf logits - those are immutables 
+#this is literally BFS - you start at a point - you ziggle - and you make up the output - until all the data is reasonably mapped  
+#in other words, this is the circle problem - we get the intergral value and we draw the circle (sphere) around the random point - recursively doing that until the condition of intergral_value == euclid_distance(x, y) is met - this is a hard task - i'm not saying this is easy - this requires correct discretization + everything to make this right
+
+#the only reason we are doing frequencies' coordinate is because we are using constructive interference operation addition without breaking numerical stability (lossless encode)
+#alrights - I've been talking bullshits - actually 1Hz 2Hz 1.5Hz interference is lossless and it's called FFT - converting from the discretized (x -> f(x)) domain -> the frequency domain 
+#what we actually want to store is the fuzzy chad, x = chad, f(x) = chad - and doing addition operation to have constructive interference on the output
+#so we actually map the chad -> frequency -> the euclidean coordinate then do projection
+#the mapping is continuous and pretrained - without further training (immu logits)
+
+#we assume literally everything is ordered discretized chad - from x to f(x) - we leverage the continuity of euclidean (or radian) coordinate by mapping f(euclid(x)) - note that the function is euclid_continuous but the output is chad (this is an assumption)
+#other than that I don't really see the whys
+
+#a good coder is a good assumer - they break the function responsibiliies correctly 
+#we assume this does that that does other things - then we use recursion resolution to solve the problem
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
