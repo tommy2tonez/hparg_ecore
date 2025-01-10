@@ -113,6 +113,23 @@
 #or frequency_to_euclid(euclid_to_frequency(x) * 2 + euclid_to_frequency(x1) * 2 + 1) - without loss of generality
 #or etc.
 
+#alright - Dad, Mom got a point - the semantic space of chad_to_euclid(euclid_to_chad(x) + euclid_to_chad(x1)) is minimal - the semantic space of frequency * 2 + frequency * 2 + 1 is maximal 
+#we need to find the middle points - where is the middle point - it is the separate interference of two or more semantic spaces - point is we want constructive interference - we aren't trading destructive interference for lossy compression (though we can) by doing frequency(x) * 1.1 + other_frequency 
+#if the semantic space is too large and our logit density stays the same - the required logits scale exponentially - which is a bad thing
+#sandy beach is actually a good application name - we have waves, leafs are sands - we are "collecting" the semantic of the pacific ocean  
+
+#our only use case for neural net is compression because compression is nice in terms of inputs and outputs - and the only thing we should concern about is logit density (compression_rate/ leaf_logit_byte)
+#our PHD focus is building a regex engine - says the users want to mine logit density of a certain model using regex syntax
+#we are the ones filling the specifics - by running convergence analysis and paths + top of the lines optimization techniques
+
+#thank you Dad, we are adding real-time density analysis of leaf logits and using blkr to densify the logits by using heuristics 
+#I dont know if that's necessary if the model has uniform influence of leaf logits and our semantic space is uniform distributed - either direction is fine
+#the truth is our brain has always been doing compressions
+#that's why 1 + 1 for the first grade is the equivalence of doing an integral for a high schooler - the math semantic space of the high schooler is well shaped - but the learning rate - the d logit_density/dt (derivative of gradient - we can say that) is the same or reduced or even saturated
+#we want to have multi layers of compression for this precise reason - yet - logit density of the upper networks plays a VERY VERY crucial role for the compression rate of the lower networks - bad logit density of upper network means lower network cannot further compress the semantic space  
+#there is also the concept of semantic space shaping - which is an advanced concept - we aren't heading there for now - we use discretized logarit uint3_t immu + multiplier for linear - says (10**3 + a) * x
+#we'll be there guys - the day of 0.1% compression rate - I do think it's possible and it's simple - it's not 1024 pages of machine learning - its more like 1024 lines of heuristic and pruning
+
 #mapping x - f(x)
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
