@@ -87,6 +87,14 @@
 #says 10 10 -> 010 110 
 #this is not good for constructive interference - but we are talking about lossless compression 
 
+#let's elaborate on this further - there are two ways to do this: one is (x1 * 2 + 1) + (x2 * 2 + 0) to preserve interference (full constructive interference) - we now assume that x1 and x2 are frequency domain - not chad domain (alright maybe chad is not that good - we could stay on frequency domain to do things) - so to do lossless compression - we must convert chad back to frequency domain and train another neural network on this
+#                                - alright - sin(x) + sin(1.5x) and sin(2x) + sin(3x) what's the mathemetical difference? this is the quedstion that only neural network could answer appropriately
+#                                - second way is x1 * 2 + x2 to preserve interference - and reduce the semantic space by 2 ** tree_height - this requires precond of len(x1) == len(x2) - in terms of semantic_space_bit_length
+#                                - the way we do lossless and lossy compression will determine how good our model is
+#                                - we want to discretize this space - the chad space - and map it to the euclidean - such that sqrt((chad1(x) - chad2(x)) * (chad1(x) - chad2(x))) ~= integral(chad1(x)) - integral(chad2(x)) - we want propotional relations - we dont care about actual values - because it's semantic mapping
+#                                - after we have the euclidean output - we want to train this (chad -> euclid) on another continuous neural network - that has the training loss rate of 0% - we make this immutable - and now we have chad -> euclid or radian coordinate to do continous projection 
+#                                - we want to map this guy for EVERY f(x) projection - f(x) -> f(chad_to_euclid(x))
+
 #alright - so we just learned that converting to the chad coordinate to do add operation (constructive interference) has better numerical stability - and convert it back to frequency domain then fixed euclid semantic coordinate and do continuous mapping is a good way to do things
 #this is easily described not easily written
 
@@ -94,16 +102,20 @@
 #x1's range is [0, 5)
 #y1 is area/deltax = 2
 #x2's range is [5, 10)
-#x2 avg is 4
+#y2 avg is 4
 #etc.
+#chad is good but we'll probably have other coordinates to do this better
 
-#chad is good - but we'll probably have other coordinates to do this better
+#Mom talked about context diffractor and divider earlier - we have to assume that the x and f(x) density space are uniformly distributed - projection_counter(x) / dx = area/range for all x c range 
+#alright - we'll build a regex engine + regex path optimization + convergence analysis to mine logit density  
 
+#mapping x - f(x)
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
                                                        #second of pos(x) responsibility is to bijectively rearrange x input space -> (discretized n)! space - 1234 -> 3214, 2134, 4321, etc. 
 
+#trade density for intelligence
 def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
 
     func_vec        = [f(x, f_properties, cursor) for _ in range(approx_sz)]
@@ -111,6 +123,7 @@ def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
 
     return sum(inclusive_vec)  #stacking f(x) - gradients of f(x) and f1(x) and f2(x) f3(x) are the trainingly equivalents - these are semantically equivalent groups - we want uniform training rate for the group - or combinatorial blkr to approx the best results 
 
+#diffract + mix context
 def pos(x: list[bool], f_properties: object) -> list[bool]:
 
     #this is where the recursion happens - this is precisely the quicksort (mergesort) algorithm
@@ -131,9 +144,24 @@ def pos(x: list[bool], f_properties: object) -> list[bool]:
     #such is there is no all in one basket (says I want to utilize 3 out of 15 logits for a certain set of input, another 3 out of 15 logits for another set of inputs etc.) 
     #not for the cause that we stated in math_approx.py
 
-    (lhs, rhs)      = half_split(x) #without loss of generality - the state of the art transformer actually split this row_sz - and do concurrent parallel semantic mixing then do transpose(0, 1) which is a mixed_semantic - then another MLP 
-    lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz) #recursive definition - we need to define what we are approxing - so we could write the recursive resolution - is it repeated context diffraction - this is for the parallel processing purposes
-    rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz) #recursive definition
-    mixed_semantic  = mix(lhs_semantic, rhs_semantic, f_properties, mix_approx_sz) #uniform input logit diffraction - this function is probably the most important
+    #^^^
+    #these are the most important lines
+    # (lhs, rhs)      = half_split(x) #without loss of generality - the state of the art transformer actually split this row_sz - and do concurrent parallel semantic mixing then do transpose(0, 1) which is a mixed_semantic - then another MLP 
+    # lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz) #recursive definition - we need to define what we are approxing - so we could write the recursive resolution - is it repeated context diffraction - this is for the parallel processing purposes
+    # rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz) #recursive definition
+    # mixed_semantic  = mix(lhs_semantic, rhs_semantic, f_properties, mix_approx_sz) #uniform input logit diffraction - this function is probably the most important
 
-    return mixed_semantic #return mixed semantic - which is now wave-liked instead of euclidean-liked shape - this is a hint that our euclidian semantic coordinate is probably not correct - unless our operation window is on euclidean coordinate - which is an output assumption
+    #vvv
+
+    #alrights - let's redefine this - 
+    #f_x is context mixer + diffractor
+    #merge is transpose(0, 1) equivalent of square matrix
+
+    for _ in range(mixed_sz):
+        (lhs, rhs)      = half_split(x)
+        lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz, _) #...
+        rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz, _) #these are same function f_x - without loss of generality - this is dimensional reduction + cuda parallel processing - we are treating f(x) like a real function, says sorting function for instance
+        new_semantic    = merge(lhs_semantic, rhs_semantic) #mix is supposed to be a recursive function - but we make things simple here
+        x               = x + new_semantic  #we are doing constructive interference - Chad's rules
+
+    return x #return mixed semantic - which is now wave-liked instead of euclidean-liked shape - this is a hint that our euclidian semantic coordinate is probably not correct - unless our operation window is on euclidean coordinate - which is an output assumption
