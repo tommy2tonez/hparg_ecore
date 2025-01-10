@@ -108,6 +108,10 @@
 
 #Mom talked about context diffractor and divider earlier - we have to assume that the x and f(x) density space are uniformly distributed - projection_counter(x) / dx = area/range for all x c range 
 #alright - we'll build a regex engine + regex path optimization + convergence analysis to mine logit density  
+#let's do the reverse of soy boy - and now we are mapping euclidean -> chad (whose euclidean we build from chad coordinate)
+#so a constructive inteference operation would look like chad_to_euclid(euclid_to_chad(x) + euclid_to_chad(x1)) - euclid_to_chad and chad_to_euclid are static functions - yet able to propagate gradients
+#or frequency_to_euclid(euclid_to_frequency(x) * 2 + euclid_to_frequency(x1) * 2 + 1) - without loss of generality
+#or etc.
 
 #mapping x - f(x)
 def f(x: list[bool], f_properties: object) -> list[bool]:
