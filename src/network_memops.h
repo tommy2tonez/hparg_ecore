@@ -105,7 +105,8 @@ namespace dg::network_memops_fsys{
     auto memcpy_host_to_fsys(fsys_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
-        
+        stdx::seq_cst_guard seq_cst_grd; 
+
         if (!map_rs.has_value()){
             return map_rs.error();
         }
@@ -119,6 +120,7 @@ namespace dg::network_memops_fsys{
     auto memcpy_cuda_to_fsys(fsys_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto map_rs             = dg::network_kernelmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd; 
 
         if (!map_rs.has_value()){
             return map_rs.error();
@@ -133,6 +135,7 @@ namespace dg::network_memops_fsys{
     auto memcpy_fsys_to_host(void * dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd; 
 
         if (!map_rs.has_value()){
             return map_rs.error();
@@ -147,6 +150,7 @@ namespace dg::network_memops_fsys{
     auto memcpy_fsys_to_cuda(cuda_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto map_rs             = dg::network_kernelmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!map_rs.has_value()){
             return map_rs.error();
@@ -161,12 +165,14 @@ namespace dg::network_memops_fsys{
     auto memcpy_fsys_to_fsys(fsys_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
         }
 
         auto src_map_rs         = dg::network_kernelmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!src_map_rs.has_value()){
             return src_map_rs.error();
@@ -182,6 +188,7 @@ namespace dg::network_memops_fsys{
     auto memset_fsys(fsys_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
         
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
@@ -229,6 +236,7 @@ namespace dg::network_memops_cufs{
     auto memcpy_host_to_cufs(cufs_ptr_t dst, const void * src, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
@@ -243,6 +251,7 @@ namespace dg::network_memops_cufs{
     auto memcpy_cuda_to_cufs(cufs_ptr_t dst, cuda_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
@@ -257,12 +266,14 @@ namespace dg::network_memops_cufs{
     auto memcpy_fsys_to_cufs(cufs_ptr_t dst, fsys_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
         }
 
         auto src_map_rs         = dg::network_kernelmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!src_map_rs.has_value()){
             return src_map_rs.error();
@@ -278,12 +289,14 @@ namespace dg::network_memops_cufs{
     auto memcpy_cufs_to_cufs(cufs_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
         } 
 
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!src_map_rs.has_value()){
             return src_map_rs.error();
@@ -299,6 +312,7 @@ namespace dg::network_memops_cufs{
     auto memcpy_cufs_to_host(void * dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!src_map_rs.has_value()){
             return src_map_rs.error();
@@ -313,6 +327,7 @@ namespace dg::network_memops_cufs{
     auto memcpy_cufs_to_cuda(cuda_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!src_map_rs.has_value()){
             return src_map_rs.error();
@@ -327,12 +342,14 @@ namespace dg::network_memops_cufs{
     auto memcpy_cufs_to_fsys(fsys_ptr_t dst, cufs_ptr_t src, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_kernelmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();
         }
 
         auto src_map_rs         = dg::network_cudafsmap_x::map_safe(src);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!src_map_rs.has_value()){
             return src_map_rs.error();
@@ -348,6 +365,7 @@ namespace dg::network_memops_cufs{
     auto memset_cufs(cufs_ptr_t dst, int c, size_t sz) noexcept -> exception_t{
 
         auto dst_map_rs         = dg::network_cudafsmap_x::map_safe(dst);
+        stdx::seq_cst_guard seq_cst_grd;
 
         if (!dst_map_rs.has_value()){
             return dst_map_rs.error();

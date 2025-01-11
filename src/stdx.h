@@ -426,7 +426,7 @@ namespace stdx{
 
             using self = unlock_guard; 
 
-            __attribute__((always_inline)) unlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
+            inline __attribute__((always_inline)) unlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -438,7 +438,7 @@ namespace stdx{
             unlock_guard(const self&) = delete;
             unlock_guard(self&&) = delete;
 
-            __attribute__((always_inline)) ~unlock_guard() noexcept{
+            inline __attribute__((always_inline)) ~unlock_guard() noexcept{
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -457,7 +457,7 @@ namespace stdx{
 
         public:
 
-            __attribute__((always_inline)) seq_cst_guard() noexcept{
+            inline __attribute__((always_inline)) seq_cst_guard() noexcept{
             
                 std::atomic_signal_fence(std::memory_order_seq_cst);
             }
@@ -465,7 +465,7 @@ namespace stdx{
             seq_cst_guard(const seq_cst_guard&) = delete;
             seq_cst_guard(seq_cst_guard&&) = delete;
 
-            __attribute__((always_inline)) ~seq_cst_guard() noexcept{
+            inline __attribute__((always_inline)) ~seq_cst_guard() noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
             }
@@ -478,7 +478,7 @@ namespace stdx{
 
         public:
 
-            __attribute__((always_inline)) memtransaction_guard() noexcept{
+            inline __attribute__((always_inline)) memtransaction_guard() noexcept{
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -490,7 +490,7 @@ namespace stdx{
             memtransaction_guard(const memtransaction_guard&) = delete;
             memtransaction_guard(memtransaction_guard&&) = delete;
 
-            __attribute__((always_inline)) ~memtransaction_guard() noexcept{
+            inline __attribute__((always_inline)) ~memtransaction_guard() noexcept{
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);

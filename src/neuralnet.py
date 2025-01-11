@@ -129,6 +129,7 @@
 #we want to have multi layers of compression for this precise reason - yet - logit density of the upper networks plays a VERY VERY crucial role for the compression rate of the lower networks - bad logit density of upper network means lower network cannot further compress the semantic space  
 #there is also the concept of semantic space shaping - which is an advanced concept - we aren't heading there for now - we use discretized logarit uint3_t immu + multiplier for linear - says (10**3 + a) * x
 #we'll be there guys - the day of 0.1% compression rate - I do think it's possible and it's simple - it's not 1024 pages of machine learning - its more like 1024 lines of heuristic and pruning
+#legend says that if we  - then we'd unlock AGI by current transformer training
 
 #mapping x - f(x)
 def f(x: list[bool], f_properties: object) -> list[bool]:

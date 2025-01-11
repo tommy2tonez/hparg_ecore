@@ -14,6 +14,41 @@
 
 namespace dg::network_kernelmap_x{
 
+    //alright fellas - we have issues from github feedback
+    //let's stick to the assumption of atomic + relaxed function (concurrent-sufficient)
+
+    //let's assume relaxed function means that the concurrent state of the program before and after a function invoke (of unspecified order) is correct
+    //let's assume we write another function - we want to write a recusrive resolution to maintain the requirements of relaxed
+
+    //let's prove by using induction
+    //assume that we have no serialization inference - such is a function is perfectly executed as if the computation flow is purely based on the computation serialization of the arguments    
+    //then our recursive resolution maintains correct (induction) - and our function is relaxed
+
+    //assume that we have a serialization inference (which is another word for memory_ordering) - then we place all the relaxed statements inside a concurrent transaction block of [acquire, release]
+    //then our recursive resolution maintains correct (induction) - and our function is relaxed
+    //assume that we detach the serialization inference - which is a bad practice - we must use std::thread_signal_fence(std::memory_order_release)
+
+    //this is completely valid syntax 
+
+    //std::atomic<int> lck = {};
+    //while (!lck.cmp_exchg(EMPTY_STATE, ACQUIRE_STATE, relaxed)){}
+    //some_local_variable += lck_value;
+    //std::cout << some_local_variable;
+    //std::atomic_signal_fence(std::memory_order_release);
+    //lck.exchange(EMPTY_STATE, relaxed)
+
+    //this is the equivalence
+    //std::atomic<int> lck = {};
+    //while (!lck.cmp_exchg(EMPTY_STATE, ACQUIRE_STATE, acquired)){}
+    //some_local_variable += lck_value;
+    //std::cout << some_local_variable;
+    //lck.exchange(EMPTY_STATE, release)
+
+    //we'll be there fellas - just be patient and have faith - the day our logit density is denser than the gzip (compression_rate/source_code_size)
+    //we want the language semantic space to be continuous - round like spheres - before we train our AI
+    //this's gonna be at least 1 petabyte concurrent brain - trained on all iphone devices - can actually resurrect people just from their imagination  
+    //I promised babe buying that 10M house in the Seattle neighborhood
+
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
 

@@ -532,8 +532,10 @@ namespace dg::network_host_asynchronous{
                         std::abort();
                     }
                 }
+
                 auto task           = [load_balancer_arg = this->load_balancer, work_order_arg = std::move(work_order), load_balance_handle_arg = load_balance_handle.value()]() noexcept{
                     work_order_arg();
+                    std::atomic_signal_fence(std::memory_order_release); //alright - this is very important - otherwise we are languagely incorrect
                     load_balancer_arg->close_handle(load_balance_handle_arg);
                 };
                 auto virtual_task   = make_virtual_work_order(std::move(task));
