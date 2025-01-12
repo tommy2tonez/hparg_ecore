@@ -129,7 +129,26 @@
 #we want to have multi layers of compression for this precise reason - yet - logit density of the upper networks plays a VERY VERY crucial role for the compression rate of the lower networks - bad logit density of upper network means lower network cannot further compress the semantic space  
 #there is also the concept of semantic space shaping - which is an advanced concept - we aren't heading there for now - we use discretized logarit uint3_t immu + multiplier for linear - says (10**3 + a) * x
 #we'll be there guys - the day of 0.1% compression rate - I do think it's possible and it's simple - it's not 1024 pages of machine learning - its more like 1024 lines of heuristic and pruning
-#legend says that if we  - then we'd unlock AGI by current transformer training
+
+#alrights - let's talk about this scientific terms
+#first, Mom is right - about having pretrained semantic mapping
+#there are bad pretrained mapping and good pretrained mapping - bad pretrained mapping use tons of logits but achieve the result - good pretrained has better logit density
+#Mom was talking about good pretrained and retrain
+#I was talking about the bad pretrained, continuous and fixed - only used for backpropping gradients (alright - bad pretrain does not backprop gradient as well as good pretrain - we might want to have custom backward - which is weird)
+
+#the constructive interference is just one of the very specific example that we could use
+#now - let's discuss about this in-depth
+#we know that if our semantic space is too large - the model is unable to learn
+#or if our semantic space is not dense enough - it's hard for the model to learn continuous projection
+
+#let's say we have uint8_t - the semantic space is 256
+#let's say we have uint16_t - the semantic space is 65536
+#let's say each of the context vector in the semantic space has bijective relation to the chad's coordinate
+#alright - this is the hard part - we need to buff the chad's coordinate to be able to maintain the semantic relation of euclidean coordinate  by the formula: distance() == integral_diff()
+#constructive interference in this case is just + operation - moving towards to (a + b) * 2 + 1
+#then we want to fit this into the original space - without breaking numerical stability (extremely hard) - this is the float responsibility - they use correct exponent (or do they?) to represent this
+#machine learning is, at heart, data manipulation
+#we probably want to translate our language to a nicer language (by using good compression) - before training our AI
 
 #mapping x - f(x)
 def f(x: list[bool], f_properties: object) -> list[bool]:
