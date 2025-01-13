@@ -161,8 +161,13 @@
 #because float32_t use logarit discretization of euclidean space to represent semantic space
 #wheras uint32_t use continuous of euclidean space (we are talking N set) to represent semantic space 
 #pay very close attention to the problems I have stated and I have solved - and human kind probably stands a chance in the future
+#we actually don't need 80 million training or human data - we entirely train our data on logics + synthetic data 
+#we've been wasting crazy semantic space (trillion logits network) - actual AI's only 1.5GB if the datatypes are used correctly - and logit density + saturation are monitored correctly  
+#the only reason we are scaling petabytes or even exabytes of network is because we are not training AI - we are training future transaction infrastructure - this level requires extreme optimizations and density mining
 
 #mapping x - f(x)
+#this is a regex - we'll build a regex optimizer to optimize for logit density
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
@@ -174,7 +179,7 @@ def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
     func_vec        = [f(x, f_properties, cursor) for _ in range(approx_sz)]
     inclusive_vec   = static_exclusion(func_vec, initial_input_unique_representation, f_properties) #leaf logits diffraction
 
-    return sum(inclusive_vec)  #stacking f(x) - gradients of f(x) and f1(x) and f2(x) f3(x) are the trainingly equivalents - these are semantically equivalent groups - we want uniform training rate for the group - or combinatorial blkr to approx the best results 
+    return sum(inclusive_vec) #this is definitely constructive interference  #stacking f(x) - gradients of f(x) and f1(x) and f2(x) f3(x) are the trainingly equivalents - these are semantically equivalent groups - we want uniform training rate for the group - or combinatorial blkr to approx the best results 
 
 #diffract + mix context
 def pos(x: list[bool], f_properties: object) -> list[bool]:
@@ -215,6 +220,6 @@ def pos(x: list[bool], f_properties: object) -> list[bool]:
         lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz, _) #...
         rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz, _) #these are same function f_x - without loss of generality - this is dimensional reduction + cuda parallel processing - we are treating f(x) like a real function, says sorting function for instance
         new_semantic    = merge(lhs_semantic, rhs_semantic) #mix is supposed to be a recursive function - but we make things simple here
-        x               = x + new_semantic  #we are doing constructive interference - Chad's rules
+        x               = x + new_semantic  #we are doing constructive interference - Chad's rules - now I want you to think whether destructive interference is required or only loud constructive interference is required (if loud constructive interference is allowed - think about how we could achieve that)
 
     return x #return mixed semantic - which is now wave-liked instead of euclidean-liked shape - this is a hint that our euclidian semantic coordinate is probably not correct - unless our operation window is on euclidean coordinate - which is an output assumption
