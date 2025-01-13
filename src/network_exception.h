@@ -38,7 +38,12 @@ namespace dg::network_exception{
 
         invalid_arg() noexcept: base_exception("invalid_arg"){}
     };
-    
+
+    struct ExceptionHandlerInterface{
+        virtual ~ExceptionHandlerInterface() noexcept = default;
+        virtual void update(exception_t) noexcept = 0;
+    };
+
     static inline constexpr exception_t SUCCESS                             = 0u;
     static inline constexpr exception_t CRITICAL_FAILURE                    = 2u;
     static inline constexpr exception_t OCCUPIED_MEMREGION                  = 3u;

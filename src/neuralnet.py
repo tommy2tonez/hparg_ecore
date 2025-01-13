@@ -109,7 +109,7 @@
 #Mom talked about context diffractor and divider earlier - we have to assume that the x and f(x) density space are uniformly distributed - projection_counter(x) / dx = area/range for all x c range 
 #alright - we'll build a regex engine + regex path optimization + convergence analysis to mine logit density  
 #let's do the reverse of soy boy - and now we are mapping euclidean -> chad (whose euclidean we build from chad coordinate)
-#so a constructive inteference operation would look like chad_to_euclid(euclid_to_chad(x) + euclid_to_chad(x1)) - euclid_to_chad and chad_to_euclid are static functions - yet able to propagate gradients
+#so a constructive interference operation would look like chad_to_euclid(euclid_to_chad(x) + euclid_to_chad(x1)) - euclid_to_chad and chad_to_euclid are static functions - yet able to propagate gradients
 #or frequency_to_euclid(euclid_to_frequency(x) * 2 + euclid_to_frequency(x1) * 2 + 1) - without loss of generality
 #or etc.
 
@@ -149,6 +149,18 @@
 #then we want to fit this into the original space - without breaking numerical stability (extremely hard) - this is the float responsibility - they use correct exponent (or do they?) to represent this
 #machine learning is, at heart, data manipulation
 #we probably want to translate our language to a nicer language (by using good compression) - before training our AI
+
+#alright - I feel lazy today - so let's talk about this for an hour - about semantic space - float, exponent and sin cos interference - and normalization of semantic space
+#what the hell is attention? Attention is probably a way to have unique representation of context without doing the Chad's rules plus dimensional reduction of possibility to increase intelligent
+#without attention, we have bad numerical stability of context representation - thus the model is unable to learn
+
+#we know that float32_t is to fool people into believing that the number could represent every possible number in the universe - well it's partially true
+#but float32_t semantic space is not better than uint32_t semantic space - in terms of information storage - they both maximum represent 1 << 32 context points
+
+#yet float32_t with correct exponent (base 2 exponent) - would be able to do constructive interference without breaking numerical stability of the a and b in y = (a + b) * 2 + 1
+#because float32_t use logarit discretization of euclidean space to represent semantic space
+#wheras uint32_t use continuous of euclidean space (we are talking N set) to represent semantic space 
+#pay very close attention to the problems I have stated and I have solved - and human kind probably stands a chance in the future
 
 #mapping x - f(x)
 def f(x: list[bool], f_properties: object) -> list[bool]:
