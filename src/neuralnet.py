@@ -212,8 +212,10 @@
 #why radian coordinate? well - because it best describes continuity without infinity and friends
 
 #so we have learnt the basics of data information - it's entropy, continuity
-#in the high entropy semantic space - every continuous function trades 1 for 1 - 1 leaf logit for 1 output logit
-#in the low entropy semantic space (which is continuous) - the logit density is infinity
+#in a high entropy semantic space - every continuous function trades 1 for 1 - 1 leaf logit for 1 output logit
+#in a low entropy semantic space (which is continuous) - the logit density is infinity
+#alright - we are talking in terms of enumerated continuous space (uint8_t) - we can actually have high entropy continuous space - which is machine learning (or what we are trying to learn)
+#what we choose to be enumerated continuous functions would determine the success of our base operations - this is a very important note - if we aren't getting the enumerated continuous functions right - we are wasting fries
 
 #machine learning is deentropizer - we are moving from high entropy semantic space -> low entropy semantic space
 #we adhere to the rule of minimum wage via mathematical formula, whether it is Chad's or polynomial
