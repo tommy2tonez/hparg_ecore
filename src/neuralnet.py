@@ -191,6 +191,26 @@
 #mapping x - f(x)
 #this is a regex - we'll build a regex optimizer to optimize for logit density
 
+#alright - let's look at the core of machine learning
+#it's polynomial function - if you do linear 20 times - you approx accurately 20 results  - we are talking as if x is the only mutating variable in the <x, x1, x2, ...> input space
+#if you do linear 50 times - you approx accurately 50 results - we are encoding the semantic space by using linear 
+#then you plus the result for every layer 
+#alright - that's machine learning
+
+#how about continuity and radian coordinate? 
+#first why continuity? because if things arent continuous - we aren't mapping relevant semantics - we are doing random projection of not intelligent things
+#let's make things simple by thinking of every 2D projection space could be within at least one circle
+#and the point we start drawing is the last point that the pen touches without lifting
+
+#alright - there is the problem of gradient approx of the left operand
+#ok - without loss of generality, we have f(x) = a * x
+#we are dealing with discrete logic here - let's say that we have the gradient or the delta value being theta for f(x)
+#we want to do best distance projection for a - and move a in the direction that best approxes the new value which is f(x) + theta
+#and we want to have an unordered_map or some random magic function for the job
+#point is instead of storing uint8_t for linear semantic - we are doing every continuous projection possible within the uint8_t space by enumerating the continuity possibilities
+#we know better that those continuous functions could be described by using mathematical continuous methods - yet it does not have good numerical stability 
+#why radian coordinate? well - because it best describes continuity without infinity and friends
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
