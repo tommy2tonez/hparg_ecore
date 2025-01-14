@@ -211,6 +211,15 @@
 #we know better that those continuous functions could be described by using mathematical continuous methods - yet it does not have good numerical stability 
 #why radian coordinate? well - because it best describes continuity without infinity and friends
 
+#so we have learnt the basics of data information - it's entropy, continuity
+#in the high entropy semantic space - every continuous function trades 1 for 1 - 1 leaf logit for 1 output logit
+#in the low entropy semantic space (which is continuous) - the logit density is infinity
+
+#machine learning is deentropizer - we are moving from high entropy semantic space -> low entropy semantic space
+#we adhere to the rule of minimum wage via mathematical formula, whether it is Chad's or polynomial
+#1 leaf logit for 1 output logit
+#the extra is fries
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
