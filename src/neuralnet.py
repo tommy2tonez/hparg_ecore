@@ -165,6 +165,29 @@
 #we've been wasting crazy semantic space (trillion logits network) - actual AI's only 1.5GB if the datatypes are used correctly - and logit density + saturation are monitored correctly  
 #the only reason we are scaling petabytes or even exabytes of network is because we are not training AI - we are training future transaction infrastructure - this level requires extreme optimizations and density mining
 
+#alright let's talk more about increasing logit density of base operations
+#we know of oval, circle and line segments
+#let's talk about continuity - what the hell is continuity? continuity is the ability to draw a graph without lifting the pen
+#what if we want to draw every possibilities of continuity by evenly discretizing the space into grids 
+
+#let's say I have a grid of size 8x8 = 64
+#I want to do dfs - and get every possibility of continuity then I would either do projection of space to store information or magnifization of the compact space 
+#then I encode the information and make it a as in f(x) = a * x of linear
+#and I make the a differentiable - by using neighbor rules
+
+#alright - let's limit the domain and range of a function by using circle rules
+#we must assume that the output space is enclosed by a circle - such is there exists a circle that contains the domain and the range
+#then our grid projection must be of enclosed shape
+
+#this is called fluid projection - fluid projection if done right can be very very impactful
+
+#what do we learn? 
+#we learn that uniform distribution of leaf logit influence is very important (transformer succeeded solely at this via destructive interference training - this is why swapping transformer layer does not change the result, all leaf logits are mostly equal)
+#we learn that the attention layer enhances semantic to allow unique representation of context space to allow better y as in f(x) -> y - and decrease possibility space (which increases intellect)
+#we learn that loud interference is important for destructive interferece (how we achieve this is probably via regex training)
+#we learn that fluid projection increase logit density if done correctly - people wasting 8 bit space for linear semantic - we waste 8 bit space to represent every possibility of continuity - we are not the same
+#we'll probably ditch linear for fluid projection - this is probably costly
+
 #mapping x - f(x)
 #this is a regex - we'll build a regex optimizer to optimize for logit density
 
