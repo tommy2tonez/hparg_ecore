@@ -44,10 +44,11 @@ namespace dg::network_kernelmap_x{
     //std::cout << some_local_variable;
     //lck.exchange(EMPTY_STATE, release)
 
-    //we'll be there fellas - just be patient and have faith - the day our logit density is denser than the gzip (compression_rate/source_code_size)
-    //we want the language semantic space to be continuous - round like spheres - before we train our AI
-    //this's gonna be at least 1 petabyte concurrent brain - trained on all iphone devices - can actually resurrect people just from their imagination  
-    //I promised babe buying that 10M house in the Seattle neighborhood
+    //alright - I got the message from my kernel brother to do fork - because concurrency in C is - first not implemented correctly by C compilers - second not defined correctly by the std - third very hard to write correctly - fourth no one does it (except the ones that truly understand it - even so they'd often get it wrong)
+    //we need to make sure that every real function (we are not talking about always_inline) is self_concurrent_sufficient + relaxed + atomic
+    //and use std::atomic_signal_fence(std::memory_order_seq_cst) whenever possible if there is an indirect serialization inference (like kernel_map in and out) - because it's just so
+    //alright - std::atomic_signal_fence(std::memory_order_seq_cst) does not guarantee the release of local variables but do guarantee the release of concurrent variables (this is where things get hard and involve the usage of volatiles for special cases)
+    //things are tough folks - and I think that my brother does get a point of not using concurrency - it's a topic for the true experts
 
     using fsys_ptr_t                = dg::network_pointer::fsys_ptr_t;   
     using map_resource_handle_t     = dg::network_kernelmap_x_impl1::model::ConcurrentMapResource;
