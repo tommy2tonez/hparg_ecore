@@ -222,6 +222,18 @@
 #1 leaf logit for 1 output logit
 #the extra is fries
 
+#alright - so we have learnt the basics of semantic mapper - crypto or machine learning or huffman encoding or gzip
+#the theory is simple - assume that we have the semantic mapper of size N (leaf logit size)
+#the space complexity of deentropizer of linear size O(N)
+#if the secret key is 256 bytes - then we need 256 + C output token bytes to accurately estimate the secret key (C is the extra semantic - including the programming language semantic space + source code + overheads + etc.)
+#this is precisely the reason for our invention of uniform distribution encoding method
+#we also have learnt that the only thing that's been wasting money is destructive interference of learning (we ziggle the polymorphic eqn by 0.00001 and all the semantic changes) - we want to offset this cost accurately by picking pivots (not fries) and right heuristics (this is another research topic) 
+#the destructive interference of learning is so bad that scaling the transformer - polynomial order - would result in worser model (either the model regex is wrong or the training is wrong or model and training are wrong)
+#we call this guided model training (this is an entire another research topic)
+#we'll probably have clients to do bid/ask for logit density mining - for many purposes - crypto crack/ intellect/ semantic compression/ etc.
+#this is logarit regex mining - we'll be there
+#apache is nice - 
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
