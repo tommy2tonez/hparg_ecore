@@ -232,7 +232,7 @@
 #we call this guided model training (this is an entire another research topic)
 #we'll probably have clients to do bid/ask for logit density mining - for many purposes - crypto crack/ intellect/ semantic compression/ etc.
 #this is logarit regex mining - we'll be there
-#apache is nice - 
+#apache is nice - we'll be talking about session encoding + decoding directly via network traffic later - constant time
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
