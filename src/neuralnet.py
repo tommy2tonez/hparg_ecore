@@ -295,7 +295,30 @@
 #and the distribution of integral difference - it must be either uniform distribution on the domain or local distribution - we need to come up with a synthetic way to do this
 #so machine learning is essentially lossless compression + minimum wages + fries + Chad + semantic reduction (we want to reduce semantic window of the, WLOG, linear operation into operatable window to leverage locality compression of projections) + training ziggle integral difference distribution (uniform or locally skewed) + the projectable space (flash exp + linear would increase the range dramatically)
 #after we got the regex for all of that right - we'll begin to implement other advanced algorithms to do logit density mining
-#
+
+#alright - we want to talk about polynomial without exp() and polynomial with exp()
+#the difference is the polynomial with exp() can correctly predict skewed semantic context space where polynomial without exp() can not
+
+#let's open desmos and see the difference between (x-1) * (x-2) * (x-3) * (x-4) and (x-1) * (x-2 + e^x) * (x-3) * (x-4)
+#the problem with polynomial prediction is it takes incredibly long training time to train the polynomial to look reasonable
+#til the point one could argue that if the integral difference distribution is local uniform or local skewed - then it would offset the cost tremendously - we probably want destructive interference for this 
+#because most of the training has destructive interference and it moves very slowly in the right direction
+
+#thing is we want to flex the graph to touch the points without exponent interference and we probably want to preprocess our semantic space to look round + continuous + reasonable
+#let's go back to our original formula of unordered set of zeros - we are looking at the semantic space of decimal size n!/((n - x)! * x!) - compared to the space of byte size (uint8_t) * n in the linear case
+#let's say we want to encode the shapes - we would want to leverage our recursive ballinger compression - suffix array of f -> suffix array of f' -> suffix array of f'', etc.
+
+#we want to include continuity - which is back to problem of enclosed same area - different shape - euclid_distance() == integral_difference() - this is another research topic
+#we want to keep the enumeration of shapes small - within 256 or 1024 - because otherwise - we are not making semantic connections (we are not getting fries - we are storing irrelevant data)
+#Chad's posulate: in the most compressed semantic coordinate, there is at least one possibility that things could be continuous. Chad says he does not which set of shapes, it is just continuous  
+
+#we get the what might've worked - and follow best practices of atomicity + self-concurrent-sufficient + relaxed function
+#except open, except operations, noexcept close - noexcept reverse
+#alright - we must do noexcept for the socket for special implementations - we offload the stack unwinding of exception resolution to the caller
+#then we'd want to look at what might've not worked (things like volatile + std::atomic_signal_fence(std::memory_order_seq_cst) for transactional concurrency (usually open-close)) - things like cuda crash + ssd fails + silent packet lost + etc. (and we implementation hotfixes for this)
+#we'd skip exotic exceptions like memory exhaustion or incorrect internal state snaps or incorrect assumptions because it would expose silent internal corruptions which are very hard to trace + fix 
+
+#alright - we'll implement this
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
