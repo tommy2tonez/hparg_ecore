@@ -234,6 +234,35 @@
 #this is logarit regex mining - we'll be there
 #apache is nice - we'll be talking about session encoding + decoding directly via network traffic later - constant time
 
+#alright - let's admit one thing - we are monkeys - we speak in simple terms so let's make this simple
+#assume we are in the coordinate of x = <input, output>, y = <deviation>
+#polynomial order of 10 = 10 correctly predicted deviation
+
+#alright - let's talk in terms of uncertainty - let's say that the accepted window of output deviation is 0.1
+#and our flex grid is 0.1 (or resoluton) - and the x axis that is within the circle has the length of 10
+#then our maximum correctly predicted output is 100
+#polynomial order of 10 flex = 1000 correctly predicted deviation
+#why? because it is (x-1)(x-2) * (x-3)(x-4)
+#and multiplication acts as a lossless compressor in this case
+#alright - so what have we been talking about? we are talking about linear wasting resolution (alright - this is informationally speaking debatable - because there are methods to offset this cost)
+#and we talking about linear can't get us fries - because linear only stores linear semantics 
+#and we are talking about locality compression - linear is sufficient to compress EVERY semantic possible that are not semantically relevant (not local) but not sufficient to compress local context
+#locality compression is a very major concept in information technology - because every possible problem in Computer Science can be quantified as locality and affinity problems
+#we have just talked about the very minute subset of locality compression which is knot theory  
+
+#what is a good example of locality compression? it's permutational reflection
+#assume an array (image) of arr = [1, 2, 3, 4, 5, 6]
+#we want to store a = [2, 1, 3]
+#so we store the suffix and remove the suffix out of the array iteratively, which algorithm has the result space complexity of n! / (n - size(a))! 
+#so instead of storing uint8_t * size(a) - we are storing at max n! decimal space for sizeof(a) 
+#let's talk in terms of logit density - we have reduced the logit density by a factor of uint8_t * size(a)/ byte_size(n! decimal space) 
+#so what are we doing? we map it to another semantic space - we leverage the fact that <continuity and our defined enclosed space> means that everything can only be passed once (it is <x, y> pair not y or not x) - and we enumerate every permutational possibilities  
+
+#what is the other mathematically lossless compression? it's Chad 
+#why should we use Chad compression (full constructive interference) over other compression (linear)? (1): because Chad has loud interference (which replaces destructive interference), (2): we can described Chad's in euclidean coordinate by using integral_difference() == euclidean_difference()
+#in other words, Chad compression has a more stable approach than linear compression
+#we assume
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
