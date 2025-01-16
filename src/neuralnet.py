@@ -312,12 +312,6 @@
 #we want to keep the enumeration of shapes small - within 256 or 1024 - because otherwise - we are not making semantic connections (we are not getting fries - we are storing irrelevant data)
 #Chad's posulate: in the most compressed semantic coordinate, there is at least one possibility that things could be continuous. Chad says he does not which set of shapes, it is just continuous  
 
-#we get the what might've worked - and follow best practices of atomicity + self-concurrent-sufficient + relaxed function
-#except open, except operations, noexcept close - noexcept reverse
-#alright - we must do noexcept for the socket for special implementations - we offload the stack unwinding of exception resolution to the caller
-#then we'd want to look at what might've not worked (things like volatile + std::atomic_signal_fence(std::memory_order_seq_cst) for transactional concurrency (usually open-close)) - things like cuda crash + ssd fails + silent packet lost + etc. (and we implementation hotfixes for this)
-#we'd skip exotic exceptions like memory exhaustion or incorrect internal state snaps or incorrect assumptions because it would expose silent internal corruptions which are very hard to trace + fix 
-
 #alright - we'll implement this
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
