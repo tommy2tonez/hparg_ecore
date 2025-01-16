@@ -264,6 +264,12 @@
 #we have suffix compression of continuous chart
 #we are aiming for 90% compression rate compared to linear - so we are looking at 3 projection points - because too few projection points would not correctly describe the chart - and too many projection points would stretch our semantic space -> the original space
 
+#let's assume our continuous locality compression is dfs - of 3 bits - up, down or stays - this is dfs
+#there are 1024 different ways to do locality compression
+#consider this case - 1 - 3, 2 - 4, 3 - 3, 4 - 2
+#then instead of doing 8 bits for random range, etc.
+#pay very close attention to the things I mentioned about locality and continuity and enumeration
+
 #is there a better locality algorithm? - this question is up for debate
 #let's assume the set of our defined continuous function is U
 #let's evenly discretize 256 different continuous shapes - and we want to move from one shape to another (shape shifter) to fit the projection pattern
@@ -278,7 +284,7 @@
 #what really is the struggle between choosing the right lossless compression method and still getting the fries? 
 #imagine this eqn (x-1)(x-2)(x-3)(x-4)(x-5) - this is polynomial
 #you ziggle 1 -> 0.9 - and literally everything changes semantically
-#is there a way that we could circumscribe the affected area to limit destructive interference of training (it is linear)?
+#is there a way that we could circumscribe the affected area to limit destructive interference of training?
 
 #imagine this eqn sin(x) + sin(2x) + sin(3x) + sin(4x) + sin(5x)
 #you ziggle 1 -> 0.9.
@@ -289,6 +295,7 @@
 #and the distribution of integral difference - it must be either uniform distribution on the domain or local distribution - we need to come up with a synthetic way to do this
 #so machine learning is essentially lossless compression + minimum wages + fries + Chad + semantic reduction (we want to reduce semantic window of the, WLOG, linear operation into operatable window to leverage locality compression of projections) + training ziggle integral difference distribution (uniform or locally skewed) + the projectable space (flash exp + linear would increase the range dramatically)
 #after we got the regex for all of that right - we'll begin to implement other advanced algorithms to do logit density mining
+#
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
