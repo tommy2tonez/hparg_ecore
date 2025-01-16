@@ -258,6 +258,18 @@
 #let's talk in terms of logit density - we have reduced the logit density by a factor of uint8_t * size(a)/ byte_size(n! decimal space) 
 #so what are we doing? we map it to another semantic space - we leverage the fact that <continuity and our defined enclosed space> means that everything can only be passed once (it is <x, y> pair not y or not x) - and we enumerate every permutational possibilities  
 
+#let's reuse the locality algorithm that we mentioned in the stock trading ballinger
+#we change the semantic coordinate of the continuous projection -> chart compression
+#the lossy compression ratio is ln(x!) / (ln(256) * x) for x is the number of projection and we are storing x on uint8_t     
+#we have suffix compression of continuous chart
+#we are aiming for 90% compression rate compared to linear - so we are looking at 3 projection points - because too few projection points would not correctly describe the chart - and too many projection points would stretch our semantic space -> the original space
+
+#is there a better locality algorithm? - this question is up for debate
+#let's assume the set of our defined continuous function is U
+#let's evenly discretize 256 different continuous shapes - and we want to move from one shape to another (shape shifter) to fit the projection pattern
+#what the hell is evenly discretize? It is euclid distance = integral_difference * C for all pairs + each point has a bijective relation with a matrix's cell that spans the range + domain of the output space 
+#let's logaritally discretize 256 different continuous shapes
+
 #what is the other mathematically lossless compression? it's Chad 
 #why should we use Chad compression (full constructive interference) over other compression (linear)? (1): because Chad has loud interference (which replaces destructive interference), (2): we can described Chad's in euclidean coordinate by using integral_difference() == euclidean_difference()
 #in other words, Chad compression has a more stable approach than linear compression
@@ -275,6 +287,8 @@
 
 #so what the hell do we want? we want integral difference of delta(I) = I1 - I2 
 #and the distribution of integral difference - it must be either uniform distribution on the domain or local distribution - we need to come up with a synthetic way to do this
+#so machine learning is essentially lossless compression + minimum wages + fries + Chad + semantic reduction (we want to reduce semantic window of the, WLOG, linear operation into operatable window to leverage locality compression of projections) + training ziggle integral difference distribution (uniform or locally skewed) + the projectable space (flash exp + linear would increase the range dramatically)
+#after we got the regex for all of that right - we'll begin to implement other advanced algorithms to do logit density mining
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
