@@ -263,6 +263,19 @@
 #in other words, Chad compression has a more stable approach than linear compression
 #we assume
 
+#what really is the struggle between choosing the right lossless compression method and still getting the fries? 
+#imagine this eqn (x-1)(x-2)(x-3)(x-4)(x-5) - this is polynomial
+#you ziggle 1 -> 0.9 - and literally everything changes semantically
+#is there a way that we could circumscribe the affected area to limit destructive interference of training (it is linear)?
+
+#imagine this eqn sin(x) + sin(2x) + sin(3x) + sin(4x) + sin(5x)
+#you ziggle 1 -> 0.9.
+#it still changes everything semantically - but ... there is the importance of semantic (by magnitude of 1, 2, 3, 4, 5 or loudness (amplitude)) - and the new result is not very deviated from the old result
+#alright - we have just spoken of two lossless compression methods that we know of - there are probably other better ways to do this - which is a research topic of regex mining problems
+
+#so what the hell do we want? we want integral difference of delta(I) = I1 - I2 
+#and the distribution of integral difference - it must be either uniform distribution on the domain or local distribution - we need to come up with a synthetic way to do this
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
