@@ -314,6 +314,36 @@
 
 #alright - we'll implement this
 
+#we'll work more on the theory today
+#there's a curse between lossless compression and fries
+#the more fries you get, the lesser the lossless compression gonna be
+#because you store the information as shapes as trade off for lossless compression
+#but the information theory stays the same
+#1 leaf logit for 1 output logit (on average)
+
+#consider this polynomial function (x-1)(x-2)(x-3)(x-4)
+#4 outputs for 4 linears
+#now we want to flex the shape at x = 1.8 to get y = -2 to get the fries - we can't because it violates information technology - you have reached the maximum storage for irrelevant data
+#not the same in the sense of flex shape - flex shape gets nothing right individually - but together - they get things right - this is uniform distribution of responsibility
+#so flex shape is better on average (in the sense of best fit line - because it stores information as continuous shape or semantics - not absolute lossless information like linear - well we can say that flex shape stores absolute information like linear in the sense of shape - but we aren't getting into the recursion of it all)
+
+#alright - so we talk about locality compression - which is continuity in general, not linear, not sin, not cos, not exp, not ln, not mathematical eqns
+#consider we want to store polynomial set of 2 zeros on the domain [0, 256] and we want to store those on the domain [0, 8]
+#which can be expressed as (x - a) * (x - b) or n!/((n - x)! * x!)
+#the difference is from the "set" - not "linear" problem
+#alright things get confused for locality and set theory here
+#but wait, if we are storing data as zeros and the function is continuous, we probably dont want to repeat the zeros (though we can - two zeros mean something semantically different)
+
+#goal of machine learning is to maximize locality compression (we want to be able to store two zeros on the [0, 8] rather than two zeros on the domain [0, 256])
+#the ultimate goal is to get the set of flex shapes correctly - and shift from one shape to another by using heuristic - not mathematically eqns (left operand)
+#flex shape also allows smoother training - in the sense that a local changes wont affect the function globally like linear which looks like a variant of plus 1/x * g(x)
+
+#alright - what if we go full regard mode and flex everything?
+#like flex is the only pair operation we have
+#and we only care about uniform distribution of leaf logit on the result
+#such is a random leaf logit influence on a random result logit is the same for all possible pair
+#to be able to understand - we must unlearn the mathematics - for all that math expresses is continuity and locality compression
+
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
     return project(pos(x, f_properties), f_properties) #one of pos(x) responsibility is semantic space mapper - mapping from irrelevant space -> euclidean relevant space - limit (distance -> 0) in euclidean coordinate means semantically equivalent 
