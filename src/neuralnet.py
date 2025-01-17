@@ -339,13 +339,27 @@
 #flex shape also allows smoother training - in the sense that a local changes wont affect the function globally like linear which looks like a variant of plus 1/x * g(x)
 
 #alright - what if we go full regard mode and flex everything?
+#this is where the trinity is from - flex is a trinity operation, flex(lhs, rhs, flex_shape) = y - we are on radian so lhs and rhs are theta and alpha - being the xy radian and xz radian - and the flex shape is somewhat a spheroid
+#the propagation of gradient -> lhs, rhs, and flex_shape are tedious - we want fast approximator for these
+#the flex heuristic function is also tedious - assume f(x, y, z) -> f'(x, y, z), we want heuristic(z) = z' and f(x, y, z') = f'(x, y, z) 
+
+#theoretically - this works - but the training process usually says otherwise - if the shape is too flex - we aren't getting the minimum wages 
+
 #like flex is the only pair operation we have
-#and we only care about uniform distribution of leaf logit on the result
+#we only care about uniform distribution of leaf logit on the result
 #such is a random leaf logit influence on a random result logit is the same for all possible pair (before training)
 #to be able to understand - we must unlearn the mathematics - for all that math expresses is continuity and locality compression
 #so our new ultimate goal is actually good locality compression (another word for math operations) by using right set of flex, regex of initial seeds, uniform distribution of influence, and radian coordinate 
 #and good heuristic approximation + path optimizations
 #if you got these rights in a 1990 computer - you'd unlock crypto secret keys in constant time - that's literally the danger we are facing right now
+
+#alright
+#consider input logits, leaf logits and output logits
+#each input logit must have uniform influence on output logit
+#each leaf logit must have uniform influence on output logit
+#we must be able to prove that if a function is continuous - then it most compact form can be expressed as continuous functions - we'll talk about this later
+
+#enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
@@ -362,37 +376,6 @@ def f_x(x: list[bool], f_properties: object, approx_sz: int) -> list[bool]:
 
 #diffract + mix context
 def pos(x: list[bool], f_properties: object) -> list[bool]:
-
-    #this is where the recursion happens - this is precisely the quicksort (mergesort) algorithm
-    #for sorting algorithms - we assume that f(x) sorts the array
-    #for neural network algorithms - we assume that f(x) groups the context semantically and diffract the context by the replication factor of K (okay - when we diffract the context - we are wasting leaf logits to move things around - this is the argument between locality and logit_density)
-    #Ok, this is the important part - for locality purposes - K must be uniformly diffracted all over the output range (like photon and double-slit experiment) - we want this to maximize cuda parallel processing  
-    #so a zip of lhs and rhs is essentially a reinvented static merge_sort zip (without comparisons) before we transform it again by mix(lhs, rhs, args...)
-    #mix is essentially linear or sphere transformation - or multi-layer perceptrons
-    #the complexity of this does not precede sorting algorithms' - which is O(n * log(n)) 
-
-    #okay - people ask where the activator function is
-    #activator function is, actually, not what people think - hint it is not if else activation per se in the sense of training
-    #it is the bad leaf logit density diffraction - in another words, it has the equivalent terrible job of our circle implementation (left | right) 
-    #the true discrete operation is hard to implement - I dont know if there is a reasonable implementation than just random seeds
-
-    #because all our functions are - recursively defined and symmetric - it is equivalently described as above 
-    #the only purpose of activators is to resource utilize the leaf logits efficiently
-    #such is there is no all in one basket (says I want to utilize 3 out of 15 logits for a certain set of input, another 3 out of 15 logits for another set of inputs etc.) 
-    #not for the cause that we stated in math_approx.py
-
-    #^^^
-    #these are the most important lines
-    # (lhs, rhs)      = half_split(x) #without loss of generality - the state of the art transformer actually split this row_sz - and do concurrent parallel semantic mixing then do transpose(0, 1) which is a mixed_semantic - then another MLP 
-    # lhs_semantic    = f_x(lhs, f_properties, lhs_approx_sz) #recursive definition - we need to define what we are approxing - so we could write the recursive resolution - is it repeated context diffraction - this is for the parallel processing purposes
-    # rhs_semantic    = f_x(rhs, f_properties, rhs_approx_sz) #recursive definition
-    # mixed_semantic  = mix(lhs_semantic, rhs_semantic, f_properties, mix_approx_sz) #uniform input logit diffraction - this function is probably the most important
-
-    #vvv
-
-    #alrights - let's redefine this - 
-    #f_x is context mixer + diffractor
-    #merge is transpose(0, 1) equivalent of square matrix
 
     for _ in range(mixed_sz):
         (lhs, rhs)      = half_split(x)
