@@ -342,10 +342,20 @@
 #this is where the trinity is from - flex is a trinity operation, flex(lhs, rhs, flex_shape) = y - we are on radian so lhs and rhs are theta and alpha - being the xy radian and xz radian - and the flex shape is somewhat a spheroid
 #the propagation of gradient -> lhs, rhs, and flex_shape are tedious - we want fast approximator for these
 #the flex heuristic function is also tedious - assume f(x, y, z) -> f'(x, y, z), we want heuristic(z) = z' and f(x, y, z') = f'(x, y, z) 
-
 #theoretically - this works - but the training process usually says otherwise - if the shape is too flex - we aren't getting the minimum wages 
+#says that the shapes are all plus operations - then we aren't actually learning anything 
+#so getting the set of flex shapes right is actually a topic worth 4 years of PHD research
+#I just make things simple and do fixed volume - and kinda twist the shapes in different directions - we talked about integral difference and integral difference distributions - we kinda want to move in the direction
+#let's actually dwell on the ideas for 2-3 days before we start this project (we need to get the ideas right - and prove that this can approx every possible continuous function - or there exists an optimal solution by using flex projections)
 
-#like flex is the only pair operation we have
+#like flex is the only trinity operation we have beside constructive interference pair operation which is add - what is the secret of the add operation is mathematic? it seems like add is the only operation that we can't project
+#it seems like add is the coordinate calibration function - such that it changes the semantic coordinate, adder with respect to the addee, or addee with respect to the adder, not necessarily projecting anything
+#let's throw away all mathematical projection operations like exp, log, sin, cos, inverse, sqrt, etc.
+#we must keep lossless compression operation mul and coordinate calibration operation add  
+#because without add - we stuck in one context space - we aren't resoluting the context space (calibrating the space layers by layers)
+#without mul - we are not getting the lossless compression - which is bad numerically speaking - this is up for debate - things can be done without mul (this is back to the Chad's shape + add - sin(x) + sin(2x) + sin(3x), etc.)
+#so the three operations are mul, add, and flex - which are the tri-force
+
 #we only care about uniform distribution of leaf logit on the result
 #such is a random leaf logit influence on a random result logit is the same for all possible pair (before training)
 #to be able to understand - we must unlearn the mathematics - for all that math expresses is continuity and locality compression
