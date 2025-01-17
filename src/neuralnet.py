@@ -341,8 +341,11 @@
 #alright - what if we go full regard mode and flex everything?
 #like flex is the only pair operation we have
 #and we only care about uniform distribution of leaf logit on the result
-#such is a random leaf logit influence on a random result logit is the same for all possible pair
+#such is a random leaf logit influence on a random result logit is the same for all possible pair (before training)
 #to be able to understand - we must unlearn the mathematics - for all that math expresses is continuity and locality compression
+#so our new ultimate goal is actually good locality compression (another word for math operations) by using right set of flex, regex of initial seeds, uniform distribution of influence, and radian coordinate 
+#and good heuristic approximation + path optimizations
+#if you got these rights in a 1990 computer - you'd unlock crypto secret keys in constant time - that's literally the danger we are facing right now
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
 
