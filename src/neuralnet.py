@@ -350,6 +350,9 @@
 
 #like flex is the only trinity operation we have beside constructive interference pair operation which is add - what is the secret of the add operation is mathematic? it seems like add is the only operation that we can't project
 #it seems like add is the coordinate calibration function - such that it changes the semantic coordinate, adder with respect to the addee, or addee with respect to the adder, not necessarily projecting anything
+#alright so what's the difference between f(x, y) = x + y and f(x, y) - x = y
+#this is numerical stability issue that we would want to talk about - or is it?
+ 
 #let's throw away all mathematical projection operations like exp, log, sin, cos, inverse, sqrt, etc.
 #we must keep lossless compression operation mul and coordinate calibration operation add  
 #because without add - we stuck in one context space - we aren't resoluting the context space (calibrating the space layers by layers)
