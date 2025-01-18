@@ -372,10 +372,33 @@
 #we must be able to prove that if a function is continuous - then it most compact form can be expressed as continuous functions - we'll talk about this later
 
 #let's get back to the string theory - what does string theory state? that the universe is made of invisible semantic strings
-#string is another word for continuity, and semantic space, we add those strings together - which is semantic space calibration
+#string is another word for continuity and semantic space, we add those strings together - which is semantic space calibration
 #so our trinity flex operation is f(x, y, flex_shape) = <x, y, z> in euclidean coordinate
 #we approx the string's shape - we stretch the string in x, y, z, and we do semantic calibration 
+#this is the clearest proof that string theory could be one of the possibility of what the universe is made of
 
+#let's work on the theory of shape estimation today
+#assume we have two operations: add and flex
+#let's assume we only have the operation flex (or we are looking at the flex only of the flex and add)
+#without loss of generality, we have f(x) = x, and we kinda want to twist the f(x), to do bucket propagation of unordered range 
+#because flex1(flex2(flex3(x))) would turn the range into unordered eventually
+#so we want to look at this as unordered range propagation and n! permutation sort
+#alright this is not good - because flex1(flex2(flex3(x))) slowly turns our "semantic information" into unordered range of information - or destructive interference with respect to initial purposes
+
+#this is precisely why we need semantic calibration which is the add operation between flex operations
+#so instead of doing flex1(flex2(flex3(x))) - we are doing flex1(flex(x) + x)) + ...
+#so let's say we have 30 strings that made up the universe
+#we guess the first string out of 30 strings, we guess the second string out of 29 strings, we guess the third string out of 28 strings, etc.
+
+#alright - back to the question of flat earthers and round eathers - we have combinatorial operation, whose row is render rule and column is state
+#linear render rule is simple - so we can describe it separately (in the sense of pair operation and path)
+#spheroid render rule is not (we cant describe it as pair operation or trinity operation or etc.)
+
+#alright - back to the original mathematical rules
+#if we aren't doing self operation (x linear x' - attention paper), we aren't getting the lossless compression - polynomial order is 1
+#let's move the focal to x1 (x1 is the only variable, all others are constants) as for x = <x1, x2, x3, x4, x5, ...>
+#y = a * x1 + b for y is a random cell in the output matrix
+#so it's important to do self operation - to increase polynomial order which helps with lossless compression 
 
 #enough theory - we have to see if this actually works
 
