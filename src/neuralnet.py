@@ -389,15 +389,26 @@
 #so instead of doing flex1(flex2(flex3(x))) - we are doing flex1(flex(x) + x)) + ...
 #so let's say we have 30 strings that made up the universe
 #we guess the first string out of 30 strings, we guess the second string out of 29 strings, we guess the third string out of 28 strings, etc.
+#we are collapsing the semantic spaces(strings) iteratively, what could possibly go wrong with this?
+#the first string and the last string has a very unbalanced workload - we aren't doing uniform distribution of leaf logits - this is a very important optimizable
+#alright what does this mean? do we do plus 30 different layers? No - because we aren't collapsing the spaces by doing that
+#we want to reduce the shape resolution exponentially from the first layer -> the last layer
+#let's say that our flex shape can represent 256 shapes for the last layer
+#our flex shape can represent 512 shapes for the next to last layer
+#we don't want to compromise same resolution for the first -> last layer and risk saturated leaf logits
+#the first string contains 2x more information than the 2nd string
+#second string contains 2x more information than the 3rd string
+#etc.
+#if we set this up right - we can do this
 
 #alright - back to the question of flat earthers and round eathers - we have combinatorial operation, whose row is render rule and column is state
 #linear render rule is simple - so we can describe it separately (in the sense of pair operation and path)
-#spheroid render rule is not (we cant describe it as pair operation or trinity operation or etc.)
+#"spheroid" render rule is not (we cant describe it as pair operation or trinity operation or etc.)
 
 #alright - back to the original mathematical rules
 #if we aren't doing self operation (x linear x' - attention paper), we aren't getting the lossless compression - polynomial order is 1
 #let's move the focal to x1 (x1 is the only variable, all others are constants) as for x = <x1, x2, x3, x4, x5, ...>
-#y = a * x1 + b for y is a random cell in the output matrix
+#then y = a * x1 + b for y is a random cell in the output matrix - without self operation
 #so it's important to do self operation - to increase polynomial order which helps with lossless compression 
 
 #enough theory - we have to see if this actually works
