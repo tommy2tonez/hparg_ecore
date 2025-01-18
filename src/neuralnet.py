@@ -352,7 +352,6 @@
 #it seems like add is the coordinate calibration function - such that it changes the semantic coordinate, adder with respect to the addee, or addee with respect to the adder, not necessarily projecting anything
 #alright so what's the difference between f(x, y) = x + y and f(x, y) - x = y
 #this is numerical stability issue that we would want to talk about - or is it?
- 
 #let's throw away all mathematical projection operations like exp, log, sin, cos, inverse, sqrt, etc.
 #we must keep lossless compression operation mul and coordinate calibration operation add  
 #because without add - we stuck in one context space - we aren't resoluting the context space (calibrating the space layers by layers)
@@ -371,6 +370,12 @@
 #each input logit must have uniform influence on output logit
 #each leaf logit must have uniform influence on output logit
 #we must be able to prove that if a function is continuous - then it most compact form can be expressed as continuous functions - we'll talk about this later
+
+#let's get back to the string theory - what does string theory state? that the universe is made of invisible semantic strings
+#string is another word for continuity, and semantic space, we add those strings together - which is semantic space calibration
+#so our trinity flex operation is f(x, y, flex_shape) = <x, y, z> in euclidean coordinate
+#we approx the string's shape - we stretch the string in x, y, z, and we do semantic calibration 
+
 
 #enough theory - we have to see if this actually works
 
