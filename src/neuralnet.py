@@ -414,11 +414,22 @@
 #so instead of y = a * x1 + b, we are looking at y = sin(2x1) + sin(3x1) + ax1 + b, etc.
 #so that's why rope is in the attention layer
 #with our new invention, we are looking at y = flex2(flex1(x1) + x1 + C ...
-#we are collapsing the 2-dimensional string (continuous function) layer by layer - by using multi dimensional flex function (which is radian coordinate without loss of generality)
+#we are collapsing the 2-dimensional string (continuous function) layer by layer - by using multi dimensional flex function (which is on radian coordinate without loss of generality)
+#alright - continuity can't be easily described - Mom talked about knot theories - this is advanced topic - if there are knots - we aren't on radian coordinate
+#there are problems with numerical stabilities - described above with flex(flex(flex)) would turn things into unordered range compression - we need numerical stability from first layer -> output layer (because that's what we can really count on) - not in-between layers
+#things like y = ax + b or y = ax + sin(x) + sin(2x) + b
+#but the ideas remain the same
+#we want to collapse the semantic spaces iteratively - by using flex shapes of continuity (which is locality compression) - and offset the cost of destructive interference
+
+#it's best for flex1 to have better resolution than flex2, which has better resolution than flex3
+#because the first string is going to create ripple effect for the following strings - and if we aren't getting things right (or stuck between the right things) - drawing a best-fit linear line between irrelevant points - we cause a learning ripple effect - which has destructive interference (and move towards equilibrium of uniform responsibility to avoid ripple effects which is part of the learning - thus swapping layers of transformers won't affect results)
+#alright so we are not only learning the input -> output, we are also learning to avoid ripple effects in transformers - this is usually the problems - there aren't enough logits to learn to avoid that - we need to offset this cost
+#we are now back to the 2x denser continuity - what does that even mean? it probably means that we use 2x as much shapes (or 2x resolution) to "not stuck between the right things" or "less stuck between the right things" - alright (what are usually the right things and how we enumerate those are very hard to get right)
 
 #so our only concerns in the two above cases are enumerated flex shapes 
 #and our f(x, y) = x + y vs f(x, y) - x = y. What's the difference? 
 #one is fake semantic calibration, other is true semantic calibration - we want true calibration for flex shapes - because we already talked about flex(flex(flex(x))) would destroy our flexibility - in the sense of turning the result in to unordered range compression
+#is f(x, y) = x - (-y), possibly with correct shapes? or is there a way to force calibrations? limit the transformation? this question is up for debate - imma just put the question mark here - for now - the add is the coordinate calibration operator
 
 #enough theory - we have to see if this actually works
 
