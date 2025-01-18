@@ -410,6 +410,15 @@
 #let's move the focal to x1 (x1 is the only variable, all others are constants) as for x = <x1, x2, x3, x4, x5, ...>
 #then y = a * x1 + b for y is a random cell in the output matrix - without self operation
 #so it's important to do self operation - to increase polynomial order which helps with lossless compression 
+#alright - we've been talking about rope - rotational positional embedding - it's essentially Chad (or flex Joe) that we described - we are turning linear relation to sin cos constructive interference which represents the context better 
+#so instead of y = a * x1 + b, we are looking at y = sin(2x1) + sin(3x1) + ax1 + b, etc.
+#so that's why rope is in the attention layer
+#with our new invention, we are looking at y = flex2(flex1(x1) + x1 + C ...
+#we are collapsing the 2-dimensional string (continuous function) layer by layer - by using multi dimensional flex function (which is radian coordinate without loss of generality)
+
+#so our only concerns in the two above cases are enumerated flex shapes 
+#and our f(x, y) = x + y vs f(x, y) - x = y. What's the difference? 
+#one is fake semantic calibration, other is true semantic calibration - we want true calibration for flex shapes - because we already talked about flex(flex(flex(x))) would destroy our flexibility - in the sense of turning the result in to unordered range compression
 
 #enough theory - we have to see if this actually works
 
