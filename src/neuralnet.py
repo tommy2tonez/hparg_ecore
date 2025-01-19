@@ -431,6 +431,19 @@
 #one is fake semantic calibration, other is true semantic calibration - we want true calibration for flex shapes - because we already talked about flex(flex(flex(x))) would destroy our flexibility - in the sense of turning the result in to unordered range compression
 #is f(x, y) = x - (-y), possibly with correct shapes? or is there a way to force calibrations? limit the transformation? this question is up for debate - imma just put the question mark here - for now - the add is the coordinate calibration operator
 
+#we know that f(x) = flex1(flex2(flex3(x))) would slowly turn things into unordered range compression - what's possibly the cause
+#the 1st cause is we are doing particle projections - and not continuity curve extension
+#the 2nd cause is we are storing y instead of <x, y> which represents the curve
+#what is continuity curve extension - assume we have a curve Curve - a function f, and a flex index of Flex - f(Curve, Flex) = new_curve 
+
+#this probably means we want to do things a little differently - flex1(flex2(flex3))(x) - instead of flex1(flex2(flex3(x)))
+#first  - we achieve numerical stability of flex by doing this
+#second - we aren't passing x around - we are passing curves around (string theory) 
+#so we kinda do add + flex on curves - after we get the final curve, we do f(x) -> y once - and propagate gradients -> flex indices
+#from conception to implementation is hard - this does not have distributed property - or is it? we have a computation tree of curves
+#we compute the final curve - then we do f(x) -> y - and we propagate gradients 
+#so there are still matrices + rows + columns like normal
+
 #enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
