@@ -6704,8 +6704,6 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    //alright - we do forward + self gradient + backward_signal self + forward_signal the observers
-    //we probably dont want to do the backward responsibility here - we just fill the gradients
     class ForwardDoCritSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
@@ -6801,7 +6799,7 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             }
-        
+
         private:
 
             struct InternalDescendantAddressFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t, std::optional<uma_ptr_t> *>>{
@@ -6829,7 +6827,7 @@ namespace dg::network_memcommit_resolutor{
                                 if (current_ops_id != expected_ops_id){
                                     *fetching_addr = std::nullopt;
                                 } else{
-                                    *fetching_addr = dg::network_tile_member_getsetter::get_crit_descendant_addr_nothrow(dst);
+                                    *fetching_addr = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(dst);
                                 }
 
                                 break;
@@ -6845,6 +6843,76 @@ namespace dg::network_memcommit_resolutor{
                             }
                         }
                     }
+                }
+            };
+
+            struct InternalCudaResolutor: dg::network_producer_consumer::KVConsumerInterface<cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, grad_status_t, cuda_tileops_dispatch_control_t>>{
+                
+                dg::network_cuda_controller::AsynchronousDeviceInterface * async_device;
+                dg::network_cuda_controller::Synchronizer * synchronizer;
+                dg::network_cuda_controller::RestrictPointerSynchronizer * restrict_synchronizer;
+
+                void push(cuda_ptr_t, std::tuple<cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, cuda_ptr_t, grad_status_t, cuda_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t cuda_ptr_arr_sz  = sz * 4;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_arr(cuda_ptr_arr_sz);
+                    auto virtual_wo_vec     = dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::make_virtual_workorder_sequential_container(sz));
+                    size_t total_complexity = {};
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst_logit_cudaptr, src_logit_cudaptr, dst_crit_cudaptr, dst_grad_cudaptr, grad_status, tileops_dispatch_control] = data_arr[i];
+                        cuda_ptr_arr[i * 4]     = dst_logit_cudaptr;
+                        cuda_ptr_arr[i * 4 + 1] = src_logit_cudaptr;
+                        cuda_ptr_arr[i * 4 + 2] = dst_crit_cudaptr;
+                        cuda_ptr_arr[i * 4 + 3] = dst_grad_cudaptr;
+                        
+                        dg::network_tileops_cuda_poly::forward_crit_dispatch_chk(dst_logit_cudaptr, src_logit_cudaptr, dst_crit_cudaptr, dst_grad_cudaptr, tileops_dispatch_control); //it's better to split the responsibility here
+                        total_complexity        += dg::network_tileops_cuda_poly::decode_crit_dispatch_control(tileops_dispatch_control)->runtime_complexity;
+                        auto work_order         = [dst_logit_cudaptr, src_logit_cudaptr, dst_crit_cudaptr, dst_grad_cudaptr, grad_status, tileops_dispatch_control]() noexcept{
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_crit(dst_logit_cudaptr, src_logit_cudaptr, dst_crit_cudaptr, dst_grad_cudaptr, tileops_dispatch_control)); //TODOs:
+                        };
+                        auto virtual_wo         = dg::network_cuda_controller::virtualize_async_task(std::move(work_order));
+                        virtual_wo_vec->add(std::move(virtual_wo));
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_arr.get(), std::next(cuda_ptr_arr.get(), cuda_ptr_arr_sz)));
+                    auto synchronizable = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(virtual_wo_vec), total_complexity));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(std::move(synchronizable)));
+                }
+            };
+
+            struct InternalHostResolutor: dg::network_producer_consumer::KVConsumerInterface<host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, grad_status_t, host_tileops_dispatch_control_t>>{
+
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * async_device;
+                dg::network_host_asynchronous::Synchronizer * synchronizer;
+                dg::network_host_asynchronous::RestrictPointerSynchronizer * restrict_synchronizer;
+
+                void push(host_ptr_t, std::tuple<host_ptr_t, host_ptr_t, host_ptr_t, host_ptr_t, grad_status_t, host_tileops_dispatch_control_t> * data_arr, size_t sz) noexcept{
+
+                    size_t host_ptr_arr_sz  = sz * 4;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_arr(host_ptr_arr_sz);
+                    auto virtual_wo_vec     = dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::make_virtual_workorder_sequential_container(sz));
+                    size_t total_complexity = {};
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto [dst_logit_hostptr, src_logit_hostptr, dst_crit_hostptr, dst_grad_hostptr, grad_status, tileops_dispatch_control] = data_arr[i];
+                        host_ptr_arr[i * 4]     = dst_logit_hostptr;
+                        host_ptr_arr[i * 4 + 1] = src_logit_hostptr;
+                        host_ptr_arr[i * 4 + 2] = dst_crit_hostptr;
+                        host_ptr_arr[i * 4 + 3] = dst_grad_hostptr;
+
+                        dg::network_tileops_host_poly::forward_crit_dispatch_chk(dst_logit_hostptr, src_logit_hostptr, dst_crit_hostptr, dst_grad_hostptr, tileops_dispatch_control); //it's better to split the responsibility here
+                        total_complexity        += dg::network_tileops_host_poly::decode_crit_dispatch_control(tileops_dispatch_control)->runtime_complexity;
+                        auto work_order         = [dst_logit_hostptr, src_logit_hostptr, dst_crit_hostptr, dst_grad_hostptr, grad_status, tileops_dispatch_control]() noexcept{
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_crit(dst_logit_hostptr, src_logit_hostptr, dst_crit_hostptr, dst_grad_hostptr, tileops_dispatch_control)); //TODOs:
+                        };
+                        auto virtual_wo         = dg::network_host_asynchronous::virtualize_async_task(std::move(work_order));
+                        virtual_wo_vec->add(std::move(virtual_wo));
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_arr.get(), std::next(host_ptr_arr.get(), host_ptr_arr_sz)));
+                    auto synchronizable = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(virtual_wo_vec), total_complexity));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(std::move(synchronizable)));
                 }
             };
 
@@ -6891,6 +6959,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]        = data_arr[i];
+                        uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(dst);
                         operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_operatable_fwd_id   = dg::network_tile_member_getsetter::get_crit_operatable_forward_id_nothrow(dst);
@@ -6919,6 +6988,10 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
+                        if (dst_src != src){
+                            continue;
+                        }
+
                         if (dst_operatable_id != expected_ops_id){
                             continue;
                         }
@@ -6926,6 +6999,8 @@ namespace dg::network_memcommit_resolutor{
                         if (dst_operatable_fwd_id != src_operatable_fwd_id.value()){
                             continue;
                         }
+
+                        auto dispatch_info = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_crit_forward_dispatch(dispatch_control)); 
 
                         if (!dg::network_uma::reacquirer_fixedsize_is_region_reacquirable(umamap_reacquirer, {{dst_logit_umaptr, dispatch_info.dst_logit_vd_id},
                                                                                                               {src_logit_umaptr.value(), dispatch_info.src_logit_vd_id}, 
