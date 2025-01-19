@@ -458,8 +458,11 @@
 #how about string theory and transformers - we are still doing transformers - instead of doing interference <string of input>, we are doing interference of <string of transformation> 
 
 #so the inputs are abstracted away as string shape - which is initially f(x) = x
-#then we transform the shape, get the output, which is f
+#then we transform the shape, get the output, which is f (this is actually heavy (depends - we can reduce the f resolution) - but I guess this is the right approach - in the sense of not losing numerical stability of flex)
 #then we do f(x) -> y
+#we dont really care about performance - we have 1 billion devices (you'd be surprised by the right hecker) to train this in parallel 
+#as long as the theory works - its fine
+#by the time you have read these technical details (very careful about the flex + chaim rules - hecker says ssh is a joke) - you probably own a trillion $ company (im not joking) - but I guess people rather do linear and their cringy mathematic than to think of locality compression and continuity and string theory
 
 #enough theory - we have to see if this actually works
 
