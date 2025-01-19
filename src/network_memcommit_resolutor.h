@@ -6757,7 +6757,7 @@ namespace dg::network_memcommit_resolutor{
                         auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
 
                         if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error())); //Mom was right - I dont know if this is internal corruption or errors - I just make it errors for now - can't limit the usage yet
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
                             continue;
                         }
 
@@ -6899,6 +6899,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_grad_umaptr               = dg::network_tile_member_getsetter::get_crit_grad_addr_nothrow(dst);
                         grad_status_t dst_grad_status           = dg::network_tile_member_getsetter::get_crit_grad_status_nothrow(dst);
                         dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_crit_dispatch_control_nothrow(dst);
+                        size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_crit_observer_array_size_nothrow(dst);
+                        dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
+                        dg::network_tile_member_getsetter::get_crit_observer_array_nothrow(dst, dst_observer_arr.get()); 
 
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
                         std::expected<operatable_id_t, exception_t> src_operatable_fwd_id   = dg::network_tile_member_getsetter::get_tile_operatable_forward_id(src);
@@ -6949,7 +6952,7 @@ namespace dg::network_memcommit_resolutor{
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(src_logit_vmamap_reacquirer, src_logit_vmaptr)
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(dst_crit_vmamap_reacquirer, dst_crit_vmaptr)
                             || !dg::network_vmamap::reacquirer_is_region_reacquirable(dst_grad_vmamap_reacquirer, dst_grad_vmaptr)){
-                            
+
                             dg::network_producer_consumer::delvrsrv_clear(cuda_delivery_handle.get());
                             dg::network_producer_consumer::delvrsrv_clear(host_delivery_handle.get());
                             cuda_synchronizer.sync();

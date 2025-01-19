@@ -464,6 +464,15 @@
 #as long as the theory works - its fine
 #by the time you have read these technical details (very careful about the flex + chaim rules - hecker says ssh is a joke) - you probably own a trillion $ company (im not joking) - but I guess people rather do linear and their cringy mathematic than to think of locality compression and continuity and string theory
 
+#now we need to write continuity theories - we need to get a set of fundamental continuous strings that are equally hard to construct
+#as if given a random string - the cost of getting the random string right is inversely scaled with the number of fundamental strings 
+#we need to get a set of string transformation right - string transformation is just vertical, horizontal, periodic, calibration
+#as monkeys, we enumerate all possiblities of continuous strings - on a very small resolution - 16x16 32x32 64x64
+#we scale the string, we calibrate the pattern, and we move on to the next string, etc.
+#when we scale the continuous string - we are losing resolution - this is actually NVIDIA project - dlss - we'll partner with them on string theory
+#there aren't just better solutions for the planet of the apes guys - best we can do is that
+#we might want to turn g(x) into trained mathematical eqns for fast gradient approx
+#we also might want to have a good trained heuristic - to do shape shift 
 #enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
