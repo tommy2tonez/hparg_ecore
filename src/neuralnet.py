@@ -444,6 +444,23 @@
 #we compute the final curve - then we do f(x) -> y - and we propagate gradients 
 #so there are still matrices + rows + columns like normal
 
+#i finally trust my physic bro (not crypto bro) and take the string theory seriously
+#let's prioritize one thing
+#it is continuous compression (locality compression)
+#given a continuous 2D chart - tell me the set of syntaxes that represent the string in the most compressed form (this is the catch)
+
+#it is continuous transformation or string transformation f(string) = another_string
+#what is the set of string transformation? stretch vertically, stretch horizontally, stretch periodically, calibration
+
+#tell me a heuristic to train the 2D chart -> another 2D chart by using heuristic(string, data_point) -> another_string
+#okay - we are doing this a little differently from normal guys
+#we guess the chart - we make up a function, then we best fit the function - not the other way around
+#how about string theory and transformers - we are still doing transformers - instead of doing interference <string of input>, we are doing interference of <string of transformation> 
+
+#so the inputs are abstracted away as string shape - which is initially f(x) = x
+#then we transform the shape, get the output, which is f
+#then we do f(x) -> y
+
 #enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
