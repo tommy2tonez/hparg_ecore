@@ -477,6 +477,24 @@
 #we have a point in the multidimensional space - it bends the space based on the mass of the point and the distances of the point to the space surface - we calibrate the space and we move on - that's one way continuity can be compressed
 #without loss of generality, initially we have f(x) = x - we find the first point x = <1, 1, 1> to bend the space - we calibrate - then we find the next point x = <2, 2, 2>, etc. 
 
+#okay - so we have learnt about massful objects - which is God favorite language to compress continuity
+#we have a f(x) = x initially - we place a massful object - which has interference by the eqn f'(x) = f(x) + influence(y, r) - for x is the one dimensional pointer on the surface, y is the random point in the space - r is the distance   
+#what difference does this make from the original machine learning approach?
+
+#you can say that it's f(x) = x^2 then calibrate then move on to the next - etc. alright - we are flat-earther conpiracists
+#and we are doing projection - which has bad numerical stability
+#okay - its numerical stability, we talked about f(x) = f1(f2(f3(f4(x)))) would eventually turn things into unordered range compression (if the input and output are far away - we have massive destructive interference of training) - no matter how hard you try - this is the problem with transformers 
+
+#how about we store our brain as tuples of <mass, coordinate, influence eqn>?
+#we process the massful objects one by one to bend the output space (these functions of get_new_string(old_string, object) actually dont have destructive interference - in the sense of "hardness" to guess the output string after certain layer of functions) - not all at once 
+#and we trying to guess the shape of the output string - we calibrate, we move on guess the next string etc.
+#so imagine a normal linear render rule would map things onto a plane - our massful render rule would bend the output string 
+
+#we'll write proof of concept - prove that numerical stability of this approach is better
+#essentially - we want to have our, without loss of generality, 3D points of f(x) = x (says 1000000 avg surface points)
+#we want to process these guys - by doing shape projections  - not particle projections - we are string specialists 
+#we do the same thing as we do for transformer - and we get the final shape which is used for particle f(x) projections 
+
 #enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
