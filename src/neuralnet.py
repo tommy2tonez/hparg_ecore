@@ -495,6 +495,9 @@
 #we want to process these guys - by doing shape projections  - not particle projections - we are string specialists 
 #we do the same thing as we do for transformer - and we get the final shape which is used for particle f(x) projections 
 
+#things are hard - we are not retarded enough - the graph is too fluid to actually learn - we solve those by using dimensional reduction
+#this is why we want to project 100.000.000 points and have the same number of massful objects - we aren't storing the 100.000.000 points - we are storing the way to transform the semantic space shapes 
+
 #enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
