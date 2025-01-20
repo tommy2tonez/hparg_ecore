@@ -473,6 +473,10 @@
 #there aren't just better solutions for the planet of the apes guys - best we can do is that
 #we might want to turn g(x) into trained mathematical eqns for fast gradient approx
 #we also might want to have a good trained heuristic - to do shape shift 
+#alright - we have evolved from apes -> human, we should describe this as mass, space time bend and calibrations
+#we have a point in the multidimensional space - it bends the space based on the mass of the point and the distances of the point to the space surface - we calibrate the space and we move on - that's one way continuity can be compressed
+#without loss of generality, initially we have f(x) = x - we find the first point x = <1, 1, 1> to bend the space - we calibrate - then we find the next point x = <2, 2, 2>, etc. 
+
 #enough theory - we have to see if this actually works
 
 def f(x: list[bool], f_properties: object) -> list[bool]:
