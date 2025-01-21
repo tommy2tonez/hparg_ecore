@@ -21,9 +21,18 @@
 #the art of compression is machine learning - yet I think we are not there - the calibration part and the periodic - we got the base string correctly
 #we need to work on the theories
 
-#gravity is probably on the 20th string
-#electromagnetic is probably on the 21th string
-#we call string a multi-dimensional projection shape 
+#gravity is probably on the 21th string
+#electromagnetic is probably on the 20th string
+#pay close attention that electromagnetic is affected by gravity but not otherwise (this is a hint that the massful_objects for electromagnetics are probably of lower string hierarchical tree)
+#we call string a multi-dimensional projection shape
+#this is a huge advancement in string theory - because it tells us that things, actually, can be created from multidimensional hierarchical strings (which is what transformers had been able to prove)
+
+#think of the massful objects as semantic rules
+#the first layer of particles (base_string) has to adhere to 20 semantic rules
+#the second layer of parciles (base_string) has to adhere to 19 semantic rules
+#etc. 
+#this creates training friction for the 1st layer 2nd layer - such that the training must be able to find the semantic rules for the 1st and 2nd and 3rd layers in order to proceed
+#note this very important rule of machine learning training - we need to create training friction
 
 #on 2D euclidean coordnate - we have particle projection - and we have wave-like projection which is a 2 dimensional string
 #thing is we want to use God's favorite language of "massful" for continuity compression
@@ -34,7 +43,12 @@
 
 #so what's our regex of building the universe? or compress continuity? Or at least this is the God's language
 #f(x, n) = string_interference(f(x, n - 1), massful_objects) + f(x1, n1)
-#f(x, 0) = base_string   
+#f(x, 0) = base_string
+
+#alright - let's twist things - God wants to confuse us - assume that we add one dimension (which is massful iterator) for massful objects - and increase our dimensiona from n -> n + 1
+#what happens?
+#each of them massful objects is on a different timeline
+#pay very close attention to how we could simulate the universe (in our point of views and how we can differentiate the x and f(x) - hint they are all (massful objects or logits) started from the center - the Big Bang)
 
 def main():
     pass 
