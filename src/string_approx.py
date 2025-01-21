@@ -49,6 +49,25 @@
 #what happens?
 #each of them massful objects is on a different timeline
 #pay very close attention to how we could simulate the universe (in our point of views and how we can differentiate the x and f(x) - hint they are all (massful objects or logits) started from the center - the Big Bang)
+#all right - we are missing calibration projection - if we are string absolutists - we probably dont need calibration projections for now (because it messes up numerical stability)
+
+#if we are absolute theorists - we must include string calibration projection
+#assume the famous three-body problem - we want to be able to project the position of the three body on the 3d vs time coordinate by using stationary massful objects (on an arbitrary coordinate)
+
+#we first have initial velocities of the three bodies
+#we have the masses of the three bodies
+#we have the positions of the three bodies
+#we have the t0 of the three bodies 
+
+#we first have static massful objects to rid of the mass + initial position continuity influence - and we are left with initial velocities, position and t0
+#we then have static massful objects to rid of the initial velocities influence - etc.
+#we then have ... to rid of the time influence
+
+#without loss of generality, we "collapse" the semantic space to be able to approx things easier, better, faster
+#the first layer already got 80% of the shape correctly
+#the second layer got 10% of the shape correctly
+#the third layer got 5% of the shape correctly 
+#we want the hierarchical build up to allow training "friction" of strings - to simulate the actual semantic collapse and recursive build up of semantic space
 
 def main():
     pass 
