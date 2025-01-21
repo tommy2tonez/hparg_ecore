@@ -29,8 +29,12 @@
 #thing is we want to use God's favorite language of "massful" for continuity compression
 #what Einstein described was 4 dimensional string - and massful object would bend continuity of the 4 dimensional projection string
 #Einstein was not wrong - just not sufficient - in the sense of information flux
-#information flux is the maximum information that an enclosed space can receive from outer space (which is kinda maximum pingpong/s)
+#information flux is the maximum information that an enclosed space can receive from outer space (which is kinda maximum pingpong/s) - alright - we are talking in terms of 4 dimensionalists - how should we describe this is terms of 20 dimensionalists? it's resolution - saturated logit problems
 #string quantum is right - but we can't observe another world to tell our world - the photon that went through the slit and the observed photon aren't on the same coordinate - they are on 20 dimensional projection string - and they went different direction  
+
+#so what's our regex of building the universe? or compress continuity? Or at least this is the God's language
+#f(x, n) = string_interference(f(x, n - 1), massful_objects) + f(x1, n1)
+#f(x, 0) = base_string   
 
 def main():
     pass 
