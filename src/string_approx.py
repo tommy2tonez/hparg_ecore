@@ -20,6 +20,8 @@
 
 #the art of compression is machine learning - yet I think we are not there - the calibration part and the periodic - we got the base string correctly
 #we need to work on the theories
+#every machine learning problem is to approx the f(x) -> y projection string - by using continuous compression
+#whether you are linear absolutists or string absolutists - we want to dent the continuity - and recursion building of context space (how we get the recursion building correctly is described below via the trinity tests) - and repetitive rules of continuity  
 
 #gravity is probably on the 21th string
 #electromagnetic is probably on the 20th string
@@ -69,5 +71,115 @@
 #the third layer got 5% of the shape correctly 
 #we want the hierarchical build up to allow training "friction" of strings - to simulate the actual semantic collapse and recursive build up of semantic space
 
-def main():
+#i've been thinking about string projection  
+#because it is important to reorder the input domain to do continuity of different groups - without this, we are logic-impaired (in the sense that we always assume the domain to be of continuity)
+
+#let's do things simple - calibration - massful influence - and trees 
+#we want to be able to approx 3 body problem, murmur hash output space and sin cos interference as proof of concept (this is the baseline of every semantic approximator system - periodic, recursive buildup and constructive interference - if we can't get this right then I'm afraid we aren't going anywhere)
+#we'll get things done today and tomorrow - then we think of how to scale this thing
+
+from typing import Callable
+
+class Particle:
+
+     def __init__(self, mass: float, position: list[float]):        
+        self.mass = mass
+        self.position = position 
+
+class ForceVector:
+
+    def __init__(self, vec: list[float]):
+        self.vec = vec
+
+class String:
+
+    def __init__(self, string_particles: list[Particle]):
+        self.string_particles = string_particles
+
+def get_multidimensional_string(dim: int, resolution: int) -> String:
+    pass
+
+class StringOperationTree:    
+
+    def __init__(self, left_string_tree = None, right_string_tree = None, operation_kind = None):
+        self.left_string_tree   = left_string_tree
+        self.right_string_tree  = right_string_tree
+        self.operation_kind     = operation_kind
+
+class OpsString:
+
+    def __init__(self):
+        pass 
+
+OPERATION_KIND_SELF = 0
+OPERATION_KIND_MUL  = 1
+OPERATION_KIND_ADD  = 2 
+
+#alright what is an operation tree? an operation tree computes the string(x) -> y
+#operation tree has string * string (which is massful influence) or string + other string
+#string * string is done by combinatorial pairwise operation of lhs on rhs - such is rhs moves towards lhs by the eqn f(pos, r)
+#string + string is coordinate calibration - we calibrate the string by doing + operation - alright - assume we discretize an arbitrary string est surface into one dimensional pointer, then for every iteration point the new_point = sum(distance(O, i) for all i c iteration_grid)
+#assume we are on radian coordinate - we have the initial space of a sphere (which is shape)
+
+def clone_tree(root: StringOperationTree) -> StringOperationTree:
+
+    if root == None:
+        return None
+
+    return StringOperationTree(clone_tree(root.left_string_tree), clone_tree(root.right_string_tree), root.operation_kind)
+
+def make_operation_tree(dim: int, semantic_layer_height: int, tree_skewness: float, total_node_sz: int) -> list[StringOperationTree]:    
+
+    if total_node_sz == 0:
+        return None 
+
+    if total_node_sz == 1:
+        return StringOperationTree(None, None, OPERATION_KIND_SELF)  
+
+    left_node_sz: int                           = min(max(1, int(total_node_sz * tree_skewness)), total_node_sz)
+    right_node_sz: int                          = total_node_sz - left_node_sz
+    left_tree_list: list[StringOperationTree]   = make_operation_tree(dim, semantic_layer_height - 1, tree_skewness, left_node_sz)
+    right_tree_list: list[StringOperationTree]  = make_operation_tree(dim, semantic_layer_height - 1, tree_skewness, right_node_sz)
+    rs_tree: list[StringOperationTree]          = []
+
+    for i in range(len(left_tree_list)):
+        for j in range(len(right_tree_list)):
+            new_tree_1  = StringOperationTree(clone_tree(left_tree_list[i]), clone_tree(right_tree_list[j]), OPERATION_KIND_MUL)
+            new_tree_2  = StringOperationTree(clone_tree(left_tree_list[i]), clone_tree(right_tree_list[j]), OPERATION_KIND_ADD)
+            rs_tree     += [new_tree_1]
+            rs_tree     += [new_tree_2]
+
+    return rs_tree
+
+#these are the three string operations that I think sufficient for every semantic approximation
+#calibration, massful curvation + projection
+
+def add_string(lhs_string: String, rhs_string: String) -> String:
+
+    new_particle_pairs  = list(zip(lhs_string.string_particles, rhs_string.string_particles))
+    new_particle        = [sum(pair) for pair in new_particle_pairs]
+
+    return new_particle
+
+def mul_string(lhs_string: String, rhs_string: String, eqn: Callable[[Particle, Particle], ForceVector]) -> String:
+
+    new_string: String = String()
+
+    for j in range(len(rhs_string.string_particles)):
+        force_vec: list[ForceVector] = [] 
+
+        for i in range(len(lhs_string.string_particles)):
+            force_vec += [eqn(lhs_string.string_particles[i], rhs_string.string_particles[j])]
+
+        new_particle = move_particle(rhs_string.string_particles[j], combine_vec(force_vec))
+        add_string_particle(new_string, new_particle)
+
+    return new_string
+
+def project_string(string_projector: Callable[[String], String], s: String) -> String:
     pass 
+
+def main():
+    #I'll be back to write this tmr
+    pass
+
