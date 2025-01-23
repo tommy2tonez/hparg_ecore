@@ -44,8 +44,9 @@ namespace dg::network_tile_foreign_injection{
 
             virtual ~TileRoomControllerInterface() noexcept = default;
             virtual auto enter_room(uma_ptr_t) noexcept -> std::expected<bool, exception_t> = 0;
+            virtual auto check_entry_requirement(uma_ptr_t) noexcept -> exception_t = 0;
             virtual auto get_kick_candidate() noexcept -> std::expected<uma_ptr_t, exception_t> = 0;
-            virtual auto exit_room(uma_ptr_t) noexcept = 0;
+            virtual void exit_room(uma_ptr_t) noexcept = 0;
     };
 
     class TileShadowControllerXInterface{
@@ -62,7 +63,7 @@ namespace dg::network_tile_foreign_injection{
         private:
 
             dg::unordered_unstable_map<polymorphic_tile_kind_t, dg::vector<uma_ptr_t>> allocation_dict;
-        
+
         public:
 
             TileAllocator(dg::unordered_unstable_map<polymorphic_tile_kind_t, dg::vector<uma_ptr_t>> allocation_dict) noexcept: allocation_dict(std::move(allocation_dict)){}
@@ -87,7 +88,6 @@ namespace dg::network_tile_foreign_injection{
 
             void deallocate(uma_ptr_t addr) noexcept{
 
-                //alright this is gonna be a spaghetti if not done correctly - whatever
                 polymorphic_tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(addr);
                 allocation_dict.find(tile_kind)->second.push_back(addr);
             }
@@ -98,37 +98,44 @@ namespace dg::network_tile_foreign_injection{
         private:
 
             std::unique_ptr<TileAllocatorInterface> allocator;
-        
+
         public:
 
             TileForeignInjection(std::unique_ptr<TileAllocatorInterface> allocator) noexcept: allocator(std::move(allocator)){}
 
             auto inject(polymorphic_tile_kind_t tile_kind, const dg::string& serialized_tile) -> std::expected<uma_ptr_t, exception_t>{
 
-                std::expected<uma_ptr_t, exception_t> addr = this->allocator->allocate(tile_kind);
-
-                if (!addr.has_value()){
-                    return std::unexpected(addr.error());
-                }
-
-                PolymorphicTile polymorphic_tile{};
-                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<PolymorphicTile>)(polymorphic_tile, serialized_tile.data(), serialized_tile.size(), this->serialization_secret); //we have to use serialization secret to guard 
+                PolymorphicTile polymorphic_tile    = {};
+                exception_t err                     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<PolymorphicTile>)(polymorphic_tile, serialized_tile.data(), serialized_tile.size());
 
                 if (dg::network_exception::is_failed(err)){
-                    this->allocator->deallocate(addr.value());
                     return std::unexpected(err);
                 }
 
-                switch (polymorphic_tile.tile_kind){
-
+                if (polymorphic_tile.tile_kind != tile_kind){
+                    return std::unexpected(dg::network_exception::BAD_ARGUMENT);
                 }
+
+                std::expected<uma_ptr_t, exception_t> tile_addr = this->allocator->allocate(tile_kind);
+
+                if (!tile_addr.has_value()){
+                    return std::unexpected(tile_addr.error());
+                }
+
+                exception_t err = dg::network_tile_member_getsetter::set_tile(tile_addr.value(), polymorphic_tile);
+
+                if (dg::network_exception::is_failed(err)){
+                    this->allocator->deallocate(tile_addr.value());
+                    return err;
+                }
+
+                return tile_addr.value();
             }
 
             void deallocate(uma_ptr_t ptr) noexcept{
 
-                // dg::network_tile_initialization::orphan(ptr);
+                dg::network_tile_initialization::orphan(ptr);
                 this->allocator->deallocate(ptr);
-                //
             }
     };
 
@@ -195,6 +202,49 @@ namespace dg::network_tile_foreign_injection{
             }
     };
 
+    class FIFOTileRoomController: public virtual TileRoomControllerInterface{
+
+        private:
+
+            dg::deque<uma_ptr_t> room_container;
+            size_t room_capacity; 
+
+        public:
+
+            FIFOTileRoomController(dg::deque<uma_ptr_t> room_container,
+                                   size_t room_capacity) noexcept: room_container(std::move(room_container)),
+                                                                   room_capacity(room_capacity){}
+
+            auto enter_room(uma_ptr_t addr) noexcept -> std::expected<bool, exception_t>{
+
+                if (this->room_container.size() == this->room_capacity){
+                    return false;
+                }
+
+                this->room_container.push_back(addr);
+                return true;
+            }
+            
+            auto check_entry_requirement(uma_ptr_t addr) noexcept -> exception_t{
+
+                return dg::network_exception::SUCCESS;                
+            }
+
+            auto get_kick_candidate() noexcept -> std::expected<uma_ptr_t, exception_t>{
+
+                if (this->room_container.empty()){
+                    return std::unexpected(dg::network_exception::EMPTY_QUEUE);
+                }
+
+                return this->room_container.front();
+            }
+
+            void exit_room(uma_ptr_t ptr) noexcept{
+
+                this->room_container.erase(std::remove(this->room_container.begin(), this->room_container.end(), ptr));
+            }
+    };
+
     class TileShadowControllerX: public virtual TileShadowControllerXInterface{
 
         private:
@@ -221,6 +271,12 @@ namespace dg::network_tile_foreign_injection{
                 }
 
                 if (!room_status.value()){
+                    exception_t entry_requirement_err = this->room_controller->check_entry_requirement(shadowed_addr);
+
+                    if (dg::network_exception::is_failed(entry_requirement_err)){
+                        return entry_requirement_err;
+                    }
+
                     std::expected<uma_ptr_t, exception_t> cand = this->room_controller->get_kick_candidate();
 
                     if (!cand.has_value()){

@@ -96,6 +96,30 @@
 #universe is actually like an onion - we want to peel layer by layer - by using tons of massful operations for each layers
 #thing about linear is precisely that - imagine that we are on 3 dimensional string projection - we are drawing plane to peel onions - which is (1): drawing lines between irrelevant pts, (2): cause bad projection ripple effect which has bad numerical stability, (3): only good for parrot affect - sounds similar but not the actual context 
 
+#alright - let's talk about how to build a model
+#thing in machine learning is there are only two layers that we should talk about - the input layer and the output layer (because machine learning is all about numerical stability - and not about what people say)
+#we want to describe the output layer based on the input layer - and how the coefficients move the output projection
+#we dont really care about the middle layers and what it really does
+#if we only have linear operator and we rotate the intermediate layer correctly 
+#we expect y = a * x1 + b * x2 + c * x3 + ..., for y is a random output cell
+
+#if we have self operation - we expect to see polynomial
+#if we have attn - we expect to see exponent - which touches the points that the linear could not touch
+#alright - how about we describe things in terms of string?
+
+#how about we have embedding f(x) = 0 for every layer? - for x is the initial input (before embedding projection)
+#and we apply the massful operation
+#so we should expect to see things like f(x, n) = f(x, n - 1) * massful_objects + f0(x) * whatever
+#what is wrong with this?
+#that there is actually nothing wrong with this - we don't have self operation to increase polynomial order or exponent to increase the touchness of the graph
+#we encode all the information in the massful_objects
+#we assume there are invisible strings - and we build strings on top of each other to simulate context collapse - and we want to work on numerical stability of this  
+
+#alright - we always want to start from - what we expect the output layer to be from the input layer and we build things from there
+#I say I want the output cell to be in <x1, x2, ..., xn> space and we are able to bend the string space f(x) -> y projection - layer by layer like the formula - ((embedding(x) * massful_objects) + embedding(x1)) * massful_objects   
+#alright - what are the other things that we see - we see recursive building of things (alright - attention does allow recursive building of things - because without attention the layers aren't making senses) - which we want to prove that works (or we want to twist things to allow this to work)
+#what other things that we see, that embedding(x) and embedding(x1) probably look the same - and we want to reuse the massful_objects rule for all other cells
+
 from typing import Callable
 
 class Particle:
