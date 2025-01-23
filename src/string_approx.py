@@ -78,6 +78,24 @@
 #we want to be able to approx 3 body problem, murmur hash output space and sin cos interference as proof of concept (this is the baseline of every semantic approximator system - periodic, recursive buildup and constructive interference - if we can't get this right then I'm afraid we aren't going anywhere)
 #we'll get things done today and tomorrow - then we think of how to scale this thing
 
+#alright - we've been talking about string and projection - let's simulate string in projection environment
+#assume that we are not flat-earthers
+#we wanna ditch linear for massful operation
+
+#we want to assume that we are the one element in the invisible string
+#assume that we want to simulate two dimensional string
+#we first want to have a linear operation - f(x) = <x, x>
+#we then want to have a massful operation mass = <x1, y1>
+#a pull operation should transform <x, x> -> <x + (distance * heaviness) * cos, y + (distance * heaviness) * sin>, distance = sqrt((f(x) - mass_coor) . (f(x) - mass_coor))
+#alright - let's do the reverse of Chad soy boy
+#assume you have the continuity of the universe, we want to unhinge the universe layers by layers
+#assume that the universe is made of invisible strings and there are massful operations to bend continuity 
+#what we want to do is exactly like transformer
+#x = x + peel_layer(x)
+#get_context_layer is essentially the, without loss of generality, (distance * heaviness) * cos, (distance * heaviness) * sin, etc 
+#universe is actually like an onion - we want to peel layer by layer - by using tons of massful operations for each layers
+#thing about linear is precisely that - imagine that we are on 3 dimensional string projection - we are drawing plane to peel onions - which is (1): drawing lines between irrelevant pts, (2): cause bad projection ripple effect which has bad numerical stability, (3): only good for parrot affect - sounds similar but not the actual context 
+
 from typing import Callable
 
 class Particle:
