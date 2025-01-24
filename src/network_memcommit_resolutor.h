@@ -113,6 +113,30 @@ namespace dg::network_memcommit_resolutor{
     //we are declaring dependency injection expectations
     //users of the resolutors must coerce (implements) interface by composition of std::shared_ptr<>
 
+    //alright Mom - you say this is B - but I say this is probably the most optimized form this could be programmed - we dont want to tie our hands to limit future optimization efforts
+    //we must be able to do 128x128 or 64x64 tiles because it's the most compact form for UDP protocol transfer without risking frictions (our tcp things) 
+    //and at that level of 128x128 or 64x64 - we must do pair_accum + unordered_accum for "linear" operations
+    //we must use fixed size UACM_ACM_SZ and PACM_ACM_SZ because we want to control the frequency uncertainty - things would get very out of hands if we aren't controlling the accumulation size
+    //and I think that fixed size UACM_ACM_SZ should mimic the logic of unordered accum for most of the cases, so does fixed size PACM_ACM_SZ - we dont want to waste storage and memory footprint for "linear" - that's the goal
+    //the magic of our engine is the parallel of path optimizations - thing is that traditional training exposes a very clear convergence of loss_rate or validation_rate - and things get very predictable very early on
+    //we want to use what we called community detection and centrality algorithm + A * optimization technique, we want to "detect" certain patterns by using traditional methods - like regex cosine similarity and training convergence similarity
+    //we want to forge our path through the training - and achieve the "best possible" regex version
+    //there is a problem of what trains first, what trains second, etc. - which is also a path problem - we'll talk about how we could generalize these problems
+    //alright - after we throw every traditional method at the problem and we can't still solve it - we begin to exponentially discretize the logits - and train it on 1 billion devices - and sell the best possible version for money
+    //this is called logit mining
+
+    //thing is the traditional semantic mapping method does not have recursive build up of semantic space - and we are stuck at one semantic layer - things like cosine similarities - or jaccard similarities - but these traditional methods excel at simple training prediction
+    //we want to kinda have a "centrality" to talk about the likelihood of path exploration in A* algorithm
+    //and we also want to have community detection to see if the situtation is prunable - or worth digging in the direction
+    //we want to store the training data points in a global semantic graph - our training optimization engine
+    //we'll try to see how things turn out to be
+
+    //but the final boss is to guess the inital logit values - and kinda learn what's the best combo to try - we also want to store this in our training optimization engine
+    //we guess the initial logit values exponentially - base 1.2, without loss of generality, try to set random values and store the statistics
+    //all of these things are called logit mining - and we store the data points to converge our mining mission faster, more efficient
+    //it probably looks like a 1/x graph, no matter if you have 1 billion devices or 10 billion devices - but that's the direction that we are heading
+    //people are offering BB $ if we get this to work correctly - so we must be very careful about the agendas and the implementations
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> std::expected<Address, exception_t> = 0;
@@ -5852,7 +5876,7 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                const size_t LCK_ADDR_SZ_PER_DISPATCH = sz + 1u;
+                constexpr size_t LCK_ADDR_SZ_PER_DISPATCH   = UACM_ACM_SZ + 1u;
                 dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> descendant_arr(sz * UACM_ACM_SZ);
                 dg::network_stack_allocation::NoExceptAllocation<bool[]> validation_arr(sz);
                 dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> lck_addr_arr(sz * LCK_ADDR_SZ_PER_DISPATCH);
@@ -5929,7 +5953,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         auto key = dg::vector_view<uma_ptr_t, LCK_ADDR_SZ_PER_DISPATCH>(cur_lck_addr);
-                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id, cur_descendant_arr));
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, cur_descendant_arr, event_arr[i].operatable_id));
                     }
                 }
             }
@@ -9170,16 +9194,114 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-            const size_t delivery_capacity;
-        
+            const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
+            const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
+            const size_t request_delivery_capacity;
+            const size_t addrfetch_vectorization_sz;
+            const size_t region_vectorization_sz;
+            const size_t backward_vectorization_sz;
+
         public:
 
             BackwardDoUACMSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                          size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
-                                                                              delivery_capacity(delivery_capacity){}
-            
-            void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
+                                          std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                          std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                          size_t request_delivery_capacity,
+                                          size_t addrfetch_vectorization_sz,
+                                          size_t region_vectorization_sz,
+                                          size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                      cuda_async_device(std::move(cuda_async_device)),
+                                                                                      host_async_device(std::move(host_async_device)),
+                                                                                      request_delivery_capacity(request_delivery_capacity),
+                                                                                      addrfetch_vectorization_sz(addrfetch_vectorization_sz),
+                                                                                      region_vectorization_sz(region_vectorization_sz),
+                                                                                      backward_vectorization_sz(backward_vectorization_sz){}
 
+            void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
+                
+                constexpr size_t LCK_ADDR_SZ_PER_DISPATCH   = UACM_ACM_SZ + 1u;
+
+                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> descendant_arr(sz * UACM_ACM_SZ);
+                dg::networK_stack_allocation::NoExceptAllocation<bool[]> validation_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> lck_addr_arr(sz * LCK_ADDR_SZ_PER_DISPATCH); 
+
+                const size_t EVENT_SCALE_FACTOR             = UACM_ACM_SZ;
+                size_t max_possible_event_sz                = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz);
+                size_t rdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_request_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rdh_mem(rdh_allocation_cost);
+                auto request_delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(this->request_box.get(), trimmed_request_delivery_capacity, rdh_mem.get()));
+
+                {
+                    InternalDescendantAddressFetcher fetcher    = {};
+                    
+                    size_t trimmed_addrfetch_vectorization_sz   = std::min(this->addrfetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&fetcher, trimmed_addrfetch_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
+
+                        if (!ptrchk.has_value()){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
+                            continue;
+                        }
+
+                        uma_ptr_t rcu_addr                  = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].dst);
+                        uma_ptr_t lck_addr                  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+                        auto fetch_arg                      = AddressFetchArgument{};
+                        fetch_arg.root                      = event_arr[i].dst;
+                        fetch_arg.expected_ops_id           = event_arr[i].operatable_id;
+                        fetch_arg.fetching_addr             = std::next(descendant_arr.get(), i * UACM_ACM_SZ);
+                        fetch_arg.fetching_validation_addr  = std::next(validation_arr.get(), i);
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, fetch_arg);
+                    }
+                }
+
+                {
+                    auto internal_resolutor                     = InternalResolutor{};
+                    internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
+                    internal_resolutor.host_async_device        = this->host_async_device.get();
+                    internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
+                    internal_resolutor.vectorization_sz         = this->backward_vectorization_sz;
+
+                    size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!validation_arr[i]){
+                            continue;
+                        }
+
+                        size_t lck_region_sz            = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
+                        uma_ptr_t * cur_descendant_arr  = std::next(descendant_arr.get(), i * UACM_ACM_SZ);
+                        uma_ptr_t * cur_lck_addr        = std::next(lck_addr_arr.get(), i * LCK_ADDR_SZ_PER_DISPATCH);
+                        bool rcu_addr_flag              = true;
+                        cur_lck_addr[0u]                = dg::memult::region(dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].dst), lck_region_sz);
+
+                        for (size_t j = 0u; j < UACM_ACM_SZ; ++j){
+                            std::expected<uma_ptr_t, exception_t> rcu_addr = dg::network_tile_member_getsetter::get_tile_rcu_addr(cur_descendant_arr[j]);
+
+                            if (!rcu_addr.has_value()){
+                                rcu_addr_flag = false;
+                                break;
+                            }
+
+                            cur_lck_addr[j + 1] = dg::memult::region(rcu_addr.value(), lck_region_sz);
+                        }
+
+                        if (!rcu_addr_flag){
+                            continue;
+                        }
+
+                        auto key = dg::vector_view<uma_ptr_t, LCK_ADDR_SZ_PER_DISPATCH>(cur_lck_addr);
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), key, std::make_tuple(event_arr[i].dst, cur_descendant_arr, event_arr[i].operatable_id))
+                    }
+                }
             }
     };
 
@@ -9188,15 +9310,36 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-            const size_t delivery_capacity;
-        
+            const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
+            const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
+            const size_t request_delivery_capacity;
+            const size_t addrfetch_vectorization_sz;
+            const size_t region_vectorization_sz;
+            const size_t backward_vectorization_sz;
+
         public:
 
             BackwardDoPACMSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                          size_t delivery_capacity) noexcept: request_box(std::move(request_box)),
-                                                                              delivery_capacity(delivery_capacity){}
+                                          std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                          std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                          size_t request_delivery_capacity,
+                                          size_t addrfetch_vectorization_sz,
+                                          size_t region_vectorization_sz,
+                                          size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                      cuda_async_device(std::move(cuda_async_device)),
+                                                                                      host_async_device(std::move(host_async_device)),
+                                                                                      request_delivery_capacity(request_delivery_capacity),
+                                                                                      addrfetch_vectorization_sz(addrfetch_vectorization_sz),
+                                                                                      region_vectorization_sz(region_vectorization_sz),
+                                                                                      backward_vectorization_sz(backward_vectorization_sz){}
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+                constexpr size_t LCK_ADDR_SZ_PER_DISPATCH       = PACM_ACM_SZ + PACM_ACM_SZ + 1u;
+
+                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> left_descendant_arr(sz * PACM_ACM_SZ);
+                dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> right_descendant_arr(sz * PACM_ACM_SZ);
+                dg::network_stack_allocation::NoExceptAllocation<bool[]> validation_arr(sz);
 
             }
     };
