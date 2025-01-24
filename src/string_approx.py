@@ -120,6 +120,9 @@
 #alright - what are the other things that we see - we see recursive building of things (alright - attention does allow recursive building of things - because without attention the layers aren't making senses) - which we want to prove that works (or we want to twist things to allow this to work)
 #what other things that we see, that embedding(x) and embedding(x1) probably look the same - and we want to reuse the massful_objects rule for all other cells
 
+#we gonna gucci later babe - just have faith for probably 2 years - I'll try to code the regex + path_optimization + randomization + convergence analysis + derivative of gradients + etc.
+#dont trust Chad - all he does is offensive meme and closing things
+
 from typing import Callable
 
 class Particle:

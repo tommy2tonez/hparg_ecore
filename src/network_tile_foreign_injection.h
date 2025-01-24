@@ -18,13 +18,12 @@ namespace dg::network_tile_foreign_injection{
             virtual void deallocate(uma_ptr_t) noexcept = 0;
     };
 
-    //this is weird - I'll fix the convention
-    class TileForeignInjectionInterface{
+    class TileInjectorInterface{
 
         public:
 
-            virtual ~TileForeignInjectionInterface() noexcept = default;
-            virtual auto inject(polymorphic_tile_kind_t, const dg::string&) noexcept -> std::expected<uma_ptr_t, exception_t> = 0; 
+            virtual ~TileInjectorInterface() noexcept = default;
+            virtual auto inject(const PolymorphicTile&) noexcept -> std::expected<uma_ptr_t, exception_t> = 0; 
             virtual void deallocate(uma_ptr_t) noexcept = 0;
     };
 
@@ -33,7 +32,7 @@ namespace dg::network_tile_foreign_injection{
         public:
 
             virtual ~TileShadowControllerInterface() noexcept = default;
-            virtual auto shadow(uma_ptr_t, polymorphic_tile_kind_t, const dg::string&) noexcept -> exception_t = 0; 
+            virtual auto shadow(uma_ptr_t, const PolymorphicTile&) noexcept -> exception_t = 0; 
             virtual auto get_alias(uma_ptr_t) noexcept -> std::expected<uma_ptr_t, exception_t> = 0;
             virtual auto unshadow(uma_ptr_t) noexcept = 0;
     };
@@ -54,34 +53,37 @@ namespace dg::network_tile_foreign_injection{
         public:
 
             virtual ~TileShadowControllerXInterface() noexcept = default;
-            virtual auto shadow(uma_ptr_t, polymorphic_tile_kind_t, const dg::string&) noexcept -> exception_t = 0;
+            virtual auto shadow(uma_ptr_t, const PolymorphicTile&) noexcept -> exception_t = 0;
             virtual auto get_alias(uma_ptr_t) noexcept -> std::expected<uma_ptr_t, exception_t> = 0;
     };
+
+    //----
+    //we have a quota to write 1000 lines of code per day sharp - we have so many things to write - and low level tuning - we are way behind schedule
 
     class TileAllocator: public virtual TileAllocatorInterface{
 
         private:
 
-            dg::unordered_unstable_map<polymorphic_tile_kind_t, dg::vector<uma_ptr_t>> allocation_dict;
+            dg::unordered_unstable_map<polymorphic_tile_kind_t, dg::deque<uma_ptr_t>> allocation_dict;
 
         public:
 
-            TileAllocator(dg::unordered_unstable_map<polymorphic_tile_kind_t, dg::vector<uma_ptr_t>> allocation_dict) noexcept: allocation_dict(std::move(allocation_dict)){}
+            TileAllocator(dg::unordered_unstable_map<polymorphic_tile_kind_t, dg::deque<uma_ptr_t>> allocation_dict) noexcept: allocation_dict(std::move(allocation_dict)){}
 
             auto allocate(polymorphic_tile_kind_t tile_kind) noexcept -> std::expected<uma_ptr_t, exception_t>{
 
                 auto map_ptr = this->allocation_dict.find(tile_kind);
 
                 if (map_ptr == this->allocation_dict.end()){
-                    return std::unexpected(dg::network_exception::BAD_ENTRY);
+                    return std::unexpected(dg::network_exception::BAD_ARGUMENT);
                 }
 
                 if (map_ptr->second.empty()){
                     return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
                 }
 
-                uma_ptr_t rs = map_ptr->second.back();
-                map_ptr->second.pop_back();
+                uma_ptr_t rs = map_ptr->second.front();
+                map_ptr->second.pop_front();
 
                 return rs;
             }
@@ -93,7 +95,7 @@ namespace dg::network_tile_foreign_injection{
             }
     };
 
-    class TileForeignInjection: public virtual TileForeignInjectionInterface{
+    class TileInjector: public virtual TileInjectorInterface{
 
         private:
 
@@ -101,32 +103,22 @@ namespace dg::network_tile_foreign_injection{
 
         public:
 
-            TileForeignInjection(std::unique_ptr<TileAllocatorInterface> allocator) noexcept: allocator(std::move(allocator)){}
+            TileInjector(std::unique_ptr<TileAllocatorInterface> allocator) noexcept: allocator(std::move(allocator)){}
 
-            auto inject(polymorphic_tile_kind_t tile_kind, const dg::string& serialized_tile) -> std::expected<uma_ptr_t, exception_t>{
+            auto inject(const PolymorphicTile& polymorphic_tile) -> std::expected<uma_ptr_t, exception_t>{
 
-                PolymorphicTile polymorphic_tile    = {};
-                exception_t err                     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<PolymorphicTile>)(polymorphic_tile, serialized_tile.data(), serialized_tile.size());
-
-                if (dg::network_exception::is_failed(err)){
-                    return std::unexpected(err);
-                }
-
-                if (polymorphic_tile.tile_kind != tile_kind){
-                    return std::unexpected(dg::network_exception::BAD_ARGUMENT);
-                }
-
-                std::expected<uma_ptr_t, exception_t> tile_addr = this->allocator->allocate(tile_kind);
+                std::expected<uma_ptr_t, exception_t> tile_addr = this->allocator->allocate(polymorphic_tile.tile_kind);
 
                 if (!tile_addr.has_value()){
                     return std::unexpected(tile_addr.error());
                 }
 
+                //
                 exception_t err = dg::network_tile_member_getsetter::set_tile(tile_addr.value(), polymorphic_tile);
 
                 if (dg::network_exception::is_failed(err)){
                     this->allocator->deallocate(tile_addr.value());
-                    return err;
+                    return std::unexpected(err);
                 }
 
                 return tile_addr.value();
@@ -143,19 +135,19 @@ namespace dg::network_tile_foreign_injection{
 
         private:
 
-            std::unique_ptr<TileForeignInjectionInterface> foreign_injector;
+            std::unique_ptr<TileInjectorInterface> tile_injector;
             dg::unordered_unstable_map<uma_ptr_t, uma_ptr_t> alias_dict;
             size_t alias_dict_capacity; 
 
         public:
 
-            TileShawdowController(std::unique_ptr<TileForeignInjectionInterface> foreign_injector,
+            TileShawdowController(std::unique_ptr<TileInjectorInterface> tile_injector,
                                   dg::unordered_unstable_map<uma_ptr_t, uma_ptr_t> alias_dict,
-                                  size_t alias_dict_capacity) noexcept: foreign_injector(std::move(foreign_injector)),
+                                  size_t alias_dict_capacity) noexcept: tile_injector(std::move(tile_injector)),
                                                                         alias_dict(std::move(alias_dict)),
                                                                         alias_dict_capacity(alias_dict_capacity){}
 
-            auto shadow(uma_ptr_t shadowed_addr, polymorphic_tile_kind_t kind, const dg::string& injection_data) noexcept -> exception_t{
+            auto shadow(uma_ptr_t shadowed_addr, const PolymorphicTile& tile_data) noexcept -> exception_t{
 
                 if (this->alias_dict.size() == this->alias_dict_capacity){
                     return dg::network_exception::RESOURCE_EXHAUSTION;
@@ -165,7 +157,7 @@ namespace dg::network_tile_foreign_injection{
                     return dg::network_exception::BAD_ENTRY;
                 } 
 
-                std::expected<uma_ptr_t, exception_t> shadowing_addr = this->foreign_injector->inject(kind, injection_data);
+                std::expected<uma_ptr_t, exception_t> shadowing_addr = this->tile_injector->inject(tile_data);
 
                 if (!shadowing_addr.has_value()){
                     return shadowing_addr.error();
@@ -261,7 +253,7 @@ namespace dg::network_tile_foreign_injection{
                                                                     room_controller(std::move(room_controller)),
                                                                     mtx(std::move(mtx)){}
 
-            auto shadow(uma_ptr_t shadowed_addr, polymorphic_tile_kind_t tile_kind, const dg::string& init_payload) noexcept -> exception_t{
+            auto shadow(uma_ptr_t shadowed_addr, const PolymorphicTile& tile_data) noexcept -> exception_t{
 
                 stdx::lock_guard<std::mutex> lck_grd(*this->mtx);
                 std::expected<bool, exception_t> room_status = this->room_controller->enter_room(shadowed_addr);
@@ -288,7 +280,7 @@ namespace dg::network_tile_foreign_injection{
                     dg::network_exception_handler::assert(dg::network_exception_handler::nothrow_log(this->room_controller->enter_room(shadowed_addr)));
                 }
 
-                exception_t shadowing_status = this->base_tile_shadow_controller->shadow(shadowed_addr, tile_kind, init_payload);
+                exception_t shadowing_status = this->base_tile_shadow_controller->shadow(shadowed_addr, tile_data);
 
                 if (dg::network_exception::is_failed(shadowing_status)){
                     this->room_controller->exit_room(shadowed_addr);
@@ -315,10 +307,10 @@ namespace dg::network_tile_foreign_injection{
 
             ConcurrentTileShadowControllerX(std::vector<std::unique_ptr<TileShadowControllerXInterface>> base_controller_vec) noexcept: base_controller_vec(std::move(base_controller_vec)){}
 
-            auto shadow(uma_ptr_t shadowed_addr, polymorphic_tile_kind_t tile_kind, const dg::string& init_payload) noexcept -> exception_t{
+            auto shadow(uma_ptr_t shadowed_addr, const PolymorphicTile& tile_data) noexcept -> exception_t{
 
                 size_t idx = dg::hasher::murmur_hash(dg::pointer_cast<dg::pointer_info<uma_ptr_t>::max_unsigned_t>(shadowed_addr)) & (this->base_controller_vec.size() - 1u);
-                return this->base_controller_vec[idx]->shadow(shadowed_addr, tile_kind, init_payload);
+                return this->base_controller_vec[idx]->shadow(shadowed_addr, tile_data);
             }
 
             auto get_alias(uma_ptr_t shadowed_addr) noexcept -> std::expected<uma_ptr_t, exception_t>{
@@ -327,7 +319,6 @@ namespace dg::network_tile_foreign_injection{
                 return this->base_controller_vec[idx]->get_alias(shadowed_addr);
             }
     };
-
 } 
 
 #endif
