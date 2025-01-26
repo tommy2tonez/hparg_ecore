@@ -160,6 +160,27 @@
 #we have string ^ t heuristic approximator - we need special method (not differential) to converge this approxmiation
 #we need to make sure that the uncertainty of gradients and destructive interference do not exceed the learning
 #things gonna be hard but I think its possible
+#this mimics how our brain actually works
+#whenever a logit moves - we move towards the result - but losse the old information - the question is given the appearance of the results in a certain window - what's the window of uncertainty of the not appeared results? How fast do we actually forget things to burn new information?
+#a fully burnt brain does not move logits as fast as a newborn brain - in the way that a logit move does not touch all the projection string by r^2 or r^3  
+#and the lower layers are actually very important to predict | train the upper layers - given a math semantics x^2 + y^2 + z^2 - our brains collapse the math semantic space and do string projection to a new space where we could do another semantic collapse without affecting the old space - things get confusing here
+#if we mess up the lower layers - we steer away from the correct path - and the incorrectness might diverge - not converge
+#in order to make the semantic collapse "real" - we must do string normalization - assume our example of math semantic collapse as murmur hash
+#in murmur - we shift, multiply, rotate, etc - when we shift - we move it to another semantic space - we multiply in the new semantic space and we rotate in another new semantic space
+#good string normalization and numerical stabilities are hard to do
+
+#we probably can mimic the string projections by calibrations - this is hard - without actual string projection we are bending continuity of irrelevant data
+#this is hence the f(x) = x + peel(x)
+#how do we actually describe this in mathematical terms?
+#imagine that we have x y z on the slot 1, 10, 20
+#we want to reorder the x y z to 0, 1, 2 - and bend the continuity there - because they are relevant terms in mathematics - and we want to map it back to 1, 10, 20 and do a constructive interference operation - that's kinda the idea of context space collapse of euclidean irrelevant data
+#this is a position reordering operations
+#position reordering operations (or calibration) are actually the tough part - do we do mapping based on set frequencies? or continuous functions? things that appear together should be grouped together - this is part of the temporal linkage part of our brains - things fired together linked together  
+#a simple linear(x) is too vague to describe this functionality
+#how about a discretized tree of semantic space - things fired together are interval tree responsibility
+
+#alright, all the difficulty is because of we want to group relevant things together - things fired together - we map it to another semantic space (and now we have another things-fired-together) - we do continuity bending there - because they are relevant - we map it back to our semantic space - we do constructive interference
+#and we group those fired together things again - we keep doing that thing, which is called semantic space collapse of irrelevant data - look back to our example of murmurhash - this is not a necessity if the semantic space is nice and round
 
 from typing import Callable
 
