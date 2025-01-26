@@ -123,6 +123,32 @@
 #we gonna gucci later babe - just have faith for probably 2 years - I'll try to code the regex + path_optimization + randomization + convergence analysis + derivative of gradients + etc.
 #dont trust Chad - all he does is offensive meme and closing things
 
+#what if I tell you that AI is three body of three body of three body of ... problem
+#let's investigate the three body problem https://en.wikipedia.org/wiki/Three-body_problem
+#it's https://en.wikipedia.org/wiki/Puiseux_series, proved by Finnish mathematician Karl Fritiof Sundman - not Linus Torvards
+#alright - we have f(x) = puiseux_serieries
+#we probably want to do f1(f2(f3(x))) - this is where we are at - the transformers and their exponents
+
+#how about law of momentum conservation?
+#alright - so what's momentum? momentum is the moral of the story behind the forever spins around each other of the-three body problem
+#God - the old man - does not have infinite resource - he needs to store the moral of the story in order to bend continuity
+#in other words, he needs to have story coherence in order to do story telling of what's next in the continuity story
+#back to the gymnastic story - a girl spins in a complex motion - but there's no moral of the story for continuity  
+#how do we actually incorporate this in mathematics? - could this "moral of the story" be described in mathematics terms? 
+#yes - but it would break numerical stability of the result - I'll be back to solve the problem today - 
+
+#finding the momentums cannot be done via differential methods - we break numerical stabilities when the uncertainty exceeds the gap closing of gradient approximation
+#linear, eigen values and eigen vectors are cool - but what happen if we do string multiplication?
+#back to the gravity problem - f(t) = string ^ t
+#there aren't many ways to do this correctly (at least not the differential roads) - but the f(t) has a unique footprint that narrows the function down to only a few operations to approximate (we are approxing string) - alright - we are back to the decoding problem and semantic space + information storage theorem
+#maybe differential and Newton are only good for approximating classical local optimal solutions
+#alright - this works only if we do precalculation to do heuristic pruning of what's possible version of string - we want to discretize + precompute this - because this is a very important concept of neural network - the dynamic continuity
+#
+#so we have changed our coordinate to radians - and we have all the initial string right in the middle of the coordinate (the origin) which has a sphere shape - and we have a sphere shape of massful objects in the outer layer, we are doing an enclosed shape of continuity (this is an important concept) 
+#thing is this way of doing things have a very smooth curve of gradient - and we are not stuck in the gradient valley like polynomial methods 
+#and this actually simulates the actual context collapse efficiently - the recursive build up - this is up for debate - it only is if the projection string is kinda round - not like zig-zag shape which affects the uniform distribution of massful objects which require a string projection in order to rebalance the uniform responsibility - or skewed responsibility  
+#we want to mess with numerical stabilities in the newton approx, and we dont want to stuck in the valley - so it's the way of doing things
+
 from typing import Callable
 
 class Particle:

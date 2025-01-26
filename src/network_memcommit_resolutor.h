@@ -137,6 +137,22 @@ namespace dg::network_memcommit_resolutor{
     //it probably looks like a 1/x graph, no matter if you have 1 billion devices or 10 billion devices - but that's the direction that we are heading
     //people are offering BB $ if we get this to work correctly - so we must be very careful about the agendas and the implementations
 
+    //what if I tell you that AI is three body of three body of three body of ... problem
+    //let's investigate the three body problem https://en.wikipedia.org/wiki/Three-body_problem
+    //it's https://en.wikipedia.org/wiki/Puiseux_series, proved by Finnish mathematician Karl Fritiof Sundman - not Linus Torvards
+    //alright - we have f(x) = puiseux_serieries
+    //we probably want to do f1(f2(f3(x))) - this is where we are at - the transformers and their exponents
+
+    //how about law of momentum conservation?
+    //how about tommy's synthetic series? a series that approximate the "three body projection" based on mathematical tree - which is math_approx.py
+    //we want to see what the tommy's synthetic series looks like - by forging a synthetic formula - and we want to use this formula for our regex model
+
+    //alright - so what's momentum? momentum is the moral of the story behind the forever spins around each other of the-three body problem
+    //God - the old man - does not have infinite resource - he needs to store the moral of the story in order to bend continuity
+    //in other words, he needs to have story coherence in order to do story telling of what's next in the continuity story
+    //back to the gymnastic story - a girl spins in a complex motions - but there's no moral of the story for continuity  
+
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> std::expected<Address, exception_t> = 0;
