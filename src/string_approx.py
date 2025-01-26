@@ -148,6 +148,18 @@
 #thing is this way of doing things have a very smooth curve of gradient - and we are not stuck in the gradient valley like polynomial methods 
 #and this actually simulates the actual context collapse efficiently - the recursive build up - this is up for debate - it only is if the projection string is kinda round - not like zig-zag shape which affects the uniform distribution of massful objects which require a string projection in order to rebalance the uniform responsibility - or skewed responsibility  
 #we want to mess with numerical stabilities in the newton approx, and we dont want to stuck in the valley - so it's the way of doing things
+#alright - let's talk about the numerical stability - we have two spheres
+#Dad talked about the gradient valley of curves - such is there is a non-returnable point of shape - such is the "hardness" of shifting from the shape to another possible shape from the original point is impossible
+#we must circumscribe the closing circumference gap (middle theorem) to limit the non-returnables, and we kinda stay in the acceptable fluid zone of gradient moving 
+#so the deeper the valley - the harder it is to shape the curve - or the distribution of possible shapes is skewed in the direction of the valley
+#so we must do string projection - to "normalize" the input string - and keep it in "acceptable" gradient zone
+
+#in a general perspective, we have f(x) -> y is projection string
+#we have possible shapes - and we have the possibility of moving from one shape to another (we kinda want to flex this area of possibility to not stuck in the gradient valley)
+#we have string altitude normalization - we normalize a string to do shape bending better - as described above
+#we have string ^ t heuristic approximator - we need special method (not differential) to converge this approxmiation
+#we need to make sure that the uncertainty of gradients and destructive interference do not exceed the learning
+#things gonna be hard but I think its possible
 
 from typing import Callable
 
