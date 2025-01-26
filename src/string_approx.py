@@ -182,6 +182,16 @@
 #alright, all the difficulty is because of we want to group relevant things together - things fired together - we map it to another semantic space (and now we have another things-fired-together) - we do continuity bending there - because they are relevant - we map it back to our semantic space - we do constructive interference
 #and we group those fired together things again - we keep doing that thing, which is called semantic space collapse of irrelevant data - look back to our example of murmurhash - this is not a necessity if the semantic space is nice and round
 
+#our state of the art is actually not that we do context collapse (which is briefly described via the solution to murmur hash approx) but the reordering of context space - to bend euclidean irrelevant things together
+#assume this simple model of doing so
+#given that our input layer is the base
+#given that we discretize the space into grids
+#given our next to base layer is the layer of the things fired together in the base
+#given our next to the next to base layer is the layer of things fired together in the next to base
+#what do we want to do with this? for every layer not base - we can do an inorder-search of base to create a newly-reordered semantic space without breaking numerical stabilities
+#the attention was to solve this specific problem (the problem of bending euclidean irrelevant things) - but in a numerical instable way
+#the actual model of reordering must be of complex forms - and involve algorithms and not maths - we'll talk about this later - this is hard
+
 from typing import Callable
 
 class Particle:
