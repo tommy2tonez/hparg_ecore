@@ -240,9 +240,13 @@
 #let's talk about our brain
 #let's say we have 5 senses - which orderly spit into a matrix
 #our eye tensor inputs are euclideanly closer than our ear tensor inputs
-#but not euclideanly closer means semantically relevant (back to the example of yes and yet) - we must do temporal reoderings of tensors - map into another domain and do continuity bending - and we rinse and repeat until we get the result
+#but not euclideanly closer means semantically relevant (back to the example of yes and yet, yet this is actually semantically relevant in terms of brain mechanics - things that are euclideanly closer are easier to establish linkages - and learnings) - we must do temporal reoderings of tensors - map into another domain and do continuity bending - and we rinse and repeat until we get the result
 #note that there are two very different systems in our brain - the system of temporal reordering of input domain and the system of string bending - the system of string bending is described via the hashing method - the system of temporal reordering simply just observes the lit up tensors and do centrality + community detections and reconstruct the input domain
 #the proof of concept is done when we can approx murmur hash via string multiplications and efficient reordering (I cant tell the criterias for what "efficient" is for now rather than "maybe temporally related means maybe contextually related")
+#side note: we are being confusing when we mentioned lit up tensors - what we actually meant in the context is lit up domain grids, and tensor is just a grid pointer
+#this's gonna be hard - but we'll be there in probably a week or two - stay tuned
+#theory: if the internet is 1 petabyte - then the most efficient learning system only takes 1 petabyte of learning to reconstruct the semantic space
+#the most compact semantic space size can not exceed all of its possible outcomes size
 
 from typing import Callable
 
