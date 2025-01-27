@@ -223,8 +223,26 @@
 #hyper focus and string continuity operations are two sides of the same coin - can't exist without another - unless the projection string is round 
 #we'll work more on the theory
 #our grand plan is to reduce the complexity of constructive interference of n! space (n is the domain's range, n c N)  -> 32 reordered space by using hyper focus with the hope that hyper focus would bring relevant things together to help our continuity bending
-#i thought we were frens fr 
-#frens dont smash my phones
+
+#consider this example
+#yes, I'm fine
+#yet, I'm fine
+
+#alright - yes, I'm fine and yet, I'm fine are euclideanly related - in the sense of sqrt((coor(s) - coor(t)) * (coor(s) - coor(t))) - but the semantic is very different, this denotes a requirement for reordering of the euclidean domain grids - otherwise we are bending irrelevant context (which is against continuity bending of relevant context)
+#we solve this problem by using lit up tensors community detection - yes, I'm fine is categorized as good signal - yet, I'm fine is categorized as bad signal in euclidean tensor graph - and we want to recursively reconstruct the euclidean semantic domain space from the graph temporal semantic space - we can't actually eliminate all the false positives - but we kinda "commnunity detect" potential context relevant things from temporal relevant things which help continuity bending
+#the art of n! reorderings -> 32 reorderings requires a lot of work - not a simple attention layers - if we are seriously talking building a brain 
+
+#let's talk about dimensional reduction more in depth - we have input domain - we have temporal semantic graph - we reconstruct the domain from our graph, now our newly created domain must spans higher space range - because it encapsulates more information than just the original domain
+#let's say "how are you" and "how are you doing" are temporally grouped, without loss of generality
+#they are in slot 0 and 1 respectively in our new domain - but the slot 0 and 1 are only 1 bit of information - so we have reducted our domain resolution from bit_size("how are you") + bit_size("how are you doing") -> 1 bit
+#the reconstruction of the domain is necessary for our constructive interference - which we will talk later - we are talking in terms of string and not tensors for now
+
+#let's talk about our brain
+#let's say we have 5 senses - which orderly spit into a matrix
+#our eye tensor inputs are euclideanly closer than our ear tensor inputs
+#but not euclideanly closer means semantically relevant (back to the example of yes and yet) - we must do temporal reoderings of tensors - map into another domain and do continuity bending - and we rinse and repeat until we get the result
+#note that there are two very different systems in our brain - the system of temporal reordering of input domain and the system of string bending - the system of string bending is described via the hashing method - the system of temporal reordering simply just observes the lit up tensors and do centrality + community detections and reconstruct the input domain
+#the proof of concept is done when we can approx murmur hash via string multiplications and efficient reordering (I cant tell the criterias for what "efficient" is for now rather than "maybe temporally related means maybe contextually related")
 
 from typing import Callable
 
