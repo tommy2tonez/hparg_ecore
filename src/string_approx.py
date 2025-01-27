@@ -192,6 +192,37 @@
 #the attention was to solve this specific problem (the problem of bending euclidean irrelevant things) - but in a numerical instable way
 #the actual model of reordering must be of complex forms - and involve algorithms and not maths - we'll talk about this later - this is hard
 
+#alright the topics we are going cover today are hyper focus subspace + discretization of euclidean space + space dimensional reduction + dimensional expansion
+#we have talked about the things fired together grouped together by temporal linkage - all linked to a master node - which is again fired together and linked to another master node
+#we then have our newly created semantic space in terms of graph - which represents temporally relevant things
+#but we want to bend this this in euclidean coordinate (because we have a well establised string theory of how relevant things bend together) - so we must invent a way to convert graph semantic space -> euclidean semantic space - by, without loss of generality, the formula euclidean_distance(node1, node2) = shortest_weighted_raph_distance(node1, node2) or maxflow(node1, node2) or by whatever lossless compression that we can reconstruct the semantic graph from
+#alright - things aren't perfect - we can only fuzzy approx the euclidean coordinate - because there is no perfect answer
+#how about we do it again? rinse and repeat in our newly created euclidean coordinate
+
+#discretization of euclidean space is nothing but interval (in terms of for loop) - we have intervalx(intervaly(intervalz)) - and we grid the (dx x dy x dz) 
+
+#let's cover the space dimensional reduction | expansion in a nutshell
+#let's get back to the example of x y z
+#assume we are on three dimensional domain - the chances of x y z "euclideanly" collaborate are higher than on one dimensional domain (because we can move in the 2nd and 3rd dimension to relatively bend things without compromising the euclidean_distance(node1, node2)) 
+#what's the difference between 3 dimensional domain and 1 dimensional domain - there is essentially no difference if the one dimensional domain is domain(x) * domain(y) * domain(z) - which has bijective relation to the 3 dimensional domain
+#the only difference that we are mentioning is the euclidean distance - which is important for bending strings by our described methods
+#so increasing dimensions helps continuity bending of relevant groups
+
+#let's get back to our tokenization methods - do we enumerate the vocabularies to create an arbitrary semantic space - or we do byte stream - or we do bit stream
+#bit stream is the ultimate goal of information technology - because all the algorithms mostly operate on bit levels
+#alright - so we increase the dimensions of the semantic space - which is, by our definition, a good thing - because it increases the groupabilities
+#so what's hyper focus - hyper focus is the abiltiy of temporal linkage of tensors - recursively to create an arbitrary semantic spaces to increase the bendability of relevant tensors  
+
+#how precisely do we build hyper focus? by using weight decay on edges and broadcasts from input nodes and temporal group of lit up nodes (weakly connected component)
+#so hyper focus is a centrality algorithm - and linkage of lit up nodes is community detection algorithm
+#alright - we need to have decay rate of community and edges because we are on finite resources
+#the only responsibility of hyper focus is to reorder the semantic domain (community detection) of relevant things (in terms of input space)
+#and we want to construct a euclidean semantic space from the hyper focus graph space to bend continuity there
+#and we want to reconstruct the hyper focus graph space from the bent euclidean space to update the hyper focus graph space which will be reflected on the original euclidean space
+#or we can adhere to the formula of euclidean_distance(node1, node2) = maxflow(node1, node2) - and we have bijective domain relation to the original euclidean space - which we can directly update on
+#hyper focus and string continuity operations are two sides of the same coin - can't exist without another - unless the projection string is round 
+#we'll work more on the theory
+
 from typing import Callable
 
 class Particle:
