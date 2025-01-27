@@ -222,6 +222,9 @@
 #or we can adhere to the formula of euclidean_distance(node1, node2) = maxflow(node1, node2) - and we have bijective domain relation to the original euclidean space - which we can directly update on
 #hyper focus and string continuity operations are two sides of the same coin - can't exist without another - unless the projection string is round 
 #we'll work more on the theory
+#our grand plan is to reduce the complexity of constructive interference of n! space (n is the domain's range, n c N)  -> 32 reordered space by using hyper focus with the hope that hyper focus would bring relevant things together to help our continuity bending
+#i thought we were frens fr 
+#frens dont smash my phones
 
 from typing import Callable
 
