@@ -274,6 +274,49 @@
 #another important concept we kinda skim through is the continuity operation of euclidean relevant context  
 #we only discussed static string multiplication operations - not dynamic string ^ x operation - we need to unlock this mystery of heuristics without exploding the gradients
 
+#we are trying to brainstorm to get the doables before starting a project
+#are we graph-tensor-major or euclid-pointer-tensor major?
+#thing is hyperfocus is not implementable in terms of euclid-pointer-tensor major
+#without hyperfocus - we are drawing lines between irrelevant points - which is our current ML problems - how can we continuously best fit irrelevant context points? it's literally against the definition of continuity - even if you are using continuity to bring relevant context points together - it's not the definition of continuity (unless those relevant context points reordering has a continuous rule - which is absurb in most cases - we are getting into the recursive resolution here)
+#so for now, there is no good way than to just get the best of both worlds - we aren't in the either territory - because graph tensor is very expensive (storage + compute) - think of 16 bytes overhead/ bit of context - euclid pointer tensor is very cheap - we are getting exactly the storage that the hardware provides with no overhead 
+
+#or we can preprocess the semantic space to look round (human's language kinda achieve this partially) - alright - the efforts put in to make this happens actually exceed the efforts to make the mentioned thing happen
+#we are, again, back to the gymnastic problem of training - we need to have coherence of training or hyperfocus
+#let's talk about the example of interval tree, we want the manage the arbitrary space of x x y x z
+#without loss of generality
+#there is no good answer than to do an alternated version of interval tree 1/2 x x, 1/2 y y, 1/2z z
+#total branching = 2 * 2 * 2 = 8 outdegrees
+#the base linkage distances must reflect the euclidean distances
+#1/2x x, 1/2y y
+#1/2x 1/2y
+#1/2x y
+#x 1/2y
+#x y
+#the uncertainty does not sound 
+
+#how do we do this again? by origin spreading method (like an explosion) - bfs of space grids
+#we must start from the origin - assume that our space is round - and we are on radian coordinate
+#and we do bread first search to extend the circumference - and we build our divide-and-conquer semantic tree from there
+#this way of doing thing actually creates another semantic space - where we can do "lossy compression" of unordered_set of contextual points - and we can establish base linkages between all contextual points in the semantic coordinate
+
+#without loss of generality
+#imagine we are doing sphere compression (or multidimensional space compression)
+#we circumscribe the Earth from 4/3 * pi * (4096km)^3 -> 4/3*pi m^3 - the newly created Earth is still round - but the context got "lossy compressed" on the edges (radian pies)
+
+#says that we observed 1024 nodes fired in the last second
+#but we can only submit 10 nodes to establish linkage to avoid OOM + compute fling
+#we traverse up the semantic tree (to collapse semantic) + unordered_set compression - until we convert 1024 fired nodes -> most correct 10 nodes
+#we have 10 fired nodes on now slowly have direct linkage to each other - via the usage of a master node - we want to reuse these master nodes - because we are on finite resources (we need to have "decay rate" of master nodes + orphan of master nodes + etc)
+#so it's a temporal semantic graph space - without actual contexts - because the sole responsibiltiy of these is temporal linkage
+#the temporal semantic space linkage is established base on the intense of the feedback system - and these guys do not only do inter-links but also outer-links or domain-skips 
+
+#it's not hard to build these guys
+#you must focus on the string approximation 
+#you pass the first test when you can approx murmur hash
+#you pass the second test when you can approx three body projections
+#you pass the third test when you build a temporal system and increase the groupness of semantically equivalent contextual points (we call this centrality score - assume we link x -> y and x -> x, we want to maximize y centrality score) by a factor of 15x - 30x
+#you pass the fourth test when you can run this fast - and distributed
+
 from typing import Callable
 
 class Particle:
