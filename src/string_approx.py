@@ -195,7 +195,7 @@
 #alright the topics we are going cover today are hyper focus subspace + discretization of euclidean space + space dimensional reduction + dimensional expansion
 #we have talked about the things fired together grouped together by temporal linkage - all linked to a master node - which is again fired together and linked to another master node
 #we then have our newly created semantic space in terms of graph - which represents temporally relevant things
-#but we want to bend this this in euclidean coordinate (because we have a well establised string theory of how relevant things bend together) - so we must invent a way to convert graph semantic space -> euclidean semantic space - by, without loss of generality, the formula euclidean_distance(node1, node2) = shortest_weighted_raph_distance(node1, node2) or maxflow(node1, node2) or by whatever lossless compression that we can reconstruct the semantic graph from
+#but we want to bend this this in euclidean coordinate (because we have a well establised string theory of how relevant things bend together) - so we must invent a way to convert graph semantic space -> euclidean semantic space - by, without loss of generality, the formula euclidean_distance(node1, node2) = shortest_weighted_graph_distance(node1, node2) or maxflow(node1, node2) or by whatever lossless compression that we can reconstruct the semantic graph from
 #alright - things aren't perfect - we can only fuzzy approx the euclidean coordinate - because there is no perfect answer
 #how about we do it again? rinse and repeat in our newly created euclidean coordinate
 
@@ -247,6 +247,16 @@
 #this's gonna be hard - but we'll be there in probably a week or two - stay tuned
 #theory: if the internet is 1 petabyte - then the most efficient learning system only takes 1 petabyte of learning to reconstruct the semantic space
 #the most compact semantic space size can not exceed all of its possible outcomes size
+
+#let's talk about specific implementations
+#there are few things to get straight - first is string continuity approximation by our formula f(x, n) = string_inteference(f(x, n - 1), massful_objects) + f1(x, n) + three body system formula - we are assuming that closer euclidean distance means closer in semantic in this fixed coordinate - this is a very important assumption that we must be able to achieve via hyper_focus system
+#hyper_focus brings domain grids together from euclidean irrelevant distances + fuzzy ordered set context of grids + dimensional reduction to not explode the domain space
+#in order to do so - we must do lossy compression of fired together grids (otherwise we are OOM) - bring them into an intermediate semantic space where contextually relevant things would collide at the same address
+#those temporal semantic space of fired together grids again reconstruct the semantic space domain
+#now we do constructive interference of the f(x) + f1(x + f(x)) - for f is the old semantic coordinate and f1 is the new semantic coordinate
+#we are hoping that x + f(x) would reduce the semantic space size as we proceed - because fired together grids entropy must converge - otherwise - we are reordering the domain space for ... nothing - because we are not hyper-focusing
+#how about we build the hyper_focus by using interval trees? somewhat like our heap implementation
+#we discretize the domain - we build an interval tree with a reasonable memory allowance - and we connect the tree to the "hyperfocus" system where we could reconstruct the domain and build a new semantic space
 
 from typing import Callable
 
