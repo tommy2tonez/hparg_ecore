@@ -258,6 +258,22 @@
 #how about we build the hyper_focus by using interval trees? somewhat like our heap implementation
 #we discretize the domain - we build an interval tree with a reasonable memory allowance - and we connect the tree to the "hyperfocus" system where we could reconstruct the domain and build a new semantic space
 
+#without loss of generality
+#how about building another heap, on every level of our heap is a newly collapsed domain of the immediate next level
+
+#so the specific implementation is
+#a hyper_focus heap to collapse semantic domain + reorder level-wise (not parent-descendant wise)
+#a string operation on every level
+#a constructive interference x + f(x) to reduce the semantic space size to match the domain collapse rate
+#an interval tree on every level of the heap to dynamically manage the "potentially relevant context" - or to limit the submit size of lossy compression of "fired together grids" - we kinda move up one level until we hit the submit size
+#a temporal semantic graph to bring + group those "potentially relevant context" grids - via centrality + community detection algorithms - with the hope that "potentially relevant context" grids appear in "potentially temporally relevant interval" would mean contextually relevant (we want further work on this by actually link those to the end results of feedback systems - crit logits)
+#a semantic converter to convert the graph -> a domain
+#a domain projection function - from the lower layer grids (heap nodes) -> upper layer grids (heap nodes)
+#hyperfocus is important - even in our current transformers arch because it emphasizes the euclidean relevancy before doing continuity-related operations 
+
+#another important concept we kinda skim through is the continuity operation of euclidean relevant context  
+#we only discussed static string multiplication operations - not dynamic string ^ x operation - we need to unlock this mystery of heuristics without exploding the gradients
+
 from typing import Callable
 
 class Particle:
