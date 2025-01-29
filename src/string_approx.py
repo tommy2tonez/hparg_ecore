@@ -338,9 +338,18 @@
 #we want to trade off space for quality of the "sorting" and the domain reduction
 #we want to increase qualities for higher domains
 #and we want to rinse and repeat
-#
-
 #this should be enough to get our feet wet - we'll be back with detailed implementations, with loss of generality soon
+
+#I was thinking of x and their fuzzy representations (lossless compression -> lossy compression)
+#we are now back to the question of whether we are on a euclidean relevant coordinate - assume that we are trying to
+#consider this example on the coordinate x x y x z
+#abc, which could be represented as <1, 2, 3>
+#or <1 * 256 + 2 * 256 + 3 * 256>
+#or whatever form of lossless compression
+#thing is that beside doing hyper-focusing on the domain to rid of the never-gonna-happen-x - we need to translate x -> fuzzy representations to be able to construct a semantic domain graph - otherwise we are linking to deadends
+#so we need the base lossy compressions to link these guys, in other words, we transform these guys into an intermediate semantic space in order to establish linkage
+#my brother was right - though the method was wrong
+#this is extremely important in terms of vision or image processing because we are not on a euclidean relevant coordinate (in the sense of motions - not in the sense of static images)
 
 from typing import Callable
 
