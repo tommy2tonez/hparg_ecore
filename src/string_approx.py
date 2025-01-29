@@ -327,6 +327,17 @@
 #how about the (input - output) - we are for sure that the output is the semantic in the coordinate that we are looking for - and the input that share the same output must bend together - or euclideanly related
 #so to avoid the worst case scenerio of the base domain being not euclideanly related at all - we must incorperate the "output-input topological sorting" - this must be another responsibility of hyperfocus - point is we want to have that "chain-reaction" of things completely not euclideanly related to slowly euclideanly related (not because of the domain collapses - we are talking things relatively) - and we use graph-based approach to boost that functionality
 #we'll build the hyperfocus in two weeks - stay tuned
+#let's talk in depth guys - hyperfocus is hard - this technology alone's worth BB $ - so take very serious notes - the abilties of keeping numerical stabilities after "sorting" + domain projection of "community detected grids" are very hard to implement correctly
+#and the collaboration between hyperfocus and string approx is also hard (the graph-based approach and traditional-tensor-based approach)
+#the problem with the current ML problem is precisely this - it does not focus - even after the attention paper
+#imagine we are drawing lines in a not euclidean correlated coordinate to hope that it would be euclidean correlated
+#it does not work that way fellas - the moment you draw lines is the moment you assume that it's euclidean correlated - not after
+
+#so machine learning is actually sorting problem - f(x) -> y, we want to sort the x domain (lambda x: y) to increase continuity-index (or increase euclidean relevancy)
+#we want to reduct the x domain - by using community detection algorithm
+#we want to trade off space for quality of the sorting and the domain reduction
+#we want to increase qualities for higher domains
+#and we want to rinse and repeat
 
 from typing import Callable
 
