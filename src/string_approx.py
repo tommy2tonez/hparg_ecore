@@ -317,6 +317,17 @@
 #you pass the third test when you build a temporal system and increase the groupness of semantically equivalent contextual points (we call this centrality score - assume we link x -> y and x -> x, we want to maximize y centrality score) by a factor of 15x - 30x
 #you pass the fourth test when you can run this fast - and distributed
 
+#alright maybe we didnt split the responsibilties correctly
+#let's look back to hyperfocus - hyperfocus is to bring domains' grids together + dimensional reduct to create fuzzy context representation of "how are you" or "how are you doing"
+#bringing domains grids together is one responsibility - "how are you" and "how are you doing" are two different coordinates in the original domain that we want to bring together - alright - we are not being single-responsibiltiized here
+#dimensional reduction is another responsibility - bit_size("how are you") + bit_size("how are you doing"), reducted to 1 bit of representation in our new domain - we are clear here
+#there is no guarantee that the reducing semantic space is euclideanly related - thus the "graph temporal linkage" of node - node might not reflect the domain - range continuity like we wanted it to - "how are you" and "how are you doing" might mean two completely two different things
+#for now, let's say that hyperfocus is only to reduce the semantic space by focusing on the things appear together and create another domain based on the semantic graph
+#
+#how about the (input - output) - we are for sure that the output is the semantic in the coordinate that we are looking for - and the input that share the same output must bend together - or euclideanly related
+#so to avoid the worst case scenerio of the base domain being not euclideanly related at all - we must incorperate the "output-input topological sorting" - this must be another responsibility of hyperfocus - point is we want to have that "chain-reaction" of things completely not euclideanly related to slowly euclideanly related (not because of the domain collapses - we are talking things relatively) - and we use graph-based approach to boost that functionality
+#we'll build the hyperfocus in two weeks - stay tuned
+
 from typing import Callable
 
 class Particle:
