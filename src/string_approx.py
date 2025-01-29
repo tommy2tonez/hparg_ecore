@@ -333,11 +333,14 @@
 #imagine we are drawing lines in a not euclidean correlated coordinate to hope that it would be euclidean correlated
 #it does not work that way fellas - the moment you draw lines is the moment you assume that it's euclidean correlated - not after
 
-#so machine learning is actually sorting problem - f(x) -> y, we want to sort the x domain (lambda x: y) to increase continuity-index (or increase euclidean relevancy)
-#we want to reduct the x domain - by using community detection algorithm
-#we want to trade off space for quality of the sorting and the domain reduction
+#so machine learning is actually a sorting problem - f(x) -> y, we want to sort the x domain (lambda x: y) to increase continuity-index (or increase euclidean relevancy), if y is euclidean-relevant - think of euclidean feedback system 
+#we want to reduct the x domain - by using community detection algorithm, for example, "h" "o" "w" "a" "r" "e" "y" "o" "u" -> "0" - we want to collapse the domain semantic space for many reasons - first is convergence of locality of continuity - second is recursive build up of vocabulary - we dont care about the context collapse because we already mentioned that the string approx method is sufficient by itself in a euclidean related coordinate
+#we want to trade off space for quality of the "sorting" and the domain reduction
 #we want to increase qualities for higher domains
 #and we want to rinse and repeat
+#
+
+#this should be enough to get our feet wet - we'll be back with detailed implementations, with loss of generality soon
 
 from typing import Callable
 
