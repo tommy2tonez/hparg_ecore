@@ -351,6 +351,32 @@
 #my brother was right - though the method was wrong
 #this is extremely important in terms of vision or image processing because we are not on a euclidean relevant coordinate (in the sense of motions - not in the sense of static images)
 
+#there are three important concepts
+#(1): the recursive building of vocabulary in neural networks
+
+#(2): without loss of generality, assume we are on a euclidean relevant coordinate - our method of x = <x1, x2, x3> -> <one_dimensional_grid_pointer>
+#assume that two nodes share the same grid - then their euclidean distance uncertainty is sqrt((x1 - discretized_x1)^2 + ...)
+#let's look at our semantic graph - it represents the reducted information (x1, x2, x3 -> one_dimensional_grid) and groups of relevant contextual points (xx1, xx2, xx3 -> the_one_dimensional_grid)
+#so everyone's happy - we have built another word (one_dimensional_grid) - and the domain (vocabulary space) is euclideanly related in the sense of distance
+#this is a version of bucketizing - we'll talk about this later
+#so our definition of things (neurons) fired together linked together only works if ... they are in a euclideanly relevant space or coming to a euclideanly relevant space
+
+#(3): without loss of generality, assume we are on a non-euclidean relevant coordinate (image processing)
+#assume our matrix input is x - x is a 256x256 picture 
+#assume that we have f(x) -> y - for y is the semantic of x and y is euclideanly relevant
+#assume we sort the matrix input x by lambda x: f(x)
+#now the matrix input is one dimensionally euclideanly relevant
+#the thing about image processing is we need to iterate roughly 256**65536 images to sort our domain
+#and building a new vocabulary space does not reduce the size of the old vocabulary space - we are neuro-divergents at this point
+#this requires us to have special method of processing images - lossy compression and their intermediate representations - to actually reduce the vocabulary space and somewhat "sort" the buckets
+#or this rquires us to "learn" a sorting algorithm for images - such does not exceed the domain size
+#this is actually not the hyperfocus responsibility
+
+#but the intuition is clear - we want to do sort + bucket
+#we sort based on the semantic of x - a.k.a., WLOG, euclideanly relevant y
+#we bucket based on their new sorted coordinates - to do domain reduction which helps reduce the sorting time + sorting quality + string processing time + reduce the number of the never-gonna-happen-x
+#we hyperfocus on the fired together relevant neurons (the moving towards euclidean relevant (input neurons) and the euclidean relevant (vocabulary neurons)) - to create another vocabulary neuron (which is vocab fast path) 
+
 from typing import Callable
 
 class Particle:
