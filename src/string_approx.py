@@ -377,6 +377,35 @@
 #we bucket based on their new sorted coordinates - to do domain reduction which helps reduce the sorting time + sorting quality + string processing time + reduce the number of the never-gonna-happen-x
 #we hyperfocus on the fired together relevant neurons (the moving towards euclidean relevant (input neurons) and the euclidean relevant (vocabulary neurons)) - to create another vocabulary neuron (which is vocab fast path) 
 
+#the sorting algorithm is actually the secret sauce
+#how precisely do we do sorting? 
+#we use another continuous function to do sorting - well... that does not work very well
+#we use graph analytics' community detection - that is not very fast
+#we pretrain our sorting algorithms - that is not generalized enough
+#the semantic is an easy part - we just do centrality algorithms to extract node meanings
+#the most compact sorting algorithm (or densest logit density) should be what we are heading towards - but not a neccessity - we want to sort these guys with reasonable amount of memory (the one that has linear trade off for sorting quality)
+
+#we are in a loop of semantic made by the logits and the sorting of the logits
+
+#let's iterate through all the options that we have for domain projections - this is what people called IQ score (the abiltiy to sort certain things that are not NVIDIA and TSLA):
+#first option - graph approach:
+#establish base fuzzy representations of input logits such cover the basic "context tokens" representation in an intermediate space to increase collision rate - such would have direct links to what the current input logits mean
+#second option - continuous approach:
+#regex + logit mining to hope that things would work out well
+#third option - pretrain:
+#pretrained image domain projections + neural domain projections + temporal neural domain projections
+#fourth option - heuristic guided approach:
+#use guided optimizations + path optimizations technique to hope that things would work out well because we are deep in the seek 
+#fifth option:
+#real time training of domain projections
+#sixth option:
+#euclidean skewed memorizations - we have a temporary window buffer of 32GB to store the not obvious (irrelevant) sorting techniques (this is important) - which we want to backtest on by using our trained domain projections
+
+#so hyperfocus and domain projectors are two sides of the same coin
+#we use domain projectors to sort our domain
+#we hyperfocus to create a new domain
+#we probably want to combine the responsibility of sort + create domains
+
 from typing import Callable
 
 class Particle:
