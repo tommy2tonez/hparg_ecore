@@ -406,6 +406,29 @@
 #we hyperfocus to create a new domain
 #we probably want to combine the responsibility of sort + create domains
 
+#this sounds like a quicksort + mergesort problem because it really is
+#we have a binary tree to sort things - the left binary tree and the right binary tree and the root resolution of combining the trees
+#we approach this a little differently by using levelwise sort + domain reduction of euclidean relevant grids
+#imagine radix sort
+#we sort 256 bits - to buckets - sort it again, etc. until we find the resolution for the sorting problem
+
+#I've been thinking what this means - and prove the completeness of this sorting algorithm - because we will think about this again to improve the accuracy
+#assume we want to sort 3 2 1 4 5 6 -> 1 2 3 4 5 6
+#assume that for every iteration, our sorting accuracy is 100% 
+#then the hyperfocus responsibility is completed, no movies
+
+#assume that for every iteration (domain projection), our sorting accuracy is 20%, we aren't collapsing the domain for now
+#then the number of sort required to reach 99% accuracy is 1% = 1 * 80% ^ n - this is an oversimplification - in reality - we want to increase the y centrality score - where y is the graph semantic of x
+#the last layer - the one that is 99% sorting completed is the layer that we want to do string approx on - not the previous layers
+#given that we are in an ideal given condition of 20% decay rate (this is extremely hard to achieve)
+
+#now the previous assumptions and given the decay domain rate of, without loss of generality, 50%
+#we are losing soldiers - in the sense of irrelevant and relevant euclidean grids get grouped together to do dimensional reduction - so our last layer cannot be used to do string approx on - so we must use the previous layer knowledge to collapse the semantic space to fit the decay domain rate of 50%, in other words, offset the cost of losing soldiers 
+#so the x + f(x) means calibration for the next layer - in the sense of "the current layer will learn the way to make sure that the next layer is sufficient by itself for the result" - so we are passing responsibility (the responsibility of output) - and collapse the domain (or the previous range) with no loss of output resolution
+#the thing about reducing domain range is that it is easier to do high quality sorting (or increase continuity to do string approximation better) - and it produces better best fit functions with lower costs 
+
+#so our base of the heap is the raw input of visions, hearings and other senses - we want to have the a temporal buffer with sliding window for what things (base and non-bases) mean - and we trying to sort the semantic of those things (semantic of a logit is the temporal environment of the logit or the output of the logit) - essentially a temporary buffer + a background resolutor to do domain projections
+
 from typing import Callable
 
 class Particle:
