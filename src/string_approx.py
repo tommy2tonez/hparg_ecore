@@ -429,6 +429,20 @@
 
 #so our base of the heap is the raw input of visions, hearings and other senses - we want to have the a temporal buffer with sliding window for what things (base and non-bases) mean - and we trying to sort the semantic of those things (semantic of a logit is the temporal environment of the logit or the output of the logit) - essentially a temporary buffer + a background resolutor to do domain projections
 
+#our systems must be consisted of:
+#persistent temporal semantic graphs
+#sliding temporal semantic graphs (the one that we use to backtest and train the background realtime sorters + optimizers) - we want to boost this to 1TB
+#background realtime optimizers
+
+#this is gonna be very hard to write - we need to detail every component - take the decay domain rate for example - there is a sweet spot between the correct domain decay rate, the offset of x + f(x), and the sorting decay rate that our optimizers could provide
+#the plus operation is not the correct calibration function as described and mentioned by Dad (unless we are having negative values or shape symmetric)
+#thus there is a base layer in the string approximation and not a calibration function (we assume that the base layer is calibrated) - this cannot be assumed in the scenerio of x + f(x) - it's hard
+#we only thing that we specifically care is that - the domain decay rate and the offset of the function f(x) - because if we reach a certain layer intact - we do brute force of sort and do string approx directly on the layer
+#everyone's happy - we aren't having troubles in the sense of hyperfocus - it's the string approx + numerical stabilities problem now
+
+#as we can see, the system is actually components built on top of another - the semantic of x is its temporal environment which is created by the string approx and string approx is built on top of the semantic sorting of those logits
+#we need to have appropriate learning rate for each of the component to avoid the case of bottleneck of responsibility - otherwise we are linking the x to the inappropriate supposed-to-be-euclidean-and-correct-logits - and create a bad ripple effect 
+
 from typing import Callable
 
 class Particle:
