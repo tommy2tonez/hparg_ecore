@@ -441,7 +441,8 @@
 #everyone's happy - we aren't having troubles in the sense of hyperfocus - it's the string approx + numerical stabilities problem now
 
 #as we can see, the system is actually components built on top of another - the semantic of x is its temporal environment which is created by the string approx and string approx is built on top of the semantic sorting of those logits
-#we need to have appropriate learning rate for each of the component to avoid the case of bottleneck of responsibility - otherwise we are linking the x to the inappropriate supposed-to-be-euclidean-and-correct-logits - and create a bad ripple effect 
+#we need to have appropriate learning rate for each of the component to avoid the case of bottleneck of responsibility - otherwise we are linking the x to the inappropriate supposed-to-be-euclidean-and-correct-logits
+#that was enough of brainstorming - we'll do implementations and improve
 
 from typing import Callable
 
