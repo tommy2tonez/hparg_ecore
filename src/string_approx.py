@@ -442,7 +442,21 @@
 
 #as we can see, the system is actually components built on top of another - the semantic of x is its temporal environment which is created by the string approx and string approx is built on top of the semantic sorting of those logits
 #we need to have appropriate learning rate for each of the component to avoid the case of bottleneck of responsibility - otherwise we are linking the x to the inappropriate supposed-to-be-euclidean-and-correct-logits
-#that was enough of brainstorming - we'll do implementations and improve
+
+#another topic of continuity compression
+#its the topic of linear and x^2
+#what's so special about x^2 - that no other polynomial could do?
+#it's the ability to approximate every possible curve with 1 turning point
+#we'll be back at this topic - the topic of calibration + curve extraction
+
+#now let's talk about string approximation - and how we could replace linear with significantly less cost
+#we have the coordinate of the mass coor1 (row)
+#we have the coordinate of the particle coor2 (column)
+
+#usually a linear operation would take n^3 compute
+#in our case - it's actually only n^2 - we compute the coordinate once and do the operation of moving towards the massful objects (this is differentiable) - this is linear O(n) compute - we are only worrying about whether this would do bad business for the compute market
+#so we aren't tilting planes - we are shaping the projection space (we are now back to question of whether we want to do enumerated common curves (planet of the apes) + NVIDIA project of super realistic)
+#the only thing that we are worrying about is the lossless compression theory - is our way of doing things have destructive interface (if stack together) - we can eliminate that possibility by doing calibration operation for every layer
 
 from typing import Callable
 
