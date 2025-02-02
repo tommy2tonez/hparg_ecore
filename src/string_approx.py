@@ -456,7 +456,49 @@
 #usually a linear operation would take n^3 compute
 #in our case - it's actually only n^2 - we compute the coordinate once and do the operation of moving towards the massful objects (this is differentiable) - this is linear O(n) compute - we are only worrying about whether this would do bad business for the compute market
 #so we aren't tilting planes - we are shaping the projection space (we are now back to question of whether we want to do enumerated common curves (planet of the apes) + NVIDIA project of super realistic)
-#the only thing that we are worrying about is the lossless compression theory - is our way of doing things have destructive interface (if stack together) - we can eliminate that possibility by doing calibration operation for every layer
+#what we actually talked about was dimensional reduction
+#we are from, without loss of generality, 3 dimensional space -> 1 dimensional space - a minus operation would result in the difference vector - the vector that points A -> B,  AO + OB = OB - OA = AB
+
+#I was thinking about the basic rules of continuity compression
+#let's talk in terms of flux + sphere
+#at a random point in the coordinate - what is the uncertainty of the neighbors and the mathematical relations of the differences
+
+#let's get to the basics - we store the points on the curves and connect those points by drawing lines (neighbors edges) - alright - we have ourselves a curve - this is lossy compression and the resolution of the curve is linearly related to the # of the points
+#how about our method of flux + sphere
+#we increase the resolution of the sphere in the sense of distances - and place the charges (massful objects) at the curve to approximate one turning point - we also have ourselves a curve - this is lossy compression and the resolution of the curve is linearly related to the # of the charges
+#so flux is a lossy compression method of continuity compression - and the lossy can be increased -> lossless simply by maginifying the projection sphere (in contrast to increasing number of tangent lines (planes) by storing point method)
+#so what's the difference between storing flux and storing tangent planes? that storing flux is differentiable while storing tangent planes is not - that is the only difference in terms of information technology
+
+#alright so what's our goal precisely? - our goal is be able to do lossy curve compression - and we want to actually store the "rules" in the most compact form possible (via the usage of dimensional reduction) - this is intellect - we probably want to brute force this and store all the rules, there is no intellect but it is called a virtue-compass machine
+#what's the problem with polynomial? that we can only count on the lossless compression of zeros - we can't count on the curves to touch the points - and making that happens is actually very hard - we can say that linear is "regarded" in the sense of learning - "regard" is good because it forces our brain to form the correct sophisticated rules to snap logics in the most compressed form - but too much "regard" would result in the inability to learn
+#back to the example of peeling layers and moving the responsibility of the previous layers -> the next layers
+#we are counting on the MLP + attention layers to correctly project the right string to offload the responsibility to the next layer - if we misproject the peeling string to reduce the semantic space size - we are losing the output resolution forever
+#so what are we proposing precisely? is a sweet trade off between the # of logits and the lossy compression quality - or we call this logit density
+#at one point in time - we would realize that the right way is no other than enumerate the common projection shapes and kinda increase the resolution by using flux 
+
+#consider this polynomial function f(x) = c * (x - a)(x - b)(x - c)(x - d)
+#the things that we actually store is a b c d - we have no control over the curve whatsoever (we are getting too much destructive inteference of the curve to move the polynomial to the training points - this is precisely where flux shines - flux circumscribes the training area) - so polynomial is a bad continuity compression method (in contrast to its counterpart, flux compression)
+#what is the difference between the three methods? there is no difference in terms of storing information (lossless compression) - yet there is a difference in terms of string approximation by using differential (tangents aren't differentiable, linear is differentiable but isn't having realistic continuity relations - tiliting planes isn't actually a good way, we kinda want somewhere in between, which is flux)
+#is flux the only way in terms of peeling layers (reducing context space + dimensional reduction numerical stability)? flux is only our, without loss of generality, better than linear operation - the one true operation cannot be found rather than using path optimizations + enumeration of shapes
+
+#let's investigate the problem of the current machine learning model
+#we have input is higher semantic space size - output is lower semantic space size - we are moving from higher -> lower
+#assume that x is the current semantic at a random layer
+#we do x = x + f(x) with the hope that x is self-sufficient in the sense of semantic (we are calling y is semantic in the sense of f(x) -> y)
+#that's the first assumption of f(x)
+
+#we assume that f(x) is a sufficient approximation to snap x + f(x) -> diffracted euclidean semantic in the newly collapsed semantic space to do rotate
+#why do I call linear context diffractor - linear is actually a dimensional reduction operation with the lhs being one dimensional rule and rhs being multidimensional coordinate (the arbitrary new cell in the output is now the dimensionally reducted information of the rhs)
+#because we are in one dimensional coordinate - we get the sound-alike affect - which is partially reduced by increasing the dimension size (the one dimensional space size is too big to get the sound alike affect now - there is no neighbor - but is there?)
+#that's the second assumption
+
+#we are drawing lines - so it's hard to have a raw array of inputs <how, are, you>
+#we need to boost this to 512 euclidean dimensions - to be more forgiving on the drawing wrong lines| planes| whatever - we are using different radix of optimization to offset the inability of linear at this point (note that a massive blackhole could do whatever linear could do - in the sense of diffracting context - if we are at the event horizon)
+#that's the third assumption - we are assuming increasing dimension size would be forgiving
+
+#we are in a euclidean coordinate and doing basic math continuity compression methods
+#that's the fourth assumption - our input - output (f(x) -> y) is not in a euclidean coordinate (take image processing for example)
+#what does it take for the model to learn radix sort? this is the question
 
 from typing import Callable
 
