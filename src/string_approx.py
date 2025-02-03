@@ -484,21 +484,27 @@
 #let's investigate the problem of the current machine learning model
 #we have input is higher semantic space size - output is lower semantic space size - we are moving from higher -> lower
 #assume that x is the current semantic at a random layer
-#we do x = x + f(x) with the hope that x is self-sufficient in the sense of semantic (we are calling y is semantic in the sense of f(x) -> y)
+#we do x = x + f(x) with the hope that x is self-sufficient in the sense of semantic (we are calling y semantic in the sense of f(x) -> y)
 #that's the first assumption of f(x)
 
 #we assume that f(x) is a sufficient approximation to snap x + f(x) -> diffracted euclidean semantic in the newly collapsed semantic space to do rotate
 #why do I call linear context diffractor - linear is actually a dimensional reduction operation with the lhs being one dimensional rule and rhs being multidimensional coordinate (the arbitrary new cell in the output is now the dimensionally reducted information of the rhs)
-#because we are in one dimensional coordinate - we get the sound-alike affect - which is partially reduced by increasing the dimension size (the one dimensional space size is too big to get the sound alike affect now - there is no neighbor - but is there?)
+#because we are in a one-dimensional-coordinate - we get the sound-alike effect - which is partially reduced by increasing the dimension size (the one dimensional space size is too big to get the sound-alike effect now - there is no neighbor - but is there?)
 #that's the second assumption
 
 #we are drawing lines - so it's hard to have a raw array of inputs <how, are, you>
-#we need to boost this to 512 euclidean dimensions - to be more forgiving on the drawing wrong lines| planes| whatever - we are using different radix of optimization to offset the inability of linear at this point (note that a massive blackhole could do whatever linear could do - in the sense of diffracting context - if we are at the event horizon)
+#we need to boost this to 512 euclidean dimensions - to be more forgiving on the drawing wrong lines| planes| whatever - we are using a different radix of optimization to offset the inability of linear at this point (note that a massive blackhole could do whatever linear could do - in the sense of diffracting context - if we are at the event horizon)
 #that's the third assumption - we are assuming increasing dimension size would be forgiving
 
 #we are in a euclidean coordinate and doing basic math continuity compression methods
 #that's the fourth assumption - our input - output (f(x) -> y) is not in a euclidean coordinate (take image processing for example)
 #what does it take for the model to learn radix sort? this is the question
+
+#after a long conversation with my machine learning friends - it's actually possible to use pure neural network + context diffractor to transport data without compromising the locality-ness of the data (we use pure math to alter the context to transport) or the data quality (this is debatable - we can't prove this yet - we actually can by using charges, assume there is an arbitrary space where the dimensionally reducted context is ..., prove that the euclidean relation is ..., with the dimension size = ...)
+#the way from now -> there is a very long road and we might deal with numerical stability of differential methods - we'll come up with a way to solve this 
+#but before we get anywhere - we must build a regex optimizer machine - by using centralities + path optimizations technique (because network network training convergence is differentiable)
+#we are heading in the right direction
+#with this rate - we are getting nowhere - we need to boost this to 1500 lines/day at least
 
 from typing import Callable
 
