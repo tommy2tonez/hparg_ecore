@@ -8528,7 +8528,7 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
-    //
+    //things are hard to write Mom - if we unwind the exception - or doing soft pass - there are three questions: why did the error occur? why couldn't the error be resoluted by the callee or state setters? if it is the error that is common - and not resolutable - like network or connectivity - we must log the decision of passing the work order - this introduces tons of work that is not quantifiable (insecured programming) - im talking about 3x 4x the current amount of work and let alone the debugability
 
     class BackwardDoLeafSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
@@ -8565,22 +8565,30 @@ namespace dg::network_memcommit_resolutor{
                         continue;
                     }
 
-                    size_t lck_region_sz    = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
-                    uma_ptr_t rcu_addr      = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
-                    uma_ptr_t lck_addr      = dg::memult::region(rcu_addr, lck_region_sz);
+                    size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
+                    uma_ptr_t rcu_addr                  = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
+                    uma_ptr_t lck_addr                  = dg::memult::region(rcu_addr, lck_region_sz); 
+                    auto resolutor_val_arg              = ResolutorValueArgument{};
+                    resolutor_val_arg.dst               = event_arr[i].dst;
+                    resolutor_val_arg.expected_ops_id   = event_arr[i].operatable_id; 
 
-                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(event_arr[i].dst, event_arr[i].operatable_id));
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, resolutor_val_arg);
                 }
             }
 
         private:
 
-            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, std::tuple<uma_ptr_t, operatable_id_t>>{
+            struct ResolutorValueArgument{
+                uma_ptr_t dst;
+                operatable_id_t expected_ops_id;
+            };
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ResolutorValueArgument>{
 
                 dg::network_cuda_controller::AsynchronousDeviceInterface * cuda_async_device;
                 dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
 
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, operatable_id_t> * data_arr, size_t sz) noexcept{
+                void push(uma_ptr_t rcu_addr, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
@@ -8591,7 +8599,7 @@ namespace dg::network_memcommit_resolutor{
                     auto host_synchronizer          = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_host_asynchronous::Synchronizer>());
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [ptr, expected_ops_id]             = data_arr[i];
+                        auto [ptr, expected_ops_id]             = std::make_tuple(data_arr[i].dst, data_arr[i].expected_ops_id);
                         set_operatable_id_t set_operatable_id   = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(ptr); //we are doing compact set by using interval [first, last)
                         init_status_t init_status               = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(ptr);
                         grad_status_t grad_status               = dg::network_tile_member_getsetter::get_leaf_grad_status_nothrow(ptr);
@@ -8615,6 +8623,7 @@ namespace dg::network_memcommit_resolutor{
 
                         if (!dg::network_uma::reacquirer_fixedsize_is_region_reacquirable(umamap_reacquirer, {{logit_umaptr, dispatch_info.logit_vd_id}, 
                                                                                                               {grad_umaptr, dispatch_info.grad_vd_id}})){
+
                             cuda_synchronizer.sync();
                             host_synchronizer.sync();
                         }
@@ -8638,23 +8647,29 @@ namespace dg::network_memcommit_resolutor{
                         if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_info.dispatch_platform)){
                             cuda_ptr_t logit_cudaptr    = dg::network_vmamap::get_cuda_ptr(logit_vmamap_reacquirer);
                             cuda_ptr_t grad_cudaptr     = dg::network_vmamap::get_cuda_ptr(grad_vmamap_reacquirer);
-                            auto executable             = [=]() noexcept{ //the noexcept here is questionable
-                                dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::grad_update(logit_cudaptr, grad_cudaptr, dispatch_info.tileops_cuda_dispatch_control, TILEOPS_POSTOPERATION_ZERO));
-                            };
-                            auto async_task             = dg::network_cuda_controller::virtualize_async_task(std::move(executable)); 
-                            auto async_id               = dg::network_exception_handler::nothrow_log(this->cuda_async_device->exec(std::move(async_task))); //this must be an error in the next sprint
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::grad_update_dispatch_chk(logit_cudaptr, grad_cudaptr, dispatch_info.tileops_cuda_dispatch_control));
 
-                            dg::network_exception_handler::nothrow_log(cuda_synchronizer.add(async_id));
+                            auto executable             = [=]() noexcept{
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::grad_update(logit_cudaptr, grad_cudaptr, dispatch_info.tileops_cuda_dispatch_control));
+                            };
+                            size_t runtime_complexity   = dg::network_tileops_cuda_poly::decode_grad_update_dispatch_control(dispatch_info.tileops_cuda_dispatch_control)->runtime_complexity;
+                            auto async_task             = dg::network_cuda_controller::virtualize_async_task(std::move(executable)); //TODOs: optimizables
+                            auto synchronizable         = dg::network_exception_handler::nothrow_log(this->cuda_async_device->exec(std::move(async_task), runtime_complexity)); //this must be an error in the next sprint
+
+                            dg::network_exception_handler::nothrow_log(cuda_synchronizer.add(std::move(synchronizable)));
                         } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_info.dispatch_platform)){
                             host_ptr_t logit_hostptr    = dg::network_vmamap::get_host_ptr(logit_vmamap_reacquirer);
                             host_ptr_t grad_hostptr     = dg::network_vmamap::get_host_ptr(grad_vmamap_reacquirer);
-                            auto executable             = [=]() noexcept{ //the noexcept here is questionable
-                                dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::grad_update(logit_hostptr, grad_hostptr, dispatch_info.tileops_host_dispatch_control, TILEOPS_POSTOPERATION_ZERO));
-                            };
-                            auto async_task             = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));
-                            auto async_id               = dg::network_exception_handler::nothrow_log(this->host_async_device->exec(std::move(async_task))); //this must be an error in the next sprint
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::grad_update_dispatch_chk(logit_hostptr, grad_hostptr, dispatch_info.tileops_host_dispatch_control));
 
-                            dg::network_exception_handler::nothrow_log(host_synchronizer.add(async_id));
+                            auto executable             = [=]() noexcept{
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::grad_update(logit_hostptr, grad_hostptr, dispatch_info.tileops_host_dispatch_control));
+                            };
+                            size_t runtime_complexity   = dg::network_tileops_host_poly::decode_grad_update_dispatch_control(dispatch_info.tileops_host_dispatch_control)->runtime_complexity;
+                            auto async_task             = dg::network_host_asynchronous::virtualize_async_task(std::move(executable));  //TODOs: optimizables
+                            auto synchronizable         = dg::network_exception_handler::nothrow_log(this->host_async_device->exec(std::move(async_task), runtime_complexity)); //this must be an error in the next sprint
+
+                            dg::network_exception_handler::nothrow_log(host_synchronizer.add(std::move(synchronizable)));
                         } else{
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));

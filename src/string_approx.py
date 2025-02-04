@@ -518,10 +518,19 @@
 #but the idea of solving locality problems + context diffraction problems by doing contagious operation (message passing via the hardware closest neighbors + dimensional reductions) is the correct idea (in terms of computer science) - I'm not talking about differential or machine learning yet
 #linear in large language models is more utilized as centrality algorithm than to draw relevant lines
 #and it's really good at being a centrality algorithm
-#we increase dimension to 512 - we map it to spacey one dimensional coordinate - and now we have a diffracted context (centrality) of the row with no neighbor
+#we increase dimension to 512 - we map it to spacey one dimensional coordinate - and now we have a diffracted context (centrality) of the row
 
 #what we are missing is actually row linear operations + column linear operations to avoid extra rotate operations
 #we dont know what's more expensive - rotate then row linear or column linear, without loss of generality
+
+#the question being asked is whether linear a good centrality algorithm?
+#from the linear perspective, we are from a multidimensional coordinate, diffract context points -> 1 dimensional coordinates and do a rotate operation - we are assuming that our 1 dimensional representation is "nice" enough to represent the context of the multi-dimensional coordinate
+
+#how about we have an operation to split multi-dimensional coordinate -> one-dimensional lossy compressed coordinate
+#we need to consider individualism - such is each of the cell is responsible for an arbitrary space dimension of 512, without loss of generality - this is back to our way of sphere + explosion
+#so how precisely do we do this? we diffract the context of 512 high resolution dimensions -> n x 512 low resolution dimensions (this is tricky - we need an associative operation (assume such operation exists) to solve the problem of numerical stability of rotation yet still being able to be lossless (if we associate all the uniformly splitted tokens)) - how to?
+#so we have ourselves a nice centrality algorithm - we diffract the meaning of the row, we rotate, we mix - it's like a milk shake
+#besides, we deal with delaunay triangularization and charges' distribution to further dent the continuous space - this is helpful if used correctly
 
 from typing import Callable
 
