@@ -506,6 +506,23 @@
 #we are heading in the right direction
 #with this rate - we are getting nowhere - we need to boost this to 1500 lines/day at least
 
+#alright - let's talk about delaunay triangularization and the dentability of the continuity 
+#we already talked about how tangent lines, charges and polynomials produce a unique footprint in terms of lossless compression in an arbitrary space
+#we haven't talked about the continuity dentability of those methods
+
+#charges and delaunay triangularizations and the distribution of the area | volume | whatever 4 dimensional "volume" - are important for differential methods to dent continuous strings
+#if the area distribution (we discretize the area sizes 1.5m^2 -> 1m^2 for example) is too skewed - we are losing the continuity dentabilities - but we aren't losing the lossless compression (this is an important note) - because the charge coordinates produce a unique string footprint (somewhat a bijective relation to the string - we want to prove this by using flux)
+#so the point of no return in "charges" is actually referring to the area distribution of delaunay regions
+
+#maybe mathematical operations aren't sufficient
+#but the idea of solving locality problems + context diffraction problems by doing contagious operation (message passing via the hardware closest neighbors + dimensional reductions) is the correct idea (in terms of computer science) - I'm not talking about differential or machine learning yet
+#linear in large language models is more utilized as centrality algorithm than to draw relevant lines
+#and it's really good at being a centrality algorithm
+#we increase dimension to 512 - we map it to spacey one dimensional coordinate - and now we have a diffracted context (centrality) of the row with no neighbor
+
+#what we are missing is actually row linear operations + column linear operations to avoid extra rotate operations
+#we dont know what's more expensive - rotate then row linear or column linear, without loss of generality
+
 from typing import Callable
 
 class Particle:
