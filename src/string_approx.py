@@ -532,6 +532,10 @@
 #so we have ourselves a nice centrality algorithm - we diffract the meaning of the row, we rotate, we mix - it's like a milk shake
 #besides, we deal with delaunay triangularization and charges' distribution to further dent the continuous space - this is helpful if used correctly
 
+#we'll work on the basic of centrality algorithms - we dimensional reduct the Earth (row) -> marble (cell) and shoot the marble (rotate) - and zoom it back to Earth size and do constructive interference of the Earths and the current Earth
+#it's a milkshake operation
+#we want to avoid the downsides of the one dimensional approach (euclidean context collision - by treating every cell as a sphere)
+
 from typing import Callable
 
 class Particle:
