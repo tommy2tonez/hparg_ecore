@@ -536,6 +536,9 @@
 #it's a milkshake operation
 #we want to avoid the downsides of the one dimensional approach (euclidean context collision - by treating every cell as a sphere)
 
+#there is a very narrow path for the centrality algorithm - such can offset the need for cuda - without loss of generality, by using multidimensional projections (as opposed to output cell one-dimensional projection) + rotate + shake + expansion + constructive interferences + add to the original now rotated context vector  
+#we'll talk about the optimal centrality algorithm later - this has a lot to deal with individualism of euclidean space and resolution of the space
+
 from typing import Callable
 
 class Particle:
