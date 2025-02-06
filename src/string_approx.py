@@ -552,6 +552,31 @@
 #hyperfocus is the frequency mapping of the previous range and the current domain
 #sort algorithm is the semantic reordering of the current domain
 
+#I was having a coordinate confusion
+#in the coordinate where the space ship is spinning - the net acceleration vector is pointing towards the origin
+#so the ring is pushing us towards the center (we are inside the ring - not on the ring)
+#and we are pushing back to the rim the same force
+
+#in the stationry coordinate (where the space ship is not spinning) - the net acceleration vector is 0
+#it's the coordinate calibration that generates artificial gravity - this is the confusion that I had  
+
+#interstellar is actually a very insightful movie - except for when Mann tried to dock the spaceship to override the unauthorized operation
+#alright - let's get back to the basic of centrality algorithms and context diffraction - goal is to be able to diffract + blend the context of the input matrix and the leaf matrix + dimensional reduct + transport + diffract + rinse and repeat
+#the method for the context diffraction is unspecified - we can either do dimensional reduction of rules (one row, many columns) - which generate a synchronized operation of diffraction - or we can do dimensional reduction of rules + special rule for the focal - I've yet to think about this
+
+#then there is string theory - goal is to be able to do calibration of space - to generate "artificial" gravity
+#and we kinda want to rinse and repeat the massful objects operation of pulling or denting strings
+#there are two kinds that we know about string calibrations - first is absolute string calibration - which is the one we mentioned - second is dynamic string calibration (such generates artifical gravity)
+#three-body problem is about the dynamic string calibration (we're still working on solving this problem)
+#string theory is very important to do context diffraction - we want the (x, y, z) -> (x1, y1, z1) -> (rx1, xy1, rz1) instead of (x, y, z) -> value
+
+#then there is domain reduction (hyperfocus) - I'm still not sure about the specific implementations - just know that there is an exponential reduction of domain space - to "focus" on what's important - its like a wormhole to go to another space where important things are there 
+#there is also a sort operation to make things "euclideanly relevant" - this operation is, without loss of generality, important before the tokenization step (which is translating the input semantic space -> byte_stream space or bit_stream space - interstellar perfers bit_stream for some reason, maybe because all computer arch is built on binary)  
+#there is also a problem of delaunay triangularizations - this creates the anomaly of gravitational field which is a result of unbalanced area distribution of Voronoi diagrams (this is an unavoidable part of the training - we can only circumscribe the training area of the massful objects - not entirely eliminate it from disrupting the Voronoi's area distribution)
+#we want to explore the "anomaly" (diving into the wormhole or the blackhole) which leads us to another space (which we already anticipated for)  where we can find the "context" to save the Earth
+
+#it's a well-written movie for differential methods - I'm sure there are other methods to do centrality + string approximation I've yet to think about
+
 from typing import Callable
 
 class Particle:
