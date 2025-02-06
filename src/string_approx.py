@@ -577,6 +577,24 @@
 
 #it's a well-written movie for differential methods - I'm sure there are other methods to do centrality + string approximation I've yet to think about
 
+#alright - the hinge was not quantifiable and the domain space is not compact enough for the range space (which creates anomalies - black holes - where we want to explore) - we'll think about this later
+#I dont know math like my brother does - but I'm an experimentalist - I stick with path + heuristic + multidimensional projection rather than advanced linear - I really dont know what linear is for, except for learning purposes
+#goal is to be able to use A* to increase convergence-ability of training - Dad talked about hinge, I agreed - the hinge is only not clear when it is not quantifiable
+#what specifically do we quantify as hinges? learning_rate? cluser training sequence? logaritized value? mathematical operation? The hinge is ambiguous in the case - we probably want to build the basic information graph (with named entities) and build centrality algorithm on the graph to extract "the best possible next exploration, a.k.a hinge" from all of our users
+
+#it seems that there are two graphs:
+#the model graph - this is a tree of possibilities - each possibility represents a model (root - cursor) and its descendants represent possible paths of extension (cursor - base)
+#the training graph - this is also a tree of possibilities in terms of training - each node represents "which group of logit", and the training rate for the group
+#the model graph and the training graph intertwined and create a semantic space of named entities - which we can run centrality algorithm on to decide the best possible next "hinge" for our grand "A*" algorithm
+
+#from our perspective - this is probably the way to create a dynamic model - such the convergence of loss_rate (d_loss_rate/d_t) is not linear (this is debatable - even if we exhaust all our "training intellect" - we would probably get something like 1/x d/dt curve which is f(x) = ln(x), this is success_line)
+#there isn't a specific "fit-all" model - for the reason being there is not training friction (if we aim to generalize, we get nothing - that's the rule of compression)
+
+#these are different radices of optimization - we have gravitational forces + delaunay + calibrations + centrality + domain reduction + focus + etc. as one radix
+#we have path optimizations as another radix - this is hard to get right (we simply dont have enough users, yet)
+
+#even if we implemented all of the mentioned things - we're prolly still in the radix of differential methods + centrality (which is a minute set of intellect)
+
 from typing import Callable
 
 class Particle:
