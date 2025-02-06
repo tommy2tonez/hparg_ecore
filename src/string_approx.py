@@ -539,6 +539,19 @@
 #there is a very narrow path for the centrality algorithm - such can offset the need for cuda - without loss of generality, by using multidimensional projections (as opposed to output cell one-dimensional projection) + rotate + shake + expansion + constructive interferences + add to the original now rotated context vector  
 #we'll talk about the optimal centrality algorithm later - this has a lot to deal with individualism of euclidean space and resolution of the space
 
+#what precisely do we know? we know that the basics of every intellect system consist of centrality algorithm, domain reduction and sort algorithm
+
+#the centrality algorithm is the transformer architecture - imagine customized pagerank specifically for the input - output - transformer learns the centrality algorithm not machine learning linear that we know about (this is an important note)
+#the domain reduction is hyperfocus
+#the sort algorithm is another responsibility
+
+#I have no proof for why centrality => intellect, and maybe intellect != => centrality
+#thus a system that built on top of centrality and produces output based on input must be an intelligent system
+#this hints us that we must emphasize individualism of nodes in an arbitrary tensor graph - we are back to the massful objects to do multidimensional projection (as opposed to linear being one dimensional projection) (x, y, z) -> (x1, y1, z1) and the single responsibility of euclidean space
+
+#hyperfocus is the frequency mapping of the previous range and the current domain
+#sort algorithm is the semantic reordering of the current domain
+
 from typing import Callable
 
 class Particle:

@@ -8529,7 +8529,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //
-
+    
     class BackwardDoLeafSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
