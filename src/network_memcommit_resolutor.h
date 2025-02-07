@@ -228,11 +228,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
@@ -329,11 +331,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
@@ -430,11 +434,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr      = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].dst);
@@ -535,11 +541,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].dst);
@@ -641,11 +649,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr_nothrow(event_arr[i].dst);
@@ -751,11 +761,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].dst);
@@ -860,11 +872,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); //we are risking 0s - we will fix this later
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].dst);
@@ -974,11 +988,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].dst);
@@ -1075,11 +1091,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].dst);
@@ -1176,11 +1194,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].dst);
@@ -1375,9 +1395,11 @@ namespace dg::network_memcommit_resolutor{
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst); 
 
-                    if (!tile_kind.has_value()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(tile_kind.error()));
-                        continue;
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!tile_kind.has_value()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(tile_kind.error()));
+                            std::abort();
+                        }
                     }
 
                     switch (tile_kind.value()){
@@ -1492,11 +1514,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].requestee);
@@ -1588,11 +1612,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); //
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
@@ -1684,12 +1710,14 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
-                    for (size_t i = 0u; i < sz; ++I){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].requestee);
+                    for (size_t i = 0u; i < sz; ++i){
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].requestee);
@@ -1792,11 +1820,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].requestee);
@@ -1898,11 +1928,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2005,11 +2037,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2112,11 +2146,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2229,11 +2265,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2336,11 +2374,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2443,11 +2483,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2550,11 +2592,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2755,9 +2799,11 @@ namespace dg::network_memcommit_resolutor{
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].requestee);
 
-                    if (!tile_kind.has_value()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(tile_kind.error()));
-                        continue;
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!tile_kind.has_value()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(tile_kind.error()));
+                            std::abort();
+                        }
                     }
 
                     switch (tile_kind.value()){
@@ -2872,11 +2918,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].requestee);
@@ -2969,11 +3017,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3066,11 +3116,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3203,11 +3255,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3340,11 +3394,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3479,11 +3535,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3621,11 +3679,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3766,11 +3826,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].requestee);
@@ -3903,11 +3965,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].requestee);
@@ -4062,11 +4126,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].requestee);
@@ -4215,11 +4281,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].requestee);
@@ -4351,11 +4419,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].requestee);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].requestee);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].requestee);
@@ -4586,9 +4656,11 @@ namespace dg::network_memcommit_resolutor{
             for (size_t i = 0u; i < sz; ++i){
                 std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].requestee);
 
-                if (!tile_kind.has_value()){
-                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(tile_kind.error()));
-                    continue;
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!tile_kind.has_value()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(tile_kind.error()));
+                        std::abort();
+                    }
                 }
 
                 switch (tile_kind.value()){
@@ -4731,11 +4803,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
@@ -5127,11 +5201,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
@@ -5165,7 +5241,6 @@ namespace dg::network_memcommit_resolutor{
                         std::expected<uma_ptr_t, exception_t> src_rcu_addr = dg::network_tile_member_getsetter::get_tile_rcu_addr(descendant_arr[i].value());
 
                         if (!src_rcu_addr.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(src_rcu_addr.error()));
                             continue;
                         }
 
@@ -5515,11 +5590,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].dst);
@@ -6026,6 +6103,7 @@ namespace dg::network_memcommit_resolutor{
                 constexpr size_t LCK_ADDR_SZ_PER_DISPATCH   = UACM_ACM_SZ + 1u;
                 dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> descendant_arr(sz * UACM_ACM_SZ);
                 dg::network_stack_allocation::NoExceptAllocation<bool[]> validation_arr(sz);
+                std::fill(validation_arr.get(), std::next(validation_arr.get(), sz), false);
                 dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> lck_addr_arr(sz * LCK_ADDR_SZ_PER_DISPATCH);
 
                 const size_t EVENT_SCALE_FACTOR             = MAX_OBSERVER_ARR_SZ;
@@ -6044,12 +6122,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            validation_arr[i] = false;
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].dst);
@@ -6123,15 +6202,12 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                *fetching_status = false;
                                 break;
                             }
                             case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
                             case TILE_INIT_STATUS_DECAYED:
                             {
-                                if (current_ops_id != expected_ops_id){
-                                    *fetching_status = false;
-                                } else{
+                                if (current_ops_id == expected_ops_id){
                                     *fetching_status = true;
                                     dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(dst, fetching_addr);
                                 }
@@ -6749,11 +6825,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_extndst_rcu_addr_nothrow(event_arr[i].dst);
@@ -7154,11 +7232,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].dst);
@@ -7588,11 +7668,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].dst);
@@ -7964,11 +8046,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].dst);
@@ -8448,9 +8532,11 @@ namespace dg::network_memcommit_resolutor{
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
 
-                    if (!tile_kind.has_value()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(tile_kind.error()));
-                        continue;
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!tile_kind.has_value()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(tile_kind.error()));
+                            std::abort();
+                        }
                     }
 
                     switch (tile_kind.value()){
@@ -8558,11 +8644,13 @@ namespace dg::network_memcommit_resolutor{
                 auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].dst);
+                    if constexpr(DEBUG_MODE_FLAG){
+                        auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].dst);
 
-                    if (!ptrchk.has_value()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                        continue;
+                        if (!ptrchk.has_value()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            std::abort();
+                        }
                     }
 
                     size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
@@ -8733,11 +8821,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
@@ -9112,6 +9202,7 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
+    //
     class BackwardDoPairSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
@@ -9160,11 +9251,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr              = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].dst);
@@ -9200,7 +9293,6 @@ namespace dg::network_memcommit_resolutor{
                         std::expected<uma_ptr_t, exception_t> rhs_rcu_addr  = dg::network_tile_member_getsetter::get_tile_rcu_addr(rhs_ptr); //polymorphic access - every polymorphic access must issue a guard - because correct instantiations guaranteed by setters aren't equivalent to the existence of certain class members
 
                         if (!lhs_rcu_addr.has_value() || !rhs_rcu_addr.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(dg::network_exception::BAD_ACCESS));
                             continue;
                         }
 
@@ -9741,11 +9833,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr                  = dg::network_tile_member_getsetter::get_uacm_rcu_addr_nothrow(event_arr[i].dst);
@@ -9925,11 +10019,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr                  = dg::network_tile_member_getsetter::get_pacm_rcu_addr_nothrow(event_arr[i].dst);
@@ -10110,11 +10206,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr                  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr_nothrow(event_arr[i].dst);
@@ -10586,11 +10684,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, vdh_mem.get())); 
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size())); 
@@ -10788,11 +10888,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].dst);
@@ -11211,11 +11313,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].dst);
@@ -11584,6 +11688,7 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
+    //
     class BackwardDoMsgrBwdSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
@@ -11642,11 +11747,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&fetcher, trimmed_addrfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].dst);
@@ -12171,9 +12278,11 @@ namespace dg::network_memcommit_resolutor{
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
 
-                    if (!tile_kind.has_value()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(tile_kind.error()));
-                        continue;
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!tile_kind.has_value()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(tile_kind.error()));
+                            std::abort();
+                        }
                     }
 
                     switch (tile_kind.value()){

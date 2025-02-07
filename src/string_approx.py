@@ -631,6 +631,11 @@
 #why is the worm hole a closed string again? because continuity is better described if closed (a circle, a sphere, etc.) - and I approved of this approach
 
 #well that was a ton of implementation - but let's talk about the core core, mandatory recipe of everything - it's centrality - (input) => output - everything that is centrality-related is intelligent
+#the string^n is actually also a form of intellect - besides centrality algorithm 
+#we want to do self attention by using string ^ n operation because the rocket fuel is from the spaceship - we detach the rocket fuel - and we do self expulsion forces between the fuels and the spaceship (which is a closed system) 
+#so we want to do string ^ n to have a good sling shot around the Gargantua - then we do self expulsion (attention) by splitting the spaceship into two parts (the fuel and the spaceship) then we do self expulsion of closed system (the fuel and the spaceship) without loss of generality
+#string ^ n was also a without loss of generality, we want to estimate a reasonable x by using projection to narrow the numerical stability (keep it in control)
+#that was the best description of context diffraction + context blend + self attention - well done by the interstellar cast
 
 from typing import Callable
 
