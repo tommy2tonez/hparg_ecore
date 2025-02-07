@@ -599,12 +599,14 @@
 #let's get to the basic - interstellar is right - the context window is fixed (we are only having that travelling input space, the spaceship) - so we must leave something behind in order to get something new (new context) - we need to escape the pulling force of the black hole in order to stay contextually intact (by using propeller, attention, WLOG, described 2014) - otherwise, everything sounds the same (the blackhole is no longer a context diffractor but now a heavy influencer of what's the black hole means)
 #note how the spaceship leverages blackhole gravitational force to have free ride - if the a = v^2/r - we are basically having a free ride around the circumference
 #we can actually leverage the v^2/r centripetal force to do "sling-shot" without compromising energy (the spaceship is stationary in an arbitrary calibrated coordinate)
-#then the spaceship found it place where "other spaceships" haven't been to yet - initiate propeller to escape the free_ride (we are doing context projection - (x, y, z) -> (rx1, ry1, rz1))  
+#then the spaceship found it place where "other spaceships" haven't been to yet - initiate propeller to escape the free_ride (we are doing context projection + string exponential - (x, y, z) -> (rx1, ry1, rz1) and ((x, y, z) * (x1, y1, z1)) "^"" n)
+#alright - the numerical stability of the "exponential" part is the hard problem to solve - we break numerical stability very easily there - yet we are back at the contextual space and the law of information storage - maybe differential methods can't be used to solve numerical stability
 
 #what are the planets in interstellar? They are brains - with waves of backward + forward propagations
 #too watery would be an unsurvivable planet - or too dry would be unsurvivable as well
-#note how Dr. Brand tried to collect the information before the wave - and got caught in the wave (the memregion_lock) - and the spaceship got halted for years (this is the funny part)
-#interstellar tried to warn us to avoid to operate on the region at its backward frequency (we'll come up with a way to solve this) 
+#note how Dr. Brand tried to collect the information before the wave - and got caught in the wave (the memregion_lock) - and the spaceship got halted for years (this is the funny part - because the frequency of the wave on the planet is way slower than the frequency up there in the spaceship - planet is too heavy)
+#interstellar tried to warn us to avoid to operate on the region at its backward frequency (we'll come up with a way to solve this) and try our best to be "synchronized" with Romilly (imagine we are back when Romilly is still in cryo - and not knowing anything about the blackhole)
+#moral of the story: try to catch the information in time - if not - get out before Doyle's dead because of timeout
 
 #note that when Cooper fell into the blackhole, all he saw is a room - this means a context skew happened that disrupted the Voronoi diagram area distribution (but this is a very important room where everything happens - thus the skew - and this "tesseract" denotes individualism of euclidean space - this is an important note)
 #alright - so centrality by using "spaceship" implementation requires us to have the art of giving - transactional - we give something bad, we get something better - we diffract the context (notify everyone) - we rinse and repeat  
@@ -612,6 +614,8 @@
 #after his daughter got the neccessary information - problem solved (f(x) -> y) - mission completed - Cooper is rescued
 
 #the rescue operation of the Endurance was an advanced operation - we use a spaceship to save another spaceship - by calibrating with its contextual space 
+
+#well that was a ton of implementation - but let's talk about the core core, mandatory recipe of everything - it's centrality - (input) => output - everything that is centrality-related is intelligent
 
 from typing import Callable
 
