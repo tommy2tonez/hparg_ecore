@@ -599,8 +599,8 @@
 #let's get to the basic - interstellar is right - the context window is fixed (we are only having that travelling input space, the spaceship) - so we must leave something behind in order to get something new (new context) - we need to escape the pulling force of the black hole in order to stay contextually intact (by using propeller, attention, WLOG, described 2014) - otherwise, everything sounds the same (the blackhole is no longer a context diffractor but now a heavy influencer of what's the black hole means)
 #note how the spaceship leverages blackhole gravitational force to have free ride - if the a = v^2/r - we are basically having a free ride around the circumference
 #we can actually leverage the v^2/r centripetal force to do "sling-shot" without compromising energy (the spaceship is stationary in an arbitrary calibrated coordinate)
-#then the spaceship found it place where "other spaceships" haven't been to yet - initiate propeller to escape the free_ride (we are doing context projection + string exponential - (x, y, z) -> (rx1, ry1, rz1) and ((x, y, z) * (x1, y1, z1)) "^"" n)
-#alright - the numerical stability of the "exponential" part is the hard problem to solve - we break numerical stability very easily there - yet we are back at the contextual space and the law of information storage - maybe differential methods can't be used to solve numerical stability
+#then the spaceship found it place where "other spaceships" haven't been to yet - initiate propeller to escape the free_ride (we are doing context projection + string exponential - (x, y, z) -> (rx1, ry1, rz1) and ((x, y, z) * (x1, y1, z1)) '^' n)
+#alright - the numerical stability of the "exponential" part is the hard problem to solve - we break numerical stability very easily there - yet we are back at the contextual space and the law of information storage - maybe differential methods can't be used to solve numerical stability (note that numerical stability is hardly a problem - moving in the differentially "right" direction is the problem)
 
 #what are the planets in interstellar? They are brains - with waves of backward + forward propagations
 #too watery would be an unsurvivable planet - or too dry would be unsurvivable as well
@@ -611,9 +611,24 @@
 #note that when Cooper fell into the blackhole, all he saw is a room - this means a context skew happened that disrupted the Voronoi diagram area distribution (but this is a very important room where everything happens - thus the skew - and this "tesseract" denotes individualism of euclidean space - this is an important note)
 #alright - so centrality by using "spaceship" implementation requires us to have the art of giving - transactional - we give something bad, we get something better - we diffract the context (notify everyone) - we rinse and repeat  
 #how did Cooper communicate with his daughter again? by pulling strings - so the constructive interference operation interstellar used was string "multiplication" operation
-#after his daughter got the neccessary information - problem solved (f(x) -> y) - mission completed - Cooper is rescued
+#after his daughter got the neccessary information - problem solved (f(x) -> y) - mission accomplished - Cooper is rescued
+#note that the daughter was awared of the watch - but didn't know the context of the watch - until certain time kicked in which initiated the training sequence involving the watch (to do context extraction) 
+#this hints that the training order of dimensionally reducted context is important - most likely post the Voronoi's anomaly had been formed and another domain - range space with sophisticated output had been constructed
+#so the dedicated buffer is there - but the leaf logits that involved the buffer weren't trained yet (I'm not very sure of how to achieve this technically - because good centrality algorithm is hard to write, let alone leaving a restricted region untouched)
 
-#the rescue operation of the Endurance was an advanced operation - we use a spaceship to save another spaceship - by calibrating with its contextual space 
+#the way that interstellar wrote the information is very insighful - we do domain reduction - domain expansion and do string operation on a preallocated designated buffer - hoping that his daughter (in another domain) would notice
+#alright - so the taken approach was appearantly waiting for the Voronoi area skew to happen -> construct another domain - same goal (range) -> collaborate by writing-back to avoid skewed training problem
+#my approach was slightly different yet harder to achieve - we preallocate + construct exponential domain reduction - do real-time analysis of what's needed to be reducted (by using frequency of euclideanly related fired together + discretize + sort) -> map + offload responsibility of output resolution to another domain (we break numerical stability here if the domain collapse rate is not fast enough - and the real time mapping is not stable)  
+
+#the rescue operation (constructive interference) of the Endurance was an advanced operation - we use a spaceship to save another spaceship - by calibrating with its contextual space 
+#this hints that constructive interference is only good if calibrated - otherwise it'd have destructive interference for both of the spaceships
+
+#let's talk about the string ^ n operation
+#we need to iteratively compute the artifical gravitational points to calibrate + construct another stationary space where we could keep the numerical stability post string ^ n - and maybe we aren't using differential methods to "heuristicly" guess the "gradient" for string as in string ^ n (we need to have memorized previous results because the possibilities for string only converge in a non-differential + accumulation way - maybe this is temporal fired together grouped together responsibility)
+#this is hard - and another entire research topic to think about (we can only think of memorized x (x1, x2, ..., xn), and the reconstruction of the string by using non-differential methods)
+#we aren't worrying about this yet - this is an advanced topic - calibration is another also very advanced topic - it seems like we extract the "^n" of the operation to do coordinate calibration - this is precisely the dynamic calibration of the Cooper's spaceship (row) and Endurance spaceship (rowxcolumn), Cooper spaceship - without the string(^n) or spinning in the endurance direction - we are having more destructive interference (explosion) than constructive interference of contextual space
+
+#why is the worm hole a closed string again? because continuity is better described if closed (a circle, a sphere, etc.) - and I approved of this approach
 
 #well that was a ton of implementation - but let's talk about the core core, mandatory recipe of everything - it's centrality - (input) => output - everything that is centrality-related is intelligent
 
