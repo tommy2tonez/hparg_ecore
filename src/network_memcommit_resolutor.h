@@ -4770,6 +4770,7 @@ namespace dg::network_memcommit_resolutor{
     //the problem with the current training is that the numerical stability is bad - the uncertainty of training exceeds the differential progress
     //my brother took the right approach - yet I aim to generalize that centrality must be done by spaceships operation + message-passing via hardware nearest-neighbors (I dont know if differential is the way - I just know centrality must be done that way - computer scientifically speaking) 
     //imagine this with a one billion handheld devices scale - we'll be there someday fellas - we'll be rich
+    //let's see where us lowlifes could get in the capitalism world - but first, we must understand the law of local transportation + frequency (we can't stress this over the internet - it's not feasible - the infrastructure is not ready - we are transporting a massive amount of data by building a voronoi digram) 
 
     class ForwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
