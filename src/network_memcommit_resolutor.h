@@ -4748,6 +4748,29 @@ namespace dg::network_memcommit_resolutor{
     //we are transitioning to all-stack-allocation to avoid affine problems
     //alrights - we are breaking engineering practices to do extreme optimizations here - we'll try to see what the large scale centrality algorithm would look like (it'd probably look like our universe and the spaceship - yet we have more "spaceships" to unhinge + diffract the universe) - we want to keep numerical stability in control - we'll talk about this later
 
+    //I was still trying to prove the completeness of the algorithm 
+    //so let's write the proof once and for all
+    //(1): the authorization fence of operatable_memevent_id + operatable_forward_id + operatable_backward_id
+    //(2): assume that the tree is fixed, TILE_INIT_INITIALIZED denotes that the subtree is correctly computed  + intact - prove that a random transaction (a lock of the tree and its descendant) must snap the tree state in a correct state - by using induction, we can prove that after a certain number of totally random operations - the tree is correctly computed
+    //(3): assume a miscomputation is performed (for whatever reason) - we must be able to prove that the program is not crash (we allow leeway for not-a-number)
+    //(4): assume an orphan order (orphan can only be performed on the entire computation tree) is performed during the tree forward + backward computation - the integrity of the leaf, and the not-yet-orphaned must not be compromised if the tree is reused after all orphan orders have been confirmed (post synchronization)
+    //(5): assume that no orphan order is called, only adopt order, we must be able to prove that the tree computation is not compromised (as if it's serially computed - there is no diffrerence in the uncertainty of computation)  
+
+    //now we need to calibrate the semantic space and write the algorithm to fulfill the contracts
+
+    //this is actually harder than the allocation tree - that was pretty tough to write also - and a lot more confusing (this took me weeks + months to finalize the designs - it's hard)
+    //thing is at this level of programming - we don't actually think things holistically - rather single responsibiltity + atomicity of state snap (what the operation does and what users intend it to do are two very differrent things - linked by probably, maybe, temporally)
+    //so it's actually about laying out the basic operations - find the use cases that the users could use - and we are trying to link the basic rules together to establish a contract - it's harder than the traditional approach in the sense of "what user intends the operation to do" and "what the operation actually does" are two different things
+    //and I actually couldn't think of other ways for this to work efficiently more than it already does - we must abide to the law of 8K unit tile (because that's the UDP standard for years - I doubt that would be changed soon in a forseeable future)
+    //we realized that the thing that slows down the parallel host system, in most scenerios, is the mutex check + the RAM bus + the memory ordering synchronization - not that correctly predicted branch or 16 reduntdant math operations - we'll try our best to work on that later
+
+    //we'll try to aim for 1 PB linear/ host_core*s
+    //the thing is that we probably don't need that crazy compute power - rather a guided training (granted, this is another radix of optimization) - think of guided training as unhinging a graph search node - where for each of the nodes, we must dispatch, WLOG, 100GB of data to gather the data and re-evaluate the situation and explore the next hinge
+    //we already have our theory, everything that is built on top of a centrality algorithm and produces output based on input must be an intelligent system - this requires the uniform responsibility of centrality nodes (we can't have skewed centrality nodes - it's cheating)
+    //the problem with the current training is that the numerical stability is bad - the uncertainty of training exceeds the differential progress
+    //my brother took the right approach - yet I aim to generalize that centrality must be done by spaceships operation + message-passing via hardware nearest-neighbors (I dont know if differential is the way - I just know centrality must be done that way - computer scientifically speaking) 
+    //imagine this with a one billion handheld devices scale - we'll be there someday fellas - we'll be rich
+
     class ForwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         public:
