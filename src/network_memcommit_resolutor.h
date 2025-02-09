@@ -4751,7 +4751,14 @@ namespace dg::network_memcommit_resolutor{
     //I was still trying to prove the completeness of the algorithm 
     //so let's write the proof once and for all
     //(1): the authorization fence of operatable_memevent_id + operatable_forward_id + operatable_backward_id
-    //(2): assume that the tree is fixed, TILE_INIT_INITIALIZED denotes that the subtree is correctly computed  + intact - prove that a random transaction (a lock of the tree and its descendant) must snap the tree state in a correct state - by using induction, we can prove that after a certain number of totally random operations - the tree is correctly computed
+    //(2): assume that the reference tree is fixed, TILE_INIT_INITIALIZED denotes that the subtree is correctly computed  + intact - prove that a random transaction (a lock of the tree and its descendant) must snap the tree state in a correct state - by using induction, we can prove that after a certain number of totally random operations - the tree is correctly computed
+    //                                              we want to have TILE_INIT_INITIALIZED for the pinged logits (this is the grand plan)
+    //                                              prove that a regex version of every possible correct state would snap the tree to a correct state (induction) - transactional of resolution payload - correct state consists of (ORPHANED | EMPTY | DECAYED | ADOPTED, or INITIALIZED => logit_value of the subtree is correctly computed)
+    //                                              prove that there exists a chance by doing totally random valid operations (snap random node -> orphaned | empty | decayed | adopted or use induction operation to induce the next valid state) - but never false positive
+    //                                              prove that the flow of ping + init + decay + forward would converge the tree -> initialized eventually
+
+    //things get very confusing if you aren't calibrating the semantic space (assume the tree is fixed)
+
     //(3): assume a miscomputation is performed (for whatever reason) - we must be able to prove that the program is not crash (we allow leeway for not-a-number)
     //(4): assume an orphan order (orphan can only be performed on the entire computation tree) is performed during the tree forward + backward computation - the integrity of the leaf, and the not-yet-orphaned must not be compromised if the tree is reused after all orphan orders have been confirmed (post synchronization)
     //(5): assume that no orphan order is called, only adopt order, we must be able to prove that the tree computation is not compromised (as if it's serially computed - there is no diffrerence in the uncertainty of computation)  
@@ -4771,6 +4778,7 @@ namespace dg::network_memcommit_resolutor{
     //my brother took the right approach - yet I aim to generalize that centrality must be done by spaceships operation + message-passing via hardware nearest-neighbors (I dont know if differential is the way - I just know centrality must be done that way - computer scientifically speaking) 
     //imagine this with a one billion handheld devices scale - we'll be there someday fellas - we'll be rich
     //let's see where us lowlifes could get in the capitalism world - but first, we must understand the law of local transportation + frequency (we can't stress this over the internet - it's not feasible - the infrastructure is not ready - we are transporting a massive amount of data by building a voronoi digram) 
+    //let's set a goal - we'll do the demo of interstellar in a month or two (for real - by using double semantic space of named entities (training) and centrality (transformer))
 
     class ForwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
