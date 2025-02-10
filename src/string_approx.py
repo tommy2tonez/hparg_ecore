@@ -666,6 +666,9 @@
 #thing is we don't choose the things to be calibrated - we assign the things to be calibrated - and we train the system based on the rules 
 
 #alright - we are greedy - how about we combine the tricks - we run centrality on the string approximated system?
+#don't worry frens - we'll carry the team - we'll show the naysayers about the true power of 2 centrality + hyperfocus + string approx + compression + sort
+#we probably would break through the current security layer (JWT + https + symmetric + asymmetric + whatever) with those 5 methods, if implemented correctly - and reach escape velocity
+#1980s is a good time to rewind
 
 from typing import Callable
 
