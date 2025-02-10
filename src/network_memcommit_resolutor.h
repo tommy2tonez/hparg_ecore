@@ -4784,25 +4784,12 @@ namespace dg::network_memcommit_resolutor{
     //I admit this is very difficult to write - and very difficult to comprehend - there's a saying - now there are God and I who understand the code - soon there's only God
     //yet this speaks to the core of computer science - the flood management (8K UDP offload to kernel - hardly a system would implement this) - multi-users - dynamicity of tile dispatch - routing of tile dispatch - true concurrency - frequency to allow user customized calibration + etc 
     //there are several concepts that we need to talk - first is the concept of unique_ptr and the concept of unique_nobuf_ptr - alright - std always couples the responsibility of buffer and the semantic of the buffer and the lifetime of those (we must decouple the responbiility if we want to live in the low world)
-    
-    //the semantic space calibration is actually important - and the algorithm to calibrate the thing is hard to implement
-    //takes computer for example - we stroke a key - it appears on the screen - but behind the mechanism - there is the device buffer (monitor_buffer), the semantic sense maker (operating_system), the hardware transportation system - the electron - the God's language, etc.
-    //the layer of semantic is built one on top of another - if it's not calibrated correctly - the centrality algorithm would render useless
 
-    //now talks about computer science - and the calibration of the layers
-    //first is the hardware instruction fetch (semantic collapser) + transporation layer + buffer
-    //second is the first program - an event loop
-    //third is modern languages + operating system
-    //fourth is virtual machine
-
-    //how exactly do we do calibrations in centrality? This is a hard task - alright - is calibration in centrality a term for another word? says that we can't really calibrate - so we build another word for the fired together (which now has a separate render rule)
-
-    //now is the advanced topic - we are 20 years past centrality and now we wonder how to do calibration in string approximation
-    //let's talk in terms of gravity - how did interstellar do calibration? there are angular calibration, artificial gravity calibration and three-body system calibration
-
-    //let's say continuity compression can be solely described in terms of gravity manipulation - then our only concern is the reference frame of the gravitational operation
-    //and the process of adjusting the reference frame is calibration
-    //recall the planet that is on a curved plane - where did the ball hit? a window 
+    //we lay the rules for differential neural network std - a semantic calibration layer that is the backbone of every distributed differential neural network implementation - the core
+    //we thought long and hard - there isn't really another way that avoids system flood of UDP + backward synchronization overhead
+    //the contract that we are heading is the serialized process of ingest leafs -> adopt -> signal -> orphan -> adopt -> signal -> orphan -> etc. (for the same computation tree) (we can run this in parallel)
+    //256x256 is probably the best tile size that we can opt for - and we can push the system -> maximum cuda speed of 1PB linear dispatch/ host_core * s
+    //this might be an overkill for the current centrality algorithm
 
     constexpr auto convert_grad_status_to_cuda_write_option(grad_status_t grad_status) noexcept -> cuda_write_option_t{
 
@@ -4932,11 +4919,13 @@ namespace dg::network_memcommit_resolutor{
 
                         size_t lck_region_sz            = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
                         uma_ptr_t dst_rcu_addr          = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
+
                         auto resolutor_key              = ResolutorKeyArgument{};
                         resolutor_key.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
                         resolutor_key.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
                         resolutor_key.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
+
                         auto resolutor_val              = ResolutorValueArgument{};
                         resolutor_val.dst               = event_arr[i].dst;
                         resolutor_val.src               = dispatch_radix_arg_arr[i]->src;
@@ -5036,7 +5025,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono_dispatch_chk(data_arr[i].dst, data_arr[i].src, data_arr[i].dispatch_control));
                         total_complexity        += dg::network_tileops_cuda_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)->runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
-                            dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(data_arr[i].dst, data_arr[i].src, data_arr[i].dispatch_control)); //kernel launches might be expensive
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(e.dst, e.src, e.dispatch_control)); //kernel launches might be expensive
                         };
                         size_t async_task_bsz   = dg::network_cuda_controller::get_preallocated_virtual_async_task_size(work_order);
                         char * async_task_buf   = dg::network_exception_handler::nothrow_log(this->allocator->malloc(async_task_bsz));
@@ -5350,11 +5339,13 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
                         uma_ptr_t dst_lck_addr              = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         uma_ptr_t src_lck_addr              = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
+
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dst_lck_addr;
                         resolutor_key_arg.src_lck_addr      = src_lck_addr;
                         resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
                         resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
+
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -8954,10 +8945,12 @@ namespace dg::network_memcommit_resolutor{
 
                         size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
+
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.dst_logit_vd_id   = dispatch_radix_arg_arr[i]->dst_logit_vd_id;
                         resolutor_key_arg.dst_grad_vd_id    = dispatch_radix_arg_arr[i]->dst_grad_vd_id;
+
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.expected_ops_id   = event_arr[i].operatable_id; 
@@ -9247,9 +9240,11 @@ namespace dg::network_memcommit_resolutor{
 
                         size_t lck_region_sz            = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
                         uma_ptr_t dst_rcu_addr          = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
+
                         auto resolutor_key              = ResolutorKeyArgument{};
                         resolutor_key.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key.src_lck_addr      = dg::memult::region(descendant_rcu_addr.value(), lck_region_sz);
+
                         auto resolutor_val              = ResolutorValueArgument{};
                         resolutor_arg.dst               = event_arr[i].dst;
                         resolutor_arg.src               = descendant_arr[i].value();
