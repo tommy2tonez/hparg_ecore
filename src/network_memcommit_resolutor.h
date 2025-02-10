@@ -4785,8 +4785,24 @@ namespace dg::network_memcommit_resolutor{
     //yet this speaks to the core of computer science - the flood management (8K UDP offload to kernel - hardly a system would implement this) - multi-users - dynamicity of tile dispatch - routing of tile dispatch - true concurrency - frequency to allow user customized calibration + etc 
     //there are several concepts that we need to talk - first is the concept of unique_ptr and the concept of unique_nobuf_ptr - alright - std always couples the responsibility of buffer and the semantic of the buffer and the lifetime of those (we must decouple the responbiility if we want to live in the low world)
     
-    //we've yet to understand why centrality is intelligent (this is the very easy road of achieving intelligent) - the complex road is string exponential (^n) - we'll be there some day
-    // 
+    //the semantic space calibration is actually important - and the algorithm to calibrate the thing is hard to implement
+    //takes computer for example - we stroke a key - it appears on the screen - but behind the mechanism - there is the device buffer (monitor_buffer), the semantic sense maker (operating_system), the hardware transportation system - the electron - the God's language, etc.
+    //the layer of semantic is built one on top of another - if it's not calibrated correctly - the centrality algorithm would render useless
+
+    //now talks about computer science - and the calibration of the layers
+    //first is the hardware instruction fetch (semantic collapser) + transporation layer + buffer
+    //second is the first program - an event loop
+    //third is modern languages + operating system
+    //fourth is virtual machine
+
+    //how exactly do we do calibrations in centrality? This is a hard task - alright - is calibration in centrality a term for another word? says that we can't really calibrate - so we build another word for the fired together (which now has a separate render rule)
+
+    //now is the advanced topic - we are 20 years past centrality and now we wonder how to do calibration in string approximation
+    //let's talk in terms of gravity - how did interstellar do calibration? there are angular calibration, artificial gravity calibration and three-body system calibration
+
+    //let's say continuity compression can be solely described in terms of gravity manipulation - then our only concern is the reference frame of the gravitational operation
+    //and the process of adjusting the reference frame is calibration
+    //recall the planet that is on a curved plane - where did the ball hit? a window 
 
     constexpr auto convert_grad_status_to_cuda_write_option(grad_status_t grad_status) noexcept -> cuda_write_option_t{
 
@@ -4919,8 +4935,8 @@ namespace dg::network_memcommit_resolutor{
                         auto resolutor_key              = ResolutorKeyArgument{};
                         resolutor_key.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        resolutor_key.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key.src_vd_id         = dispatch_radix_arg_arr[i]->src_device_id;
+                        resolutor_key.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
                         auto resolutor_val              = ResolutorValueArgument{};
                         resolutor_val.dst               = event_arr[i].dst;
                         resolutor_val.src               = dispatch_radix_arg_arr[i]->src;
@@ -4935,8 +4951,8 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t src_device_id;
-                device_id_t dst_device_id;
+                device_id_t src_vd_id;
+                device_id_t dst_vd_id;
             };
 
             struct DispatchRadixFetcherArgument{
@@ -4969,8 +4985,8 @@ namespace dg::network_memcommit_resolutor{
                                     auto dispatch_arg           = DispatchRadixArgument{};
                                     auto dispatch_info          = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_blkr_forward_dispatch(dg::network_tile_member_getsetter::get_blkr_dispatch_control_nothrow(data_arr[i].root)));
                                     dispatch_arg.src            = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(data_arr[i].root);
-                                    dispatch_arg.src_device_id  = dispatch_info.src_vd_id;
-                                    dispatch_arg.dst_device_id  = dispatch_info.dst_vd_id;
+                                    dispatch_arg.src_vd_id      = dispatch_info.src_vd_id;
+                                    dispatch_arg.dst_vd_id      = dispatch_info.dst_vd_id;
 
                                     *data_arr[i].fetching_addr  = dispatch_arg;
                                 }
@@ -5337,8 +5353,8 @@ namespace dg::network_memcommit_resolutor{
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dst_lck_addr;
                         resolutor_key_arg.src_lck_addr      = src_lck_addr;
-                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_device_id;
+                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -5353,8 +5369,8 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t src_device_id;
-                device_id_t dst_device_id;
+                device_id_t src_vd_id;
+                device_id_t dst_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -5387,8 +5403,8 @@ namespace dg::network_memcommit_resolutor{
                                     auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_mono_forward_dispatch(dg::network_tile_member_getsetter::get_mono_dispatch_control_nothrow(data_arr[i].root)));
                                     auto dispatch_radix             = DispatchRadixArgument{};
                                     dispatch_radix.src              = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(data_arr[i].root);
-                                    dispatch_radix.src_device_id    = dispatch_info.src_vd_id;
-                                    dispatch_radix.dst_device_id    = dispatch_info.dst_vd_id;
+                                    dispatch_radix.src_vd_id        = dispatch_info.src_vd_id;
+                                    dispatch_radix.dst_vd_id        = dispatch_info.dst_vd_id;
 
                                     *data_arr[i].fetching_addr      = dispatch_radix;
                                 }
@@ -5744,13 +5760,15 @@ namespace dg::network_memcommit_resolutor{
                         size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
                         uma_ptr_t dst                       = event_arr[i].dst;
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(dst); //assume that descendant_arr[i].has_value() => safe pair access
+
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.lhs_lck_addr      = dg::memult::region(left_rcu_addr.value(), lck_region_sz);
                         resolutor_key_arg.rhs_lck_addr      = dg::memult::region(right_rcu_addr.value(), lck_region_sz);
-                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key_arg.lhs_vd_id         = dispatch_radix_arg_arr[i]->lhs_device_id;
-                        resolutor_key_arg.rhs_vd_id         = dispatch_radix_arg_arr[i]->rhs_device_id;
+                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key_arg.lhs_vd_id         = dispatch_radix_arg_arr[i]->lhs_vd_id;
+                        resolutor_key_arg.rhs_vd_id         = dispatch_radix_arg_arr[i]->rhs_vd_id;
+
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = dst;
                         resolutor_val_arg.lhs               = left;
@@ -5767,9 +5785,9 @@ namespace dg::network_memcommit_resolutor{
             struct DispatchRadixArgument{
                 uma_ptr_t lhs;
                 uma_ptr_t rhs;
-                device_id_t dst_device_id;
-                device_id_t lhs_device_id;
-                device_id_t rhs_device_id;
+                device_id_t dst_vd_id;
+                device_id_t lhs_vd_id;
+                device_id_t rhs_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -5811,9 +5829,9 @@ namespace dg::network_memcommit_resolutor{
                                     auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_forward_pair_dispatch(dg::network_tile_member_getsetter::get_pair_dispatch_control_nothrow(data_arr[i].root))); 
                                     dispatch_radix.lhs              = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(data_arr[i].root);
                                     dispatch_radix.rhs              = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(data_arr[i].root);
-                                    dispatch_radix.dst_device_id    = dispatch_info.dst_vd_id;
-                                    dispatch_radix.lhs_device_id    = dispatch_info.lhs_vd_id;
-                                    dispatch_radix.rhs_device_id    = dispatch_info.rhs_vd_id;
+                                    dispatch_radix.dst_vd_id        = dispatch_info.dst_vd_id;
+                                    dispatch_radix.lhs_vd_id        = dispatch_info.lhs_vd_id;
+                                    dispatch_radix.rhs_vd_id        = dispatch_info.rhs_vd_id;
                                     *data_arr[i].fetching_addr      = dispatch_radix;
                                 }
 
@@ -6592,8 +6610,8 @@ namespace dg::network_memcommit_resolutor{
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_device_id;
+                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -6608,8 +6626,8 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t dst_device_id;
-                device_id_t src_device_id;
+                device_id_t dst_vd_id;
+                device_id_t src_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -6642,8 +6660,8 @@ namespace dg::network_memcommit_resolutor{
                                     auto dispatch_radix             = DispatchRadixArgument{};
                                     auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extnsrc_forward_dispatch(dg::network_tile_member_getsetter::get_extnsrc_dispatch_control_nothrow(data_arr[i].root)));
                                     dispatch_radix.src              = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(data_arr[i].root);
-                                    dispatch_radix.dst_device_id    = dispatch_info->dst_vd_id;
-                                    dispatch_radix.src_device_id    = dispatch_info->src_vd_id;
+                                    dispatch_radix.dst_vd_id        = dispatch_info->dst_vd_id;
+                                    dispatch_radix.src_vd_id        = dispatch_info->src_vd_id;
 
                                     *data_arr[i].fetching_addr      = dispatch_radix;
                                 }
@@ -6995,8 +7013,8 @@ namespace dg::network_memcommit_resolutor{
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_device_id;
+                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -7011,8 +7029,8 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t dst_device_id;
-                device_id_t src_device_id;
+                device_id_t dst_vd_id;
+                device_id_t src_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -7050,8 +7068,8 @@ namespace dg::network_memcommit_resolutor{
                                         auto dispatch_radix             = DispatchRadixArgument{};
                                         auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extndst_forward_dispatch(dg::network_tile_member_getsetter::get_extndst_dispatch_control_nothrow(data_arr[i].root)));
                                         dispatch_radix.src              = alias.value().value();
-                                        dispatch_radix.dst_device_id    = dispatch_info.dst_vd_id;
-                                        dispatch_radix.src_device_id    = dispatch_info.src_vd_id;
+                                        dispatch_radix.dst_vd_id        = dispatch_info.dst_vd_id;
+                                        dispatch_radix.src_vd_id        = dispatch_info.src_vd_id;
                                         *data_arr[i].fetching_addr      = dispatch_radix;
                                     }
 
@@ -7420,13 +7438,15 @@ namespace dg::network_memcommit_resolutor{
 
                         size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_crit_rcu_addr_nothrow(event_arr[i].dst);
+
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        resolutor_key_arg.dst_logit_vd_id   = dispatch_radix_arg_arr[i]->dst_logit_device_id;
-                        resolutor_key_arg.src_logit_vd_id   = dispatch_radix_arg_arr[i]->src_logit_device_id;
-                        resolutor_key_arg.dst_crit_vd_id    = dispatch_radix_arg_arr[i]->dst_crit_device_id;
-                        resolutor_key_arg.dst_grad_vd_id    = dispatch_radix_arg_arr[i]->dst_grad_device_id;
+                        resolutor_key_arg.src_logit_vd_id   = dispatch_radix_arg_arr[i]->src_logit_vd_id;
+                        resolutor_key_arg.dst_logit_vd_id   = dispatch_radix_arg_arr[i]->dst_logit_vd_id;
+                        resolutor_key_arg.dst_crit_vd_id    = dispatch_radix_arg_arr[i]->dst_crit_vd_id;
+                        resolutor_key_arg.dst_grad_vd_id    = dispatch_radix_arg_arr[i]->dst_grad_vd_id;
+
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -7441,10 +7461,10 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t src_logit_device_id;
-                device_id_t dst_logit_device_id;
-                device_id_t dst_crit_device_id;
-                device_id_t dst_grad_device_id;
+                device_id_t src_logit_vd_id;
+                device_id_t dst_logit_vd_id;
+                device_id_t dst_crit_vd_id;
+                device_id_t dst_grad_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -7477,10 +7497,10 @@ namespace dg::network_memcommit_resolutor{
                                     auto dispatch_radix                 = DispatchRadixArgument{};
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_crit_forward_dispatch(dg::network_tile_member_getsetter::get_crit_dispatch_info_nothrow(data_arr[i].root))); 
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(data_arr[i].root);
-                                    dispatch_radix.src_logit_device_id  = dispatch_info.src_logit_vd_id;
-                                    dispatch_radix.dst_logit_device_id  = dispatch_info.dst_logit_vd_id;
-                                    dispatch_radix.dst_crit_device_id   = dispatch_info.dst_crit_vd_id;
-                                    dispatch_radix.dst_grad_device_id   = dispatch_info.dst_grad_vd_id;
+                                    dispatch_radix.src_logit_vd_id      = dispatch_info.src_logit_vd_id;
+                                    dispatch_radix.dst_logit_vd_id      = dispatch_info.dst_logit_vd_id;
+                                    dispatch_radix.dst_crit_vd_id       = dispatch_info.dst_crit_vd_id;
+                                    dispatch_radix.dst_grad_vd_id       = dispatch_info.dst_grad_vd_id;
                                     *data_arr[i].fetching_addr          = dispatch_radix;
                                 }
 
@@ -7898,11 +7918,13 @@ namespace dg::network_memcommit_resolutor{
 
                         size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size())); 
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr_nothrow(event_arr[i].dst);
+
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_device_id;
+                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
+
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -7917,8 +7939,8 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t dst_device_id;
-                device_id_t src_device_id;
+                device_id_t dst_vd_id;
+                device_id_t src_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -7951,8 +7973,8 @@ namespace dg::network_memcommit_resolutor{
                                     auto dispatch_radix             = DispatchRadixArgument{};
                                     auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrfwd_forward_dispatch(dg::network_tile_member_getsetter::get_msgrfwd_dispatch_control_nothrow(data_arr[i].root)));
                                     dispatch_radix.src              = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(data_arr[i].root);
-                                    dispatch_radix.dst_device_id    = dispatch_info.dst_vd_id;
-                                    dispatch_radix.src_device_id    = dispatch_info.src_vd_id;
+                                    dispatch_radix.dst_vd_id        = dispatch_info.dst_vd_id;
+                                    dispatch_radix.src_vd_id        = dispatch_info.src_vd_id;
                                     *data_arr[i].fetching_addr      = dispatch_radix; 
                                 }
 
@@ -8308,11 +8330,13 @@ namespace dg::network_memcommit_resolutor{
 
                         size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
                         uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_msgrbwd_tile_rcu_addr_nothrow(event_arr[i].dst);
+
                         auto resolutor_key_arg              = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
                         resolutor_key_arg.src_lck_addr      = dg::memult::region(src_rcu_addr.value(), lck_region_sz);
-                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_device_id;
-                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_device_id;
+                        resolutor_key_arg.dst_vd_id         = dispatch_radix_arg_arr[i]->dst_vd_id;
+                        resolutor_key_arg.src_vd_id         = dispatch_radix_arg_arr[i]->src_vd_id;
+
                         auto resolutor_val_arg              = ResolutorValueArgument{};
                         resolutor_val_arg.dst               = event_arr[i].dst;
                         resolutor_val_arg.src               = dispatch_radix_arg_arr[i]->src;
@@ -8327,8 +8351,8 @@ namespace dg::network_memcommit_resolutor{
 
             struct DispatchRadixArgument{
                 uma_ptr_t src;
-                device_id_t dst_device_id;
-                device_id_t src_device_id;
+                device_id_t dst_vd_id;
+                device_id_t src_vd_id;
             };
 
             struct RadixFetcherArgument{
@@ -8358,11 +8382,11 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
-                                    auto dispatch_radix             = DispatchRadixArgument{};
-                                    auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrbwd_forward_dispatch(dg::network_tile_member_getsetter::get_msgrbwd_dispatch_control_nothrow(data_arr[i].root))); 
-                                    dispatch_radix.src              = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(data_arr[i].root);
-                                    dispatch_radix.dst_device_id    = dispatch_info.dst_vd_id;
-                                    dispatch_radix.src_device_id    = dispatch_info.src_vd_id; 
+                                    auto dispatch_radix         = DispatchRadixArgument{};
+                                    auto dispatch_info          = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrbwd_forward_dispatch(dg::network_tile_member_getsetter::get_msgrbwd_dispatch_control_nothrow(data_arr[i].root))); 
+                                    dispatch_radix.src          = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(data_arr[i].root);
+                                    dispatch_radix.dst_vd_id    = dispatch_info.dst_vd_id;
+                                    dispatch_radix.src_vd_id    = dispatch_info.src_vd_id; 
                                 }
 
                                 break;
@@ -8865,57 +8889,151 @@ namespace dg::network_memcommit_resolutor{
 
             const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
             const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
+            const size_t infofetch_vectorization_sz;
             const size_t region_vectorization_sz;
 
         public:
 
             BackwardDoLeafSignalResolutorV2(std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                            size_t infofetch_vectorization_sz,
                                             size_t region_vectorization_sz) noexcept: cuda_async_device(std::move(cuda_async_device)),
                                                                                       host_async_device(std::move(host_async_device)),
+                                                                                      infofetch_vectorization_sz(infofetch_vectorization_sz),
                                                                                       region_vectorization_sz(region_vectorization_sz){}
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
+                dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
                 // auto arena_allocator                    = {}; 
 
-                auto internal_resolutor                 = InternalResolutor{};
-                internal_resolutor.cuda_async_device    = this->cuda_async_device.get();
-                internal_resolutor.host_async_device    = this->host_async_device.get();
-                internal_resolutor.allocator            = &arena_allocator;
+                {
+                    auto dispatch_radix_fetcher                 = InternalDispatchRadixFetcher{};
 
-                size_t trimmed_region_vectorization_sz  = std::min(this->region_vectorization_sz, sz);
-                size_t dh_allocation_cost               = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
-                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, dh_mem.get()));
+                    size_t trimmed_infofetch_vectorization_sz   = std::min(this->infofetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&dispatch_radix_fetcher, trimmed_infofetch_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&dispatch_radix_fetcher, trimmed_infofetch_vectorization_sz, vdh_mem.get()));
 
-                for (size_t i = 0u; i < sz; ++i){
-                    if constexpr(DEBUG_MODE_FLAG){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].dst);
+                    for (size_t i = 0u; i < sz; ++i){
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
-                            std::abort();
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
+
+                        uma_ptr_t rcu_addr          = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
+                        uma_ptr_t lck_addr          = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+                        auto fetch_arg              = RadixFetcherArgument{};
+                        fetch_arg.root              = event_arr[i].dst;
+                        fetch_arg.expected_ops_id   = event_arr[i].operatable_id;
+                        fetch_arg.fetching_addr     = std::next(dispatch_radix_arg_arr.get(), i); 
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), lck_addr, fetch_arg);
                     }
+                }
 
-                    size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
-                    uma_ptr_t rcu_addr                  = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
-                    uma_ptr_t lck_addr                  = dg::memult::region(rcu_addr, lck_region_sz); 
-                    auto resolutor_val_arg              = ResolutorValueArgument{};
-                    resolutor_val_arg.dst               = event_arr[i].dst;
-                    resolutor_val_arg.expected_ops_id   = event_arr[i].operatable_id; 
+                {
+                    auto internal_resolutor                 = InternalResolutor{};
+                    internal_resolutor.cuda_async_device    = this->cuda_async_device.get();
+                    internal_resolutor.host_async_device    = this->host_async_device.get();
+                    internal_resolutor.allocator            = &arena_allocator;
 
-                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, resolutor_val_arg);
+                    size_t trimmed_region_vectorization_sz  = std::min(this->region_vectorization_sz, sz);
+                    size_t vdh_allocation_cost              = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_region_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!dispatch_radix_arg_arr[i].has_value()){
+                            continue;
+                        }
+
+                        size_t lck_region_sz                = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
+                        uma_ptr_t dst_rcu_addr              = dg::network_tile_member_getsetter::get_leaf_rcu_addr_nothrow(event_arr[i].dst);
+                        auto resolutor_key_arg              = ResolutorKeyArgument{};
+                        resolutor_key_arg.dst_lck_addr      = dg::memult::region(dst_rcu_addr, lck_region_sz);
+                        resolutor_key_arg.dst_logit_vd_id   = dispatch_radix_arg_arr[i]->dst_logit_vd_id;
+                        resolutor_key_arg.dst_grad_vd_id    = dispatch_radix_arg_arr[i]->dst_grad_vd_id;
+                        auto resolutor_val_arg              = ResolutorValueArgument{};
+                        resolutor_val_arg.dst               = event_arr[i].dst;
+                        resolutor_val_arg.expected_ops_id   = event_arr[i].operatable_id; 
+
+                        dg::network_producer_consumer::delvrsrv_deliver(vectorized_delivery_handle.get(), resolutor_key_arg, resolutor_val_arg);
+                    }   
                 }
             }
 
         private:
 
+            struct DispatchRadixArgument{
+                device_id_t dst_logit_vd_id;
+                device_id_t dst_grad_vd_id;
+            };
+
+            struct RadixFetcherArgument{
+                uma_ptr_t root;
+                operatable_id_t expected_ops_id;
+                std::optional<DispatchRadixArgument> * fetching_addr;
+            };
+
+            struct InternalDispatchRadixFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, RadixFetcherArgument>{
+
+                void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(data_arr[i].root);
+                        set_operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(data_arr[i].root);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                if (is_subset_id(data_arr[i].expected_ops_id, current_ops_id)){
+                                    auto dispatch_radix             = DispatchRadixArgument{};
+                                    auto dispatch_info              = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_leaf_backward_dispatch(dg::network_tile_member_getsetter::get_leaf_backward_dispatch_control_nothrow(data_arr[i].root)));
+                                    dispatch_radix.dst_logit_vd_id  = dispatch_info.logit_vd_id;
+                                    dispatch_radix.dst_grad_vd_id   = dispatch_info.grad_vd_id;
+                                    *data_arr[i].fetching_addr      = dispatch_radix;
+                                }
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }                    
+                }
+            };
+
             struct ResolutorKeyArgument{
                 uma_ptr_t dst_lck_addr;
                 device_id_t dst_logit_vd_id;
                 device_id_t dst_grad_vd_id;
+
+                template <class Reflector>
+                constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+                    reflector(dst_lck_addr, dst_logit_vd_id, dst_grad_vd_id);
+                }
+
+                template <class Reflector>
+                constexpr void dg_reflect(const Reflector& reflector) noexcept{
+                    reflector(dst_lck_addr, dst_logit_vd_id, dst_grad_vd_id);
+                }
             };
 
             struct ResolutorValueArgument{

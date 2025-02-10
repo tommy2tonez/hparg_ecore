@@ -642,6 +642,31 @@
 #yet that would be our thesis for probably the next year
 #we'll try to reach escape velocity of intellect - this way or another
 
+#the semantic space calibration is actually important - and the algorithm to calibrate the thing is hard to implement
+#takes computer for example - we stroke a key - it appears on the screen - but behind the mechanism - there is the device buffer (monitor_buffer), the semantic sense maker (operating_system), the hardware transportation system - the electron - the God's language, etc.
+#the layer of semantic is built one on top of another - if it's not calibrated correctly - the centrality algorithm would render useless
+
+# //now let's talks about computer science and the calibration of the layers
+# //first is the hardware instruction fetch (semantic collapser) + transporation layer + buffer
+# //second is the first program - an event loop
+# //third is modern languages + operating system
+# //fourth is virtual machine
+
+# //how exactly do we do calibrations in centrality? This is a hard task - alright - is calibration in centrality a term for another word? says that we can't really calibrate - so we build another word for the fired together (which now has a separate render rule)
+# //alright - note that the calibration decays very quickly - maybe 10-20 depth max from the original semantic - we need to offset this cost
+
+# //now is the advanced topic - we are 20 years past centrality and now we wonder how to do calibration in string approximation
+# //let's talk in terms of gravity - how did interstellar do calibration? there are angular calibration, artificial gravity calibration and three-body system calibration
+
+# //let's say continuity compression can be solely described in terms of gravity manipulation - then our only concern is the reference frame of the gravitational operation
+# //and the process of adjusting the reference frame is calibration
+# //recall the planet that is on a curved plane - where did the ball hit? a window 
+
+#says we already know the tricks - all the reference frames and their friends - how about we build a system that involes the calibration rules and friends and let the system figure out the way to make sense of things?  
+#thing is we don't choose the things to be calibrated - we assign the things to be calibrated - and we train the system based on the rules 
+
+#alright - we are greedy - how about we combine the tricks - we run centrality on the string approximated system?
+
 from typing import Callable
 
 class Particle:
