@@ -637,6 +637,11 @@
 #string ^ n was also a without loss of generality, we want to estimate a reasonable x by using projection to narrow the numerical stability (keep it in control)
 #that was the best description of context diffraction + context blend + self attention - well done by the interstellar cast
 
+#we've yet to understand why centrality is intellect (this is the easy road of achieving intellect) - the complex road is string exponential - we'll be there some day
+#and we don't know why two centrality graphs should be sufficient - the training graph (unhinging) and the model graph (the computation tree)
+#yet that would be our thesis for probably the next year
+#we'll try to reach escape velocity of intellect - this way or another
+
 from typing import Callable
 
 class Particle:
