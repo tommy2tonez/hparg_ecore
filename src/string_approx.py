@@ -664,6 +664,14 @@
 
 #says we already know the tricks - all the reference frames and their friends - how about we build a system that involes the calibration rules and friends and let the system figure out the way to make sense of things?  
 #thing is we don't choose the things to be calibrated - we assign the things to be calibrated - and we train the system based on the rules 
+#let's talk about the big picture
+#we have galaxy spins around the center of the universe
+#the Sun spins around the galaxy
+#the planet spins around the center of the Sun
+#electron spins around the neuclei
+#do we actually assign what spins around what in runtime? No - because these are preassigned - and according to the hierarchical order - it looks like a tree with outdegree - such is the descendant (whose spins around the ancestor) must use the ancestor to do reference frame calibration 
+#alright - let's move to the generalized form - it's B Tree of calibration - this is the dynamic preassigned calibration (which is described in the interstellar movie)
+#this and the centrality algorithm are two different spectrums + radices of approximation
 
 #alright - we are greedy - how about we combine the tricks - we run centrality on the string approximated system?
 #don't worry frens - we'll carry the team - we'll show the naysayers about the true power of 2 centrality + hyperfocus + string approx + compression + sort
