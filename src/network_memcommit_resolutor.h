@@ -4833,7 +4833,7 @@ namespace dg::network_memcommit_resolutor{
     //affined cache-pollution (operation vs dispatch)
     //fail-safes - we radix fail-safes as misoperations - not system crash - that's mayday) 
 
-    //number one rule of low level optimization - whatever you think about hardware instruction, it's wrong
+    //number one rule of low level optimization - whatever you think of hardware instruction, it's wrong
     //dont try to outsmart compiler - try to give compiler as many environmental arguments as possible - because compiler updates instructions - we dont
     //try to limit memory footprint
     //try to limit instruction cache fetch
@@ -9764,7 +9764,7 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
 
                 // auto arena_allocator                        = 
-            
+
                 const size_t EVENT_SCALE_FACTOR             = 2u;
                 size_t max_possible_event_sz                = sz * EVENT_SCALE_FACTOR;
                 size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz);
