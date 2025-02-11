@@ -673,6 +673,13 @@
 #alright - let's move to the generalized form - it's B Tree of calibration - this is the dynamic preassigned calibration (which is described in the interstellar movie)
 #this and the centrality algorithm are two different spectrums + radices of approximation
 
+#artificial gravitional calibration is the process of converting centripetal force (or acceleration) -> gravitational force - such is the origin is stationary in the reference frame
+#how about the three-body calibration? it seems like the three-body itself is a problem and the "one of the bodies" is another problem
+#we want to calibrate on one of the bodies such is the body is stationary in the reference frame
+#how does this relate to the B-Tree? alright - the B-Tree cell consists of many nodes - which is a subject to closed system projection - and its descendant is a subject to origin calibration
+#how do we train this thing without breaking numerical stability? alright - this is the question that maybe only God could answer - let's start from there must exist a heuristic such that the required training data size must not exceed the semantic space size
+#                                                                                                                                 - and the differential progress might not make senses if it exceeds the training uncertainty  
+
 #alright - we are greedy - how about we combine the tricks - we run centrality on the string approximated system?
 #don't worry frens - we'll carry the team - we'll show the naysayers about the true power of 2 centrality + hyperfocus + string approx + compression + sort
 #we probably would break through the current security layer (JWT + https + symmetric + asymmetric + whatever) with those 5 methods, if implemented correctly - and reach escape velocity
