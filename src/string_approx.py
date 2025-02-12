@@ -685,6 +685,18 @@
 #we probably would break through the current security layer (JWT + https + symmetric + asymmetric + whatever) with those 5 methods, if implemented correctly - and reach escape velocity
 #1980s is a good time to rewind
 
+#what I agreed with Dad is Machine Learning is a tough subject to write - not because it's tough - but because of people trying to prove machine learning by using math + customizing their models
+#what us engineers must do is try to explain machine learning as paths + optimization technique + strategies
+#because otherwise, we are getting pure luck and not doing actual engineering but rather guess and hope for the miracle from his benevolence
+
+#in Machine Learning, we add strategies into our optimization machine like numerical stability, skewness of training, regex model, etc.   
+#if one model is not enough - we'll try to add two models - if not then three models - model learns model learns model
+#the what to do next in machine learning is actually a path problem - what model, what tile_size, what data_type (bool, float8_t, float16_t, float64_t), what training data, which tensors, what learning rate, etc. 
+#this path problem does not have a clear hinge like A* or dijkstra or BFS or DFS or floyed - yet the hinge is from another centrality algorithm
+
+#what does it take to reach escape velocity? I really dont know at the moment speaking - rather than binary string + calibration + hyperfocus + centrality of centrality + spaceship operator + compression + sort 
+#if we implement all of those correctly - I haven't heard of an individual that is capable of this yet - given the complexity of the task - this would take a team of 50 people at least 5 years to have those correctly implemented
+
 from typing import Callable
 
 class Particle:
