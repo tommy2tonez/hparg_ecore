@@ -4850,12 +4850,20 @@ namespace dg::network_memcommit_resolutor{
     //we'll be back to convert device_id_t to uint64_t buffer for fast cmp 
     //thing is we aren't being greedy Mom - it's the god damn job
 
-    //alright - after a long conversation - it's better to have extnsrcsrc + extnsrcdst + extndstsrc + extndstdst
+    //alright - after a long conversation - it's better to have extnsrcsrc + extnsrcdst + extndstsrc + extndstdst 
     //for the reasons being: (1) fixation of the computation tree (we need to pre-initialize the extnsrcdst and the extndstsrc to be able to do foreign injection of pre-assigned addresses)
     //                       (2) user-customized calibration of network packets
     //                       (3) remove the responsibility of internal on-the-fly tiles which lead to system crash
-    //                       (4) precond of internal tiles (we dont worry about the device_id_t and device_platform_t now)  
-    //                       (5) it's just cleaner that way
+    //                       (4) precond of internal tiles (we dont worry about the device_id_t and device_platform_t now)
+    //                       (5) compression of transportation (dimensional reduction -> dimensional expansion of data - unclear if the responsibility is clear here) 256 x 256 x 8 bytes -> 256 x 256 * 1 bit (yet if there is compression it should be this guy's responsibility to do compression - we might use different dispatch codes to do compression - we yet to know - we might use projection to do compression (this only works if we dont have collisions))
+    //                       (6) it's just cleaner that way
+
+    //what if we broadcast this to many endpoints? 
+    //we still need a preallocated buffer to guarantee compute tree fixation for allocation-duration (this is user's contract) - so this is the approach 
+    //256 x 256 is just a generalization of rules and parallelism of rules - because datatype can scale 1 bit 1 byte 2 bytes 4 bytes 8 bytes 16 bytes etc
+    //we'll try our best to push the engine to the maximum possible operating speed (this requires alien optimizations of spinlock + memory_ordering + etc.)
+    //there is a certain trade off for 1x1 -> 256x256 - we usually find the sweet spot between compute benefits and model convergability
+    //we'll be back tomorrow to implement
 
     //extnsrcsrc -> extnsrcdst (injection) -> extndstdst (forward)
     //extndstdst -> extndstsrc (injection) -> extnsrcsrc  (backward)
@@ -6550,8 +6558,8 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
-    //optimizables
-    class ForwardDoExtnSrcSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+    //optimizables - not clear
+    class ForwardDoExtnSrcSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
 
@@ -6566,21 +6574,21 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardDoExtnSrcSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_event_t>>> request_box,
-                                              std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
-                                              std::shared_ptr<HostIPRetrieverInterface> host_ip_retriever,
-                                              std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                              size_t request_delivery_capacity,
-                                              size_t radxfetch_vectorization_sz,
-                                              size_t region_vectorization_sz,
-                                              size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                         uma_ip_retriever(std::move(uma_ip_retriever)),
-                                                                                         host_ip_retriever(std::move(host_ip_retriever)),
-                                                                                         host_async_device(std::move(host_async_device)),
-                                                                                         request_delivery_capacity(request_delivery_capacity),
-                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                         region_vectorization_sz(region_vectorization_sz),
-                                                                                         forward_vectorization_sz(forward_vectorization_sz){}
+            ForwardDoExtnSrcSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_event_t>>> request_box,
+                                            std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
+                                            std::shared_ptr<HostIPRetrieverInterface> host_ip_retriever,
+                                            std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                            size_t request_delivery_capacity,
+                                            size_t radxfetch_vectorization_sz,
+                                            size_t region_vectorization_sz,
+                                            size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                       uma_ip_retriever(std::move(uma_ip_retriever)),
+                                                                                       host_ip_retriever(std::move(host_ip_retriever)),
+                                                                                       host_async_device(std::move(host_async_device)),
+                                                                                       request_delivery_capacity(request_delivery_capacity),
+                                                                                       radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                       region_vectorization_sz(region_vectorization_sz),
+                                                                                       forward_vectorization_sz(forward_vectorization_sz){}
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -6938,7 +6946,7 @@ namespace dg::network_memcommit_resolutor{
                         ExtnSrcTile extnsrc_tile                        = dg::network_tile_member_getsetter::make_tile_from_metadata(outbound_data_vec[i]->extnsrc_metadata_tile);
                         extnsrc_tile.logit                              = std::move(outbound_data_vec[i]->logit_buf);
                         dg::string serialized                           = dg::network_compact_serializer::serialize<dg::string>(std::move(extnsrc_tile)); //TODOs: optimizables
-                        external_virtual_memory_event_t inject_event    = dg::network_external_memcommit_factory::make_event_shadow_injection(outbound_data_vec[i]->extnsrc_metadata_tile.shadow_addr, TILE_KIND_EXTNSRC, std::move(serialized));
+                        external_virtual_memory_event_t inject_event    = dg::network_external_memcommit_factory::make_event_shadow_injection(outbound_data_vec[i]->extnsrc_metadata_tile.shadow_addr, TILE_KIND_EXTNSRCDST, std::move(serialized));
                         external_virtual_memory_event_t notify_event    = dg::network_external_memcommit_factory::make_event_forward_do_signal(outbound_data_vec[i]->extnsrc_metadata_tile.counterpart);
                         external_virtual_memory_event_t event           = dg::network_external_memcommit_factory::make_event_sequential(std::move(inject_event), std::move(notify_event));
 
@@ -6960,7 +6968,18 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class ForwardDoExtnDstSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+    class ForwardDoExtnSrxSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+
+        public:
+
+            void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+                (void) event_arr;
+            }
+    };
+
+    //clear
+    class ForwardDoExtnDstSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
 
@@ -6974,19 +6993,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardDoExtnDstSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                              std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                              std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                              size_t request_delivery_capacity,
-                                              size_t radxfetch_vectorization_sz,
-                                              size_t region_vectorization_sz,
-                                              size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                         host_async_device(std::move(host_async_device)),
-                                                                                         cuda_async_device(std::move(cuda_async_device)),
-                                                                                         request_delivery_capacity(request_delivery_capacity),
-                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                         region_vectorization_sz(region_vectorization_sz),
-                                                                                         forward_vectorization_sz(forward_vectorization_sz){}
+            ForwardDoExtnDstSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                            std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                            std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                            size_t request_delivery_capacity,
+                                            size_t radxfetch_vectorization_sz,
+                                            size_t region_vectorization_sz,
+                                            size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                       host_async_device(std::move(host_async_device)),
+                                                                                       cuda_async_device(std::move(cuda_async_device)),
+                                                                                       request_delivery_capacity(request_delivery_capacity),
+                                                                                       radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                       region_vectorization_sz(region_vectorization_sz),
+                                                                                       forward_vectorization_sz(forward_vectorization_sz){}
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -7110,7 +7129,7 @@ namespace dg::network_memcommit_resolutor{
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix         = DispatchRadixArgument{};
                                     auto dispatch_control       = dg::network_tile_member_getsetter::get_extndst_dispatch_control_nothrow(data_arr[i].root);
-                                    dispatch_radix.src          = dg::network_tile_member_getsetter::get_extndst_shadow_nothrow(data_arr[i].root);
+                                    dispatch_radix.src          = dg::network_tile_member_getsetter::get_extndst_forward_shadow_nothrow(data_arr[i].root);
                                     auto dispatch_info          = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extndst_forward_dispatch(dispatch_control));
                                     dispatch_radix.dst_vd_id    = dispatch_info.dst_vd_id;
                                     dispatch_radix.src_vd_id    = dispatch_info.src_vd_id;
@@ -7290,7 +7309,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]        = std::make_tuple(data_arr[i].dst, data_arr[i].src, data_arr[i].expected_ops_id);
-                        uma_ptr_t dst_counterpart               = dg::network_tile_member_getsetter::get_extndst_counterpart_nothrow(dst);
+                        uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_extndst_forward_shadow_nothrow(dst);
                         operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(dst);
                         operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extndst_operatable_forward_id_nothrow(dst);
@@ -7300,16 +7319,15 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(dg::network_tile_metadata::MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_extndst_observer_array_nothrow(dst, dst_observer_arr.get());
 
-                        std::expected<uma_ptr_t, exception_t> extnsrc_ptr_access = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(src);
+                        std::expected<uma_ptr_t, exception_t> extnsrx_ptr_access = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(src);
 
-                        if (!extnsrc_ptr_access.has_value()){
+                        if (!extnsrx_ptr_access.has_value()){
                             continue;
                         } 
 
-                        uma_ptr_t src_selfaddr                  = dg::network_tile_member_getsetter::get_extnsrc_selfaddr_nothrow(src);
-                        operatable_id_t src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_operatable_forward_id_nothrow(src);
-                        init_status_t src_init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(src);
-                        uma_ptr_t src_logit_umaptr              = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(src);
+                        operatable_id_t src_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrx_operatable_forward_id_nothrow(src);
+                        init_status_t src_init_status           = dg::network_tile_member_getsetter::get_extnsrx_init_status_nothrow(src);
+                        uma_ptr_t src_logit_umaptr              = dg::network_tile_member_getsetter::get_extnsrx_logit_addr_nothrow(src);
 
                         if (dst_init_status != TILE_INIT_STATUS_DECAYED && dst_init_status != TILE_INIT_STATUS_ADOPTED){
                             continue;
@@ -7319,7 +7337,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_counterpart != src_selfaddr){
+                        if (dst_src != src){
                             continue;
                         }
 
@@ -7381,6 +7399,15 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             };
+    };
+
+    //clear
+    class ForwardDoExtnDsxSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+
+        void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+            (void) event_arr;
+        }
     };
 
     //clear
@@ -8727,8 +8754,12 @@ namespace dg::network_memcommit_resolutor{
             const size_t immu_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrc_resolutor;
             const size_t extnsrc_dispatch_sz;
+            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrx_resolutor;
+            const size_t extnsrx_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndst_resolutor;
             const size_t extndst_dispatch_sz;
+            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndsx_resolutor;
+            const size_t extndsx_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrfwd_resolutor;
             const size_t msgrfwd_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrbwd_resolutor;
@@ -8754,8 +8785,12 @@ namespace dg::network_memcommit_resolutor{
                                      size_t immu_dispatch_sz,
                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrc_resolutor,
                                      size_t extnsrc_dispatch_sz,
+                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrx_resolutor,
+                                     size_t extnsrx_dispatch_sz,
                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndst_resolutor,
                                      size_t extndst_dispatch_sz,
+                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndsx_resolutor,
+                                     size_t extndsx_dispatch_sz,
                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrfwd_resolutor,
                                      size_t msgrfwd_dispatch_sz,
                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrbwd_resolutor,
@@ -8777,8 +8812,12 @@ namespace dg::network_memcommit_resolutor{
                                                                            immu_dispatch_sz(immu_dispatch_sz),
                                                                            extnsrc_resolutor(std::move(extnsrc_resolutor)),
                                                                            extnsrc_dispatch_sz(extnsrc_dispatch_sz),
+                                                                           extnsrx_resolutor(std::move(extnsrx_resolutor)),
+                                                                           extnsrx_dispatch_sz(extnsrx_dispatch_sz),
                                                                            extndst_resolutor(std::move(extndst_resolutor)),
                                                                            extndst_dispatch_sz(extndst_dispatch_sz),
+                                                                           extndsx_resolutor(std::move(extndsx_resolutor)),
+                                                                           extndsx_dispatch_sz(extndsx_dispatch_sz),
                                                                            msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
                                                                            msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
                                                                            msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
@@ -8813,9 +8852,15 @@ namespace dg::network_memcommit_resolutor{
                 size_t trimmed_extnsrc_dispatch_sz  = std::min(this->extnsrc_dispatch_sz, sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
 
+                size_t trimmed_extnsrx_dispatch_sz  = std::min(this->extnsrx_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz));
+
                 size_t trimmed_extndst_dispatch_sz  = std::min(this->extndst_dispatch_sz, sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz));
 
+                size_t trimmed_extndsx_dispatch_sz  = std::min(this->extndsx_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz));
+                
                 size_t trimmed_msgrfwd_dispatch_sz  = std::min(this->msgrfwd_dispatch_sz, sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
 
@@ -8831,7 +8876,9 @@ namespace dg::network_memcommit_resolutor{
                 auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
                 auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
                 auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
+                auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz, extnsrx_dh_mem.get()));
                 auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
+                auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz, extndsx_dh_mem.get()));
                 auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
                 auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
@@ -8891,9 +8938,19 @@ namespace dg::network_memcommit_resolutor{
                             dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
                             break;
                         }
+                        case TILE_KIND_EXTNSRX:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
                         case TILE_KIND_EXTNDST:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_EXTNDSX:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
                             break;
                         }
                         case TILE_KIND_MSGRFWD:
@@ -11155,8 +11212,18 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    //optimizables - bad
-    //for clarity - we want to have extndst on both sides - logically speaking
+    //clear
+    class BackwardDoExtnSrxSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+
+        public:
+
+            void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+                (void) event_arr;
+            }
+    };
+
+    //optimizables - not clear
     class BackwardDoExtnDstSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
@@ -11325,11 +11392,11 @@ namespace dg::network_memcommit_resolutor{
                                 host_ptr_t cpydst_logit_hostptr = tile_data.logit_value.data();
                                 host_ptr_t cpydst_grad_hostptr  = tile_data.grad_value.data();
 
-                                dg::network_exception_handler::nothrow_log(dg::network_memops_clib::memcpy_host_to_host(cpydst_logit_hostptr, dst_logit_hostptr, dst_logit_byte_sz));
-                                dg::network_exception_handler::nothrow_log(dg::network_memops_clib::memcpy_host_to_host(cpydst_grad_hostptr, dst_grad_hostptr, dst_grad_byte_sz));
+                                dg::network_exception_handler::nothrow_log(dg::network_memops_clib::memcpy_host_to_host(cpydst_logit_hostptr, dst_logit_hostptr, dst_logit_byte_sz)); //
+                                dg::network_exception_handler::nothrow_log(dg::network_memops_clib::memcpy_host_to_host(cpydst_grad_hostptr, dst_grad_hostptr, dst_grad_byte_sz)); //
                                 dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::zero_grad(dst_grad_hostptr, dst_grad_byte_sz));
 
-                                auto inject_event               = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_event_shadow_injection(tile_data.backward_shadow, TILE_KIND_EXTNDSTSRC, dg::network_compact_serializer::serialize<dg::string>(tile_data)));
+                                auto inject_event               = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_event_shadow_injection(tile_data.backward_shadow, TILE_KIND_EXTNDSX, dg::network_compact_serializer::serialize<dg::string>(tile_data))); //
                                 auto signal_event               = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_event_backward_do_signal(tile_data.backward_shadow, expected_ops_id));
                                 auto sequential_event           = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_sequential_event(std::move(inject_event), std::move(signal_event))); 
                                 request_ptr->value().content    = std::move(sequential_event); 
@@ -11363,8 +11430,37 @@ namespace dg::network_memcommit_resolutor{
             };
     }; 
 
-    class BackwardDoExtnDstSrcSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoExtnDsxSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
+            const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
+            const size_t request_delivery_capacity;
+            const size_t radxfetch_vectorization_sz;
+            const size_t region_vectorization_sz;
+            const size_t backward_vectorization_sz;
+        
+        public:
+
+            BackwardDoExtnDsxSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                             std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                             size_t request_delivery_capacity,
+                                             size_t radxfetch_vectorization_sz,
+                                             size_t region_vectorization_sz,
+                                             size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                         host_async_device(std::move(host_async_device)),
+                                                                                         cuda_async_device(std::move(cuda_async_device)),
+                                                                                         request_delivery_capacity(request_delivery_capacity),
+                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                         region_vectorization_sz(region_vectorization_sz),
+                                                                                         backward_vectorization_sz(backward_vectorization_sz){}
+
+            void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+            }
     };
 
     class BackwardDoCritSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
