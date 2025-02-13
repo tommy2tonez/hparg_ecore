@@ -4802,7 +4802,8 @@ namespace dg::network_memcommit_resolutor{
     //we'll spend the next week to do extreme network optimization + affinity problem + memory_ordering issues (mostly moving to efficient relaxed functions)
     //we are aiming for lost packets during training - yet maximizing the number of successful tree operations/ second - frequency of training as we called it - we are minimizing synchronization overhead as much as possible
     //we noticed that there is the problem of allocation - such is a lost allocation request is thru - we'll add timeout for request effectiveness to avoid the issue - such is the master node should leverage the timeout to send a new request without overriding issues
-    //we'll do alien optimizations that would compromise future extensions - like tile_data layout - we yet to think to extend in the direction - its hard 
+    //there is also a problem of misoperated cyclic backward operation - it's very unlikely - yet its exploitable (we've yet wanted to solve this - we offload the responsibility to the master controller for now)
+    //we'll do alien optimizations that would compromise future extensions - like tile_data layout - we've yet to think to extend in the direction - its hard
     //we are happy if this even runs smoothly at all - we'll containerize the thing with finite resource - we'll be back to handle exotic errors like cuda_device corruptions - we're messed up either way - cuda corruption hints memory corruption + synchronization corruption + etc - it's hard to solve synchronization corruption
 
     constexpr auto convert_grad_status_to_cuda_write_option(grad_status_t grad_status) noexcept -> cuda_write_option_t{
