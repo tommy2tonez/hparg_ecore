@@ -697,6 +697,7 @@
 #what does it take to reach escape velocity? I really dont know at the moment speaking - rather than binary string + calibration + hyperfocus + centrality of centrality + spaceship operator + compression + sort 
 #if we implement all of those correctly - I haven't heard of an individual that is capable of this yet - given the complexity of the task - this would take a team of 50 people at least 5 years to have those correctly implemented
 #yet it is not impossible - I admit things are hard - yet all of these, if I've calculated correctly, should take 2 million lines of compact, specialized code to run - it might take me years
+#
 
 from typing import Callable
 
