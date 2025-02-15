@@ -697,7 +697,12 @@
 #what does it take to reach escape velocity? I really dont know at the moment speaking - rather than binary string + calibration + hyperfocus + centrality of centrality + spaceship operator + compression + sort 
 #if we implement all of those correctly - I haven't heard of an individual that is capable of this yet - given the complexity of the task - this would take a team of 50 people at least 5 years to have those correctly implemented
 #yet it is not impossible - I admit things are hard - yet all of these, if I've calculated correctly, should take 2 million lines of compact, specialized code to run - it might take me years
-#
+
+#after a series of experiment, what we realized is that an attempt to approx a dynamic system (tree | path | centrality | gravity calibration | etc.) - is intellect - and the focus on what's important (domain reduction + words + blackholes + wormholes + etc.) is important for differential training 
+
+#recall the A* algorithm, we have heuristic of reaching the destination, and we have actual cost of reaching the current state - and we have state expansion and a priority queue to unhinge the next move - what we are unsure is "the hinge and the heuristic"
+#recall how we assign our gravitational calibration points - now we assume that we have hinges, we have path, and we have an admissible heuristic - and we train a system based on such - alright so what are we finding again? we are finding the Google Map to run A* on 
+#how precisely? recall that an admissible A* algorithm would reach the minimum possible distance after k moves - we want to find the standard distribution of k - and move k to the 90% percentile and find the minimum hinge and backprop that hinge 
 
 from typing import Callable
 

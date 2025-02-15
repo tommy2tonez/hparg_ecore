@@ -4648,8 +4648,12 @@ namespace dg::network_memcommit_resolutor{
             const size_t immu_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrc_pingpong_resolutor;
             const size_t extnsrc_dispatch_sz;
+            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrx_pingpong_resolutor;
+            const size_t extnsrx_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndst_pingpong_resolutor;
             const size_t extndst_dispatch_sz;
+            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndsx_pingpong_resolutor;
+            const size_t extndsx_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrfwd_pingpong_resolutor;
             const size_t msgrfwd_dispatch_sz;
             const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrbwd_pingpong_resolutor;
@@ -4675,8 +4679,12 @@ namespace dg::network_memcommit_resolutor{
                                             size_t immu_dispatch_sz,
                                             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrc_pingpong_resolutor,
                                             size_t extnsrc_dispatch_sz,
+                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrx_pingpong_resolutor,
+                                            size_t extnsrx_dispatch_sz,
                                             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndst_pingpong_resolutor,
                                             size_t extndst_dispatch_sz,
+                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndsx_pingpong_resolutor,
+                                            size_t extndsx_dispatch_sz,
                                             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrfwd_pingpong_resolutor,
                                             size_t msgrfwd_dispatch_sz,
                                             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrbwd_pingpong_resolutor,
@@ -4698,8 +4706,12 @@ namespace dg::network_memcommit_resolutor{
                                                                                   immu_dispatch_sz(immu_dispatch_sz),
                                                                                   extnsrc_pingpong_resolutor(std::move(extnsrc_pingpong_resolutor)),
                                                                                   extnsrc_dispatch_sz(extnsrc_dispatch_sz),
+                                                                                  extnsrx_pingpong_resolutor(std::move(extnsrx_pingpong_resolutor)),
+                                                                                  extnsrx_dispatch_sz(extnsrx_dispatch_sz),
                                                                                   extndst_pingpong_resolutor(std::move(extndst_pingpong_resolutor)),
                                                                                   extndst_dispatch_sz(extndst_dispatch_sz),
+                                                                                  extndsx_pingpong_resolutor(std::move(extndsx_pingpong_resolutor)),
+                                                                                  extndsx_dispatch_sz(extndsx_dispatch_sz),
                                                                                   msgrfwd_pingpong_resolutor(std::move(msgrfwd_pingpong_resolutor)),
                                                                                   msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
                                                                                   msgrbwd_pingpong_resolutor(std::move(msgrbwd_pingpong_resolutor)),
@@ -4734,8 +4746,14 @@ namespace dg::network_memcommit_resolutor{
             size_t trimmed_extnsrc_dispatch_sz  = std::min(this->extnsrc_dispatch_sz, sz);
             dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_pingpong_resolutor.get(), trimmed_extnsrc_dispatch_sz));
 
+            size_t trimmed_extnsrx_dispatch_sz  = std::min(this->extnsrx_dispatch_sz, sz);
+            dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_pingpong_resolutor.get(), trimmed_extnsrx_dispatch_sz));
+
             size_t trimmed_extndst_dispatch_sz  = std::min(this->extndst_dispatch_sz, sz);
             dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_pingpong_resolutor.get(), trimmed_extndst_dispatch_sz));
+
+            size_t trimmed_extndsx_dispatch_sz  = std::min(this->extndsx_dispatch_sz, sz);
+            dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_pingpong_resolutor.get(), trimmed_extndsx_dispatch_sz));
 
             size_t trimmed_msgrfwd_dispatch_sz  = std::min(this->msgrfwd_dispatch_sz, sz);
             dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_pingpong_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
@@ -4752,7 +4770,9 @@ namespace dg::network_memcommit_resolutor{
             auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_pingpong_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
             auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_pingpong_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
             auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_pingpong_resolutor.get(), this->extnsrc_dispatch_sz));
+            auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_pingpong_resolutor.get(), this->extnsrx_dispatch_sz));
             auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_pingpong_resolutor.get(), this->extndst_dispatch_sz));
+            auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_pingpong_resolutor.get(), this->extndsx_dispatch_sz));
             auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_pingpong_resolutor.get(), this->msgrfwd_dispatch_sz));
             auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_pingpong_resolutor.get(), this->msgrbwd_dispatch_sz));
 
@@ -4812,9 +4832,19 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
                         break;
                     }
+                    case TILE_KIND_EXTNSRX:
+                    {
+                        dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
+                        break;
+                    }
                     case TILE_KIND_EXTNDST:
                     {
                         dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
+                        break;
+                    }
+                    case TILE_KIND_EXTNDSX:
+                    {
+                        dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
                         break;
                     }
                     case TILE_KIND_MSGRFWD:
@@ -4913,6 +4943,9 @@ namespace dg::network_memcommit_resolutor{
     //so sometimes - it's better to type it all out - instead of being smart and remembering your decisions
     //all your low-level + bad + whatever assumptions are in the component - if the component does not work - delete and write another component - its like a plug and play game
     //we'll reach 1 billion of pingpong resolution/ host_core * second + 1 << 28 forward + backward - we'll do benchmarks 
+    //alright - Mom is right - there is a bad killing vibe - we'll try to remove some of those if it'd bonsai the upper calling functions
+    //yet the software engineering practices say that if there couldn't be a way to communicate error - we should log the errors or abort the program - we can't really log the errors - and if there is an error occurred during the function call - we need to solve the error at the callee - not the endusers (callers) - if we can't solve it at the callee (this is usally a program resource problem | or connectivity problem - which we will solve by using containerization | or user log)
+    //we can assume that tile state is correct at all times
 
     constexpr auto convert_grad_status_to_cuda_write_option(grad_status_t grad_status) noexcept -> cuda_write_option_t{
 
@@ -5911,8 +5944,8 @@ namespace dg::network_memcommit_resolutor{
                     internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
                     internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
                     internal_resolutor.host_async_device        = this->host_async_device.get();
-                    internal_resolutor.vectorization_sz         = this->forward_vectorization_sz;
                     internal_resolutor.allocator                = &arena_allocator;
+                    internal_resolutor.vectorization_sz         = this->forward_vectorization_sz;
 
                     size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz); 
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
