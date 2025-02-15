@@ -5023,7 +5023,10 @@ namespace dg::network_memcommit_resolutor{
 
     //extnsrcsrc -> extnsrcdst (injection) -> extndstdst (forward)
     //extndstdst -> extndstsrc (injection) -> extnsrcsrc  (backward)
-    //
+    
+    //the difficult - the goal that our clients are requesting is the overall efficiency - such is we don't waste cpu | gpu | ssd flops for computation - and they want to ingest the training data with no p2p synchronization overheads (if the lost computation tree across p2p system rate is 20% - we want to ingest 1TB of training data/s - to bring the training rate to 200GB/ s without loss of generality)
+    //we attempt to solve that by using short tree (increasing the computation radix -> 32) + batching of training (we aren't increasing dimensions - we are dispatching different orders)
+    //there is the backward synchronization + packet synchronization problem - which we will discuss in depth, which covers memregion frequency + etc.
 
     //clear
     class ForwardDoBlkrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{

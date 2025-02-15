@@ -701,8 +701,11 @@
 #after a series of experiment, what we realized is that an attempt to approx a dynamic system (tree | path | centrality | gravity calibration | etc.) - is intellect - and the focus on what's important (domain reduction + words + blackholes + wormholes + etc.) is important for differential training 
 
 #recall the A* algorithm, we have heuristic of reaching the destination, and we have actual cost of reaching the current state - and we have state expansion and a priority queue to unhinge the next move - what we are unsure is "the hinge and the heuristic"
-#recall how we assign our gravitational calibration points - now we assume that we have hinges, we have path, and we have an admissible heuristic - and we train a system based on such - alright so what are we finding again? we are finding the Google Map to run A* on 
+#recall how we assign our gravitational calibration points - now we assume that we have hinges, we have path, and we have an admissible heuristic - and we train a system based on such - alright so what are we finding again? we are finding the "Google Map" to run A* on (this Google Map has a single destination - right or wrong)
 #how precisely? recall that an admissible A* algorithm would reach the minimum possible distance after k moves - we want to find the standard distribution of k - and move k to the 90% percentile and find the minimum hinge and backprop that hinge 
+
+#the correct 21st century algorithm is a combination of those strategies - we dont know if it is centrality + path - or centrality + gravity + path - or all of those strategies
+#we just know that it must involve path + centrality - recall how we do the floyed algorithm and try to "relax" the responsibility of a node (it's an advanced parallel algorithm - a radix of dense centrality algorithm (sparse centrality is linear) - we must be able to approx the floyed algorithm to map the semantic as in f(x) -> y)
 
 from typing import Callable
 
