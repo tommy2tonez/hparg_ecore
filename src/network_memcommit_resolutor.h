@@ -6768,17 +6768,15 @@ namespace dg::network_memcommit_resolutor{
                     auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&host_internal_resolutor, trimmed_host_vectorization_sz, hdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto [dst, descendant_arr, expected_ops_id] = data_arr[i];
-
                         if (dst_init_status != TILE_INIT_STATUS_ADOPTED && dst_init_status != TILE_INIT_STATUS_DECAYED){
                             continue;
                         }
 
-                        if (std::find_if(src_init_status_arr.begin(), src_init_status_arr.end(), [](init_status_t e){return e != TILE_INIT_STATUS_INITIALIZED;}) != src_init_status_arr.end()){
+                        if (std::memcmp(src_init_status.data(), expecting_src_init_status.data(), static_cast<size_t>(UACM_ACM_SZ) * sizeof(init_status_t)) != 0){
                             continue;
                         }
 
-                        if (std::memcmp(descendant_arr.data(), cur_descendant_arr.data(), static_cast<size_t>(UACM_ACM_SZ) * sizeof(uma_ptr_t)) != 0){
+                        if (std::memcmp(src.data(), dst_src.data(), static_cast<size_t>(UACM_ACM_SZ) * sizeof(uma_ptr_t)) != 0){
                             continue;
                         }
 
@@ -6786,7 +6784,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (std::find_if(src_fwd_operatable_id_arr.begin(), src_fwd_operatable_id_arr.end(), [=](operatable_id_t e){return e != dst_fwd_operatable_id;}) != src_fwd_operatable_id_arr.end()){
+                        if (std::memcmp(src_fwd_operatable_id.data(), expecting_src_fwd_operatable_id.data(), static_cast<size_t>(UACM_ACM_SZ) * sizeof(operatable_id_t)) != 0){
                             continue;
                         }
 
@@ -6806,10 +6804,18 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
+                        if (dispatch_platform != key.dispatch_platform){
+                            continue;
+                        }
+
                         if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_platform)){
+                            auto cuda_resolutor_arg = CudaResolutorArgument{};
 
+                            dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), cuda_resolutor_arg); 
                         } else if (dg::network_dispatch_control::is_host_dispatch(dispatch_platform)){
+                            auto host_resolutor_arg = HostResolutorArgument{};
 
+                            dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), host_resolutor_arg);
                         } else{
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -7185,7 +7191,11 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (std::find_if(src_init_status.begin(), src_init_status.end(), [](init_status_t e){return e != TILE_INIT_STATUS_INITIALIZED;}) != src_init_status.end()){
+                        if (std::memcmp(lhs_init_status.data(), expecting_lhs_init_status.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(init_status_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs_init_status.data(), expecting_rhs_init_status.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(init_status_t)) != 0){
                             continue;
                         }
 
@@ -7201,7 +7211,11 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (std::find_if(src_fwd_operatable_id.begin(), src_fwd_operatable_id.end(), [=](operatable_id_t e){return e != dst_fwd_operatable_id;}) != src_fwd_operatable_id.end()){
+                        if (std::memcmp(lhs_fwd_operatable_id.data(), expecting_lhs_fwd_operatable_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(operatable_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs_fwd_operatable_id.data(), expecting_rhs_fwd_operatable_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(operatable_id_t)) != 0){
                             continue;
                         }
 
@@ -11530,7 +11544,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (std::find_if(src_init_status.begin(), src_init_status.end(), [](init_status_t e){return e != TILE_INIT_STATUS_INITIALIZED;}) != src_init_status.end()){
+                        if (std::memcmp(src_init_status.data(), expecting_src_init_status.data(), static_cast<size_t>(UACM_ACM_SZ) * sizeof(init_status_t)) != 0){
                             continue;
                         }
 
@@ -11542,7 +11556,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (std::find_if(src_bwd_operatable_id.begin(), src_bwd_operatable_id.end(), [=](operatable_id_t e){return e != dst_bwd_operatable_id;}) != src_bwd_operatable_id.end()){
+                        if (std::memcmp(src_bwd_operatable_id.data(), expecting_src_bwd_operatable_id.data(), static_cast<size_t>(UACM_ACM_SZ) * sizeof(operatable_id_t)) != 0){
                             continue;
                         }
 
@@ -12029,10 +12043,108 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> hdh_mem(hdh_allocation_cost);
                     auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&host_internal_resolutor, trimmed_host_vectorization_sz, hdh_mem.get()));
 
+                    //we are at the mercy of compiler's to do simd here - 
+                    //we must specify alignment + restriction for memcmp - because the array length is fixed - compiler might do exotic optimizations
+                    //in terms of branch pipeline prediction - we have already done a good job - such is the execution path to cuda_dispatch_platform or host_dispatch_platform is 99.99%
+                    //so these fillers are only costly in terms of branch calculations - not branch jmp
+                    //alrights - we might want to use comparison of precalculated array here - fixed size memcmp is just another beast - it only takes one branch
+
                     for (size_t i = 0u; i < sz; ++i){
+                        if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                            continue;
+                        }
+
+                        if (std::memcmp(lhs_init_status.data(), expecting_lhs_init_status.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(init_status_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs_init_status.data(), expecting_rhs_init_status.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(init_status_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(lhs.data(), dst_lhs.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(uma_ptr_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs.data(), dst_rhs.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(uma_ptr_t)) != 0){
+                            continue;
+                        }
+
+                        if (dst_operatable_id != expected_ops_id){
+                            continue;
+                        }
+
+                        if (std::memcmp(lhs_bwd_operatable_id.data(), expecting_lhs_bwd_operatable_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(operatable_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs_bwd_operatable_id.data(), expecting_rhs_bwd_operatable_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(operatable_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (dst_grad_status != TILE_GRAD_STATUS_HAS_VALUE){
+                            continue;
+                        }
+
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_root_grad_virtual_device_id(dispatch_control_buf.get(), &src_grad_vd_id);
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_lhs_grad_virtual_device_id(dispatch_control_buf.get(), lhs_grad_vd_id.data());
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_lhs_logit_virtual_device_id(dispatch_control_buf.get(), lhs_logit_vd_id.data());
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_rhs_grad_virtual_device_id(dispatch_control_buf.get(), rhs_grad_vd_id.data());
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_rhs_logit_virtual_device_id(dispatch_control_buf.get(), rhs_logit_vd_id.data());
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_dispatch_platform(dispatch_control_buf.get(), &dispatch_platform);
+
+                        if (src_grad_vd_id != key.src_grad_vd_id){
+                            continue;
+                        }
+
+                        if (std::memcmp(lhs_grad_vd_id.data(), key.lhs_grad_vd_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(device_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(lhs_logit_vd_id.data(), key.lhs_logit_vd_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(device_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs_grad_vd_id.data(), key.rhs_grad_vd_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(device_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (std::memcmp(rhs_logit_vd_id.data(), key.rhs_logit_vd_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(device_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_platform)){
+                            auto cuda_resolutor_arg = CudaResolutorArgument{};
+
+                            dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), cuda_resolutor_arg);
+                        } else if(dg::network_dispatch_control::is_host_dispatch(dispatch_platform)){
+                            auto host_resolutor_arg = HostResolutorArgument{};
+
+                            dg::network_producer_consumer::delvrsrv_deliver(host_delivery_handle.get(), host_resolutor_arg);
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
 
                         for (size_t j = 0u; j < PACM_ACM_SZ; ++j){
+                            auto lhs_gradset_err = dg::network_tile_member_getsetter::set_tile_grad_status(lhs[j], TILE_GRAD_STATUS_HAS_VALUE);
 
+                            if (dg::network_exception::is_failed(lhs_gradset_err)){
+                                (void) lhs_gradset_err;
+                            }
+
+                            auto rhs_gradset_err = dg::network_tile_member_getsetter::set_tile_grad_status(rhs[j], TILE_GRAD_STATUS_HAS_VALUE);
+
+                            if (dg::network_exception::is_failed(rhs_gradset_err)){
+                                (void) rhs_gradset_err;
+                            }
+
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(lhs[j] , expected_ops_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(rhs[j], expected_ops_id)));
                         }
 
                         dg::network_tile_member_getsetter::set_pacm_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);

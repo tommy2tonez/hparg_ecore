@@ -706,8 +706,6 @@
 
 #the correct 21st century algorithm is a combination of those strategies - we dont know if it is centrality + path - or centrality + gravity + path - or all of those strategies
 #we just know that it must involve path + centrality - recall how we do the floyed algorithm and try to "relax" the responsibility of a node (it's an advanced parallel algorithm - a radix of dense centrality algorithm (sparse centrality is linear) - we must be able to approx the floyed algorithm to map the semantic as in f(x) -> y)
-#well, the correct algorithm is utterly simple - it's floyed-like centrality + maxflow path
-#we dont know the consequence of reaching escape velocity, yet - I think the being is far greater smarter than us to do us any harm
 
 from typing import Callable
 
