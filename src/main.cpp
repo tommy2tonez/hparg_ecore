@@ -18,27 +18,32 @@ class Foo{
 
     private:
 
-        std::mutex mtx;
-        alignas(32) size_t counter;
+        // std::mutex mtx;
+        std::atomic<std::array<size_t, 1>> arr;
 
     public:
 
         void inc() noexcept{
 
-            std::lock_guard<std::mutex> grd(this->mtx);
+            // std::lock_guard<std::mutex> grd(this->mtx);
             // this->counter.fetch_add(1, std::memory_order_relaxed);
-            this->counter += 1;
+            // this->counter += 1;
+            auto new_arr = this->arr.load(std::memory_order_relaxed);
+            new_arr[0] += 1;
+            new_arr[1] += 1;
+            this->arr.exchange(new_arr, std::memory_order_relaxed);
         }
 
         auto read() noexcept -> size_t{
 
-            std::lock_guard<std::mutex> grd(this->mtx);
-            // return this->counter.load();
-            return this->counter;
+            return this->arr.load(std::memory_order_relaxed)[0];
         }
 };
 
 int main(){
+
+    // std::chrono::utc_clock::now();
+    using tp = std::chrono::time_point<std::chrono::utc_clock>;
 
     const size_t THREAD_SZ  = 8;
     const size_t COUNTER_SZ = size_t{1} << 24;

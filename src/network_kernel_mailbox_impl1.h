@@ -53,6 +53,14 @@
 
 //       patch every leak possible
 //       hopefully reach maximum network bandwidth
+//       we dont really care about how kernel actually handles their packets and their internal memory ordering virtue - we must do good on our parts and pray that kernel will come to their senses of not polluting the system (this is the sole purpose of the kernel) - this includes minimizing mutex calls and accumulating kernel recv + delvrsrv - this requires a heartbeat self ping to avoid unconsumed packets
+//       things would be very nasty if the physical core thread scales to 1024 or 2048 - at this level - hardsync or even acquire or release would be a disaster (1024 memory_order_acquire/core*s * 1024 = 1 << 20 acquire/s ~= 100ms of overhead - things are bad)
+//       we try to implement the doables first and try to relax every operation possible
+//       the optimizables we are implementing are: (1) vectorization of ack packets + IP by using kv_delvrsrv (2x optimizables)
+//                                                 (2) reducing mutex acquisitions + memory ordering by using batching techniques
+//                                                 (3) "noblock" the UDP recv by using self packet ping
+//                                                 (4) maximizing bandwidth by using affined ports or SO_REUSEPORT + SO_ATTACH - we'll be doing actual benchs later this week - stay tuned
+//
 
 //lets see what we could do
 //recall how CPU works - CPU does not stop - they have a "side" buffer to see where branches might go - they go forward in the tentative direction - if things work out fine - fine - if not reverse and correct their route
@@ -164,7 +172,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint8_t priority;
         uint8_t kind; 
         std::array<uint64_t, 16> port_utc_stamps;
-        uint8_t port_stamp_sz; 
+        uint8_t port_stamp_sz;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
@@ -229,13 +237,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
 
+    //alright - this is the interface we agreed upon
+    //max_consume_size is the abort error - exception_t * would return resource_exhaustion - which is resolvable by infretry_device
+    //we'll try to implement this
+    //scheduler is like allocator - we "preallocate" the schedules - exhaust the allocations - then we reallocate the schedules
+    //we try to stay affined + not invoking the memory_ordering for as long as possible - then we invoke free on the remaining buffer - the way we are doing allocations allows us to do that
+    //we'll talk in depth about memory allocations
+
     class BatchSchedulerInterface{
 
         public:
 
             virtual ~BatchSchedulerInterface() noexcept = default;
-            virtual void schedule(Address *, size_t, std::expected<std::chrono::nanoseconds, exception_t> *) noexcept = 0;
+            virtual void schedule(Address *, size_t, std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> *) noexcept = 0;
             virtual void feedback(SchedulerFeedBack *, size_t, exception_t *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class SchedulerInterface{
@@ -243,7 +259,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~SchedulerInterface() noexcept = default;
-            virtual auto schedule(Address) noexcept -> std::chrono::nanoseconds = 0;
+            virtual auto schedule(Address) noexcept -> std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> = 0;
             virtual auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t = 0;
     };
 
@@ -268,7 +284,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~PacketGeneratorInterface() noexcept = default;
-            virtual auto get(Address to_addr, dg::string content) noexcept -> Packet = 0;
+            virtual auto get(MailBoxArgument) noexcept -> std::expected<Packet, exception_t> = 0;
     };
 
     class RetransmissionManagerInterface{
@@ -277,8 +293,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual ~RetransmissionManagerInterface() noexcept = default;
             virtual void add_retriables(std::move_iterator<Packet> *, size_t, exception_t *) noexcept = 0;
-            virtual void ack(global_packet_id_t *, size_t, exception_t *) noexcept = 0;
-            virtual auto get_retriables(Packet *, size_t) noexcept -> size_t = 0;
+            virtual void ack(global_packet_id_t *, size_t) noexcept = 0;
+            virtual void get_retriables(Packet *, size_t&, size_t) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class PacketContainerInterface{
@@ -286,8 +303,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~PacketContainerInterface() noexcept = default;
-            virtual void push(std::move_iterator<Packet> *, size_t) noexcept = 0;
-            virtual auto pop(Packet *, size_t) noexcept -> size_t = 0;
+            virtual void push(std::move_iterator<Packet> *, size_t, exception_t *) noexcept = 0;
+            virtual void pop(Packet *, size_t&, size_t) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class InBoundIDControllerInterface{
@@ -296,6 +314,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual ~InBoundIDControllerInterface() noexcept = default;
             virtual void thru(global_packet_id_t *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class InBoundTrafficControllerInterface{
@@ -303,7 +322,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~InBoundTrafficControllerInterface() noexcept = default;
-            virtual auto thru(Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
+            virtual void thru(Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 }
 
@@ -317,7 +337,8 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
             virtual ~MailboxInterface() noexcept = default;
             virtual void send(std::move_iterator<MailBoxArgument> *, size_t, exception_t *) noexcept = 0;
-            virtual auto recv(dg::string *, size_t) noexcept -> size_t = 0;
+            virtual void recv(dg::string *, size_t&, size_t) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 }
 
@@ -928,7 +949,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get() noexcept -> GlobalPacketIdentifier{
 
-                return model::GlobalPacketIdentifier{this->last_pkt_id.value.fetch_add(1u, std::memory_order_relaxed), this->factory_id};
+                return model::GlobalPacketIdentifier{this->last_pkt_id.value.fetch_add(1u, std::memory_order_relaxed), this->factory_id.value};
             }
     };
 
@@ -992,7 +1013,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->pkt_deque.size() == this->capacity){
-                    return dg::network_exception::BAD_RETRANSMISSION;
+                    return dg::network_exception::BAD_RETRANSMISSION; //
                 }
 
                 if (pkt.retransmission_count >= this->max_retransmission){
