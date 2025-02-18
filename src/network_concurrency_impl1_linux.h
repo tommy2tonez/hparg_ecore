@@ -159,6 +159,7 @@ namespace dg::network_concurrency_impl1_linux{
 
                         if (!run_flag){
                             this->rescheduler->reschedule();
+                            break;
                         }
                     }
                 }
@@ -392,7 +393,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             using namespace std::chrono_literals;
             
-            const size_t LOOPCHK_SZ = 100u;
+            const size_t LOOPCHK_SZ = 1024u;
 
             auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(10ms);
             auto mtx            = std::make_unique<std::atomic_flag>();
@@ -409,7 +410,7 @@ namespace dg::network_concurrency_impl1_linux{
 
             using namespace std::chrono_literals;
 
-            const size_t LOOPCHK_SZ = 100u;
+            const size_t LOOPCHK_SZ = 1024u;
 
             auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(150ms);
             auto mtx            = std::make_unique<std::atomic_flag>();

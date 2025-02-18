@@ -60,7 +60,13 @@
 //so this is an affinity problem
 //in the case of scheduler - or the case of producer + consumer - we need to accumulate the orders in order to reduce the mutual exclusion overheads (this is important)
 
-//otherwise we are forever giga chads - this breaks practices - yet I guess that must be done - we must bring the number of acquire + release (or std::memory_order_seq_cst for that matter) operation -> < 1000 per second for the entire system
+//otherwise we are forever giga chads - this breaks practices - yet I guess that must be done - we must bring the number of acquire + release (or std::memory_order_seq_cst for that matter) operation -> < 1000 per second for the entire system - we'll scale to improve the latency
+//                                    - this is another radix of optimization that I dont think is related to the all relaxed + transactional open-close cache invalidation - if we are moving in the latency direction - we must do things that way
+//                                                                                                                                                                          - if we are moving in the thruput direction - we must batch EVERYTHING
+//                                                                                                                                                                          - the right answer is not either or but both must be achieved
+//                                                                                                                                                                          - people already done the all relaxed - it's called volatile - yet its deprecating - we dont know if volatile even passes code review now - we'll try our best - we leave the rest to the advancement of technology
+//                                                                                                                                                                          - it is complicated - if we decided to relax everything (including container) - it must be of size std::array<1024, char> for every relaxed read (to avoid the overhead of relaxed) - this can be achieved - or must be achieved if we dont want to contaminate other threads' computation 
+
 //let's start simple
 //we use exponential backoff strategy for memregion_lock acquisitions - to increase the number of relaxed operation as many as possible - followed by a hardsync std::atomic_thread_fence(std::memory_order_seq_cst) post the successful acquisition operation
 //we'll try to increase the number of push/ pop for producer consumer -> 1024 - by using delvrsrv + other strategies
