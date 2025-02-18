@@ -39,6 +39,34 @@
 #include "network_randomizer.h"
 #include "network_exception_handler.h"
 
+//alright - we'll focus on this heavily this week
+//goals: reduce mutual exclusion overhead
+
+//       establish basic massive parallel self-sufficient transmission controlled protocol by using round-trip time + sched_time as keys 
+//          - round-trip time does not have to be from NIC (network interface controller) - because we don't need the meter precision - in fact, we need to include all factors including kernel queuing - we need the differences - and the uncertainty in non-datacenter environments is not like one in datacenter environments
+//          - round-trip time + transmit_frequency would form a inbound/ outbound ratio (success rate)
+//          - and we want to choose the best transmit_frequency (sched_time) based on the round-trip time (which we gather from the "recent" transmissions)
+//          - how we define "best" is yet to know - the equation is not just simply maximizing success rate - yet has to take other factors into considerations - like the number of outbounds to reach the success rate which would heavily determine the congestion 
+//          - what do we actually want - in the perspective of a server, we want to maximize thruput + uniform distribution of thruput or skewed distribution of thruput (IP-based)
+//          - the uniformity of thruput is not simply determined based on RTT solely - this information must be from the server to determine the transmit frequency 
+//          - we have to be able to answer this question this week
+
+//       patch every leak possible
+//       hopefully reach maximum network bandwidth
+
+//lets see what we could do
+//recall how CPU works - CPU does not stop - they have a "side" buffer to see where branches might go - they go forward in the tentative direction - if things work out fine - fine - if not reverse and correct their route
+//they also have a statistic calculator - these guys work independently - a guy does not stop - a guy updates the heuristics - and a guy to inform the guys that aren't stopping
+//so this is an affinity problem
+//in the case of scheduler - or the case of producer + consumer - we need to accumulate the orders in order to reduce the mutual exclusion overheads (this is important)
+
+//otherwise we are forever giga chads - this breaks practices - yet I guess that must be done - we must bring the number of acquire + release (or std::memory_order_seq_cst for that matter) operation -> < 1000 per second for the entire system
+//let's start simple
+//we use exponential backoff strategy for memregion_lock acquisitions - to increase the number of relaxed operation as many as possible - followed by a hardsync std::atomic_thread_fence(std::memory_order_seq_cst) post the successful acquisition operation
+//we'll try to increase the number of push/ pop for producer consumer -> 1024 - by using delvrsrv + other strategies
+//as for one simple std::mutex acquisition - we'll leave the matter to the kernel + std implementation
+//if it is spinlock - then we must self implement
+
 namespace dg::network_kernel_mailbox_impl1::types{
 
     using factory_id_t          = std::array<char, 32>;
@@ -48,14 +76,14 @@ namespace dg::network_kernel_mailbox_impl1::types{
 namespace dg::network_kernel_mailbox_impl1::model{
 
     using namespace dg::network_kernel_mailbox_impl1::types;
-    
+
     struct SocketHandle{
         int kernel_sock_fd;
         int sin_fam;
         int comm;
         int protocol;
     };
-    
+
     struct IP{
         std::array<char, 4> ipv4;
         std::array<char, 16> ipv6;
@@ -151,6 +179,16 @@ namespace dg::network_kernel_mailbox_impl1::model{
         Packet pkt;
         std::chrono::nanoseconds sched_time;
     };
+
+    struct SchedulerFeedBack{
+        Address fr;
+        std::chrono::nanoseconds rtt;
+    };
+
+    struct MailBoxArgument{
+        Address to;
+        dg::string content;
+    };
 }
 
 namespace dg::network_kernel_mailbox_impl1::constants{
@@ -184,13 +222,22 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
-    
+
+    class BatchSchedulerInterface{
+
+        public:
+
+            virtual ~BatchSchedulerInterface() noexcept = default;
+            virtual void schedule(Address *, size_t, std::expected<std::chrono::nanoseconds, exception_t> *) noexcept = 0;
+            virtual void feedback(SchedulerFeedBack *, size_t, exception_t *) noexcept = 0;
+    };
+
     class SchedulerInterface{
 
         public:
 
             virtual ~SchedulerInterface() noexcept = default;
-            virtual auto schedule(Address)  noexcept -> std::chrono::nanoseconds = 0;
+            virtual auto schedule(Address) noexcept -> std::chrono::nanoseconds = 0;
             virtual auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t = 0;
     };
 
@@ -201,7 +248,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual ~UpdatableInterface() noexcept = default;
             virtual void update() noexcept = 0;
     };
-    
+
     class IDGeneratorInterface{
 
         public:
@@ -223,18 +270,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~RetransmissionManagerInterface() noexcept = default;
-            virtual auto add_retriable(Packet) noexcept -> exception_t = 0;
-            virtual void ack(global_packet_id_t) noexcept = 0;
-            virtual auto get_retriables() noexcept -> dg::vector<Packet> = 0;
+            virtual void add_retriables(std::move_iterator<Packet> *, size_t, exception_t *) noexcept = 0;
+            virtual void ack(global_packet_id_t *, size_t, exception_t *) noexcept = 0;
+            virtual auto get_retriables(Packet *, size_t) noexcept -> size_t = 0;
     };
 
     class PacketContainerInterface{
-        
+
         public:
-            
+
             virtual ~PacketContainerInterface() noexcept = default;
-            virtual void push(Packet) noexcept = 0;
-            virtual auto pop() noexcept -> std::optional<Packet> = 0;
+            virtual void push(std::move_iterator<Packet> *, size_t) noexcept = 0;
+            virtual auto pop(Packet *, size_t) noexcept -> size_t = 0;
     };
 
     class InBoundIDControllerInterface{
@@ -242,7 +289,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~InBoundIDControllerInterface() noexcept = default;
-            virtual auto thru(global_packet_id_t) noexcept -> std::expected<bool, exception_t> = 0;
+            virtual void thru(global_packet_id_t *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
     };
 
     class InBoundTrafficControllerInterface{
@@ -250,7 +297,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~InBoundTrafficControllerInterface() noexcept = default;
-            virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
+            virtual auto thru(Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
     };
 }
 
@@ -259,12 +306,12 @@ namespace dg::network_kernel_mailbox_impl1::core{
     using namespace dg::network_kernel_mailbox_impl1::model;
 
     class MailboxInterface{
-        
+
         public: 
 
             virtual ~MailboxInterface() noexcept = default;
-            virtual void send(Address, dg::string) noexcept = 0;
-            virtual auto recv() noexcept -> std::optional<dg::string> = 0;
+            virtual void send(std::move_iterator<MailBoxArgument> *, size_t, exception_t *) noexcept = 0;
+            virtual auto recv(dg::string *, size_t) noexcept -> size_t = 0;
     };
 }
 
@@ -864,28 +911,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         
         private:
 
-            local_packet_id_t last_pkt_id;
-            factory_id_t factory_id;
-            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<std::atomic<local_packet_id_t>> last_pkt_id;
+            stdx::hdi_container<factory_id_t> factory_id;
 
         public:
 
-            IDGenerator(local_packet_id_t last_pkt_id,
-                        factory_id_t factory_id,
-                        std::unique_ptr<std::mutex> mtx) noexcept: last_pkt_id(std::move(last_pkt_id)),
-                                                                   factory_id(std::move(factory_id)),
-                                                                   mtx(std::move(mtx)){}
+            IDGenerator(stdx::hdi_container<std::atomic<local_packet_id_t>> last_pkt_id,
+                        stdx::hdi_container<factory_id_t> factory_id) noexcept: last_pkt_id(std::move(last_pkt_id)),
+                                                                                factory_id(std::move(factory_id)){}
 
             auto get() noexcept -> GlobalPacketIdentifier{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                auto rs             = model::GlobalPacketIdentifier{this->last_pkt_id, this->factory_id};
-                this->last_pkt_id   += 1;
-
-                return rs;
+                return model::GlobalPacketIdentifier{this->last_pkt_id.value.fetch_add(1u, std::memory_order_relaxed), this->factory_id};
             }
     };
-    
+
     class PacketGenerator: public virtual PacketGeneratorInterface{
 
         private:

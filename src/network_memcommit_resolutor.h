@@ -5206,7 +5206,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_blkr_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_blkr_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_blkr_forward_dispatch(dispatch_control));
                                     dispatch_radix.src_vd_id            = dispatch_info.src_vd_id;
@@ -5258,7 +5258,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         cuda_ptr_vec[i * 2]     = data_arr[i].dst;
                         cuda_ptr_vec[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(e.dst, e.src, e.dispatch_control)); //kernel launches might be expensive
                         };
@@ -5302,7 +5302,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         host_ptr_vec[i * 2]     = data_arr[i].dst;
                         host_ptr_vec[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -5394,7 +5394,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_blkr_operatable_forward_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_blkr_logit_addr_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_blkr_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_blkr_forward_dispatch_control_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_blkr_observer_array_size_nothrow(dst);
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(dg::network_tile_metadata::MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_blkr_observer_array_nothrow(dst, dst_observer_arr.get());
@@ -5635,7 +5635,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_mono_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_mono_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_mono_forward_dispatch(dispatch_control));
                                     dispatch_radix.src_vd_id            = dispatch_info.src_vd_id;
@@ -5687,7 +5687,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         cuda_ptr_vec[i * 2]     = data_arr[i].dst;
                         cuda_ptr_vec[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -5731,7 +5731,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         host_ptr_vec[i * 2]     = data_arr[i].dst;
                         host_ptr_vec[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -5822,7 +5822,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_mono_operatable_forward_id_nothrow(dst);
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_mono_dispatch_control_nothrow(dst); 
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_mono_forward_dispatch_control_nothrow(dst); 
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_mono_logit_addr_nothrow(dst); 
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_mono_observer_array_size_nothrow(dst);
 
@@ -6079,7 +6079,7 @@ namespace dg::network_memcommit_resolutor{
 
                                 if (pong_count >= dg::network_tile_metadata::PAIR_DESCENDANT_COUNT){ //TODOs: optimizables
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_pair_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_pair_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.lhs                  = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(data_arr[i].root);
                                     dispatch_radix.rhs                  = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_forward_pair_dispatch(dispatch_control));
@@ -6135,7 +6135,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_vec[i * 3]     = data_arr[i].dst;
                         cuda_ptr_vec[i * 3 + 1] = data_arr[i].lhs;
                         cuda_ptr_vec[i * 3 + 2] = data_arr[i].rhs;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pair_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pair_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_pair(e.dst, e.lhs, e.rhs, e.dispatch_control));
                         };
@@ -6181,7 +6181,7 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_vec[i * 3]     = data_arr[i].dst;
                         host_ptr_vec[i * 3 + 1] = data_arr[i].lhs;
                         host_ptr_vec[i * 3 + 2] = data_arr[i].rhs;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pair_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pair_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_pair(e.dst, e.lhs, e.rhs, e.dispatch_control));
                         };
@@ -6290,7 +6290,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_pair_logit_addr_nothrow(dst);
                         dispatch_major_t dst_dispatch_major     = dg::network_tile_member_getsetter::get_pair_dispatch_major_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_pair_observer_array_size_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_pair_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_pair_forward_dispatch_control_nothrow(dst);
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(dg::network_tile_metadata::MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_pair_observer_array_nothrow(dst, dst_observer_arr.get());
 
@@ -6654,7 +6654,7 @@ namespace dg::network_memcommit_resolutor{
                         char * descendant_arr_buf   = dg::network_exception_handler::nothrow_log(this->allocator->malloc(descendant_arr_bsz));
                         auto descendant_arr         = dg::network_exception_handler::nothrow_log(dg::network_allocation::make_preallocated_array<cuda_ptr_t>(UACM_ACM_SZ, descendant_arr_buf));
                         std::copy(data_arr[i].descendant_arr.begin(), data_arr[i].descendant_arr.end(), descendant_arr->begin());
-                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_uacm_forward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_uacm_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order             = [dst = data_arr[i].dst, src = std::move(descendant_arr), dispatch_control = data_arr[i].dispatch_control]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_uacm(dst, src->data(), dispatch_control));
                         };
@@ -6705,7 +6705,7 @@ namespace dg::network_memcommit_resolutor{
                         auto descendant_arr         = dg::network_exception_handler::nothrow_log(dg::network_allocation::make_preallocated_array<host_ptr_t>(UACM_ACM_SZ, descendant_arr_buf));
                         std::copy(data_arr[i].descendant_arr.begin(), data_arr[i].descendant_arr.end(), descendant_arr->begin());
 
-                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_uacm_forward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_uacm_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order             = [dst = data_arr[i].dst, src = std::move(descendant_arr), dispatch_control = data_arr[i].dispatch_control]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_uacm(dst, src->data(), dispatch_control));
                         };
@@ -7053,7 +7053,7 @@ namespace dg::network_memcommit_resolutor{
                         auto rhs_arr                = dg::network_exception_handler::nothrow_log(dg::network_allocation::make_preallocated_array<cuda_ptr_t>(PACM_ACM_SZ, rhs_arr_buf));
                         std::copy(data_arr[i].rhs.begin(), data_arr[i].rhs.end(), rhs_arr->begin());
 
-                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::decode_pacm_forward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pacm_forward_dispatch::control(data_arr[i].dispatch_control)).runtime_complexity;
 
                         auto work_order = [lhs_arr_cpy = std::move(lhs_arr),
                                            rhs_arr_cpy = std::move(rhs_arr),
@@ -7115,7 +7115,7 @@ namespace dg::network_memcommit_resolutor{
                         auto rhs_arr                = dg::network_exception_handler::nothrow_log(dg::network_allocation::make_preallocated_array<host_ptr_t>(PACM_ACM_SZ, rhs_arr_buf));
                         std::copy(data_arr[i].rhs.begin(), data_arr[i].rhs.end(), rhs_arr->begin());
 
-                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pacm_forward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pacm_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
 
                         auto work_order = [lhs_arr_cpy = std::move(lhs_arr),
                                            rhs_arr_cpy = std::move(rhs_arr),
@@ -7421,7 +7421,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_extnsrc_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_extnsrc_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extnsrc_forward_dispatch(dispatch_control));
                                     dispatch_radix.dst_vd_id            = dispatch_info.dst_vd_id;
@@ -7475,11 +7475,11 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_vec[i * 3]     = data_arr[i].dst;
                         host_ptr_vec[i * 3 + 1] = data_arr[i].src;
                         host_ptr_vec[i * 3 + 2] = data_arr[i].cpy_dst;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(MEMCPY)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(MEMCPY)).runtime_complexity;
 
                         auto work_order         = [e = data_arr[i]]() noexcept{
-                            size_t cpy_sz = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(e.dispatch_control)).dst_byte_size;
+                            size_t cpy_sz = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(e.dispatch_control)).dst_byte_size;
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                             dg::network_exception_handler::nothrow_log(dg::network_memops_clib::memcpy_host_to_host(e.cpy_dst, e.dst, cpy_sz));
                         };
@@ -7558,7 +7558,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(dst);
                         operatable_id_t dst_operatable_id       = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extnsrc_operatable_forward_id_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extnsrc_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extnsrc_forward_dispatch_control_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(dst);
                         uma_ptr_t dst_counterpart               = dg::network_tile_member_getsetter::get_extnsrc_counterpart_nothrow(dst);
                         size_t dst_logit_bsz                    = dg::network_tile_member_getsetter::get_extnsrc_logit_byte_size_nothrow(dst);
@@ -7839,7 +7839,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_extndst_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_extndst_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_extndst_forward_shadow_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extndst_forward_dispatch(dispatch_control));
                                     dispatch_radix.dst_vd_id            = dispatch_info.dst_vd_id;
@@ -7891,7 +7891,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         cuda_ptr_arr[i * 2]     = data_arr[i].dst;
                         cuda_ptr_arr[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -7935,7 +7935,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         host_ptr_arr[i * 2]     = data_arr[i].dst;
                         host_ptr_arr[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -8027,7 +8027,7 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t dst_init_status           = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(dst);
                         operatable_id_t dst_fwd_operatable_id   = dg::network_tile_member_getsetter::get_extndst_operatable_forward_id_nothrow(dst);
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_extndst_logit_addr_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extndst_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_extndst_forward_dispatch_control_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_extndst_observer_array_size_nothrow(dst);
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(dg::network_tile_metadata::MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_extndst_observer_array_nothrow(dst, dst_observer_arr.get());
@@ -8283,7 +8283,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_crit_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_crit_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_crit_forward_dispatch(dispatch_control));
                                     dispatch_radix.src_logit_vd_id      = dispatch_info.src_logit_vd_id;
@@ -8341,7 +8341,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 4 + 1] = data_arr[i].src_logit_ptr;
                         cuda_ptr_arr[i * 4 + 2] = data_arr[i].dst_crit_ptr;
                         cuda_ptr_arr[i * 4 + 3] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_crit_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_crit_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [arg = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_crit(arg.dst_logit_ptr, arg.src_logit_ptr, 
                                                                                                                    arg.dst_crit_ptr, arg.dst_grad_ptr, 
@@ -8391,7 +8391,7 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 4 + 1] = data_arr[i].src_logit_ptr;
                         host_ptr_arr[i * 4 + 2] = data_arr[i].dst_crit_ptr;
                         host_ptr_arr[i * 4 + 3] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_crit_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_crit_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [arg = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_crit(arg.dst_logit_ptr, arg.src_logit_ptr, 
                                                                                                                    arg.dst_crit_ptr, arg.dst_grad_ptr, 
@@ -8491,7 +8491,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_crit_logit_addr_nothrow(dst);
                         uma_ptr_t dst_crit_umaptr               = dg::network_tile_member_getsetter::get_crit_crit_addr_nothrow(dst);
                         uma_ptr_t dst_grad_umaptr               = dg::network_tile_member_getsetter::get_crit_grad_addr_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_crit_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_crit_forward_dispatch_control_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_crit_observer_array_size_nothrow(dst);
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_crit_observer_array_nothrow(dst, dst_observer_arr.get()); 
@@ -8763,7 +8763,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrfwd_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrfwd_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrfwd_forward_dispatch());
                                     dispatch_radix.dst_vd_id            = dispatch_info.dst_vd_id;
@@ -8817,10 +8817,10 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_vec[i * 3]     = data_arr[i].dst;
                         host_ptr_vec[i * 3 + 1] = data_arr[i].src;
                         host_ptr_vec[i * 3 + 2] = data_arr[i].cpy_dst;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(MEMCPY)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(MEMCPY)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
-                            size_t cpy_dst_bsz = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(e.dispatch_control)).dst_byte_size;
+                            size_t cpy_dst_bsz = dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(e.dispatch_control)).dst_byte_size;
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                             dg::network_exception_handler::nothrow_log(dg::network_memops_clib::memcpy_host_to_host(e.cpy_dst, e.dst, cpy_dst_bsz));
                         };
@@ -8914,7 +8914,7 @@ namespace dg::network_memcommit_resolutor{
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_msgrfwd_observer_array_size_nothrow(dst);
                         size_t dst_logit_bsz                    = dg::network_tile_member_getsetter::get_msgrfwd_logit_byte_size_nothrow(dst);
                         dst_info_t dst_msgr_info                = dg::network_tile_member_getsetter::get_msgrfwd_dst_info_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_msgrfwd_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_msgrfwd_forward_dispatch_control_nothrow(dst);
                         user_id_t user_id                       = dg::network_tile_member_getsetter::get_msgrfwd_user_id_nothrow(dst);
 
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
@@ -9187,7 +9187,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrbwd_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrbwd_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrbwd_forward_dispatch(dispatch_control)); 
                                     dispatch_radix.dst_vd_id            = dispatch_info.dst_vd_id;
@@ -9239,7 +9239,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         cuda_ptr_arr[i * 2]     = data_arr[i].dst;
                         cuda_ptr_arr[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -9283,7 +9283,7 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         host_ptr_arr[i * 2]     = data_arr[i].dst;
                         host_ptr_arr[i * 2 + 1] = data_arr[i].src;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
                         };
@@ -9376,7 +9376,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_logit_umaptr              = dg::network_tile_member_getsetter::get_msgrbwd_logit_addr_nothrow(dst);
                         size_t dst_observer_arr_sz              = dg::network_tile_member_getsetter::get_msgrbwd_observer_array_size_nothrow(dst);
                         uma_ptr_t dst_src                       = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(dst);
-                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_msgrbwd_dispatch_control_nothrow(dst);
+                        dispatch_control_t dispatch_control     = dg::network_tile_member_getsetter::get_msgrbwd_forward_dispatch_control_nothrow(dst);
                         dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_observer_arr(MAX_OBSERVER_ARR_SZ);
                         dg::network_tile_member_getsetter::get_msgrbwd_observer_array_nothrow(dst, dst_observer_arr.get());
 
@@ -9730,7 +9730,7 @@ namespace dg::network_memcommit_resolutor{
 
             const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
             const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
-            const size_t infofetch_vectorization_sz;
+            const size_t radxfetch_vectorization_sz;
             const size_t region_vectorization_sz;
             const size_t gradupdate_vectorization_sz;
 
@@ -9738,11 +9738,11 @@ namespace dg::network_memcommit_resolutor{
 
             BackwardDoLeafSignalResolutorV2(std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                            size_t infofetch_vectorization_sz,
+                                            size_t radxfetch_vectorization_sz,
                                             size_t region_vectorization_sz,
                                             size_t gradupdate_vectorization_sz) noexcept: cuda_async_device(std::move(cuda_async_device)),
                                                                                           host_async_device(std::move(host_async_device)),
-                                                                                          infofetch_vectorization_sz(infofetch_vectorization_sz),
+                                                                                          radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                           region_vectorization_sz(region_vectorization_sz),
                                                                                           gradupdate_vectorization_sz(gradupdate_vectorization_sz){}
 
@@ -9755,10 +9755,10 @@ namespace dg::network_memcommit_resolutor{
                 {
                     auto dispatch_radix_fetcher                 = InternalDispatchRadixFetcher{};
 
-                    size_t trimmed_infofetch_vectorization_sz   = std::min(this->infofetch_vectorization_sz, sz);
-                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&dispatch_radix_fetcher, trimmed_infofetch_vectorization_sz);
+                    size_t trimmed_radxfetch_vectorization_sz   = std::min(this->radxfetch_vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&dispatch_radix_fetcher, trimmed_radxfetch_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&dispatch_radix_fetcher, trimmed_infofetch_vectorization_sz, vdh_mem.get()));
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&dispatch_radix_fetcher, trimmed_radxfetch_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
@@ -9902,9 +9902,9 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         cuda_ptr_vec[i * 2]     = data_arr[i].logit_ptr;
                         cuda_ptr_vec[i * 2 + 1] = data_arr[i].grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::decode_grad_update_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_gradupdate_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
-                            dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::grad_update(e.logit_ptr, e.grad_ptr, e.dispatch_control, e.write_option)); //TODOs: cuda limitation of kernel dispatches
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::grad_update(e.logit_ptr, e.grad_ptr, e.dispatch_control, e.write_option)); //TODOs: cuda limitation of kernel dispatches
                         };
 
                         size_t async_task_bsz   = dg::network_cuda_controller::get_preallocated_virtual_async_task_size(work_order);
@@ -9947,9 +9947,9 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         host_ptr_vec[i * 2]     = data_arr[i].logit_ptr;
                         host_ptr_vec[i * 2 + 1] = data_arr[i].grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::decode_grad_update_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_gradupdate_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
-                            dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::grad_update(e.logit_ptr, e.grad_ptr, e.dispatch_control, e.write_option));
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::grad_update(e.logit_ptr, e.grad_ptr, e.dispatch_control, e.write_option));
                         };
 
                         size_t async_task_bsz   = dg::network_host_asynchronous::get_preallocated_virtual_async_task_size(work_order);
@@ -10255,7 +10255,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                if (data_arr[i].expected_ops_id == current_ops_id){
+                                if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
                                     auto dispatch_control               = dg::network_tile_member_getsetter::get_mono_backward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(data_arr[i].root);
@@ -10313,7 +10313,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 3]     = data_arr[i].src_grad_addr;
                         cuda_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_addr;
                         cuda_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_addr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_mono(e.src_grad_addr, e.src_logit_addr, e.dst_grad_addr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_cuda_write_option(e.src_grad_status)));
@@ -10361,7 +10361,7 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 3]     = data_arr[i].src_grad_addr;
                         host_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_addr;
                         host_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_addr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_mono(e.src_grad_addr, e.src_logit_addr, e.dst_grad_addr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_host_write_option(e.src_grad_status)));
@@ -10553,10 +10553,10 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         dg::network_tile_member_getsetter::set_mono_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
-                        exception_t err = dg::network_tile_member_getsetter::set_tile_grad_status(src, TILE_GRAD_STATUS_HAS_VALUE);
+                        exception_t src_gradstat_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(src, TILE_GRAD_STATUS_HAS_VALUE);
 
-                        if (dg::network_exception::is_failed(err)){
-                            (void) err; //
+                        if (dg::network_exception::is_failed(src_gradstat_set_err)){
+                            (void) src_gradstat_set_err; //
                         }
 
                         dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::vitualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id)));
@@ -10803,7 +10803,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 5 + 2] = data_arr[i].rhs_logit_ptr;
                         cuda_ptr_arr[i * 5 + 3] = data_arr[i].rhs_grad_ptr;
                         cuda_ptr_arr[i * 5 + 4] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_backward_pair_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pair_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_pair(e.lhs_logit_ptr, e.lhs_grad_ptr, 
                                                                                                                     e.rhs_logit_ptr, e.rhs_grad_ptr,
@@ -10859,11 +10859,11 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 5 + 2] = data_arr[i].rhs_logit_ptr;
                         host_ptr_arr[i * 5 + 3] = data_arr[i].rhs_grad_ptr;
                         host_ptr_arr[i * 5 + 4] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_backward_pair_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pair_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
-                            dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_pair(data_arr[i].lhs_logit_ptr, data_arr[i].lhs_grad_ptr,
-                                                                                                                    data_arr[i].rhs_logit_ptr, data_arr[i].rhs_grad_ptr,
-                                                                                                                    data_arr[i].dst_grad_ptr, data_arr[i].dispatch_control,
+                            dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_pair(e.lhs_logit_ptr, e.lhs_grad_ptr,
+                                                                                                                    e.rhs_logit_ptr, e.rhs_grad_ptr,
+                                                                                                                    e.dst_grad_ptr, e.dispatch_control,
                                                                                                                     convert_grad_status_to_host_write_option(e.lhs_grad_status),
                                                                                                                     convert_grad_status_to_host_write_option(e.rhs_grad_status)));
                         };
@@ -10914,8 +10914,8 @@ namespace dg::network_memcommit_resolutor{
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<ResolutorKeyArgument, ResolutorValueArgument>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
-                dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
                 dg::network_cuda_controller::AsynchronousDeviceInterface * cuda_async_device;
+                dg::network_host_asynchronous::AsynchronousDeviceInterface * host_async_device;
                 dg::network_allocation::ArenaAllocatorInterface * allocator;
                 size_t vectorization_sz;
 
@@ -11148,18 +11148,18 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
-                        exception_t lhs_grad_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(lhs, TILE_GRAD_STATUS_HAS_VALUE);
+                        exception_t lhs_gradstat_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(lhs, TILE_GRAD_STATUS_HAS_VALUE);
 
-                        if (dg::network_exception::is_failed(lhs_grad_set_err)){
-                            (void) lhs_grad_set_err;
-                            // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(lhs_grad_set_err));
+                        if (dg::network_exception::is_failed(lhs_gradstat_set_err)){
+                            (void) lhs_gradstat_set_err;
+                            // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(lhs_gradstat_set_err));
                         }
 
-                        exception_t rhs_grad_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(rhs, TILE_GRAD_STATUS_HAS_VALUE);
+                        exception_t rhs_gradstat_set_err = dg::network_tile_member_getsetter::set_tile_grad_status(rhs, TILE_GRAD_STATUS_HAS_VALUE);
 
-                        if (dg::network_exception::is_failed(rhs_grad_set_err)){
-                            (void) rhs_grad_set_err;
-                            // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(rhs_grad_set_err));
+                        if (dg::network_exception::is_failed(rhs_gradstat_set_err)){
+                            (void) rhs_gradstat_set_err;
+                            // dg::network_log_stackdump::error_fast(dg::network_exception::verbose(rhs_gradstat_set_err));
                         }
 
                         dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(lhs, expected_ops_id)));
@@ -11404,12 +11404,12 @@ namespace dg::network_memcommit_resolutor{
                         auto src_grad_wop           = dg::network_exception_handler::nothrow_log(dg::network_allocation::make_preallocated_array<cuda_write_option_t>(UACM_ACM_SZ, src_grad_wop_buf));
                         std::transform(data_arr[i].src_grad_status.begin(), data_arr[i].src_grad_status.end(), src_grad_wop->begin(), convert_grad_status_to_cuda_write_option_lambda);
 
-                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_uacm_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_uacm_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
 
                         auto work_order = [src_grad_arr_cpy     = std::move(src_grad_arr), 
                                            src_logit_arr_cpy    = std::move(src_logit_arr), 
                                            dst_grad             = data_arr[i].dst_grad,
-                                           src_grad_wop_cpy     = std::move(std_grad_wop),
+                                           src_grad_wop_cpy     = std::move(src_grad_wop),
                                            dispatch_control     = data_arr[i].dispatch_control]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_uacm(src_grad_arr_cpy->data(), src_logit_arr_cpy->data(), src_grad_wop_cpy->data(), 
                                                                                                                     dst_grad, dispatch_control));
@@ -11474,7 +11474,7 @@ namespace dg::network_memcommit_resolutor{
                         auto src_grad_wop           = dg::network_exception_handler::nothrow_log(dg::network_allocation::make_preallocated_array<host_write_option_t>(UACM_ACM_SZ, src_grad_wop_buf));
                         std::transform(data_arr[i].src_grad_status.begin(), data_arr[i].src_grad_status.end(), src_grad_wop->begin(), convert_grad_status_to_host_write_option_lambda);
 
-                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_uacm_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity            += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_uacm_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
 
                         auto work_order = [src_grad_arr_cpy     = std::move(src_grad_arr),
                                            src_logit_arr_cpy    = std::move(src_logit_arr),
@@ -11528,6 +11528,7 @@ namespace dg::network_memcommit_resolutor{
 
                     //alright - this might compromise the designs yet we want to have the first cut by next week - it's been dragging for too long now
                     //we have roughly at least 1 thousand lines of code to write everyday - we started 2025 on the bad foot
+                    //things are harder than it appears - very hard - we dont have a way to do efficient array fetching just yet - we'll come up with a way soon - we'll be working on other components for now 
 
                     size_t trimmed_cuda_vectorization_sz            = std::min(this->vectorization_sz, sz);
                     size_t cdh_allocation_cost                      = dg::network_producer_consumer::delvrsrv_allocation_cost(&cuda_internal_resolutor, trimmed_cuda_vectorization_sz);
@@ -11855,7 +11856,7 @@ namespace dg::network_memcommit_resolutor{
                         cpy_ptr                 = std::copy(data_arr[i].rhs_logit.begin(), data_arr[i].rhs_logit.end(), cpy_ptr);
                         *cpy_ptr                = data_arr[i].dst_grad;
 
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pacm_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pacm_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
 
                         size_t lhs_grad_bsz     = dg::network_allocation::get_preallocated_array_size<cuda_ptr_t>(PACM_ACM_SZ);
                         char * lhs_grad_buf     = dg::network_exception_handler::nothrow_log(this->allocator->malloc(lhs_grad_bsz));
@@ -11949,7 +11950,7 @@ namespace dg::network_memcommit_resolutor{
                         cpy_ptr                 = std::copy(data_arr[i].rhs_logit.begin(), data_arr[i].rhs_logit.end(), cpy_ptr);
                         *cpy_ptr                = data_arr[i].dst_grad;
 
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pacm_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pacm_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
 
                         size_t lhs_grad_bsz     = dg::network_allocation::get_preallocated_array_size<host_ptr_t>(PACM_ACM_SZ);
                         char * lhs_grad_buf     = dg::network_exception_handler::nothrow_log(this->allocator->malloc(lhs_grad_bsz));
@@ -12043,12 +12044,6 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> hdh_mem(hdh_allocation_cost);
                     auto host_delivery_handle                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&host_internal_resolutor, trimmed_host_vectorization_sz, hdh_mem.get()));
 
-                    //we are at the mercy of compiler's to do simd here - 
-                    //we must specify alignment + restriction for memcmp - because the array length is fixed - compiler might do exotic optimizations
-                    //in terms of branch pipeline prediction - we have already done a good job - such is the execution path to cuda_dispatch_platform or host_dispatch_platform is 99.99%
-                    //so these fillers are only costly in terms of branch calculations - not branch jmp
-                    //alrights - we might want to use comparison of precalculated array here - fixed size memcmp is just another beast - it only takes one branch
-
                     for (size_t i = 0u; i < sz; ++i){
                         if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
                             continue;
@@ -12086,16 +12081,12 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        dg::network_dispatch_control::read_pacm_backward_dispatch_root_grad_virtual_device_id(dispatch_control_buf.get(), &src_grad_vd_id);
+                        dg::network_dispatch_control::read_pacm_backward_dispatch_root_grad_virtual_device_id(dispatch_control_buf.get(), &dst_grad_vd_id);
                         dg::network_dispatch_control::read_pacm_backward_dispatch_lhs_grad_virtual_device_id(dispatch_control_buf.get(), lhs_grad_vd_id.data());
                         dg::network_dispatch_control::read_pacm_backward_dispatch_lhs_logit_virtual_device_id(dispatch_control_buf.get(), lhs_logit_vd_id.data());
                         dg::network_dispatch_control::read_pacm_backward_dispatch_rhs_grad_virtual_device_id(dispatch_control_buf.get(), rhs_grad_vd_id.data());
                         dg::network_dispatch_control::read_pacm_backward_dispatch_rhs_logit_virtual_device_id(dispatch_control_buf.get(), rhs_logit_vd_id.data());
                         dg::network_dispatch_control::read_pacm_backward_dispatch_dispatch_platform(dispatch_control_buf.get(), &dispatch_platform);
-
-                        if (src_grad_vd_id != key.src_grad_vd_id){
-                            continue;
-                        }
 
                         if (std::memcmp(lhs_grad_vd_id.data(), key.lhs_grad_vd_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(device_id_t)) != 0){
                             continue;
@@ -12110,6 +12101,14 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         if (std::memcmp(rhs_logit_vd_id.data(), key.rhs_logit_vd_id.data(), static_cast<size_t>(PACM_ACM_SZ) * sizeof(device_id_t)) != 0){
+                            continue;
+                        }
+
+                        if (dst_grad_vd_id != key.dst_grad_vd_id){
+                            continue;
+                        }
+
+                        if (dispatch_platform != key.dispatch_platform){
                             continue;
                         }
 
@@ -12143,7 +12142,7 @@ namespace dg::network_memcommit_resolutor{
                                 (void) rhs_gradset_err;
                             }
 
-                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(lhs[j] , expected_ops_id)));
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(lhs[j], expected_ops_id)));
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(rhs[j], expected_ops_id)));
                         }
 
@@ -12362,7 +12361,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         cuda_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         cuda_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_mono(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_cuda_write_option(e.src_grad_status)));
@@ -12410,7 +12409,7 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         host_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         host_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_mono(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_host_write_option(e.src_grad_status)));
@@ -12704,7 +12703,7 @@ namespace dg::network_memcommit_resolutor{
                     internal_resolutor.uma_ip_retriever         = this->uma_ip_retriever.get();
                     internal_resolutor.allocator                = &arena_allocator;
                     internal_resolutor.vectorization_sz         = this->gradmove_vectorization_sz;
-                    
+
                     size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, sz);
                     size_t vdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_region_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
@@ -12865,7 +12864,7 @@ namespace dg::network_memcommit_resolutor{
                 UnifiedMemoryIPRetrieverInterface * uma_ip_retriever;
                 dg::network_allocation::ArenaAllocatorInterface * allocator;
                 size_t vectorization_sz; 
-                
+
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr);
@@ -13132,9 +13131,9 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                if (current_ops_id = data_arr[i].expected_ops_id){
+                                if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_extndsx_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_extndsx_backward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_extndsx_counterpart_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_extndsx_backward_dispatch(dispatch_control));
                                     dispatch_radix.src_grad_vd_id       = dispatch_info.src_grad_vd_id;
@@ -13190,7 +13189,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 3]     = data_arr[i].src_grad;
                         cuda_ptr_arr[i * 3 + 1] = data_arr[i].src_logit;
                         cuda_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch(data_arr[i].dispatch_control)).runtime_complexity; //future extension of dispatch - probably extndst - extnsrc uses different radix of compression
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity; //future extension of dispatch - probably extndst - extnsrc uses different radix of compression
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_mono(e.src_grad, e.src_logit, e.dst_grad, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_cuda_write_option(e.src_grad_status))); //
@@ -13212,7 +13211,7 @@ namespace dg::network_memcommit_resolutor{
             struct HostResolutorArgument{
                 host_ptr_t src_grad;
                 host_ptr_t src_logit;
-                host_ptr_t dst_grad
+                host_ptr_t dst_grad;
                 grad_status_t src_grad_status;
                 host_tileops_dispatch_control_t dispatch_control;
             };
@@ -13238,7 +13237,7 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 3]     = data_arr[i].src_grad;
                         host_ptr_arr[i * 3 + 1] = data_arr[i].src_logit;
                         host_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_mono(e.src_grad, e.src_logit, e.dst_grad,
                                                                                                                     e.dispatch_control, convert_grad_status_to_write_option(e.src_grad_status)));
@@ -13332,14 +13331,10 @@ namespace dg::network_memcommit_resolutor{
                         init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_extndsx_init_status_nothrow(dst);
                         uma_ptr_t dst_src                   = dg::network_tile_member_getsetter::get_extndsx_counterpart_nothrow(dst);
                         uma_ptr_t dst_grad_umaptr           = dg::network_tile_member_getsetter::get_extndsx_grad_addr_nothrow(dst);
-                        operatable_id_t dst_ops_id          = dg::network_tile_member_getsetter::get_extndsx_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_extndsx_operatable_memevent_id_nothrow(dst);
                         operatable_id_t dst_backward_ops_id = dg::network_tile_member_getsetter::get_extndsx_operatable_backward_id_nothrow(dst);
                         grad_status_t dst_grad_status       = dg::network_tile_member_getsetter::get_extndsx_grad_status_nothrow(dst);
-                        dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_extndsx_dispatch_control_nothrow(dst);
-
-                        if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
-                            continue;
-                        }
+                        dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_extndsx_backward_dispatch_control_nothrow(dst);
 
                         auto ptrchk = dg::network_tile_member_getsetter::safecthrow_extnsrc_ptr_access(src);
 
@@ -13353,6 +13348,10 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t src_logit_umaptr          = dg::network_tile_member_getsetter::get_extnsrc_logit_addr_nothrow(src);
                         grad_status_t src_grad_status       = dg::network_tile_member_getsetter::get_extnsrc_grad_status_nothrow(src);
 
+                        if (dst_init_status != TILE_INIT_STATUS_INITIALIZED){
+                            continue;
+                        }
+
                         if (src_init_status != TILE_INIT_STATUS_INITIALIZED){
                             continue;
                         }
@@ -13361,7 +13360,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_ops_id != expected_ops_id){
+                        if (dst_operatable_id != expected_ops_id){
                             continue;
                         }
 
@@ -13433,7 +13432,7 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tile_member_getsetter::set_extndsx_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
                         dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow(src, TILE_GRAD_STATUS_HAS_VALUE);
 
-                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtual_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id)));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id)));
                     }
                 }
             };
@@ -13477,9 +13476,9 @@ namespace dg::network_memcommit_resolutor{
                 const size_t EVENT_SCALE_FACTOR             = 1u;
                 size_t max_possible_event_sz                = sz * EVENT_SCALE_FACTOR;
                 size_t trimmed_request_delivery_capacity    = std::min(this->request_delivery_capacity, max_possible_event_sz);
-                size_t dh_allocation_cost                   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_request_delivery_capacity);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
-                auto request_delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_request_delivery_capacity, dh_mem.get()));
+                size_t rdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_request_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rdh_mem(rdh_allocation_cost);
+                auto request_delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_request_delivery_capacity, rdh_mem.get()));
 
                 {
                     auto fetcher                                = InternalDispatchRadixFetcher{};
@@ -13593,7 +13592,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_crit_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_crit_backward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_crit_backward_dispatch(data_arr[i].root)); 
                                     dispatch_radix.src_grad_vd_id       = dispatch_info.src_grad_vd_id; 
@@ -13649,7 +13648,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         cuda_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         cuda_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_backward_crit_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_crit_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_crit(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr,
                                                                                                                     e.dispatch_control, convert_grad_status_to_cuda_write_option(e.src_grad_status)));
@@ -13690,14 +13689,14 @@ namespace dg::network_memcommit_resolutor{
                     size_t total_complexity     = {}; 
 
                     size_t virtual_wo_vec_bsz   = dg::network_host_asynchronous::get_preallocated_virtual_workorder_sequential_container_size(sz);
-                    char * virtual_wo_vec_buf   = dg::network_exception_handler::nothrow_log(this->allocator->malloc(virtual_wo_vec_buf)); 
+                    char * virtual_wo_vec_buf   = dg::network_exception_handler::nothrow_log(this->allocator->malloc(virtual_wo_vec_bsz)); 
                     auto virtual_wo_vec         = dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::make_preallocated_virtual_workorder_sequential_container(sz, virtual_wo_vec_buf));
 
                     for (size_t i = 0u; i < sz; ++i){
                         host_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         host_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         host_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_backward_crit_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_crit_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_crit(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr,
                                                                                                                     e.dispatch_control, convert_grad_status_to_host_write_option(e.src_grad_status)));
@@ -13972,8 +13971,8 @@ namespace dg::network_memcommit_resolutor{
                 {
                     auto internal_resolutor                     = InternalResolutor{};
                     internal_resolutor.request_delivery_handle  = request_delivery_handle.get();
-                    internal_resolutor.host_async_device        = this->host_async_device.get();
                     internal_resolutor.cuda_async_device        = this->cuda_async_device.get();
+                    internal_resolutor.host_async_device        = this->host_async_device.get();
                     internal_resolutor.allocator                = &arena_allocator;
                     internal_resolutor.vectorization_sz         = this->backward_vectorization_sz;
 
@@ -14052,7 +14051,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrfwd_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrfwd_backward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrfwd_backward_dispatch(dispatch_control));
                                     dispatch_radix.src_grad_vd_id       = dispatch_info.src_grad_vd_id;
@@ -14106,7 +14105,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         cuda_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         cuda_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_backward_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_mono(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_cuda_write_option(e.src_grad_status)));
@@ -14154,7 +14153,7 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         host_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         host_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_backward_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_mono(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_host_write_option(e.src_grad_status)));
@@ -14522,7 +14521,7 @@ namespace dg::network_memcommit_resolutor{
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
-                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrbwd_dispatch_control_nothrow(data_arr[i].root);
+                                    auto dispatch_control               = dg::network_tile_member_getsetter::get_msgrbwd_backward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.src                  = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(data_arr[i].root);
                                     auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_msgrbwd_backward_dispatch(dispatch_control)); 
                                     dispatch_radix.src_grad_vd_id       = dispatch_info.src_grad_vd_id;
@@ -14576,7 +14575,7 @@ namespace dg::network_memcommit_resolutor{
                         cuda_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         cuda_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         cuda_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_backward_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]](){
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::backward_mono(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_cuda_write_option(e.src_grad_status)));
@@ -14624,14 +14623,14 @@ namespace dg::network_memcommit_resolutor{
                         host_ptr_arr[i * 3]     = data_arr[i].src_grad_ptr;
                         host_ptr_arr[i * 3 + 1] = data_arr[i].src_logit_ptr;
                         host_ptr_arr[i * 3 + 2] = data_arr[i].dst_grad_ptr;
-                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_backward_mono_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
+                        total_complexity        += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_backward_dispatch_control(data_arr[i].dispatch_control)).runtime_complexity;
                         auto work_order         = [e = data_arr[i]]() noexcept{
                             dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::backward_mono(e.src_grad_ptr, e.src_logit_ptr, e.dst_grad_ptr, 
                                                                                                                     e.dispatch_control, convert_grad_status_to_host_write_option(e.src_grad_status)));
                         };
 
                         size_t virtual_wo_bsz   = dg::network_host_asynchronous::get_preallocated_virtual_async_task_size(work_order);
-                        char * virtual_wo_buf   = dg::network_exception_handler::nothrow_log(this->allocator->malloc(virutal_wo_bsz));
+                        char * virtual_wo_buf   = dg::network_exception_handler::nothrow_log(this->allocator->malloc(virtual_wo_bsz));
                         auto virtual_wo         = dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::make_preallocated_virtual_async_task(work_order, virtual_wo_buf));
 
                         dg::network_exception_handler::nothrow_log(virtual_wo_vec->add(std::move(virtual_wo)));

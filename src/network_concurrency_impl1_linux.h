@@ -40,7 +40,7 @@ namespace dg::network_concurrency_impl1_linux{
         virtual ~WorkerInterface() noexcept = default;
         virtual bool run_one_epoch() noexcept = 0; //precond - exitable-in-all-scenerios execution
     };
-    
+
     struct ReschedulerInterface{
         virtual ~ReschedulerInterface() noexcept = default;
         virtual void reschedule() noexcept = 0;
@@ -67,7 +67,7 @@ namespace dg::network_concurrency_impl1_linux{
         public:
 
             bool run_one_epoch() noexcept{
-                
+
                 return false;
             }
     };
@@ -122,16 +122,18 @@ namespace dg::network_concurrency_impl1_linux{
             std::unique_ptr<std::atomic_flag> mtx;
             std::unique_ptr<WorkerInterface> worker;
             std::unique_ptr<ReschedulerInterface> rescheduler; 
+            size_t loopchk_sz; 
 
         public:
 
             StdDaemonRunner(std::unique_ptr<std::atomic<bool>> poison_pill,
                             std::unique_ptr<std::atomic_flag> mtx,
                             std::unique_ptr<WorkerInterface> worker,
-                            std::unique_ptr<ReschedulerInterface> rescheduler) noexcept: poison_pill(std::move(poison_pill)),
-                                                                                         mtx(std::move(mtx)),
-                                                                                         worker(std::move(worker)),
-                                                                                         rescheduler(std::move(rescheduler)){}
+                            std::unique_ptr<ReschedulerInterface> rescheduler,
+                            size_t loopchk_sz) noexcept: poison_pill(std::move(poison_pill)),
+                                                         mtx(std::move(mtx)),
+                                                         worker(std::move(worker)),
+                                                         rescheduler(std::move(rescheduler)){}
 
             void set_worker(std::unique_ptr<WorkerInterface> worker) noexcept{
 
@@ -151,10 +153,13 @@ namespace dg::network_concurrency_impl1_linux{
 
                 while (!this->poison_pill->load(std::memory_order_relaxed)){
                     stdx::xlock_guard<std::atomic_flag> lck_grd(*this->mtx);
-                    bool run_flag = this->worker->run_one_epoch();
 
-                    if (!run_flag){
-                        this->rescheduler->reschedule();
+                    for (size_t i = 0u; i < this->loopchk_sz; ++i){
+                        bool run_flag = this->worker->run_one_epoch();
+
+                        if (!run_flag){
+                            this->rescheduler->reschedule();
+                        }
                     }
                 }
             }
@@ -386,12 +391,14 @@ namespace dg::network_concurrency_impl1_linux{
         static auto spawn_std_daemon_affine_runner(std::vector<int> cpu_set) -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
 
             using namespace std::chrono_literals;
-             
-            auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(150ms);
+            
+            const size_t LOOPCHK_SZ = 100u;
+
+            auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(10ms);
             auto mtx            = std::make_unique<std::atomic_flag>();
             auto poison_pill    = std::make_unique<std::atomic<bool>>();
             auto worker         = WorkerFactory::spawn_rest();
-            auto daemon_runner  = std::make_shared<StdDaemonRunner>(std::move(poison_pill), std::move(mtx), std::move(worker), std::move(rescheduler));
+            auto daemon_runner  = std::make_shared<StdDaemonRunner>(std::move(poison_pill), std::move(mtx), std::move(worker), std::move(rescheduler), LOOPCHK_SZ);
             auto thr_instance   = StdThreadFactory::spawn_thread(daemon_runner, cpu_set); 
             auto raii_runner    = std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_instance)); 
 
@@ -401,12 +408,14 @@ namespace dg::network_concurrency_impl1_linux{
         static auto spawn_std_daemon_runner() -> std::unique_ptr<DaemonDedicatedRunnerInterface>{
 
             using namespace std::chrono_literals;
-             
+
+            const size_t LOOPCHK_SZ = 100u;
+
             auto rescheduler    = ReschedulerFactory::spawn_sleepy_rescheduler(150ms);
             auto mtx            = std::make_unique<std::atomic_flag>();
             auto poison_pill    = std::make_unique<std::atomic<bool>>();
             auto worker         = WorkerFactory::spawn_rest();
-            auto daemon_runner  = std::make_shared<StdDaemonRunner>(std::move(poison_pill), std::move(mtx), std::move(worker), std::move(rescheduler));
+            auto daemon_runner  = std::make_shared<StdDaemonRunner>(std::move(poison_pill), std::move(mtx), std::move(worker), std::move(rescheduler), LOOPCHK_SZ);
             auto thr_instance   = StdThreadFactory::spawn_thread(daemon_runner);
             auto raii_runner    = std::make_unique<StdRaiiDaemonRunner>(daemon_runner, std::move(thr_instance)); 
 
