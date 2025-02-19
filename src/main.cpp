@@ -43,7 +43,12 @@ class Foo{
 int main(){
 
     // std::chrono::utc_clock::now();
-    using tp = std::chrono::time_point<std::chrono::utc_clock>;
+    // using tp = std::chrono::time_point<std::chrono::utc_clock>;
+
+    std::move_iterator<size_t *> ptr{};
+    size_t * raw_ptr = ptr.base();
+    
+    auto tp = std::chrono::utc_clock::now() - std::chrono::nanoseconds(1); 
 
     const size_t THREAD_SZ  = 8;
     const size_t COUNTER_SZ = size_t{1} << 24;
