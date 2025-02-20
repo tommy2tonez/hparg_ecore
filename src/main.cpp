@@ -38,6 +38,12 @@ class Foo{
 
             return this->arr.load(std::memory_order_relaxed)[0];
         }
+    
+    private:
+
+        struct Bar{
+            Foo * foo;
+        };
 };
 
 int main(){

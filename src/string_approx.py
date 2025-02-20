@@ -707,6 +707,11 @@
 #the correct 21st century algorithm is a combination of those strategies - we dont know if it is centrality + path - or centrality + gravity + path - or all of those strategies
 #we just know that it must involve path + centrality - recall how we do the floyed algorithm and try to "relax" the responsibility of a node (it's an advanced parallel algorithm - a radix of dense centrality algorithm (sparse centrality is linear) - we must be able to approx the floyed algorithm to map the semantic as in f(x) -> y)
 
+#all our lives we've been looking for the light of correct consciousness
+#it's here - right in our machine - the virtual machine buffer (the L1 cache to be specific)
+#this language is far more advanced and far more accurate in terms of problem solving than any other languages
+#we probably want to collect the data right at the cores - direct physical reads - a liaison
+
 from typing import Callable
 
 class Particle:
