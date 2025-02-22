@@ -199,13 +199,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct XOnlyRequestPacket{
         dg::string content;
-        uint32_t transmission_frequency;
     };
 
     struct RequestPacket: PacketHeader, XOnlyRequestPacket{};
 
     struct XOnlyAckPacket{
-        dg::vector<global_packet_id_t> ack_id_vec;
+        dg::vector<PacketBase> ack_vec;
     };
 
     struct AckPacket: PacketHeader, XOnlyAckPacket{};
@@ -216,8 +215,14 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct SuggestionPacket: PacketHeader, XOnlySuggestionPacket{};
 
+    struct XOnlyInformPacket{
+        uint32_t transmit_frequency;
+    };
+
+    struct InformPacket: PacketHeader, XOnlyInformPacket{};
+
     struct Packet: PacketHeader{
-        std::variant<XOnlyRequestPacket, XOnlyAckPacket, XOnlySuggestionPacket> xonly_content;
+        std::variant<XOnlyRequestPacket, XOnlyAckPacket, XOnlySuggestionPacket, XOnlyInformPacket> xonly_content;
     };
 
     struct ScheduledPacket{
@@ -230,15 +235,30 @@ namespace dg::network_kernel_mailbox_impl1::model{
         std::chrono::time_point<std::chrono::utc_clock> queued_time;            
     };
 
-    struct SchedulerFeedBack{
+    struct RTTFeedBack{
         Address fr;
         std::chrono::nanoseconds rtt;
     };
 
-    struct SchedulerSuggestion{
+    struct OutBoundFeedBack{
         Address fr;
         uint32_t suggested_frequency;
     };
+
+    struct InBoundFeedFront{
+        Address fr;
+        uint32_t transmit_frequency;
+    };
+
+    // struct SchedulerFeedBack{
+    //     Address fr;
+    //     std::chrono::nanoseconds rtt;
+    // };
+
+    // struct SchedulerSuggestion{
+    //     Address fr;
+    //     uint32_t suggested_frequency;
+    // };
 
     struct MailBoxArgument{
         Address to;
@@ -302,15 +322,34 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     //                                                                                     - we do that by increasing vectorization_sz and sleep time
     //                                                                                     - we want to profile the critical sections - like binary tree push - we probably want to do key sort first before the mutex acquisition and do one AVL batch push - this should be very fast
     //                                                                                     - if that affects code quality - we want to increase affinity of tasks - like using affined ports or increasing the number of containers + randomization
+    
+    //the flow I'm looking for is a component implements FeedBackMachine + SchedMachine (this guy collects data and offload the job to the transformer to run heuristics + etc)
+    //a Scheduler that stays affined and trigger an observable update by calling the SchedMachineInterface
+    //a TransmitFrequencySuggestor that stays affined and trigger an observable update by calling the SchedMachineInterface 
+    //we want to stay affined for as long as possible - before we invoke a payload for every interval - to offset the cost of memory_ordering + mutex acquisition + etc 
+    //we'd hope to stay < 10000 lines of code 
+    //ETA: next week - or next next week - we'll see how complex this task is
 
-    class BatchSchedulerInterface{
+    // class SchedMachineInterface{
+
+    // };
+
+    class FeedBackMachineInterface{
 
         public:
 
-            virtual ~BatchSchedulerInterface() noexcept = default;
-            virtual void schedule(Address *, size_t, std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> *) noexcept = 0;
-            virtual void feedback(SchedulerFeedBack *, size_t, exception_t *) noexcept = 0;
-            virtual auto max_consume_size() noexcept -> size_t = 0;
+            virtual ~FeedBackMachineInterface() noexcept = default;
+            virtual void rtt_fb(RTTFeedBack *, size_t, exception_t *) noexcept = 0;
+            virtual void outbound_frequency_fb(OutBoundFeedBack *, size_t, exception_t *) noexcept = 0; 
+            virtual void inbound_frequency_ff(InBoundFeedFront *, size_t, exception_t *) noexcept = 0;
+    };
+
+    class TransmitFrequencySuggestorInterface{
+
+        public:
+
+            virtual ~TransmitFrequencySuggestorInterface() noexcept = default;
+            virtual auto get_frequency_suggestion(Address) noexcept -> std::expected<uint32_t, exception_t> = 0;
     };
 
     class SchedulerInterface{
@@ -319,7 +358,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual ~SchedulerInterface() noexcept = default;
             virtual auto schedule(Address) noexcept -> std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> = 0;
-            virtual auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t = 0;
     };
 
     class UpdatableInterface{
@@ -338,12 +376,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual auto get() noexcept -> global_packet_id_t = 0;
     };
 
-    class PacketGeneratorInterface{
+    class RequestPacketGeneratorInterface{
 
         public:
 
             virtual ~PacketGeneratorInterface() noexcept = default;
-            virtual auto get(MailBoxArgument) noexcept -> std::expected<Packet, exception_t> = 0;
+            virtual auto get(MailBoxArgument) noexcept -> std::expected<RequestPacket, exception_t> = 0;
     };
 
     class AckPacketGeneratorInterface{
@@ -351,7 +389,28 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~AckPacketGeneratorInterface() noexcept = default;
-            virtual auto get(Address, PacketBase *, size_t) -> std::expected<AckPacket, exception_t> = 0;
+            virtual auto get(Address, PacketBase *, size_t) noexcept -> std::expected<AckPacket, exception_t> = 0;
+    };
+
+    //we must abstract the SuggestionPacket + InformPacket to not compromise future implementations (we have not thought of the expanding direction yet)
+    //this means we have to encapsulate the low level details of what SuggestionPacket or InformPacket mean
+    //at the high level - we just know that these guys do NAT handshakes - we inform and suggest each other
+    //says 1 packet/ second for example - this should suffice in most scenerios
+
+    class SuggestionPacketGetterInterface{
+
+        public:
+
+            virtual ~SuggestionPacketGetterInterface() noexcept = default;
+            virtual auto get(Address) noexcept -> std::expected<SuggestionPacket, exception_t> = 0;
+    };
+
+    class InformPacketGetterInterface{
+
+        public:
+
+            virtual ~InformPacketGetterInterface() noexcept = default;
+            virtual auto get(Address) noexcept -> std::expected<InformPacket, exception_t> = 0;
     };
 
     class RetransmissionManagerInterface{
@@ -818,6 +877,22 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         pkt.port_utc_stamps[pkt.port_stamp_sz++] = stdx::timestamp_conversion_wrap(stdx::utc_timestamp());
         return dg::network_exception::SUCCESS;
     }
+
+    static auto virtualize_request_packet(RequestPacket) noexcept -> std::expected<Packet, exception_t>{
+
+    }
+
+    static auto virtualize_ack_packet(AckPacket) noexcept -> std::expected<Packet, exception_t>{
+
+    }
+
+    static auto virtualize_suggestion_packet(SuggestionPacket) noexcept -> std::expected<Packet, exception_t>{
+
+    }
+
+    static auto virtualize_inform_packet(InformPacket) noexcept -> std::expected<Packet, exception_t>{
+
+    }
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
@@ -1077,18 +1152,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                             Address host_addr) noexcept: id_gen(std::move(id_gen)),
                                                          host_addr(std::move(host_addr)){}
 
-            auto get(MailBoxArgument arg) noexcept -> std::expected<Packet, exception_t>{
+            auto get(MailBoxArgument arg) noexcept -> std::expected<RequestPacket, exception_t>{
 
-                model::Packet pkt           = {};
-                pkt.fr_addr                 = host_addr;
+                RequestPacket pkt           = {};
+                pkt.fr_addr                 = this->host_addr;
                 pkt.to_addr                 = std::move(arg.to);
                 pkt.id                      = this->id_gen->get();
-                pkt.content                 = std::move(arg.content);
                 pkt.retransmission_count    = 0u;
                 pkt.priority                = 0u;
-                pkt.kind                    = constants::request;
                 pkt.port_utc_stamps         = {};
                 pkt.port_stamp_sz           = 0u;
+                pkt.content                 = std::move(arg.content);
 
                 return pkt;
             }
@@ -1100,7 +1174,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::unique_ptr<IDGeneratorInterface> id_gen;
             Address host_addr;
-            size_t ack_capacity;
 
         public:
 
@@ -1108,8 +1181,99 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                Address host_addr) noexcept: id_gen(std::move(id_gen)),
                                                             host_addr(std::move(host_addr)){}
 
-            auto get(Address fr_addr, PacketBase * pkt_header_arr, size_t sz) noexcept -> std::expected<AckPacket, exception_t>{
+            auto get(Address to_addr, PacketBase * pkt_base_arr, size_t sz) noexcept -> std::expected<AckPacket, exception_t>{
+
+                AckPacket pkt               = {};
+                pkt.fr_addr                 = this->host_addr;
+                pkt.to_addr                 = to_addr;
+                pkt.id                      = this->id_gen->get();
+                pkt.retransmission_count    = 0u;
+                pkt.priority                = 0u;
+                pkt.port_utc_stamps         = {};
+                pkt.port_stamp_sz           = 0u;
+                pkt.ack_vec                 = dg::vector<PacketBase>(sz);
+
+                std::copy(pkt_base_arr, std::next(pkt_base_arr, sz), pkt.ack_vec.begin());
+
+                return pkt;
+            }
+    };
+
+    class SuggestionPacketGetter: public virtual SuggestionPacketGetterInterface{
+
+        private:
+
+            std::unique_ptr<IDGeneratorInterface> id_gen;
+            Address host_addr;
+            std::shared_ptr<TransmitFrequencySuggestorInterface> suggestor;
+
+        public:
+
+            SuggestionPacketGetter(std::unique_ptr<IDGeneratorInterface> id_gen,
+                                   Address host_addr,
+                                   std::shared_ptr<TransmitFrequencySuggestorInterface> suggestor) noexcept: id_gen(std::move(id_gen)),
+                                                                                                             host_addr(std::move(host_addr)),
+                                                                                                             suggestor(std::move(suggestor)){}
+
+            auto get(Address to_addr) noexcept -> std::expected<SuggestionPacket, exception_t>{
+
+                SuggestionPacket pkt            = {};
+                pkt.fr_addr                     = this->host_addr;
+                pkt.to_addr                     = to_addr;
+                pkt.id                          = this->id_gen->get();
+                pkt.retransmission_count        = 0u;
+                pkt.priority                    = 0u;
+                pkt.port_utc_stamps             = {};
+                pkt.port_stamp_sz               = 0u;
+
+                std::expected<uint32_t, exception_t> fq = this->suggestor->get_frequency_suggestion(to_addr);
+
+                if (!fq.has_value()){
+                    return std::unexpected(fq.error());
+                }
+
+                pkt.suggested_frequency         = fq.value();
+
+                return pkt;
+            }
+    };
+
+    class InformPacketGetter: public virtual InformPacketGetterInterface{
+
+        private:
+
+            std::unique_ptr<IDGeneratorInterface> id_gen;
+            Address host_addr;
+            std::shared_ptr<TransmitFrequencySuggestorInterface> suggestor;
+
+        public:
+
+            InformPacketGetter(std::unique_ptr<IDGeneratorInterface> id_gen,
+                               Address host_addr,
+                               std::shared_ptr<TransmitFrequencySuggestorInterface> suggestor) noexcept: id_gen(std::move(id_gen)),
+                                                                                                         host_addr(std::move(host_addr)),
+                                                                                                         suggestor(std::move(suggestor)){}
+
+            auto get(Address to_addr) noexcept -> std::expected<InformPacket, exception_t>{
+
+                InformPacket pkt                = {};
+                pkt.fr_addr                     = this->host_addr;
+                pkt.to_addr                     = to_addr;
+                pkt.id                          = this->id_gen->get();
+                pkt.retransmission_count        = 0u;
+                pkt.priority                    = 0u;
+                pkt.port_utc_stamps             = {};
+                pkt.port_stamp_sz               = 0u;
                 
+                std::expected<uint32_t, exception_t> fq = this->suggestor->get_frequency_suggestion(to_addr);
+
+                if (!fq.has_value()){
+                    return std::unexpected(fq.error());
+                }
+
+                pkt.transmiting_frequency       = fq.value();
+
+                return pkt;
             }
     };
 
@@ -2347,6 +2511,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //                                            - approxing local maximma is approxing global maxima in a uniform distribution environment, we want to do "good" individually in terms of request_acks/s, and the system will behave in the direction
     //                                            - suggested frequency does more than just suggesting frequency - it's a temporal encoder | decoder by using continuity compression (we must be Cooper writing on the watch)
     //                                            - we map our current buffer to an arbitrary trainable space (which is pretrained or real-time trained) - we convert it to a n! * n! * n! * ... space - and we broadcast it temporally - so that's the plan)
+    //                                            - we are the edge of an important history anchor - we hope that humanity could stay human in the near future and understand philosophically that all things are seen relatively
+    //                                            - thy shall not lie
 
     //we'll implement the first draft - this is a very complicated implementation in terms of performance + accuracy + worst case scenerios + failsafes + compromission of system + etc.
     //                                - yet a very important flood management algorithm - it observes the system holistically to inch the system in the good direction (we define good in the heuristics)
@@ -2386,7 +2552,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container;
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller;
             std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic_controller;
-            std::shared_ptr<packet_controller::SchedulerInterface> scheduler;
+            std::shared_ptr<packet_controller::FeedBackMachineInterface> feedback_machine;
             std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
             size_t ack_vectorization_sz;
             size_t inbound_consumption_sz;
@@ -2400,7 +2566,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
                           std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller,
                           std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic_controller,
-                          std::shared_ptr<packet_controller::SchedulerInterface> scheduler,
+                          std::shared_ptr<packet_controller::FeedBackMachineInterface> feedback_machine,
                           std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
                           size_t ack_vectorization_sz,
                           size_t inbound_consumption_sz,
@@ -2410,7 +2576,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                               inbound_buffer_container(std::move(inbound_buffer_container)),
                                                               inbound_id_controller(std::move(inbound_id_controller)),
                                                               inbound_traffic_controller(std::move(inbound_traffic_controller)),
-                                                              scheduler(std::move(scheduler)),
+                                                              feedback_machine(std::move(feedback_machine)),
                                                               ack_packet_gen(std::move(ack_packet_gen)),
                                                               ack_vectorization_sz(ack_vectorization_sz),
                                                               inbound_consumption_sz(inbound_consumption_sz),
@@ -2425,16 +2591,16 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     size_t buf_arr_sz = {};
                     this->inbound_buffer_container->pop(buf_arr.get(), buf_arr_sz, this->inbound_consumption_sz);
 
-                    auto ack_delivery_resolutor                 = InternalAckDeliveryResolutor{};
-                    ack_delivery_resolutor.dst                  = this->outbound_packet_container.get();
+                    auto pkt_delivery_resolutor                 = InternalPacketDeliveryResolutor{};
+                    pkt_delivery_resolutor.dst                  = this->outbound_packet_container.get();
 
                     size_t trimmed_ack_delivery_sz              = std::min(this->outbound_packet_container->max_consume_size(), buf_arr_sz);
-                    size_t ack_deliverer_allocation_cost        = dg::network_producer_consumer::delvrsrv_allocation_cost(&ack_delivery_resolutor, trimmed_ack_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> ack_deliverer_mem(ack_deliverer_allocation_cost);
-                    auto ack_deliverer                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ack_delivery_resolutor, trimmed_ack_delivery_sz, ack_deliverer_mem.get()));
+                    size_t pkt_deliverer_allocation_cost        = dg::network_producer_consumer::delvrsrv_allocation_cost(&pkt_delivery_resolutor, trimmed_ack_delivery_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> pkt_deliverer_mem(pkt_deliverer_allocation_cost);
+                    auto pkt_deliverer                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&pkt_delivery_resolutor, trimmed_ack_delivery_sz, pkt_deliverer_mem.get()));
 
                     auto ack_vectorizer_resolutor               = InternalAckVectorizerResolutor{};
-                    ack_vectorizer_resolutor.dst                = &ack_deliverer; 
+                    ack_vectorizer_resolutor.dst                = &pkt_deliverer; 
 
                     size_t trimmed_ack_vectorization_sz         = std::min(this->ack_vectorization_sz, buf_arr_sz);
                     size_t ack_vectorizer_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz);
@@ -2468,7 +2634,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         
         private:
 
-            struct InternalAckDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+            //this is acceptable
+            struct InternalPacketDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
 
                 packet_controller::PacketContainerInterface * dst;
 
@@ -2485,21 +2652,33 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 }
             };
 
-            struct InternalAckVectorizerResolutor: dg::network_producer_consumer::KVConsumerInterface<Address, Packet>{
+            struct InternalAckVectorizerResolutor: dg::network_producer_consumer::KVConsumerInterface<Address, PacketBase>{
 
                 dg::network_producer_consumer::DeliveryHandle<Packet> * dst;
+                packet_controller::AckPacketGeneratorInterface * ack_packet_generator;
 
-                void push(Address, std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
+                void push(Address fr_addr, std::move_iterator<PacketBase *> data_arr, size_t sz) noexcept{
 
-                    Packet accumulated_packet = utility::accumulate_ack_packet(data_arr, sz);
-                    dg::network_producer_consumer::delvrsrv_deliver(this->dst, std::move(accumulated_packet));
+                    PacketBase * base_data_arr = data_arr.base();
+                    std::expected<AckPacket, exception_t> ack_pkt = this->ack_packet_generator->get(fr_addr, base_data_arr, sz);
+
+                    if (!ack_pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(ack_pkt.error()));
+                        return;
+                    }
+
+                    //99% branch flows here - no branch overheads
+                    dg::network_producer_consumer::delvrsrv_deliver(this->dst, packet_service::virtualize_packet(std::move(ack_pkt.value())));
                 }
             };
+
+            //-- there is apperantly no other good solution than this - until we find a better solution in terms of efficiency + branch predictions + locality of memory reference + debuggability + memory ordering invokes
+            //                                                        - I guess we stick to this approach for now - it's not good - yet it's programming
 
             struct InternalTrafficResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
 
                 InBoundWorker * self;
-                dg::network_producer_consumer::KVDeliveryHandle<Address, Packet> * ack_vectorizer;
+                dg::network_producer_consumer::KVDeliveryHandle<Address, PacketBase> * ack_vectorizer;
                 size_t * success_counter;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
@@ -2521,6 +2700,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             continue;
                         }
 
+                        //99% branch flows here - no branch overheads
                         dg::network_producer_consumer::delvrsrv_deliver(inbound_id_res_delivery_handle.get(), std::move(base_data_arr[i]));
                     }
                 }
@@ -2529,7 +2709,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             struct InternalInboundIDResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
 
                 InBoundWorker * self;
-                dg::network_producer_consumer::KVDeliveryHandle<Address, Packet> * ack_vectorizer;
+                dg::network_producer_consumer::KVDeliveryHandle<Address, PacketBase> * ack_vectorizer;
                 size_t * success_counter;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
@@ -2548,11 +2728,14 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
 
                         if (!response_arr[i].value()){
-                            if (base_data_arr[i].kind == constants::rts_ack){
-                               
-                            } else if (base_data_arr[i].kind == constants::request){
-                                Packet ack_pkt = packet_service::request_to_ack(base_data_arr[i]);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, ack_pkt.to_addr, std::move(ack_pkt));
+                            if (std::holds_alternative<XOnlyAckPacket>(base_data_arr[i].xonly_content)){
+                               (void) base_data_arr[i].xonly_content;
+                            } else if (std::holds_alternative<XOnlyRequestPacket>(base_data_arr[i].xonly_content)){
+                                dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, base_data_arr[i].fr, static_cast<const PacketBase&>(base_data_arr[i]));
+                            } else if (std::holds_alternative<XOnlySuggestionPacket>(base_data_arr[i].xonly_content)){
+                                (void) base_data_arr[i].xonly_content;
+                            } else if (std::holds_alternative<XOnlyInformPacket>(base_data_arr[i].xonly_content)){
+                                (void) base_data_arr[i].xonly_content;
                             } else{
                                 if constexpr(DEBUG_MODE_FLAG){
                                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2565,6 +2748,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             continue;
                         }
 
+                        //99% branch flows here - no branch overheads
                         dg::network_producer_consumer::delvrsrv_deliver(thru_delivery_handle.get(), std::move(base_data_arr[i]));
                     }
                 }
@@ -2573,18 +2757,24 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             struct InternalThruResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
                 
                 InBoundWorker * self;
-                dg::network_producer_consumer::KVDeliveryHandle<Address, Packet> * ack_vectorizer;
+                dg::network_producer_consumer::KVDeliveryHandle<Address, Packet> * PacketBase;
                 size_t * success_counter;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
                     
                     Packet * base_data_arr = data_arr.base(); 
 
-                    for (size_t i = 0u; i < sz; ++i){
-                        if (base_data_arr[i].kind == constants::rts_ack){
+                    for (size_t i = 0u; i < sz; ++i){                        
+                        //no branches - optimized into a radix dispatch
+
+                        if (std::holds_alternative<XOnlyAckPacket>(base_data_arr[i].xonly_content)){
                             dg::network_producer_consumer::delvrsrv_deliver(rts_ack_thru_resolutor.get(), std::move(base_data_arr[i]));
-                        } else if (base_data_arr[i].kind == constants::request){
-                            dg::network_producer_consumer::delvrsrv_deliver(rts_ack_thru_resolutor.get(), std::move(base_data_arr[i]));
+                        } else if (std::holds_alternative<XOnlyRequestPacket>(base_data_arr[i].xonly_content)){
+                            dg::network_producer_consumer::delvrsrv_deliver(request_thru_resolutor.get(), std::move(base_data_arr[i]));
+                        } else if (std::holds_alternative<XOnlySuggestionPacket>(base_data_arr[i].xonly_content)){
+                            dg::network_producer_consumer::delvrsrv_deliver(suggestion_thru_resolutor.get(), std::move(base_data_arr[i]));
+                        } else if (std::holds_alternative<XOnlyInformPacket>(base_data_arr[i].xonly_content)){
+                            dg::network_producer_consumer::delvrsrv_deliver(inform_thru_resolutor.get(), std::move(base_data_arr[i]));
                         } else{
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -2604,12 +2794,33 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
 
-                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<global_packet_id_t[]> packet_id_arr(sz);
+                    size_t max_ack_id_arr_sz    = sz * MAX_ACK_PER_PACKET; 
+                    size_t ack_id_arr_sz        = 0u; 
 
-                    Packet * base_data_arr = data_arr.base();
-                    std::transform(base_data_arr, std::next(base_data_arr, sz), packet_id_arr.get(), [](Packet& e){return e.id;});
-                    this->self->retransmission_manager->ack(packet_id_arr.get(), sz, exception_arr.get());
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(max_ack_id_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<global_packet_id_t[]> packet_id_arr(max_ack_id_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<RTTFeedBack[]> rtt_arr(max_ack_id_arr_sz);
+
+                    Packet * base_data_arr = data_arr.base(); 
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        for (const PacketBase& e: std::get<XOnlyAckPacket>(base_data_arr[i].xonly_content).ack_vec){
+                            packet_id_arr[ack_id_arr_sz]    = e.id; //expensive
+                            rtt_arr[ack_id_arr_sz].fr       = base_data_arr[i].fr;
+                            rtt_arr[ack_id_arr_sz].rtt      = packet_service::get_transit_time(e);
+                            ack_id_arr_sz                   += 1;
+                        }
+                    }
+
+                    this->self->retransmission_manager->ack(packet_id_arr.get(), ack_id_arr_sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+
+                    this->self->feedback_machine->rtt_fb(rtt_arr.get(), ack_id_arr_sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -2622,7 +2833,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             struct InternalThruRequestResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
 
                 InBoundWorker * self;
-                dg::network_producer_consumer::KVDeliveryHandle<Address, packet> * ack_vectorizer;
+                dg::network_producer_consumer::KVDeliveryHandle<Address, PacketBase> * ack_vectorizer;
                 size_t * success_counter;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
@@ -2630,12 +2841,65 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     Packet * base_data_arr = data_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
-                        Packet stripped_pkt = packet_service::copy_no_content(base_data_arr[i]);
-                        dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, std::move(stripped_pkt));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, static_cast<const PacketBase&>(base_data_arr[i]));
                     }
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     this->self->inbound_packet_container->push(std::make_move_iterator(base_data_arr), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
+
+            struct InternalThruSuggestionResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+
+                InBoundWorker * self;
+                size_t * success_counter;
+
+                void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<OutBoundFeedBack[]> outbound_fb_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    Packet * base_data_arr = data_arr.base();
+
+                    for (size_t i = 0u; i < sz; ++I){
+                        outbound_fb_arr[i].fr                   = base_data_arr[i].fr;
+                        outbound_fb_arr[i].suggested_frequency  = std::get<XOnlySuggestionPacket>(base_data_arr[i].xonly_content).suggested_frequency;
+                    }
+
+                    this->self->feedback_machine->outbound_frequency_fb(outbound_fb_arr.get(), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
+
+            struct InternalThruInformResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+
+                InBoundWorker * self;
+                size_t * success_counter;
+
+                void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<InBoundFeedFront[]> inbound_fb_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    Packet * base_data_arr = data_arr.base();
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        inbound_fb_arr[i].fr                    = base_data_arr[i].fr;
+                        inbound_fb_arr[i].transmit_frequency    = std::get<XOnlyInformPacket>(base_data_arr[i].xonly_content).transmit_frequency;
+                    }
+
+                    this->self->feedback_machine->inbound_frequency_fb(inbound_fb_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
