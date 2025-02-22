@@ -2313,6 +2313,20 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //we want to "compress" the system stats by mapping it into another compact semantic space (pretrained)
     //we want to maximize self thru-put - because we are in a uniformly distributed environment - we can do local optimization to approx global optimization
     //we want to re-route the packets - by exploring neighbor nodes (A * search) - recall that local optimization is global optimization in a uniform distribution
+    //we probably dont want to re-route - because it would hinder the holistic upstream optimization (using memregion frequency)
+
+    //the things that are in our control, and do not interfere with upstream optimizations, are the obvious optimizables - like maximizing thru-put ack/s - by mutating the adjustables in an acceptable window (like suggested frequency, consume_sz, produce_sz, etc.)
+    //we'll advance in the optimization direction - we'll do very simple things like chartifying the acks per IP, chartifying the CPU consumption, chartifying the network consumption, chartifying the consumption_sz, chartifying the production_sz
+    //                                                                               chartifying the round-trip time per IP, chartifying the suggested_frequency per IP, etc.
+
+    //                                            - we want to inch forward in the direction (mutating the suggestion, mutating the production_sz, etc.) that approxes local maxima (we dont really care if we inch in the right direction - we actually care, this does create a ripple effect for training - we want to gather data for the stock market prediction)
+    //                                            - alright - this is an entire different algorithm - yet the idea is to "observe" the behavior of the system by using "stock prediction" - and inch the system in the direction that is categorized as beneficial
+    //                                            - the way that we did stock prediction is actually good - we established the support lines by mapping data into a new semantic space
+    //                                                  + transformer is a radix of sparse centrality - so the model can actually think in a complex semantic space - can even predict things very accurately in the natural enviroment - not manipulated environment like stock market 
+
+    //                                            - approxing local maximma is approxing global maxima in a uniform distribution environment, we want to do "good" individually in terms of request_acks/s, and the system will behave in the direction
+    //                                            - suggested frequency does more than just suggesting frequency - it's a temporal encoder | decoder by using continuity compression (we must be Cooper writing on the watch)
+    //                                            - we map our current buffer to an arbitrary trainable space (which is pretrained or real-time trained) - we convert it to a n! space - and we broadcast it temporally - so that's the plan)
 
     //thru-put in terms of network is ack/s
     //thru-put in terms of compute is matrix/s
