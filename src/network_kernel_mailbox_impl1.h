@@ -479,6 +479,22 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     //we want to leverage this to implement our request | respond event_driven protocol - one_request == max_one_respond within a validation window - retry after the validation window is expired (we need to take in time-dilation to avoid bugs) to make sure that the request is not overriden
     //its the programmers' responsibility to know that unsuccessful request could mean successful receive - and write code in a progressive way to avoid bugs - take orphan tiles + adopt tiles for example - a lost orphan order is happened post the adopt order and now we are out of sync
 
+    //we'll implement these tomorrow:
+    //offset shared_ptr<char[]> - to avoid buffer copy + friends - this is very important for retriables
+    //and malloc initialization for std::string(sz, ' ') to avoid cpu + memfetch
+    //this is the very hard part - the std::memory_order_seq_cst optimization for std::shared_ptr<char[]> destruction
+    //memory fragmentation + locality of reference by using node_lifetime cyclic allocations
+    //the thing that we worry is whether the memory being fetched is the correct deinitialization memory as if we dont need memory_order_seq_cst or memory_order_acquire for that matter if we dont do std::destroy(static_cast<object *>(buffer))
+
+    //recall that std::shared_ptr<> uses std::memory_order_relaxed for the reference of the pointing block
+    //the reason being is the pointer value of std::shared_ptr<> is not the responsibility of the acquisition, and the pointing value of std::shared_ptr<> is also not the responsibility of the acquisition
+    //remember that copying std::shared_ptr<> without memory ordering or a lock is also considered malicious - this is where most people get it wrong
+
+    //if referencing memory without synchronization is malicious - then who is responsibile for the memory ordering of the buffers - it is the affined allocator's - the allocator at the time of malloc must guarantee that the underlying data of the returning pointer is synchronized
+    //we'd want to do affined memory address free (a memory pool) before we trigger free in the global memory pool or another partially affined memory pool
+
+    //well, we are on track fellas - probably a year or 2 years or 5 years - we'll implement all of the mentioned things correctly  
+
     //this can actually work really well in the mass requests + atomic_flag relaxed implementation - we only need to wait for one or two requests
     //this is partially the nginx implementation
     //yet we have full control over our p2p system, so we can assume that all requests are event_driven
@@ -1751,7 +1767,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     this->packet_vec.push_back(std::move(base_pkt_arr[i]));
-                    std::push_heap(this->packet_vec.begin(), this->packet_vec.end(), less);
+                    std::push_heap(this->packet_vec.begin(), this->packet_vec.end(), less); //TODOs: optimizables
                     exception_arr[i] = dg::network_exception::SUCCESS;
                 }
             }     
@@ -1765,7 +1781,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 Packet * out_it = output_pkt_arr; 
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::pop_heap(this->packet_vec.begin(), this->packet_vec.end(), less);
+                    std::pop_heap(this->packet_vec.begin(), this->packet_vec.end(), less); //TODOs: optimizables
                     *out_it = std::move(this->packet_vec.back());
                     this->packet_vec.pop_back();
                     std::advance(out_it, 1u);
@@ -1832,7 +1848,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     sched_packet.sched_time = sched_time.value();
 
                     this->packet_vec.push_back(std::move(sched_packet));
-                    std::push_heap(this->packet_vec.begin(), this->packet_vec.end(), greater);
+                    std::push_heap(this->packet_vec.begin(), this->packet_vec.end(), greater); //TODOs: optimizables
                     exception_arr[i]        = dg::network_exception::SUCCESS;
                 }
             }
@@ -1854,7 +1870,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return;
                     }
 
-                    std::pop_heap(this->packet_vec.begin(), this->packet_vec.end(), greater);
+                    std::pop_heap(this->packet_vec.begin(), this->packet_vec.end(), greater); //TODOs: optimizables
                     output_pkt_arr[sz++] = std::move(this->packet_vec.back().pkt);
                     this->packet_vec.pop_back();
                 }
@@ -2877,7 +2893,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     dg::network_exception::NoExceptAllocation<Packet[]> cpy_packet_arr(sz);
 
                     Packet * base_packet_arr = packet_arr.base();
-                    std::copy(base_packet_arr, std::next(base_packet_arr, sz) cpy_packet_arr.get());
+                    std::copy(base_packet_arr, std::next(base_packet_arr, sz) cpy_packet_arr.get()); //optimizables
                     this->container_dst->push(std::make_move_iterator(base_packet_arr), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
