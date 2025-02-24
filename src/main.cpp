@@ -47,11 +47,8 @@ class Foo{
 };
 
 int main(){
-
-    // std::chrono::utc_clock::now();
-    // using tp = std::chrono::time_point<std::chrono::utc_clock>;
     
-    std::atomic<std::chrono::time_point<std::chrono::utc_clock>> timepoint{};
+    std::atomic<std::optional<uint8_t>> timepoint{};
     auto rs = timepoint.load();
 
     std::move_iterator<size_t *> ptr{};

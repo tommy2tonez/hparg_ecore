@@ -267,7 +267,10 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 
     enum packet_kind: uint8_t{
         rts_ack = 0,
-        request = 1
+        request = 1,
+        suggest = 2,
+        informr = 3,
+        krescue = 4
     };
 
     static inline constexpr size_t MAXIMUM_MSG_SIZE = size_t{1} << 10;  
@@ -388,8 +391,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~KernelRescuePostInterface() noexcept = default;
-            virtual void heartbeat() noexcept = 0;
-            virtual auto last_heartbeat() noexcept -> std::chrono::time_point<std::chrono::utc_clock> = 0;
+            virtual auto heartbeat() noexcept -> exception_t = 0;
+            virtual auto last_heartbeat() noexcept -> std::expected<std::optional<std::chrono::time_point<std::chrono::utc_clock>>, exception_t> = 0;
+            virtual void reset() noexcept = 0;
     };
 
     class AckPacketGeneratorInterface{
@@ -944,6 +948,46 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     static auto virtualize_inform_packet(InformPacket) noexcept -> std::expected<Packet, exception_t>{
 
     }
+
+    static auto devirtualize_request_packet(Packet pkt) noexcept -> std::expected<RequestPacket, exception_t>{
+
+    }
+
+    static auto devirtualize_ack_packet(Packet pkt) noexcept -> std::expected<AckPacket, exception_t>{
+
+    }
+    
+    static auto devirtualize_suggestion_packet(SuggestionPacket pkt) noexcept -> std::expected<Packet, exception_t>{
+
+    }
+
+    static auto devirtualize_inform_packet(InformPacket) noexcept -> std::expected<Packet, exception_t>{
+
+    }
+
+    static inline auto is_request_packet(const Packet&) noexcept -> bool{
+
+    }
+
+    static inline auto is_rts_ack_packet(const Packet&) noexcept -> bool{
+
+    }
+
+    static inline auto is_suggest_packet(const Packet&) noexcept -> bool{
+
+    }
+
+    static inline auto is_informr_packet(const Packet&) noexcept -> bool{
+
+    }
+
+    static inline auto is_hrtbeat_packet(const Packet&) noexcept -> bool{
+
+    }
+
+    static inline auto is_krescue_packet(const Packet&) noexcept -> bool{
+
+    }
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
@@ -1186,7 +1230,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get() noexcept -> GlobalPacketIdentifier{
 
-                return model::GlobalPacketIdentifier{this->last_pkt_id.value.fetch_add(1u, std::memory_order_relaxed), this->factory_id.value};
+                auto rs             = GlobalPacketIdentifier{};
+                rs.local_packet_id  = this->last_pkt_id.value.fetch_add(1u, std::memory_order_relaxed);
+                rs.factory_id       = this->factory_id.value;
+
+                return rs;
             }
     };
 
@@ -1315,7 +1363,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 pkt.priority                    = 0u;
                 pkt.port_utc_stamps             = {};
                 pkt.port_stamp_sz               = 0u;
-                
+
                 std::expected<uint32_t, exception_t> fq = this->suggestor->get_frequency_suggestion(to_addr);
 
                 if (!fq.has_value()){
@@ -1360,20 +1408,26 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::atomic<std::chrono::time_point<std::chrono::utc_clock>> ts;
+            std::atomic<std::optional<std::chrono::time_point<std::chrono::utc_clock>>> ts;
         
         public:
 
-            KernelRescuePost(std::atomic<std::chrono::time_point<std::chrono::utc_clock>> ts) noexcept: ts(std::move(ts)){}
+            KernelRescuePost(std::atomic<std::optional<std::chrono::time_point<std::chrono::utc_clock>>> ts) noexcept: ts(std::move(ts)){}
 
-            void heartbeat() noexcept{
+            auto heartbeat() noexcept -> exception_t{
 
-                this->ts.exchange(std::chrono::utc_clock::now(), std::memory_order_relaxed);
+                this->ts.exchange(std::optional<std::chrono::time_point<std::chrono::utc_clock>>(std::chrono::utc_clock::now()), std::memory_order_relaxed);
+                return dg::network_exception::SUCCESS;
             }
 
-            auto last_heartbeat() noexcept -> std::chrono::time_point<std::chrono::utc_clock>{
+            auto last_heartbeat() noexcept -> std::expected<std::optional<std::chrono::time_point<std::chrono::utc_clock>>, exception_t>{
 
-                return this->ts.load(std::memory_order_relaxed);
+                return his->ts.load(std::memory_order_relaxed);
+            }
+
+            void reset() noexcept{
+
+                this->ts.exchange(std::optional<std::chrono::time_point<std::chrono::utc_clock>>(std::nullopt), std::memory_order_relaxed);
             }
     };
 
@@ -1416,9 +1470,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
-                const size_t RETICK_OPS_SZ  = 1024u; 
-                auto clock                  = dg::tickonops_clock<std::chrono::utc_clock>(RETICK_OPS_SZ); 
-                Packet * base_pkt_arr       = pkt_arr.base(); 
+                auto now                = std::chrono::utc_clock::now();
+                Packet * base_pkt_arr   = pkt_arr.base(); 
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->pkt_deque.size() == this->pkt_deque_capacity){
@@ -1435,14 +1488,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     pkt.retransmission_count    += 1;
                     QueuedPacket queued_pkt     = {};
                     queued_pkt.pkt              = std::move(pkt);
-                    queued_pkt.queued_time      = clock.now();
+                    queued_pkt.queued_time      = now;
                     this->pkt_deque.push_back(std::move(queued_pkt));
                     exception_arr[i]            = dg::network_exception::SUCCESS;
                 }
             }
 
             void ack(global_packet_id_t * pkt_id_arr, size_t sz, exception_t * exception_arr) noexcept{
-                
+
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -1463,6 +1516,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 std::chrono::time_point<std::chrono::utc_clock> time_bar = std::chrono::utc_clock::now() - this->transmission_delay_time;
+
                 auto key            = QueuedPacket{};
                 key.queued_time     = time_bar;
                 auto last           = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), key, [](const auto& lhs, const auto& rhs){return lhs.queued_time < rhs.queued_time;});
@@ -1472,11 +1526,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto out_iter       = output_pkt_arr;
 
                 for (auto it = this->pkt_deque.begin(); it != new_last; ++it){
-                    if (!this->acked_id_hashset->contains(it->pkt.id)){
-                        *out_iter = std::move(it->pkt);
-                        std::advance(out_iter, 1u);
+                    if (this->acked_id_hashset->contains(it->pkt.id)){
+                        continue;
                     }
+
+                    *out_iter = std::move(it->pkt);
+                    std::advance(out_iter, 1u);
                 }
+
+                this->pkt_deque.erase(this->pkt_deque.begin(), new_last);
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -1549,7 +1607,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t buffer_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
-        
+
         public:
 
             BufferFIFOContainer(dg::deque<dg::string> buffer_vec,
@@ -1577,8 +1635,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 size_t new_sz   = old_sz + app_sz;
 
                 this->buffer_vec.resize(new_sz);
-                std::copy(buffer_arr, buffer_arr + app_sz, std::next(this->buffer_vec.begin(), old_sz));
 
+                std::copy(buffer_arr, std::next(buffer_arr, app_sz), std::next(this->buffer_vec.begin(), old_sz));
                 std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
                 std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
             }
@@ -1587,7 +1645,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                sz          = std::min(this->buffer_vec.size(), output_buffer_arr_cap);
+                sz          = std::min(output_buffer_arr_cap, this->buffer_vec.size());
                 auto first  = this->buffer_vec.begin();
                 auto last   = std::next(first, sz);
 
@@ -1607,7 +1665,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::unique_ptr<BufferContainerInterface> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-        
+
         public:
 
             ExhaustionControlledBufferContainer(std::unique_ptr<BufferContainerInterface> base,
@@ -1617,13 +1675,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 dg::string * buffer_arr_base        = buffer_arr.base();
-                dg::string * buffer_arr_fisrt       = buffer_arr_base;
+                dg::string * buffer_arr_first       = buffer_arr_base;
                 dg::string * buffer_arr_last        = std::next(buffer_arr_first, sz);
                 exception_t * exception_arr_first   = exception_arr;
                 exception_t * exception_arr_last    = std::next(exception_arr_first, sz);
                 size_t sliding_window_sz            = sz;
 
-                auto task = [&]() noexcept{
+                auto task = [&, this]() noexcept{
                     this->base->push(std::make_move_iterator(buffer_arr_first), sliding_window_sz, exception_arr_first);
 
                     exception_t * retriable_arr_first   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
@@ -1649,7 +1707,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto max_consume_size() noexcept -> size_t{
 
-                return this->base->max_consume_size();                
+                return this->base->max_consume_size();
             }
     };
 
@@ -1683,7 +1741,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
-                auto less = [](const Packet& lhs, const Packet& rhs){return lhs.priority < rhs.priority;};
+                auto less           = [](const Packet& lhs, const Packet& rhs){return lhs.priority < rhs.priority;};
+                auto base_pkt_arr   = pkt_arr.base();
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->packet_vec.size() == this->packet_vec_capacity){
@@ -1691,7 +1750,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         continue;
                     }
 
-                    this->packet_vec.push_back(pkt_arr[i]);
+                    this->packet_vec.push_back(std::move(base_pkt_arr[i]));
                     std::push_heap(this->packet_vec.begin(), this->packet_vec.end(), less);
                     exception_arr[i] = dg::network_exception::SUCCESS;
                 }
@@ -1701,9 +1760,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                auto less   = [](const Packet& lhs, const Packet& rhs){return lhs.priority < rhs.priority;};
-                sz          = std::min(this->output_pkt_arr_capacity, this->packet_vec.size());
-                auto out_it = output_pkt_arr; 
+                auto less       = [](const Packet& lhs, const Packet& rhs){return lhs.priority < rhs.priority;};
+                sz              = std::min(this->output_pkt_arr_capacity, this->packet_vec.size());
+                Packet * out_it = output_pkt_arr; 
 
                 for (size_t i = 0u; i < sz; ++i){
                     std::pop_heap(this->packet_vec.begin(), this->packet_vec.end(), less);
@@ -1752,7 +1811,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
-                auto greater            = [](const auto& lhs, const auto& rhs){return lhs.sched_time > rhs.sched_time;};
+                auto greater            = [](const ScheduledPacket& lhs, const ScheduledPacket& rhs){return lhs.sched_time > rhs.sched_time;};
                 Packet * base_pkt_arr   = pkt_arr.base();
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -1782,8 +1841,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                auto greater    = [](const auto& lhs, const auto& rhs){return lhs.sched_time > rhs.sched_time;};
+                auto greater    = [](const ScheduledPacket& lhs, const ScheduledPacket& rhs){return lhs.sched_time > rhs.sched_time;};
                 auto time_bar   = std::chrono::utc_clock::now();
+                sz              = 0u;
 
                 for (size_t i = 0u; i < output_pkt_arr_capacity; ++i){
                     if (this->packet_vec.empty()){
@@ -1810,22 +1870,40 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::unique_ptr<PacketContainerInterface> ack_container;
-            std::unique_ptr<PacketContainerInterface> req_container;
-            size_t ack_accum_sz;
-            size_t req_accum_sz; 
+            std::unique_ptr<PacketContainerInterface> rts_ack_container;
+            std::unique_ptr<PacketContainerInterface> request_container;
+            std::unique_ptr<PacketContainerInterface> suggest_container;
+            std::unique_ptr<PacketContainerInterface> informr_container;
+            std::unique_ptr<PacketContainerInterface> krescue_container;
+            size_t rts_ack_accum_sz;
+            size_t request_accum_sz; 
+            size_t suggest_accum_sz;
+            size_t informr_accum_sz;
+            size_t krescue_accum_sz;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
-            OutboundPacketContainer(std::unique_ptr<PacketContainerInterface> ack_container,
-                                    std::unique_ptr<PacketContainerInterface> req_container,
-                                    size_t ack_accum_sz,
-                                    size_t req_accum_sz,
-                                    stdx::hdi_container<size_t> consume_sz_per_load) noexcept: ack_container(std::move(ack_container)),
-                                                                                               req_container(std::move(req_container)),
-                                                                                               ack_accum_sz(ack_accum_sz),
-                                                                                               req_accum_sz(req_accum_sz),
+            OutboundPacketContainer(std::unique_ptr<PacketContainerInterface> rts_ack_container,
+                                    std::unique_ptr<PacketContainerInterface> request_container,
+                                    std::unique_ptr<PacketContainerInterface> suggest_container,
+                                    std::unique_ptr<PacketContainerInterface> informr_container,
+                                    std::unique_ptr<PacketContainerInterface> krescue_container,
+                                    size_t rts_ack_accum_sz,
+                                    size_t request_accum_sz,
+                                    size_t suggest_accum_sz,
+                                    size_t informr_accum_sz,
+                                    size_t krescue_accum_sz,
+                                    stdx::hdi_container<size_t> consume_sz_per_load) noexcept: rts_ack_container(std::move(rts_ack_container)),
+                                                                                               request_container(std::move(request_container)),
+                                                                                               suggest_container(std::move(suggest_container)),
+                                                                                               informr_container(std::move(informr_container)),
+                                                                                               krescue_container(std::move(krescue_container)),
+                                                                                               rts_ack_accum_sz(rts_ack_accum_sz),
+                                                                                               request_accum_sz(request_accum_sz),
+                                                                                               suggest_accum_sz(suggest_accum_sz),
+                                                                                               informr_accum_sz(informr_accum_sz),
+                                                                                               krescue_accum_sz(krescue_accum_sz),
                                                                                                consume_sz_per_load(std::move(consume_sz_per_load)){}
 
             void push(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -1837,23 +1915,54 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
-                Packet * base_pkt_arr       = pkt_arr.base();
-                auto ack_push_resolutor     = InternalPushResolutor{};
-                ack_push_resolutor.dst      = this->ack_container.get();
+                Packet * base_pkt_arr = pkt_arr.base();
 
-                size_t trimmed_ack_accum_sz = std::min(std::min(this->ack_accum_sz, sz), this->ack_container->max_consume_size());
-                size_t ack_accumulator_size = dg::network_producer_consumer::delvrsrv_allocation_cost(&ack_push_resolutor, trimmed_ack_accum_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ack_accumulator_buf(ack_accumulator_size);
-                auto ack_accumulator        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ack_push_resolutor, trimmed_ack_accum_sz, ack_accumulator_buf.get()));
+                //
+                auto rts_ack_push_resolutor             = InternalPushResolutor{};
+                rts_ack_push_resolutor.dst              = this->rts_ack_container.get();
 
-                auto req_push_resolutor     = InternalPushResolutor{};
-                req_push_resolutor.dst      = this->req_container.get();
+                size_t trimmed_rts_ack_accum_sz         = std::min(std::min(this->rts_ack_accum_sz, sz), this->rts_ack_container->max_consume_size());
+                size_t rts_ack_accumulator_alloc_sz     = dg::network_producer_consumer::delvrsrv_allocation_cost(&rts_ack_push_resolutor, trimmed_rts_ack_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rts_ack_accumulator_buf(rts_ack_accumulator_alloc_sz);
+                auto rts_ack_accumulator                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&rts_ack_push_resolutor, trimmed_rts_ack_accum_sz, rts_ack_accumulator_buf.get()));
 
-                size_t trimmed_req_accum_sz = std::min(std::min(this->req_accum_sz, sz), this->req_container->max_consume_size());
-                size_t req_accumulator_size = dg::network_producer_consumer::delvrsrv_allocation_cost(&req_push_resolutor, trimmed_req_accum_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> req_accumulator_buf(req_accumulator_size);
-                auto req_accumulator        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&req_push_resolutor, trimmed_req_accum_sz, req_accumulator_buf.get()));
+                //
+                auto request_push_resolutor             = InternalPushResolutor{};
+                request_push_resolutor.dst              = this->request_container.get();
 
+                size_t trimmed_request_accum_sz         = std::min(std::min(this->request_accum_sz, sz), this->request_container->max_consume_size());
+                size_t request_accumulator_alloc_size   = dg::network_producer_consumer::delvrsrv_allocation_cost(&request_push_resolutor, trimmed_request_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> request_accumulator_buf(request_accumulator_alloc_size);
+                auto request_accumulator                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&request_push_resolutor, trimmed_request_accum_sz, request_accumulator_buf.get()));
+
+                //
+                auto suggest_push_resolutor             = InternalPushResolutor{};
+                suggest_push_resolutor.dst              = this->suggest_container.get();
+
+                size_t trimmed_suggest_accum_sz         = std::min(std::min(this->suggest_accum_sz, sz), this->suggest_container->max_consume_size());
+                size_t suggest_accumulator_alloc_sz     = dg::network_producer_consumer::delvrsrv_allocation_cost(&suggest_push_resolutor, trimmed_suggest_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> suggest_accumulator_buf(suggest_accumulator_alloc_sz);
+                auto suggest_accumulator                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&suggest_push_resolutor, trimmed_suggest_accum_sz, suggest_accumulator_buf.get()));
+
+                //
+                auto informr_push_resolutor             = InternalPushResolutor{};
+                informr_push_resolutor.dst              = this->informr_container.get();
+
+                size_t trimmed_informr_accum_sz         = std::min(std::min(this->informr_accum_sz, sz), this->informr_container->max_consume_size());
+                size_t informr_accumulator_alloc_sz     = dg::network_producer_consumer::delvrsrv_allocation_cost(&informr_push_resolutor, trimmed_informr_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> informr_accumulator_buf(informr_accumulator_alloc_sz);
+                auto informr_accumulator                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&informr_push_resolutor, trimmed_informr_accum_sz, informr_accumulator_buf.get()));
+
+                //
+                auto krescue_push_resolutor             = InternalPushResolutor{};
+                krescue_push_resolutor.dst              = this->krescue_container.get();
+
+                size_t trimmed_krescue_accum_sz         = std::min(std::min(this->krescue_accum_sz, sz), this->krescue_container->max_consume_size());
+                size_t krescue_accumulator_alloc_sz     = dg::network_producer_consumer::delvrsrv_allocation_cost(&krescue_push_resolutor, trimmed_krescue_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> krescue_accumulator_buf(krescue_accumulator_alloc_sz);
+                auto krescue_accumulator                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&krescue_push_resolutor, trimmed_krescue_accum_sz, krescue_accumulator_buf.get())); 
+
+                //
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -1866,12 +1975,27 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     switch (kind){
                         case constants::rts_ack:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(ack_accumulator.get(), std::move(delivery_arg));
+                            dg::network_producer_consumer::delvrsrv_deliver(rts_ack_accumulator.get(), std::move(delivery_arg));
                             break;
                         }
                         case constants::request:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(req_accumulator.get(), std::move(delivery_arg));
+                            dg::network_producer_consumer::delvrsrv_deliver(request_accumulator.get(), std::move(delivery_arg));
+                            break;
+                        }
+                        case constants::suggest:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(suggest_accumulator.get(), std::move(delivery_arg));
+                            break;
+                        }
+                        case constants::informr:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(informr_accumulator.get(), std::move(delivery_arg));
+                            break;
+                        }
+                        case constants::krescue:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(krescue_accumulator.get(), std::move(delivery_arg));
                             break;
                         }
                         default:
@@ -1889,13 +2013,37 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_capacity) noexcept{
 
-                size_t cur_sz               = {};
-                this->ack_container->pop(output_pkt_arr, cur_sz, output_pkt_arr_capacity);
-                Packet * new_output_pkt_arr = std::next(output_pkt_arr, cur_sz);
-                size_t new_cap              = output_pkt_arr_capacity - cur_sz;
-                size_t new_sz               = {};
-                this->req_container->pop(new_output_pkt_arr, new_sz, new_cap); 
-                sz                          = cur_sz + new_sz;
+                //this does not look good yet it's probably a good solution - we cant radix this as a binary tree insertion 
+                //as request_container uses schedules
+                //rts_ack uses asap priority queues (we rely on request's frequency)
+                //and other guys use different kinds of containerization
+
+                constexpr size_t CONTAINER_SZ   = 5u;
+                using container_ptr_t           = PacketContainerInterface *;
+
+                container_ptr_t container_arr[CONTAINER_SZ]; 
+                container_arr[0]        = this->rts_ack_container.get();
+                container_arr[1]        = this->suggest_container.get();
+                container_arr[2]        = this->informr_container.get();
+                container_arr[3]        = this->request_container.get();
+                container_arr[4]        = this->krescue_container.get();
+
+                sz                      = 0u;
+                Packet * iter_pkt_arr   = output_pkt_arr;
+                size_t iter_pkt_arr_cap = output_pkt_arr_capacity; 
+
+                for (size_t i = 0u; i < CONTAINER_SZ; ++i){
+                    if (iter_pkt_arr_cap == 0u){
+                        return;
+                    }
+
+                    size_t tmp_sz       = {};
+                    container_arr[i]->pop(iter_pkt_arr, tmp_sz, iter_pkt_arr_cap);
+
+                    std::advance(iter_pkt_arr, tmp_sz);
+                    iter_pkt_arr_cap    -= tmp_sz;
+                    sz                  += tmp_sz;
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -2775,14 +2923,25 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             bool run_one_epoch() noexcept{
 
-                std::chrono::time_point<std::chrono::utc_clock> last_heartbeat  = this->rescue_post->last_heartbeat();
-                std::chrono::time_point<std::chrono::utc_clock> now             = std::chrono::utc_clock::now();
-                std::chrono::nanoseconds lapsed                                 = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_heartbeat);
+                std::expected<std::optional<std::chrono::time_point<std::chrono::utc_clock>>, exception_t> last_heartbeat = this->rescue_post->last_heartbeat();
 
-                if (lapsed < rescue_threshold){
+                if (!last_heartbeat.has_value()){
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(last_heartbeat.error()));
                     return false;
                 }
 
+                if (!last_heartbeat.value().has_value()){
+                    return false;
+                }
+
+                std::chrono::time_point<std::chrono::utc_clock> now = std::chrono::utc_clock::now();
+                std::chrono::nanoseconds lapsed                     = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_heartbeat.value().value());
+
+                if (lapsed < this->rescue_threshold){
+                    return true;
+                }
+
+                dg::network_log_stackdump::journal_fast_optional("UDP Rescue Packets enrouting");
                 dg::network_stack_allocation::NoExceptAllocation<Packet[]> rescue_packet_arr(this->rescue_packet_sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(this->rescue_packet_sz);
 
@@ -2799,7 +2958,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
                 }
 
-                this->rescue_post->heartbeat(); //this is debatable
                 return true;
             }
     };
@@ -3026,7 +3184,11 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     size_t dice = dg::network_randomizer::randomize_int<size_t>() & (this->pow2_rescue_heartbeat_interval - 1u);
 
                     if (dice == 0u){
-                        this->rescue_post->heartbeat();
+                        exception_t rescue_heartbeat_err = this->rescue_post->heartbeat();
+
+                        if (dg::network_exception::is_failed(rescue_heartbeat_err)){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(rescue_heartbeat_err));
+                        }
                     }
                 }
 
