@@ -246,23 +246,13 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct OutBoundFeedBack{
         Address fr;
-        uint32_t suggested_frequency;
+        uint32_t suggested_frequency; //we have discussed a long conversation - it suffices to transmit every information by just transmiting one variable
     };
 
     struct InBoundFeedFront{
         Address fr;
-        uint32_t transmit_frequency;
+        uint32_t transmit_frequency; //we have discussed a long conversation - it suffices to transmit every information by just transmiting one variable
     };
-
-    // struct SchedulerFeedBack{
-    //     Address fr;
-    //     std::chrono::nanoseconds rtt;
-    // };
-
-    // struct SchedulerSuggestion{
-    //     Address fr;
-    //     uint32_t suggested_frequency;
-    // };
 
     struct MailBoxArgument{
         Address to;
@@ -333,10 +323,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     //we want to stay affined for as long as possible - before we invoke a payload for every interval - to offset the cost of memory_ordering + mutex acquisition + etc 
     //we'd hope to stay < 10000 lines of code 
     //ETA: next week - or next next week - we'll see how complex this task is
-
-    // class SchedMachineInterface{
-
-    // };
+    //we dont really care about the recv_from(wait) - yet it imposes a very significant overhead on the system (memory orderings)
 
     class FeedBackMachineInterface{
 
@@ -473,6 +460,38 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     //we'll be back tomorrow to run the benchs
     //hopefully we can sat the bandwidth
 
+    //alright - we'll postpone this to next week - we'll implement the machine learning algorithm of sparse centrality + try to optimize it as far as we could - we'll run some A* algorithm to optimize the convergence of the torch model - that should be our baseline    
+    //our goal is to dynamically change the consumption_sz + production_sz - keep the kernel queue sizable (preferably no kernel container - by using recv_block) - and leave the flood management to the kernel
+    //we don't really care if our metrics are accurate - like round-trip time - as long as it is predictable (in the sense of metering the meterables) - the sense maker responsibility is the machine learning model responsibility
+
+    //our implementation of the comm protocol is the guarantee of one_send == max one_recv
+    //it can mean a lot of things - one_succcesful_send                     = one_recv
+    //                            - one_successful_send                     = no_recv
+    //                            - one_unsuccessful_send                   = one_recv (we dont know what happened - kernel panic kicked in and the stack unwinds)
+    //                            - one_unsuccessful_send                   = no_recv
+    //                            - one_partially_successful_send           = one_recv
+    //                            - one_partially_successful_send           = no_recv
+
+    //we want to leverage this to implement our request | respond event_driven protocol - one_request == max_one_respond within a validation window - retry after the validation window is expired (we need to take in time-dilation to avoid bugs) to make sure that the request is not overriden
+    //its the programmers' responsibility to know that unsuccessful request could mean successful receive - and write code in a progressive way to avoid bugs - take orphan tiles + adopt tiles for example - a lost orphan order is happened post the adopt order and now we are out of sync
+
+    //this can actually work really well in the mass requests + atomic_flag relaxed implementation - we only need to wait for one or two requests
+    //this is partially the nginx implementation
+    //yet we have full control over our p2p system, so we can assume that all requests are event_driven
+    //we might need to implement a liasion as an abstraction layer to talk to the system
+
+    //we have considered long and hard - recv_block cannot be replaced by recv_noblock
+    //                                 - a write from NIC -> kernel queue is expensive
+    //                                 - kernel queue size should be kept small to avoid flood (this includes CPU flood + network flood + system flood - it should be the NIC internal responsibility to not contaminate the system)
+    //                                 - we want to have full control over the runtime
+
+    //our 10000 lines of network protocol might not be dry - yet we want to establish basic interfaces:
+    //send
+    //recv
+    //inbound_rule (opt - by using dependency injection std::shared_ptr<IPSieverInterface>)
+    //outbound_rule (opt - by using dependency injection std::shared_ptr<IPSieverInterface>)
+    //the heart of performance is to event-driven everything - so that's where we are heading
+
     //things are hard to code - we can't really blame anybody because its our job to move forward based on the given arguments
     //there is no better description than just to keep it under 5000 memory orderings/ second + minimize mutex collisions and hope for the best 
     //I dont know what's wrong with people and their BDSM std::memory_order_consume
@@ -487,6 +506,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual void push(std::move_iterator<dg::string *>, size_t, exception_t *) noexcept = 0;
             virtual void pop(dg::string *, size_t&, size_t) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
+    class IPSieverInterface{
+
+        public:
+
+            virtual ~IPSieverInterface() noexcept = default;
+            virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
     };
 
     class PacketContainerInterface{
@@ -515,6 +542,25 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual ~InBoundTrafficControllerInterface() noexcept = default;
             virtual void thru(Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
+    //an address is considered when it appears in inbound and outbound 
+    //an address can also be considered in other manners 
+
+    class NATIPControllerInterface{
+
+        public:
+
+            virtual ~NATIPControllerInterface() noexcept = default;
+
+            virtual void add_inbound(Address *, size_t, exception_t *) noexcept = 0;
+            virtual void add_outbound(Address *, size_t, exception_t *) noexcept = 0;
+
+            virtual void get_inbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0; 
+            virtual auto get_inbound_friend_addr_size() noexcept -> size_t = 0;
+
+            virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
+            virtual auto get_outbound_friend_addr_size() noexcept -> size_t = 0;
     };
 }
 
@@ -841,22 +887,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
     
-    static auto request_to_ack(const model::Packet& pkt) noexcept -> model::Packet{
-
-        Packet rs{};
-
-        rs.to_addr              = pkt.fr_addr;
-        rs.fr_addr              = pkt.to_addr;
-        rs.id                   = pkt.id;
-        rs.retransmission_count = pkt.retransmission_count;
-        rs.priority             = pkt.priority;
-        rs.kind                 = constants::rts_ack;
-        rs.port_utc_stamps      = pkt.port_utc_stamps;
-        rs.port_stamp_sz        = pkt.port_stamp_sz;
-
-        return rs;
-    }
-
     static auto get_transit_time(const model::Packet& pkt) noexcept -> std::expected<std::chrono::nanoseconds, exception_t>{
         
         using namespace std::chrono_literals; 
@@ -1298,6 +1328,34 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    class KRescuePacketGenerator: public virtual KRescuePacketGeneratorInterface{
+
+        private:
+
+            std::unique_ptr<IDGeneratorInterface> id_gen;
+            Address host_addr;
+        
+        public:
+
+            KRescuePacketGenerator(std::unique_ptr<IDGeneratorInterface> id_gen,
+                                   Address host_addr) noexcept: id_gen(std::move(id_gen)),
+                                                                host_addr(std::move(host_addr)){}
+
+            auto get() noexcept -> std::expected<KRescuePacket, exception_t>{
+
+                KRescuePacket pkt               = {};
+                pkt.fr_addr                     = this->host_addr;
+                pkt.to_addr                     = this->host_addr;
+                pkt.id                          = this->id_gen->get();
+                pkt.retransmission_count        = 0u;
+                pkt.priority                    = 0u;
+                pkt.port_utc_stamps             = {};
+                pkt.port_stamp_sz               = 0u;
+
+                return pkt;
+            }
+    };
+
     class KernelRescuePost: public virtual KernelRescuePostInterface{
 
         private:
@@ -1313,7 +1371,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 this->ts.exchange(std::chrono::utc_clock::now(), std::memory_order_relaxed);
             }
 
-            auto last_heartbeat() noexcept{
+            auto last_heartbeat() noexcept -> std::chrono::time_point<std::chrono::utc_clock>{
 
                 return this->ts.load(std::memory_order_relaxed);
             }
@@ -2048,6 +2106,272 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 return this->consume_sz_per_load.value;
             }
     };
+    
+    class NATPunchIPController: public virtual NATIPControllerInterface{
+
+        private:
+
+            std::unique_ptr<datastructure::unordered_set_interface<Address>> inbound_ip_set; //
+            std::unique_ptr<datastructure::unordered_set_interface<Address>> outbound_ip_set; //
+            dg::deque<Address> inbound_addr_deque;
+            size_t inbound_addr_deque_cap;
+            dg::deque<Address> outbound_addr_deque;
+            size_t outbound_addr_deque_cap;
+
+        public:
+
+            NATPunchIPController(std::unique_ptr<datastructure::unordered_set_interface<Address>> inbound_ip_set,
+                                 std::unique_ptr<datastructure::unordered_set_interface<Address>> outbound_ip_set,
+                                 dg::deque<Address> inbound_addr_deque,
+                                 size_t inbound_addr_deque_cap,
+                                 dg::deque<Address> outbound_addr_deque,
+                                 size_t outbound_addr_deque_cap) noexcept: inbound_ip_set(std::move(inbound_ip_set)),
+                                                                           outbound_ip_set(std::move(outbound_ip_set)),
+                                                                           inbound_addr_deque(std::move(inbound_addr_deque)),
+                                                                           inbound_addr_deque_cap(inbound_addr_deque_cap),
+                                                                           outbound_addr_deque(std::move(outbound_addr_deque)),
+                                                                           outbound_addr_deque_cap(outbound_addr_deque_cap){}
+
+            void add_inbound(Address *, size_t, exception_t *) noexcept{
+                
+            }
+
+            void add_outbound(Address *, size_t, exception_t *) noexcept{
+
+            }
+
+            void get_inbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept{
+
+            }
+
+            auto get_inbound_friend_addr_size() noexcept -> size_t{
+
+            }
+
+            void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept{
+
+            }
+
+            auto get_outbound_friend_addr_size() noexcept -> size_t{
+
+            }
+    };
+
+    class NATFriendIPController: public virtual NATIPControllerInterface{
+
+        private:
+
+            std::shared_ptr<IPSieverInterface> inbound_ip_siever;
+            std::shared_ptr<IPSieverInterface> outbound_ip_siever;
+            dg::set<Address> inbound_friend_set; //we've yet to know whether add_inbound uniqueness of entries is the caller or callee responsibility - let's make it callee responsibility for now
+            size_t inbound_friend_set_cap;
+            dg::set<Address> outbound_friend_set;
+            size_t outbound_friend_set_cap;
+
+        public:
+
+            NATFriendIPController(std::shared_ptr<IPSieverInterface> inbound_ip_siever,
+                                  std::shared_ptr<IPSieverInterface> outbound_ip_siever,
+                                  dg::deque<Address> inbound_friend_set,
+                                  size_t inbound_friend_set_cap,
+                                  dg::deque<Address> outbound_friend_set,
+                                  size_t outbound_friend_set_cap) noexcept: inbound_ip_siever(std::move(inbound_ip_siever)),
+                                                                            outbound_ip_siever(std::move(outbound_ip_siever)),
+                                                                            inbound_friend_set(std::move(inbound_friend_set)),
+                                                                            inbound_friend_set_cap(inbound_friend_set_cap),
+                                                                            outbound_friend_set(std::move(outbound_friend_set)),
+                                                                            outbound_friend_set_cap(outbound_friend_set_cap){}
+
+            void add_inbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    std::expected<bool, exception_t> is_thru = this->inbound_ip_siever->thru(addr_arr[i]);
+
+                    if (!is_thru.has_value()){
+                        exception_arr[i] = is_thru.error();
+                        continue;
+                    }
+
+                    if (!is_thru.value()){
+                        exception_arr[i] = dg::network_exception::BAD_IP_RULE;
+                        continue;
+                    }
+
+                    this->finite_set_insert(this->inbound_friend_set, this->inbound_friend_set_cap, addr_arr[i]);
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
+            }
+
+            void add_outbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    std::expected<bool, exception_t> is_thru = this->outbound_ip_siever->thru(addr_arr[i]);
+
+                    if (!is_thru.has_value()){
+                        exception_arr[i] = is_thru.error();
+                        continue;
+                    }
+
+                    if (!is_thru.value()){
+                        exception_arr[i] = dg::network_exception::BAD_IP_RULE;
+                        continue;
+                    }
+
+                    this->finite_set_insert(this->outbound_friend_set, this->outbound_friend_set_cap, addr_arr[i]);
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
+            }
+
+            void get_inbound_friend_addr(Address * addr_arr, size_t off, size_t& sz, size_t cap) noexcept{
+
+                size_t adjusted_off     = std::min(off, this->inbound_friend_set.size()); 
+                size_t max_topping_sz   = this->inbound_friend_set.size() - adjusted_off;
+                sz                      = std::min(cap, max_topping_sz);  
+                auto first              = std::next(this->inbound_friend_set.begin(), adjusted_off);
+                auto last               = std::next(first, sz);
+
+                std::copy(first, last, addr_arr);
+            }
+
+            auto get_inbound_friend_addr_size() noexcept -> size_t{
+
+                return this->inbound_friend_deque.size();
+            }
+
+            void get_outbound_friend_addr(Address * addr_arr, size_t off, size_t& sz, size_t cap) noexcept{
+
+                size_t adjusted_off     = std::min(off, this->outbound_friend_set.size());
+                size_t max_topping_sz   = this->outbound_friend_set.size() - adjusted_off;
+                sz                      = std::min(cap, max_topping_sz);
+                auto first              = std::next(this->outbound_friend_set.begin(), adjusted_off);
+                auto last               = std::next(first, sz);
+
+                std::copy(first, last, addr_arr);
+            }
+
+            auto get_outbound_friend_addr_size() noexcept -> size_t{
+
+                return this->outbound_friend_deque.size();
+            }
+
+        private:
+
+            template <class T, class U>
+            void finite_set_insert(dg::set<T>& set_obj, size_t cap, U value) noexcept{
+
+            }
+    };
+
+    class NATIPController: public virtual NATIPControllerInterface{
+
+        private:
+
+            std::unique_ptr<NATPunchIPController> punch_controller;
+            std::unique_ptr<NATFriendIPController> friend_controller;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            NATIPController(std::unique_ptr<NATPunchIPController> punch_controller,
+                            std::unique_ptr<NATFriendIPController> friend_controller,
+                            std::unique_ptr<std::mutex> mtx) noexcept: punch_controller(std::move(punch_controller)),
+                                                                       friend_controller(std::move(friend_controller)),
+                                                                       mtx(std::move(mtx)){}
+
+            void add_inbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->friend_controller->add_inbound(addr_arr, sz, exception_arr);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (dg::network_exception::is_failed(exception_arr[i])){
+                        auto arg            = InBoundPunchResolutorArgument{};
+                        arg.exception_ptr   = std::next(exception_arr, i);
+                        arg.addr            = addr_arr[i]; 
+
+                        dg::network_producer_consumer::delvrsrv_deliver(&inbound_punch_resolutor, std::move(arg));
+                    }
+                }
+            }
+
+            void add_outbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->friend_controller->add_outbound(addr_arr, sz, exception_arr);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (dg::network_exception::is_failed(exception_arr[i])){
+                        auto arg            = OutBoundPunchResolutorArgument{};
+                        arg.exception_ptr   = std::next(exception_arr, i);
+                        arg.addr            = addr_arr[i];
+
+                        dg::network_producer_consumer::delvrsrv_deliver(&outbound_punch_resolutor, std::move(arg));
+                    }
+                }
+            }
+
+            void get_inbound_friend_addr(Address * output, size_t off, size_t& sz, size_t cap) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                size_t punch_controller_sz = this->punch_controller->get_inbound_friend_addr_size();
+
+                if (off < punch_controller_sz){                    
+                    if (off + cap <= punch_controller_sz){
+                        this->punch_controller->get_inbound_friend_addr(output, off, sz, cap); //
+                    } else{                        
+                        size_t tmp_sz           = {};
+                        this->punch_controller->get_inbound_friend_addr(output, off, tmp_sz, cap);
+                        Address * new_output    = std::next(output, tmp_sz);
+                        size_t new_off          = 0u;
+                        size_t new_sz           = {};
+                        size_t new_cap          = cap - tmp_sz; 
+                        this->friend_controller->get_inbound_friend_addr(new_output, new_off, new_sz, new_cap);
+                        sz                      = tmp_sz + new_sz; 
+                    }
+
+                    return;
+                }
+
+                this->friend_controller->get_inbound_friend_addr(output, off - punch_controller_sz, sz, cap);
+            }
+
+            auto get_inbound_friend_addr_size() noexcept -> size_t{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                return this->punch_controller->get_inbound_friend_addr_size() + this->friend_controller->get_inbound_friend_addr_size();
+            }
+
+            void get_outbound_friend_addr(Address * output, size_t off, size_t& sz, size_t cap) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                size_t punch_controller_sz = this->punch_controller->get_outbound_friend_addr_size();
+
+                if (off < punch_controller_sz){                    
+                    if (off + cap <= punch_controller_sz){
+                        this->punch_controller->get_outbound_friend_addr(output, off, sz, cap); //
+                    } else{
+                        size_t tmp_sz           = {};
+                        this->punch_controller->get_outbound_friend_addr(output, off, tmp_sz, cap);
+                        Address * new_output    = std::next(output, tmp_sz);
+                        size_t new_off          = 0u;
+                        size_t new_sz           = {};
+                        size_t new_cap          = cap - tmp_sz;
+                        this->friend_controller->get_outbound_friend_addr(new_output, new_off, new_sz, new_cap);
+                        sz                      = tmp_sz + new_sz;
+                    }
+
+                    return;
+                }
+
+                this->friend_controller->get_outbound_friend_addr(output, off - punch_controller_sz, sz, cap);
+            }
+
+            auto get_outbound_friend_addr_size() noexcept -> size_t{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                return this->punch_controller->get_outbound_friend_addr_size() + this->friend_controller->get_outbound_friend_addr_size();
+            }
+    };
 
     struct ComponentFactory{
 
@@ -2462,22 +2786,192 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_stack_allocation::NoExceptAllocation<Packet[]> rescue_packet_arr(this->rescue_packet_sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(this->rescue_packet_sz);
 
+                auto gen_func = [this]() noexcept{
+                    return dg::network_exception_handler::nothrow_log(packet_service::virtualize_krescue_packet(this->krescue_gen->get()));
+                };
+
+                std::generate(rescue_packet_arr.get(), std::next(rescue_packet_arr.get(), this->rescue_packet_sz), gen_func);
+                this->outbound_packet_container->push(rescue_packet_arr.get(), this->rescue_packet_sz, exception_arr.get());
+
                 for (size_t i = 0u; i < this->rescue_packet_sz; ++i){
-                    rescue_packet_arr[i] = dg::network_exception_handler::nothrow_log(packet_service::virtualize_krescue_packet(this->krescue_gen->get()));
-                }
-
-                this->outbound_packet_container->push(rescue_packet_arr.get(), this->rescue_packet_sz, exception_arr);
-
-                for (size_t i = 0u ; i < this->rescue_packet_sz){
                     if (dg::network_exception::is_failed(exception_arr[i])){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
                     }
                 }
 
-                this->rescue_post->heartbeat();
+                this->rescue_post->heartbeat(); //this is debatable
+                return true;
+            }
+    };
+
+    class InBoundInformerWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<packet_controller::NATIPController> nat_ip_controller;
+            std::shared_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor;
+            std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container;
+            size_t addr_consumption_sz;
+            size_t outbound_container_accum_sz;
+
+        public:
+
+            InBoundInformerWorker(std::shared_ptr<packet_controller::NATIPController> nat_ip_controller,
+                                  std::shared_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor,
+                                  std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container,
+                                  size_t addr_consumption_sz,
+                                  size_t outbound_container_accum_sz) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
+                                                                                inbound_suggestor(std::move(inbound_suggestor)),
+                                                                                outbound_container(std::move(outbound_container)),
+                                                                                addr_consumption_sz(addr_consumption_sz),
+                                                                                outbound_container_accum_sz(outbound_container_accum_sz){}
+
+            bool run_one_epoch() noexcept{
+
+                dg::network_stack_allocaiton::NoExceptAllocation<Address[]> addr_arr(this->addr_consumption_sz);
+                size_t addr_sz  = {};
+                size_t offset   = {};
+
+                auto outbound_delivery_resolutor                = InternalOutBoundDeliveryResolutor{};
+                outbound_delivery_resolutor.outbound_container  = this->outbound_container.get();
+
+                size_t outbound_deliverer_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&outbound_delivery_resolutor, this->outbound_container_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> outbound_deliverer_mem(outbound_deliverer_allocation_cost);
+                auto outbound_deliverer                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&outbound_delivery_resolutor, this->outbound_container_accum_sz, outbound_deliverer_mem.get()));
+
+                while (true){
+                    this->nat_ip_controller->get_outbound_addr(addr_arr.get(), offset, addr_sz, this->addr_consumption_sz);
+
+                    for (size_t i = 0u; i < addr_sz; ++i){
+                        std::expected<InformrPacket, exception_t> pkt = this->inbound_suggestor->get(addr_arr[i]);
+
+                        if (!pkt.has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
+                        }
+
+                        std::expected<Packet, exception_t> virt_pkt = packet_service::virtualize_informr_packet(std::move(pkt.value()));
+
+                        if (!virt_pkt.has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(virt_pkt.error()));
+                        }
+
+                        dg::network_producer_consumer::delvrsrv_deliver(outbound_deliverer.get(), std::move(virt_pkt.value()));
+                    }
+
+                    offset += addr_sz;
+
+                    if (addr_sz != this->addr_consumption_sz){
+                        break;
+                    }
+                }
+
+                return true; 
+            }
+
+        private:
+
+            struct InternalOutBoundDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+
+                packet_controller::PacketContainerInterface * outbound_container;
+
+                void push(std::move_iterator<Packet *> pkt_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    this->outbound_container->push(pkt_arr, sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }  
+            };
+    };
+
+    class OutBoundSuggestorWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<packet_controller::NATIPController> nat_ip_controller;
+            std::shared_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor;
+            std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container;
+            size_t addr_consumption_sz;
+            size_t outbound_container_accum_sz; 
+
+        public:
+
+            OutBoundSuggestorWorker(std::shared_ptr<packet_controller::NATIPController> nat_ip_controller,
+                                    std::shared_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor,
+                                    std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container,
+                                    size_t addr_consumption_sz,
+                                    size_t outbound_container_accum_sz) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
+                                                                                  outbound_suggestor(std::move(outbound_suggestor)),
+                                                                                  outbound_container(std::move(outbound_container)),
+                                                                                  addr_consumption_sz(addr_consumption_sz),
+                                                                                  outbound_container_accum_sz(outbound_container_accum_sz){}
+
+            bool run_one_epoch() noexcept{
+
+                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(this->addr_consumption_sz);
+                size_t addr_sz  = {};
+                size_t offset   = 0u;
+
+                auto outbound_delivery_resolutor                = InternalOutBoundDeliveryResolutor{};
+                outbound_delivery_resolutor.outbound_container  = this->outbound_container.get();
+
+                size_t outbound_deliverer_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&outbound_delivery_resolutor, this->outbound_container_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> outbound_deliverer_mem(outbound_deliverer_allocation_cost);
+                auto outbound_deliverer                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&outbound_delivery_resolutor, this->outbound_container_accum_sz, outbound_deliverer_mem.get()));
+
+                while (true){
+                    this->nat_ip_controller->get_inbound_addr(addr_arr.get(), offset, addr_sz, this->addr_consumption_sz);
+
+                    for (size_t i = 0u; i < addr_sz; ++i){
+                        std::expected<SuggestionPacket, exception_t> pkt = this->outbound_suggestor->get(addr_arr[i]);
+
+                        if (!pkt.has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
+                            continue;
+                        }
+
+                        std::expected<Packet, exception_t> virt_pkt = packet_service::virtualize_suggestion_packet(std::move(pkt.value()));
+
+                        if (!virt_pkt.has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(virt_pkt.error()));
+                            continue;
+                        }
+
+                        dg::network_producer_consumer::delvrsrv_deliver(outbound_deliverer.get(), std::move(virt_pkt.value()));
+                    }
+
+                    offset += addr_sz; 
+
+                    if (addr_sz != this->addr_consumption_sz){
+                        break;
+                    }
+                }
 
                 return true;
             }
+
+        private:
+
+            struct InternalOutBoundDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+
+                dg::packet_controller::PacketContainerInterface * outbound_container;
+
+                void push(std::move_iterator<Packet *> pkt_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    this->outbound_container->push(pkt_arr, sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
     };
 
     class InBoundKernelWorker: public virtual dg::network_concurrency::WorkerInterface{
