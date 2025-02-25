@@ -45,6 +45,10 @@
 
 //we aint selling guys - diamond hands
 //let's see how this scam works
+//let's show the naysayers the true neural network - not their 3rd grade kid stuff
+//we've never been so close to socialism than now - in this very decade
+//socialism is 10^24 bytes/ second
+//we'll be there
 
 int main(){
 
