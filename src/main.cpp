@@ -14,82 +14,38 @@
 #include <thread>
 #include <atomic>
 
-class Foo{
+//alright I was trying to explain memory orderings because this is a difficult topic
 
-    private:
+//assume that the mutual exclusion is responsible for a finite memory pool - such is the memory reachable by the mutex is self-induced
+//then std::memory_order_acquire and std::memory_order_release should suffice
 
-        // std::mutex mtx;
-        std::atomic<std::array<size_t, 1>> arr;
+//assume that the mutual exclusion is responsible for the unique_ptr<> (without loss of generality) argument
+//then std::memory_order_acquire and std::memory_order_release should transfer the responsiblity of memory synchronization in the sense of the caller and the callee pre and post the transaction should "see" the same data
 
-    public:
+//assume that the mutual exclusion is responsible for the shared_ptr<> (without loss of generality) argument
+//then std::memory_order_acquire and std::memory_order_release release should transfer the responsibility of memory synchronization in the sense of pointer value and the constness of the pointing values (including virtualization header, and the const arguments of the pointing values)
 
-        void inc() noexcept{
+//as a contrary to common beliefs, std::shared_ptr<> operator = or initialization without a lock is malicious for the reason being - it only works IF the caller has the correct pointer value (induction), 
+//                                                                                                                                 - there is no virtualization header - and there is no constness of fields in the pointing structure
+//                                                                                                                                 - mutual exclusion is at a fixed address whose responsibility is to serialize memory access of all the members of the structure
 
-            // std::lock_guard<std::mutex> grd(this->mtx);
-            // this->counter.fetch_add(1, std::memory_order_relaxed);
-            // this->counter += 1;
-            auto new_arr = this->arr.load(std::memory_order_relaxed);
-            new_arr[0] += 1;
-            new_arr[1] += 1;
-            this->arr.exchange(new_arr, std::memory_order_relaxed);
-        }
+//people asked me why I wrote code that is the opposite with what people would do
+//because the formula is to do the exact reverse of what a soy boy would do and you would be successful
+//this applies to life, stock market and everything
+//event-driven everything is hard to write yet it's the true formula for a massive training - we'll see someday
+//point is to ingest all sliding snapshots of virtual machine buffers concurrently (L1 L2 L3 and RAM) and try to train the trees
+//we'll be surprised by the browsers' data
 
-        auto read() noexcept -> size_t{
+//collecting the core data is a very hard problem - we want to implement a virtual machine - and implement our own "cache" mechanisms - and train the data based on such
+//we want to run EVERYTHING on the tree - including focus + domain reduction + etc - we'll find a way
 
-            return this->arr.load(std::memory_order_relaxed)[0];
-        }
-    
-    private:
+//we don't even care if the backprop is thru - we just keep ingesting realtime data
+//we'd break numerical stability of gradient update yet that's another topic to explore 
+//we'd hope to train these on synthetic data
 
-        struct Bar{
-            Foo * foo;
-        };
-};
+//we aint selling guys - diamond hands
+//let's see how this scam works
 
 int main(){
-    
-    std::atomic<std::optional<uint8_t>> timepoint{};
-    auto rs = timepoint.load();
 
-    std::move_iterator<size_t *> ptr{};
-    size_t * raw_ptr = ptr.base();
-    
-    auto tp = std::chrono::utc_clock::now() - std::chrono::nanoseconds(1); 
-
-    const size_t THREAD_SZ  = 8;
-    const size_t COUNTER_SZ = size_t{1} << 24;
-    std::vector<std::unique_ptr<Foo>> foo_vec{};
-
-    for (size_t i = 0u; i < THREAD_SZ; ++i){
-        foo_vec.push_back(std::make_unique<Foo>());
-    }
-
-    auto now = std::chrono::high_resolution_clock::now();
-
-    {
-        std::vector<std::thread> thr_vec{};
-
-        for (size_t i = 0u; i < THREAD_SZ; ++i){
-            auto task = [&, i]() noexcept{
-                for (size_t j = 0u; j < COUNTER_SZ; ++j){
-                    foo_vec[i]->inc();
-                }
-            };
-
-            thr_vec.emplace_back(task);
-        }
-
-        for (size_t i = 0u; i < THREAD_SZ; ++i){
-            thr_vec[i].join();
-        }
-    }
-
-    auto then   = std::chrono::high_resolution_clock::now();
-    auto lapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - then).count();
-
-    for (size_t i = 0u; i < THREAD_SZ; ++i){
-        std::cout << foo_vec[i]->read() << std::endl;
-    }
-
-    std::cout << lapsed << "<ms>" << std::endl;
 }

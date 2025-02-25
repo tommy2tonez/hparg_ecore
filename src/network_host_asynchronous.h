@@ -7,6 +7,8 @@
 
 namespace dg::network_host_asynchronous{
 
+    //we'll add the std::memory_order_relaxed synchronization - this is a very important optimizable 
+
     using async_device_id_t = size_t;
 
     class WorkOrder{
