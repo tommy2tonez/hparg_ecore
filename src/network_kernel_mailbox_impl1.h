@@ -363,6 +363,24 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual void update() noexcept = 0;
     };
 
+    class ExhaustionControllerInterface{
+
+        public:
+
+            virtual ~ExhaustionControllerInterface() noexcept = default;
+            virtual auto is_should_wait() noexcept -> bool = 0;
+            virtual auto update_waiting_size(size_t) noexcept -> exception_t = 0;
+    };
+
+    class KernelOutBoundExhaustionControllerInterface{
+
+        public:
+
+            virtual ~KernelOutBoundExhaustionControllerInterface() noexcept = default;
+            virtual auto get_transmit_frequency() noexcept -> size_t = 0;
+            virtual auto update_waiting_size(size_t) noexcept -> exception_t = 0;
+    };
+
     class IDGeneratorInterface{
 
         public:
@@ -479,6 +497,30 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     //we want to leverage this to implement our request | respond event_driven protocol - one_request == max_one_respond within a validation window - retry after the validation window is expired (we need to take in time-dilation to avoid bugs) to make sure that the request is not overriden
     //its the programmers' responsibility to know that unsuccessful request could mean successful receive - and write code in a progressive way to avoid bugs - take orphan tiles + adopt tiles for example - a lost orphan order is happened post the adopt order and now we are out of sync
+    //90% of the web bugs are from overriden requests - it's extremely hard to code web or frontend - I doubt that there even exists a frontend without bugs
+    //I dont even know if apache or nginx implement these time-out methods
+    //essentially - the practice of request synchronization is a lost practice - and it's extremely dangerous in certain scenerios where attackers want to do timing attack on clients or servers
+    //in the world of software engineering - if you dont abstract your components - you wont make it
+    //there are literally thousands of updates along the development - and you can't change the calling stack every time you have a new update
+    //this is stable engineering - even though there are old dinosaur folks who would disagree with me on this matter
+    //it's literally impossible to design things in a hollistic picture - we just care what the component does, what the component needs, and do dependency injection
+
+    //says now I want all exhaustion controlled containers to be subcripted to a machine learning model - input + output
+    //what I'd want to do is to "extend" the interface, do dependency injection of the machine learning model and returns the new result    
+    //for best practices, we almost always need composition of base_object interface + extend - and never inheritance
+    //because the inheritance of a component exposes the protected + private interface which are not supposed to be exposed
+    //in other words, if a class is not extensible via public interface - it should not be extended AT ALL
+
+    //alright the exhaustion control pushes the statistics data to the machine learning model
+    //how about the traffic controller? we definitely can't extend the interface for every subscriber
+    //this is where multiple interface extension shines - we want to inherit the TrafficControllerInterface and the TrafficDataCollectibleInterface
+    //the machine learning model now "observes" the traffic_controller intervally and pull the traffic data
+
+    //we don't have such blessing in the world of C - this is precisely why C++ is good if correctly practiced
+
+    //"real life" programming is that - each component is independent of each other - it does not look "dry" but when they fuse together - it just makes sense 
+    //we want to be accurate - maybe maintainable - debuggable - and provide an abstraction of initialization + reset + how to use the component
+    //we can't aim to have all of those "practices" - it's hard - abstraction is always your friend in terms of software engineering
 
     //we'll implement these tomorrow:
     //offset shared_ptr<char[]> - to avoid buffer copy + friends - this is very important for retriables
@@ -558,17 +600,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    class InBoundTrafficControllerInterface{
+    class TrafficControllerInterface{
 
         public:
 
-            virtual ~InBoundTrafficControllerInterface() noexcept = default;
+            virtual ~TrafficControllerInterface() noexcept = default;
             virtual void thru(Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     //an address is considered when it appears in inbound and outbound 
     //an address can also be considered in other manners 
+    //this is the interface of friend addresses - we do observer pattern to pull this to traffic controller
+    //we want to stay affined for as long as possible
 
     class NATIPControllerInterface{
 
@@ -584,6 +628,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
             virtual auto get_outbound_friend_addr_size() noexcept -> size_t = 0;
+
+            virtual auto last_update() noexcept -> std::chrono::time_point<std::chrono::utc_clock> = 0;
     };
 }
 
@@ -795,7 +841,11 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         server.sin_family   = AF_INET;
         server.sin_port     = htons(to_addr.port);
-        auto n              = sendto(sock.kernel_sock_fd, buf, stdx::wrap_safe_integer_cast(sz), MSG_DONTWAIT, (const struct sockaddr *) &server, sizeof(struct sockaddr_in));
+        auto n              = sendto(sock.kernel_sock_fd, buf, stdx::wrap_safe_integer_cast(sz), MSG_DONTWAIT, (const struct sockaddr *) &server, sizeof(struct sockaddr_in)); 
+        
+        //alright - we'll attempt to do exhaustion control at our end - because the kernel does not provide an official interface for dropping packets - I guess we take the matter into our own hands by using frequencies + "wave_lengths"
+        //these are subcriptible variables - which we'd want to do "stock prediction" on
+        //recall that system optimization is stock prediction - because the stats we optimizing must almost always be at the top - which has clear support lines to backprop 
 
         if (n == -1){
             return dg::network_exception::wrap_kernel_error(errno);
@@ -1584,12 +1634,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::unique_ptr<RetransmissionControllerInterface> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-        
+            std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller;
+
         public:
 
             ExhaustionControlledRetransmissionController(std::unique_ptr<RetransmissionControllerInterface> base,
-                                                         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
-                                                                                                                                                    executor(std::move(executor)){}
+                                                         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
+                                                         std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller) noexcept: base(std::move(base)),
+                                                                                                                                                            executor(std::move(executor)),
+                                                                                                                                                            exhaustion_controller(std::move(exhaustion_controller)){}
 
             void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
@@ -1603,6 +1656,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto task = [&, this]() noexcept{
                     this->base->add_retriables(std::make_move_iterator(pkt_arr_first), sliding_window_sz, exception_arr_first);
 
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz); 
+
+                    if (dg::network_exception::is_failed(err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                    }
+
                     exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
                     exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return e != dg::network_exception::QUEUE_FULL;});
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_eptr_first);
@@ -1611,7 +1671,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     std::advance(pkt_arr_first, relative_offset);
                     std::advance(exception_arr_first, relative_offset);
 
-                    return pkt_arr_first == pkt_arr_last;
+                    return this->exhaustion_controller->is_should_wait() && (pkt_arr_first == pkt_arr_last); //TODOs: we want to subscribe these guys to a load_balancer system
                 };
 
                 auto virtual_task = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(task)>(std::move(task));
@@ -1700,12 +1760,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::unique_ptr<BufferContainerInterface> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
+            std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller;
 
         public:
 
             ExhaustionControlledBufferContainer(std::unique_ptr<BufferContainerInterface> base,
-                                                std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
-                                                                                                                                           executor(std::move(executor)){}
+                                                std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
+                                                std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller) noexcept: base(std::move(base)),
+                                                                                                                                                   executor(std::move(executor)),
+                                                                                                                                                   exhaustion_controller(std::move(exhaustion_controller)){}
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
@@ -1719,6 +1782,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto task = [&, this]() noexcept{
                     this->base->push(std::make_move_iterator(buffer_arr_first), sliding_window_sz, exception_arr_first);
 
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz);
+
+                    if (dg::network_exception::is_failed(err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                    }
+
                     exception_t * retriable_arr_first   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
                     exception_t * retriable_arr_last    = std::find_if(retriable_arr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
 
@@ -1728,7 +1798,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     std::advance(buffer_arr_first, relative_offset);
                     std::advance(exception_arr_first, relative_offset); 
 
-                    return buffer_arr_first == buffer_arr_last;
+                    return this->exhaustion_controller->is_should_wait() && (buffer_arr_first == buffer_arr_last); //TODOs: we want to subscribe these guys to a load_balancer system
                 };
 
                 auto virtual_task = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(task)>(std::move(task));
@@ -2168,12 +2238,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::unique_ptr<PacketContainerInterface> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
+            std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller;
 
         public:
 
             ExhaustionControlledPacketContainer(std::unique_ptr<PacketContainerInterface> base,
-                                                std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
-                                                                                                                                           executor(std::move(executor)){}
+                                                std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
+                                                std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller) noexcept: base(std::move(base)),
+                                                                                                                                                   executor(std::move(executor)),
+                                                                                                                                                   exhaustion_controller(std::move(exhaustion_controller)){}
 
             void push(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
@@ -2187,6 +2260,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto task = [&, this]() noexcept{
                     this->base->push(std::make_move_iterator(pkt_arr_first), sliding_window_sz, exception_arr_first);
 
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz);
+
+                    if (dg::network_exception::is_failed(err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                    } 
+
                     exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
                     exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_eptr_first);
@@ -2195,7 +2275,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     std::advance(pkt_arr_first, relative_offset);
                     std::advance(exception_arr_first, relative_offset);
 
-                    return pkt_arr_first == pkt_arr_last;
+                    return this->exhaustion_controller->is_should_wait() && (pkt_arr_first == pkt_arr_last);  //TODOs: we want to subscribe these guys to a load_balancer system
                 };
 
                 auto virtual_task = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(task)>(std::move(task));
@@ -2213,7 +2293,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class InBoundTrafficController: public virtual InBoundTrafficControllerInterface, public virtual UpdatableInterface{
+    class InBoundTrafficController: public virtual TrafficControllerInterface, public virtual UpdatableInterface{
 
         private:
 
@@ -2804,52 +2884,144 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
     using namespace dg::network_kernel_mailbox_impl1::model; 
 
+    //we've thought long and hard about what ExhaustionControl means and how that would affect system flood
+    //system flood happens when the production_sz > consumption_sz at a random given time
+    //when that happens - we want to dynamically adjust the warehouse sizes of the supply chain to "adapt" with the flood - we want to process the data and also dump incoming data at an approriate rate
+    //we want to think in terms of extremists - think about what happen when the queue size == 0 or queue_size == inf
+    //queue_size == 0 means that we are always up-to-date - and the incoming data is always the lastest data
+    //queue_size == inf means that we are processing the data from a light year before - and the lastest data is too far away to be responded - which causes a system crash (the data we are processing is no long needed - and the data we need to process is too far away in the FIFO queue)
+    //the middle ground is probably to wait out the "sand-storm" and recalibrate the system
+
+    //in that case, we have an invisible extension of the queue which is the data in the infretry device - the question is how long do we want that invisible queue to be?
+    //now is the question of the machine learning problem of stock prediction - what is the next best possible move to achieve the defined goals? This is the question we tried to answer in ballinger project (this is 3rd grade kid stuff) - we want a complex model yet the idea remains  
+    //now is the question of whether that would affect the upstream optimization - the answer is no - because we define our goals to be as generic as possible
+    //we'll be the firsts to implement prediction based on centrality + heuristic to optimize system
+
+    //these optimizables seem simple yet they are very important in real-life scenerios - where the problem of betweenness centrality + maxflow arise
+    //we want a model to actually extract pattern + think to make the best possible min-max move
+    //
+
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
+            std::shared_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
+            std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller;
             std::shared_ptr<model::SocketHandle> socket;
             size_t packet_consumption_cap;
+            size_t packet_transmit_cap;
             size_t rest_threshold_sz; 
 
         public:
 
             OutBoundWorker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
+                           std::shared_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
+                           std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller,
                            std::shared_ptr<model::SocketHandle> socket,
                            size_t packet_consumption_cap,
+                           size_t packet_transmit_cap,
                            size_t rest_threshold_sz) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
+                                                               traffic_controller(std::move(traffic_controller)),
+                                                               exhaustion_controller(std::move(exhaustion_controller)),
                                                                socket(std::move(socket)),
                                                                packet_consumption_cap(packet_consumption_cap),
+                                                               packet_transmit_cap(packet_transmit_cap),
                                                                rest_threshold_sz(rest_threshold_sz){}
 
             bool run_one_epoch() noexcept{
 
-                dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->packet_consumption_cap);
-                size_t packet_arr_sz    = {};
-                size_t success_sz       = {};
-                this->outbound_packet_container->pop(packet_arr.get(), packet_arr_sz, this->packet_consumption_cap);
+                size_t success_sz = {};
 
-                for (size_t i = 0u; i < packet_arr_sz; ++i){
-                    exception_t stamp_err = packet_service::port_stamp(packet_arr[i]); 
+                {
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->packet_consumption_cap);
+                    size_t packet_arr_sz = {};
+                    this->outbound_packet_container->pop(packet_arr.get(), packet_arr_sz, this->packet_consumption_cap);
 
-                    if (dg::network_exception::is_failed(stamp_err)){
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(stamp_err));
+                    //
+                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(packet_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> traffic_response_arr(packet_arr_sz);
+
+                    std::tranform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return ptk.to_addr;});
+                    this->traffic_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
+
+                    //
+                    auto mailchimp_resolutor                    = InternalMailChimpResolutor{};
+                    mailchimp_resolutor.socket                  = this->socket.get();
+                    mailchimp_resolutor.exhaustion_controller   = this->exhaustion_controller.get();  
+                    mailchimp_resolutor.success_counter         = &success_sz;
+
+                    size_t trimmed_mailchimp_deliverer_sz       = std::min(this->packet_transmit_cap, packet_arr_sz);
+                    size_t mailchimp_deliverer_alloc_sz         = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailchimp_resolutor, trimmed_mailchimp_deliverer_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> mailchimp_deliverer_mem(mailchimp_deliverer_alloc_sz);
+                    auto mailchimp_deliverer                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mailchimp_resolutor, trimmed_mailchimp_deliverer_sz, mailchimp_deliverer_mem.get())); 
+
+                    for (size_t i = 0u; i < packet_arr_sz; ++i){
+                        if (!traffic_response_arr[i].has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(traffic_response_arr[i].error()));
+                            continue;
+                        }
+
+                        if (!traffic_response_arr[i].value()){
+                            dg::network_log_stackdump::error_fast_optional("Outgoing Packets dropped at OutBoundWorker Traffic Stop");
+                            continue;
+                        }
+
+                        exception_t stamp_err = packet_service::port_stamp(packet_arr[i]); 
+
+                        if (dg::network_exception::is_failed(stamp_err)){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(stamp_err));
+                        }
+
+                        auto mailchimp_arg      = InternalMailChimpArgument{};
+                        mailchimp_arg.dst       = packet_arr[i].to_addr;
+                        mailchimp_arg.content   = utility::serialize_packet(std::move(packet_arr[i]));
+
+                        dg::network_producer_consumer::delvrsrv_deliver(mailchimp_deliverer.get(), std::move(mailchimp_arg));
                     }
-
-                    Address dst             = packet_arr[i].to_addr;
-                    dg::string bstream      = utility::serialize_packet(std::move(packet_arr[i]));
-                    exception_t sock_err    = socket_service::send_noblock(*this->socket, dst, bstream.data(), bstream.size());
-
-                    if (dg::network_exception::is_failed(sock_err)){
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(sock_err));
-                    }
-
-                    success_sz              += static_cast<size_t>(dg::network_exception::is_success(sock_err));
                 }
 
-                return success_sz >= this->rest_threshold_sz;
+                return success_sz > this->rest_threshold_sz;
             }
+
+        private:
+
+            struct InternalMailChimpArgument{
+                Address dst;
+                dg::string content;
+            };
+
+            struct InternalMailChimpResolutor: dg::network_producer_consumer::ConsumerInterface<InternalMailChimpArgument>{
+
+                model::SocketHandle * socket;
+                packet_controller::KernelOutBoundExhaustionControllerInterface * exhaustion_controller;
+                size_t * success_counter;
+
+                void push(std::move_iterator<InternalMailChimpArgument *> data_arr, size_t sz) noexcept{
+
+                    exception_t mailchimp_freq_update_err           = this->exhaustion_controller->update_waiting_size(sz);
+
+                    if (dg::network_exception::is_failed(mailchimp_freq_update_err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(mailchimp_freq_update_err));
+                    } 
+
+                    InternalMailChimpArgument * base_data_arr       = data_arr.base();
+                    size_t frequency                                = this->exhaustion_controller->get_transmit_frequency();
+                    std::chrono::nanoseconds transmit_wavelength    = this->frequency_to_wavelength(frequency);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        exception_t err = socket_service::send_noblock(*this->socket, base_data_arr[i].dst, base_data_arr[i].content.data(), base_data_arr[i].content.size());
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                        } else{
+                            *this->success_counter += 1;
+                        }
+
+                        dg::network_asynchronous::hardware_sleep(transmit_wavelength);
+                    }
+                }
+            };
     };
 
     class RetransmissionWorker: public virtual dg::network_concurrency::WorkerInterface{
@@ -2895,7 +3067,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
                 }
 
-                return success_counter >= this->rest_threshold_sz;
+                return success_counter > this->rest_threshold_sz;
             }
 
         private:
@@ -3352,7 +3524,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container;
             std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container;
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller;
-            std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic_controller;
+            std::shared_ptr<packet_controller::TrafficControllerInterface> inbound_traffic_controller;
             std::shared_ptr<packet_controller::FeedBackMachineInterface> feedback_machine;
             std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
             size_t ack_vectorization_sz;
@@ -3366,7 +3538,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container,
                           std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
                           std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller,
-                          std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> inbound_traffic_controller,
+                          std::shared_ptr<packet_controller::TrafficControllerInterface> inbound_traffic_controller,
                           std::shared_ptr<packet_controller::FeedBackMachineInterface> feedback_machine,
                           std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
                           size_t ack_vectorization_sz,
@@ -3569,7 +3741,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
                 }
 
-                return success_counter >= this->rest_threshold_sz;
+                return success_counter > this->rest_threshold_sz;
             }
 
         private:
@@ -3978,7 +4150,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                          std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
                                          std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
                                          std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
-                                         std::shared_ptr<packet_controller::InBoundTrafficControllerInterface> ib_traffic_controller,
+                                         std::shared_ptr<packet_controller::TrafficControllerInterface> ib_traffic_controller,
                                          std::shared_ptr<packet_controller::SchedulerInterface> scheduler, 
                                          std::shared_ptr<SocketHandle> socket) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
