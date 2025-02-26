@@ -1017,6 +1017,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     static auto virtualize_informr_packet(InformrPacket) noexcept -> std::expected<Packet, exception_t>{
 
     }
+    
+    static auto virtualize_hrtbeat_packet(HrtBeatPacket) noexcept -> std::expected<Packet, exception_t>{
+
+    }
+
+    static auto virtualize_krescue_packet(KRescuePacket) noexcept -> std::expected<Packet, exception_t>{
+
+    } 
 
     static auto devirtualize_request_packet(Packet pkt) noexcept -> std::expected<RequestPacket, exception_t>{
 
@@ -1031,6 +1039,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     }
 
     static auto devirtualize_informr_packet(Packet pkt) noexcept -> std::expected<InformrPacket, exception_t>{
+
+    }
+
+    static auto devirtualize_hrtbeat_packet(Packet pkt) noexcept -> std::expected<HrtBeatPacket, exception_t>{
+
+    }
+
+    static auto devirtualize_krescue_packet(Packet pkt) noexcept -> std::expected<KRescuePacket, exception_t>{
 
     }
 
@@ -1273,9 +1289,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            auto schedule(Address) noexcept -> std::chrono::nanoseconds{
+            auto schedule(Address) noexcept -> std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t>{
 
-                return stdx::utc_timestamp();
+                return std::chrono::utc_clock::now();
             }
 
             auto feedback(Address, std::chrono::nanoseconds) noexcept -> exception_t{
@@ -2189,7 +2205,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     };
 
     class InBoundIDController: public virtual InBoundIDControllerInterface{
-        
+
         private:
 
             std::unique_ptr<data_structure::unordered_set_interface<global_packet_id_t>> id_hashset;
@@ -2892,14 +2908,22 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //queue_size == inf means that we are processing the data from a light year before - and the lastest data is too far away to be responded - which causes a system crash (the data we are processing is no long needed - and the data we need to process is too far away in the FIFO queue)
     //the middle ground is probably to wait out the "sand-storm" and recalibrate the system
 
+    //I was wondering why we couldn't be civil and have production_rate == consumption_rate at all time - if life was that easy
+    //we need to handle spike in real time system - to avoid retransmission from the sender which is very energy expensive
+    //and the distribution of the consumption is not a uniform distribution chart
+    //so the only problem is the implementation of the sparse centrality (we'll implement a very efficient version of sparse centrality - that probably involves only bitwise operations - an approximation from an approximation)
+
+    //clients were kinda very stingent on the timeline - so we have to be able to infiltrate into the browser security within 2 months (browser browser browser, always the stigma - kids these days can be hackers if they know backroads into the browsers - yet that's not the scary part - browser is actually contagious - this is the scary part - we are prepared with our state-of-the-art symmetric coding methods - as long as we dont talk too much)
+    //let's see if the planet of the apes and the planet of the chimps can update their system before too late
+    //we'll have a team working on extracting the virtual machine snapshots - it's been a roadblock
+
     //in that case, we have an invisible extension of the queue which is the data in the infretry device - the question is how long do we want that invisible queue to be?
     //now is the question of the machine learning problem of stock prediction - what is the next best possible move to achieve the defined goals? This is the question we tried to answer in ballinger project (this is 3rd grade kid stuff) - we want a complex model yet the idea remains  
     //now is the question of whether that would affect the upstream optimization - the answer is no - because we define our goals to be as generic as possible
-    //we'll be the firsts to implement prediction based on centrality + heuristic to optimize system
+    //we'll be the firsts to implement <prediction based on centrality> + <heuristic> to optimize system
 
     //these optimizables seem simple yet they are very important in real-life scenerios - where the problem of betweenness centrality + maxflow arise
     //we want a model to actually extract pattern + think to make the best possible min-max move
-    //
 
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -3007,7 +3031,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     InternalMailChimpArgument * base_data_arr       = data_arr.base();
                     size_t frequency                                = this->exhaustion_controller->get_transmit_frequency();
-                    std::chrono::nanoseconds transmit_wavelength    = this->frequency_to_wavelength(frequency);
+                    std::chrono::nanoseconds transmit_period        = this->frequency_to_period(frequency);
 
                     for (size_t i = 0u; i < sz; ++i){
                         exception_t err = socket_service::send_noblock(*this->socket, base_data_arr[i].dst, base_data_arr[i].content.data(), base_data_arr[i].content.size());
@@ -3018,7 +3042,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             *this->success_counter += 1;
                         }
 
-                        dg::network_asynchronous::hardware_sleep(transmit_wavelength);
+                        dg::network_asynchronous::hardware_sleep(transmit_period);
                     }
                 }
             };
