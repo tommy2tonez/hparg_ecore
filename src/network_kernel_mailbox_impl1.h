@@ -2910,8 +2910,14 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //                             - the idea of correctly handling flood is to adjust the queue extension (which is in infretry_device) to adapt to + "with" the flood
     //                             - we'll recalibrate by using centrality later Dad - it's impossible to tell what kind of router and their "drop" techniques - unless we do real-time calibration which is the machine learning + sched responsibility 
     //                             - we are not oracle - we do what fast, what right, what not overflowing the system - we know that single responsibility of EVERYTHING is important - this includes packet + request + request fits inside a packet unit
-    //                             - we'd try to push data VERY VERY fast - because we literally dont care if the packet is dropped or the computation tree is computed AT ALL - we just ingest data in a cyclic fashion and pray that the tree learns something eventually
+    //                             - we'd try to push data VERY VERY fast - because we literally dont care if the packet is dropped or if the computation tree is computed AT ALL - we just ingest data in a cyclic fashion (this cyclic fashion is not what we think - it's the reuse of computation tree by orphan + readopt) and pray that the tree learns something eventually
     //                                                                    - the only time we care is when we want to establish synchronization for tree orphan + tree adopt - that's about it
+    //                                                                    - the people that succeeded walking this roads (reaching escape velocity of training) in my knowledge are not many
+    //                                                                    - yet the idea of fission + no synchronization + virtual machine training remains
+    //                                                                    - it's easy yet very hard to implement things correctly
+    //                                                                    - we'll try to explain the concepts to yall in the simplest forms possible - in such there is no bugs of implementations
+    //                                                                    - we've encountered so many nasty bugs from memory exhaustion attack -> packet queue attack -> request timeout attack -> DDoS attack + request override attack -> cross site attack
+    //                                                                    - so we are afraid of being "fancy" - as long as we can hit the requirements of 1 transmission == 1 recv + correct load flood management + saturate network bandwidth - it's considered mission accomplished 
 
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
