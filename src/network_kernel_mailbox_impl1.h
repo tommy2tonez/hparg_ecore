@@ -461,8 +461,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
             virtual auto get_outbound_friend_addr_size() noexcept -> size_t = 0;
+    };
 
-            virtual auto last_update() noexcept -> std::chrono::time_point<std::chrono::utc_clock> = 0;
+    class PunchConnectionHeartBeatInterface{
+
+        public:
+
+            virtual ~PunchConnectionInterface() noexcept = default;
+            virtual void outbound(std::pair<Address, global_packet_id_t> *, size_t, exception_t *) noexcept = 0;
+            virtual void ack(global_packet_id_t *, size_t, exception_t *) noexcept = 0;
+            virtual void get_last_heartbeat(Address *, size_t, std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 }
 
@@ -2274,9 +2283,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 size_t inbound_addr_cap = this->nat_ip_controller->get_inbound_friend_addr_size();
                 size_t inbound_addr_sz  = {};
-
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(inbound_addr_cap);
-                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(inbound_addr_cap);
 
                 this->nat_ip_controller->get_inbound_friend_addr(addr_arr.get(), 0u, inbound_addr_sz, inbound_addr_cap);
 
@@ -2286,14 +2293,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    //we dont know the implementations yet - so it's best to copy paste things here - 
+    //we dont know the implementations yet - so it's best to copy paste things here
+    //we can't punch UDP if we dont relax the outbound - it's impossible
     class OutBoundBorderController: public virtual BorderControllerInterface, public virtual UpdatableInterface{
 
         private:
 
             std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
             std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
-            dg::unordered_set<Address> thru_ip_set;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
         
@@ -2301,11 +2308,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             OutBoundBorderController(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
                                      std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
-                                     dg::unordered_set<Address> thru_ip_set,
                                      std::unique_ptr<std::mutex> mtx,
                                      stdx::hdi_container<size_t> consume_sz_per_load) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
                                                                                                 traffic_controller(std::move(traffic_controller)),
-                                                                                                thru_ip_set(std::move(thru_ip_set)),
                                                                                                 mtx(std::move(mtx)),
                                                                                                 consume_sz_per_load(std::move(consume_sz_per_load)){}
 
@@ -2323,11 +2328,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (!this->thru_ip_set.contains(addr_arr[i])){
-                        response_exception_arr[i] = dg::network_exception::BAD_IP_RULE;
-                        continue;
-                    }
-
                     std::expected<bool, exception_t> traffic_status = this->traffic_controller->thru(addr_arr[i]);
 
                     if (!traffic_status.has_value()){
@@ -2352,19 +2352,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void update() noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                this->thru_ip_set.clear();
                 this->traffic_controller->reset();
-
-                size_t outbound_addr_cap    = this->nat_ip_controller->get_outbound_friend_addr_size();
-                size_t outbound_addr_sz     = {};
-                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(outbound_addr_cap);
-
-                this->nat_ip_controller->get_outbound_friend_addr(addr_arr.get(), 0u, outbound_addr_sz, outbound_addr_cap);
-
-                for (size_t i = 0u; i < outbound_addr_sz; ++i){
-                    this->thru_ip_set.insert(addr_arr[i]);
-                }
             }
     };
 
@@ -2912,12 +2900,22 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //it all comes down to std::unique_ptr<> and std::shared_ptr<>
     //the amount of std::shared_ptr<> increases == the quality decreases
 
+    //it's complex in agile programming - 
+    //so we'll try to limit std::shared_ptr<> yet try to add another layer of <semantic> by using interface extension - as long as the components make sense on their own - and do not carry too many responsibilities
+    //it's literally hard Mom 
+    //I doubt that C programming could code this type of complexity
+    //I dont undermine people work - yet the network comm protocol must be event-driven + punch + no-connection - if you care about performance AT ALL
+    //                             - we implement a request layer on top of this procotol + timeout technique to log errors appropriately
+    //                             - the most important is to handle flood appropriately - we'll try to implement a first draft this week or next week - it's complicated
+    //                             - the idea of correctly handling flood is to adjust the queue extension (which is in infretry_device) to adapt to + "with" the flood
+
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             std::shared_ptr<packet_controller::BorderControllerInterface> border_controller;
+            std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_heartbeater,
             std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller;
             std::shared_ptr<model::SocketHandle> socket;
             size_t packet_consumption_cap;
@@ -2928,6 +2926,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             OutBoundWorker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
                            std::shared_ptr<packet_controller::BorderControllerInterface> border_controller,
+                           std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_heartbeater,
                            std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller,
                            std::shared_ptr<model::SocketHandle> socket,
                            size_t packet_consumption_cap,
@@ -2962,10 +2961,19 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     mailchimp_resolutor.exhaustion_controller   = this->exhaustion_controller.get();  
                     mailchimp_resolutor.success_counter         = &success_sz;
 
-                    size_t trimmed_mailchimp_deliverer_sz       = std::min(this->packet_transmit_cap, packet_arr_sz);
-                    size_t mailchimp_deliverer_alloc_sz         = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailchimp_resolutor, trimmed_mailchimp_deliverer_sz);
+                    size_t trimmed_mailchimp_delivery_sz        = std::min(this->packet_transmit_cap, packet_arr_sz);
+                    size_t mailchimp_deliverer_alloc_sz         = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailchimp_resolutor, trimmed_mailchimp_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> mailchimp_deliverer_mem(mailchimp_deliverer_alloc_sz);
-                    auto mailchimp_deliverer                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mailchimp_resolutor, trimmed_mailchimp_deliverer_sz, mailchimp_deliverer_mem.get())); 
+                    auto mailchimp_deliverer                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mailchimp_resolutor, trimmed_mailchimp_delivery_sz, mailchimp_deliverer_mem.get())); 
+
+                    //
+                    auto conn_heartbeat_resolutor               = InternalConnHeartBeatResolutor{};
+                    conn_heartbeat_resolutor.heartbeater        = this->punch_heartbeater.get();
+
+                    size_t trimmed_heartbeater_delivery_sz      = std::min(this->punch_heartbeater->max_consume_size(), packet_arr_sz);
+                    size_t heartbeater_deliverer_alloc_sz       = dg::network_producer_consumer::delvrsrv_alloction_cost(&conn_heartbeat_resolutor, trimmed_heartbeater_delivery_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> heartbeater_deliverer_mem(heartbeater_deliverer_alloc_sz);
+                    auto heartbeater_deliverer                  = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&conn_heartbeat_resolutor, trimmed_heartbeater_delivery_sz, heartbeater_deliverer_mem.get()));  
 
                     for (size_t i = 0u; i < packet_arr_sz; ++i){
                         if (!traffic_response_arr[i].has_value()){
@@ -2979,11 +2987,16 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(stamp_err));
                         }
 
+                        auto heartbeat_arg      = std::pair<Address, global_packet_id_t>{};
+                        heartbeat_arg.first     = packet_arr[i].to_addr;
+                        heartbeat_arg.second    = packet_arr[i].id; 
+
                         auto mailchimp_arg      = InternalMailChimpArgument{};
                         mailchimp_arg.dst       = packet_arr[i].to_addr;
                         mailchimp_arg.content   = utility::serialize_packet(std::move(packet_arr[i]));
 
                         dg::network_producer_consumer::delvrsrv_deliver(mailchimp_deliverer.get(), std::move(mailchimp_arg));
+                        dg::network_producer_consumer::delvrsrv_deliver(heartbeater_deliverer.get(), std::move(heartbeater_arg));
                     }
                 }
 
@@ -3025,6 +3038,23 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
 
                         dg::network_asynchronous::hardware_sleep(transmit_period);
+                    }
+                }
+            };
+
+            struct InternalConnHeartBeatResolutor: dg::network_producer_consumer::ConsumerInterface<std::pair<Address, global_packet_id_t>>{
+
+                packet_controller::PunchConnectionHeartBeatInterface * heartbeater;
+
+                void push(std::pair<Address, global_packet_id_t> * data_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    this->heartbeater->outbound(data_arr, sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
                     }
                 }
             };
@@ -3180,62 +3210,75 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         private:
 
             std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_heartbeater;
             std::unique_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor;
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container;
-            size_t addr_consumption_sz;
             size_t outbound_container_accum_sz;
+            std::chrono::nanoseconds alive_conn_timebar;
 
         public:
 
             InBoundInformerWorker(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
+                                  std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_heartbeater,
                                   std::unique_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor,
                                   std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container,
-                                  size_t addr_consumption_sz,
                                   size_t outbound_container_accum_sz) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
+                                                                                punch_heartbeater(std::move(punch_heartbeater)),
                                                                                 inbound_suggestor(std::move(inbound_suggestor)),
                                                                                 outbound_container(std::move(outbound_container)),
-                                                                                addr_consumption_sz(addr_consumption_sz),
                                                                                 outbound_container_accum_sz(outbound_container_accum_sz){}
 
             bool run_one_epoch() noexcept{
 
-                dg::network_stack_allocaiton::NoExceptAllocation<Address[]> addr_arr(this->addr_consumption_sz);
+                size_t addr_cap = this->nat_ip_controller->get_outbound_friend_addr_size();
                 size_t addr_sz  = {};
-                size_t offset   = {};
+                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(this->addr_consumption_sz);
+
+                this->nat_ip_controller->get_outbound_friend_addr(addr_arr.get(), 0u, addr_sz, addr_cap);
+                dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<std::chrono::time_point<std::chrono::utc_clock>>, exception_t>[]> timestamp_arr(addr_sz);
+                this->punch_heartbeater->get_last_heartbeat(addr_arr.get(), addr_sz, timestamp_arr.get());
 
                 auto outbound_delivery_resolutor                = InternalOutBoundDeliveryResolutor{};
                 outbound_delivery_resolutor.outbound_container  = this->outbound_container.get();
 
-                size_t outbound_deliverer_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&outbound_delivery_resolutor, this->outbound_container_accum_sz);
+                size_t trimmed_deliverer_accum_sz               = std::min(this->outbound_container_accum_sz, addr_sz); 
+                size_t outbound_deliverer_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&outbound_delivery_resolutor, trimmed_deliverer_accum_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> outbound_deliverer_mem(outbound_deliverer_allocation_cost);
                 auto outbound_deliverer                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&outbound_delivery_resolutor, this->outbound_container_accum_sz, outbound_deliverer_mem.get()));
 
-                while (true){
-                    this->nat_ip_controller->get_outbound_addr(addr_arr.get(), offset, addr_sz, this->addr_consumption_sz);
+                auto now                                        = std::chrono::utc_clock::now(); //resolution 
 
-                    for (size_t i = 0u; i < addr_sz; ++i){
-                        std::expected<InformrPacket, exception_t> pkt = this->inbound_suggestor->get(addr_arr[i]);
-
-                        if (!pkt.has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
-                            continue;
-                        }
-
-                        std::expected<Packet, exception_t> virt_pkt = packet_service::virtualize_informr_packet(std::move(pkt.value()));
-
-                        if (!virt_pkt.has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(virt_pkt.error()));
-                            continue;
-                        }
-
-                        dg::network_producer_consumer::delvrsrv_deliver(outbound_deliverer.get(), std::move(virt_pkt.value()));
+                for (size_t i = 0u; i < addr_sz; ++i){
+                    if (!timestamp_arr[i].has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(timestamp_arr[i].error()));
+                        continue;
                     }
 
-                    offset += addr_sz;
-
-                    if (addr_sz != this->addr_consumption_sz){
-                        break;
+                    if (!timestamp_arr[i].value().has_value()){
+                        continue;
                     }
+
+                    std::chrono::nanoseconds lapsed = now - timestamp_arr[i].value().value();
+
+                    if (lapsed > this->alive_conn_timebar){
+                        continue;
+                    }
+
+                    std::expected<InformrPacket, exception_t> pkt = this->inbound_suggestor->get(addr_arr[i]);
+
+                    if (!pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
+                        continue;
+                    }
+
+                    std::expected<Packet, exception_t> virtual_pkt = packet_service::virtualize_informr_packet(std::move(pkt.value()));
+
+                    if (!virtual_pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(virtual_pkt.error()));
+                        continue;
+                    }
+
+                    dg::network_producer_consumer::delvrsrv_deliver(outbound_deliverer.get(), std::move(virtual_pkt.value()));
                 }
 
                 return true; 
@@ -3266,62 +3309,70 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         private:
 
             std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_heartbeater;
             std::unique_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor;
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container;
-            size_t addr_consumption_sz;
             size_t outbound_container_accum_sz; 
+            std::chrono::nanoseconds alive_conn_timebar;
 
         public:
 
             OutBoundSuggestorWorker(std::shared_ptr<packet_controller::NATIPController> nat_ip_controller,
+                                    std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_heartbeater,
                                     std::unique_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor,
                                     std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container,
-                                    size_t addr_consumption_sz,
-                                    size_t outbound_container_accum_sz) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
-                                                                                  outbound_suggestor(std::move(outbound_suggestor)),
-                                                                                  outbound_container(std::move(outbound_container)),
-                                                                                  addr_consumption_sz(addr_consumption_sz),
-                                                                                  outbound_container_accum_sz(outbound_container_accum_sz){}
+                                    size_t outbound_container_accum_sz,
+                                    std::chrono::nanoseconds alive_conn_timebar) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
+                                                                                           punch_heartbeater(std::move(punch_heartbeater)),
+                                                                                           outbound_suggestor(std::move(outbound_suggestor)),
+                                                                                           outbound_container(std::move(outbound_container)),
+                                                                                           outbound_container_accum_sz(outbound_container_accum_sz),
+                                                                                           alive_conn_timebar(std::move(alive_conn_timebar)){}
 
             bool run_one_epoch() noexcept{
 
-                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(this->addr_consumption_sz);
                 size_t addr_sz  = {};
-                size_t offset   = 0u;
+                size_t addr_cap = this->nat_ip_controller->get_inbound_friend_addr_size();
+                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(addr_cap);
 
-                auto outbound_delivery_resolutor                = InternalOutBoundDeliveryResolutor{};
-                outbound_delivery_resolutor.outbound_container  = this->outbound_container.get();
+                this->nat_ip_controller->get_inbound_friend_addr(addr_arr.get(), 0u, addr_sz, addr_cap);
+                dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<std::chrono::time_point<std::chrono::utc_clock>>, exception_t>[]> timestamp_arr(addr_sz);
+                this->punch_heartbeater->get_last_heartbeat(addr_arr.get(), addr_sz, timestamp_arr.get());
 
-                size_t outbound_deliverer_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&outbound_delivery_resolutor, this->outbound_container_accum_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> outbound_deliverer_mem(outbound_deliverer_allocation_cost);
-                auto outbound_deliverer                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&outbound_delivery_resolutor, this->outbound_container_accum_sz, outbound_deliverer_mem.get()));
+                auto outbound_deliverer                 = InternalOutBoundDeliveryResolutor{};
+                outbound_deliverer.outbound_container   = this->outbound_container.get();
 
-                while (true){
-                    this->nat_ip_controller->get_inbound_addr(addr_arr.get(), offset, addr_sz, this->addr_consumption_sz);
+                size_t outbound_deliverer_accum_sz      = std::min(this->outbound_container_accum_sz, this->outbound_container->max_consume_size());
+                size_t outbound_deliverer_alloc_sz      = dg::network_producer_consumer::delvrsrv_allocation_cost(&outbound_deliverer, outbound_deliverer_accum_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> outbound_deliverer_mem(outbound_deliverer_alloc_sz);
+                auto outbound_deliverer                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&outbound_deliverer, outbound_deliverer_accum_sz, outbound_deliverer_mem.get()));
 
-                    for (size_t i = 0u; i < addr_sz; ++i){
-                        std::expected<SuggestionPacket, exception_t> pkt = this->outbound_suggestor->get(addr_arr[i]);
+                for (size_t i = 0u; i < addr_sz; ++i){
 
-                        if (!pkt.has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
-                            continue;
-                        }
-
-                        std::expected<Packet, exception_t> virt_pkt = packet_service::virtualize_suggest_packet(std::move(pkt.value()));
-
-                        if (!virt_pkt.has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(virt_pkt.error()));
-                            continue;
-                        }
-
-                        dg::network_producer_consumer::delvrsrv_deliver(outbound_deliverer.get(), std::move(virt_pkt.value()));
+                    if (!timestamp_arr[i].has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(timestamp_arr[i].error()));
+                        continue;
                     }
 
-                    offset += addr_sz; 
-
-                    if (addr_sz != this->addr_consumption_sz){
-                        break;
+                    if (!timestamp_arr[i].value().has_value()){
+                        continue;
                     }
+
+                    std::expected<SuggestPacket, exception_t> pkt = this->outbound_suggestor->get(addr_arr[i]);
+
+                    if (!pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
+                        continue;
+                    }
+
+                    std::expected<Packet, exception_t> virtual_pkt = packet_service::virtualize_suggest_packet(std::move(pkt.value()));
+
+                    if (!virtual_pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(virtual_pkt.error()));
+                        continue;
+                    }
+
+                    dg::network_producer_consumer::delvrsrv_deliver(outbound_deliverer.get(), std::move(virtual_pkt.value()));
                 }
 
                 return true;
@@ -3435,6 +3486,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         private:
 
             std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller;
+            std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_conn_heartbeater;
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container;
             std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container;
@@ -3451,6 +3503,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         public:
 
             InBoundWorker(std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller,
+                          std::shared_ptr<packet_controller::PunchConnectionHeartBeatInterface> punch_conn_heartbeater,
                           std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
                           std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container,
                           std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
@@ -3463,6 +3516,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           size_t ack_vectorization_sz,
                           size_t inbound_consumption_sz,
                           size_t rest_threshold_sz) noexcept: retransmission_controller(std::move(retransmission_controller)),
+                                                              punch_conn_heartbeater(std::move(punch_conn_heartbeater)),
                                                               outbound_packet_container(std::move(outbound_packet_container)),
                                                               inbound_packet_container(std::move(inbound_packet_container)),
                                                               inbound_buffer_container(std::move(inbound_buffer_container)),
@@ -3488,7 +3542,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     //
 
                     auto ackid_delivery_resolutor                           = InternalRetransmissionAckDeliveryResolutor{};
-                    ackid_delivery_resolutor.dst                            = this->retransmission_controller.get();
+                    ackid_delivery_resolutor.retransmission_controller      = this->retransmission_controller.get();
+                    ackid_delivery_resolutor.punch_conn_heartbeater         = this->punch_conn_heartbeater.get();
 
                     size_t trimmed_ackid_delivery_sz                        = std::min(this->retransmission_controller->max_consume_size(), buf_arr_sz * MAX_ACK_PER_PACKET);
                     size_t ackid_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz);
@@ -3676,13 +3731,22 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             struct InternalRetransmissionAckDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<global_packet_id_t>{
 
-                dg::packet_controller::RetransmissionControllerInterface * dst;
+                packet_controller::RetransmissionControllerInterface * retransmission_controller;
+                packet_controller::PunchConnectionHeartBeatInterface * punch_conn_heartbeater;
 
                 void push(std::move_iterator<global_packet_id_t *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     global_packet_id_t * base_data_arr = data_arr.base();
-                    this->dst->ack(base_data_arr, sz, exception_arr.get());
+                    this->retransmission_controller->ack(base_data_arr, sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+
+                    this->punch_conn_heartbeater->ack(base_data_arr, sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -3694,7 +3758,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             struct InternalRTTFeedBackDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<RTTFeedBack>{
 
-                dg::packet_controller::FeedBackMachineInterface * feedback_machine;
+                packet_controller::FeedBackMachineInterface * feedback_machine;
 
                 void push(std::move_iterator<RTTFeedBack *> data_arr, size_t sz) noexcept{
 
@@ -3712,7 +3776,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             struct InternalOutBoundFeedBackDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<OutBoundFeedBack>{
 
-                dg::packet_controller::FeedBackMachineInterface * feedback_machine;
+                packet_controller::FeedBackMachineInterface * feedback_machine;
 
                 void push(std::move_iterator<OutBoundFeedBack *> data_arr, size_t sz) noexcept{
 
@@ -3730,7 +3794,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             struct InternalInBoundFeedFrontDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<InBoundFeedFront>{
 
-                dg::packet_controller::FeedBackMachineInterface * feedback_machine;
+                packet_controller::FeedBackMachineInterface * feedback_machine;
 
                 void push(std::move_iterator<InBoundFeedFront *> data_arr, size_t sz) noexcept{
 
