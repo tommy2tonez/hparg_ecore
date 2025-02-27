@@ -2908,6 +2908,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //                             - we implement a request layer on top of this procotol + timeout technique to log errors appropriately
     //                             - the most important is to handle flood appropriately - we'll try to implement a first draft this week or next week - it's complicated
     //                             - the idea of correctly handling flood is to adjust the queue extension (which is in infretry_device) to adapt to + "with" the flood
+    //                             - we'll recalibrate by using centrality later Dad - it's impossible to tell what kind of router and their "drop" techniques - unless we do real-time calibration which is the machine learning + sched responsibility 
+    //                             - we are not oracle - we do what fast, what right, what not overflowing the system - we know that single responsibility of EVERYTHING is important - this includes packet + request + request fits inside a packet unit
+    //                             - we'd try to push data VERY VERY fast - because we literally dont care if the packet is dropped or the computation tree is computed AT ALL - we just ingest data in a cyclic fashion and pray that the tree learns something eventually
+    //                                                                    - the only time we care is when we want to establish synchronization for tree orphan + tree adopt - that's about it
 
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -3348,13 +3352,18 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 auto outbound_deliverer                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&outbound_deliverer, outbound_deliverer_accum_sz, outbound_deliverer_mem.get()));
 
                 for (size_t i = 0u; i < addr_sz; ++i){
-
                     if (!timestamp_arr[i].has_value()){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(timestamp_arr[i].error()));
                         continue;
                     }
 
                     if (!timestamp_arr[i].value().has_value()){
+                        continue;
+                    }
+
+                    std::chrono::nanoseconds lapsed = now - timestamp_arr[i].value().value();
+
+                    if (lapsed > this->alive_conn_timebar){
                         continue;
                     }
 
