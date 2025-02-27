@@ -39,48 +39,6 @@
 #include "network_randomizer.h"
 #include "network_exception_handler.h"
 
-//alright - we'll focus on this heavily this week
-//goals: reduce mutual exclusion overhead
-
-//       establish basic massive parallel self-sufficient transmission controlled protocol by using round-trip time + sched_time as keys 
-//          - round-trip time does not have to be from NIC (network interface controller) - because we don't need the meter precision - in fact, we need to include all factors including kernel queuing - we need the differences - and the uncertainty in non-datacenter environments is not like one in datacenter environments
-//          - round-trip time + transmit_frequency would form a inbound/ outbound ratio (success rate)
-//          - and we want to choose the best transmit_frequency (sched_time) based on the round-trip time (which we gather from the "recent" transmissions)
-//          - how we define "best" is yet to know - the equation is not just simply maximizing success rate - yet has to take other factors into considerations - like the number of outbounds to reach the success rate which would heavily determine the congestion 
-//          - what do we actually want - in the perspective of a server, we want to maximize thruput + uniform distribution of thruput or skewed distribution of thruput (IP-based)
-//          - the uniformity of thruput is not simply determined based on RTT solely - this information must be from the server to determine the transmit frequency 
-//          - we have to be able to answer this question this week
-
-//       patch every leak possible
-//       hopefully reach maximum network bandwidth
-//       we dont really care about how kernel actually handles their packets and their internal memory ordering virtue - we must do good on our parts and pray that kernel will come to their senses of not polluting the system (this is the sole purpose of the kernel) - this includes minimizing mutex calls and accumulating kernel recv + delvrsrv - this requires a heartbeat self ping to avoid unconsumed packets
-//       things would be very nasty if the physical core thread scales to 1024 or 2048 - at this level - hardsync or even acquire or release would be a disaster (1024 memory_order_acquire/core*s * 1024 = 1 << 20 acquire/s ~= 100ms of overhead - things are bad)
-//       we try to implement the doables first and try to relax every operation possible
-//       the optimizables we are implementing are: (1) vectorization of ack packets + IP by using kv_delvrsrv (2x optimizables)
-//                                                 (2) reducing mutex acquisitions + memory ordering by using batching techniques
-//                                                 (3) "noblock" the UDP recv by using self packet ping
-//                                                 (4) maximizing bandwidth by using affined ports or SO_REUSEPORT + SO_ATTACH - we'll be doing actual benchs later this week - stay tuned
-//
-
-//lets see what we could do
-//recall how CPU works - CPU does not stop - they have a "side" buffer to see where branches might go - they go forward in the tentative direction - if things work out fine - fine - if not reverse and correct their route
-//they also have a statistic calculator - these guys work independently - a guy does not stop - a guy updates the heuristics - and a guy to inform the guys that aren't stopping
-//so this is an affinity problem
-//in the case of scheduler - or the case of producer + consumer - we need to accumulate the orders in order to reduce the mutual exclusion overheads (this is important)
-
-//otherwise we are forever giga chads - this breaks practices - yet I guess that must be done - we must bring the number of acquire + release (or std::memory_order_seq_cst for that matter) operation -> < 1000 per second for the entire system - we'll scale to improve the latency
-//                                    - this is another radix of optimization that I dont think is related to the all relaxed + transactional open-close cache invalidation - if we are moving in the latency direction - we must do things that way
-//                                                                                                                                                                          - if we are moving in the thruput direction - we must batch EVERYTHING
-//                                                                                                                                                                          - the right answer is not either or but both must be achieved
-//                                                                                                                                                                          - people already done the all relaxed - it's called volatile - yet its deprecating - we dont know if volatile even passes code review now - we'll try our best - we leave the rest to the advancement of technology
-//                                                                                                                                                                          - it is complicated - if we decided to relax everything (including container) - it must be of size std::array<1024, char> for every relaxed read (to avoid the overhead of relaxed) - this can be achieved - or must be achieved if we dont want to contaminate other threads' computation 
-
-//let's start simple
-//we use exponential backoff strategy for memregion_lock acquisitions - to increase the number of relaxed operation as many as possible - followed by a hardsync std::atomic_thread_fence(std::memory_order_seq_cst) post the successful acquisition operation
-//we'll try to increase the number of push/ pop for producer consumer -> 1024 - by using delvrsrv + other strategies
-//as for one simple std::mutex acquisition - we'll leave the matter to the kernel + std implementation
-//if it is spinlock - then we must self implement
-
 namespace dg::network_kernel_mailbox_impl1::types{
 
     using factory_id_t          = std::array<char, 32>;
@@ -296,47 +254,31 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
 
-    //alright - this is the interface we agreed upon
-    //max_consume_size is the abort error - exception_t * would return resource_exhaustion - which is resolvable by infretry_device
-    //we'll try to implement this
-    //scheduler is like allocator - we "preallocate" the schedules - exhaust the allocations - then we reallocate the schedules
-    //we try to stay affined + not invoking the memory_ordering for as long as possible - then we invoke free on the remaining buffer - the way we are doing allocations allows us to do that
-    //we'll talk in depth about memory allocations
-
-    //alright - let's see what we'd implement today 
-    //first is heartbeat packet to unblock UDP recv
-    //second is vectorization of recv + accumulation of ack packet based on IP
-    //third is a first draft of a machine learning load balancing model for network packet - we are aiming for maximum thruput + uniformity of bandwidth based on rtt + transmit_frequency (this is part of the Packet)
-    //we dont want to heavily load balance - just a normalization layer to allow upstream optimizations
-    //fourth is SO_REUSEPORT + SO_ATTACH
-    //fifth is to patch every leak possible - including retriables
-    //we'll try to minimize the memory ordering along the way
-
-    //why cant we generalize - one is many, many is one?
-    //because that's how kernel works - 8K unit is the best packet size possible - and there must be an accumulation of recv in order to reach the maximum bandwidth
-    //kernel does not wait for UDP buffer - so we must empty the queue as fast as possible - we want vectorization of 1024 continuous 8K buffer before doing one big push into the containers
-    //                                                                                     - we vectorize the ack based on IP along the way to avoid 2x overhead (we can only rely on the temporal characteristics of data transfer)
-    //                                                                                     - we probably want to throttle the memory ordering invokes -> 5000/second for all network workers - otherwise we are contaminating the system
-    //                                                                                     - we do that by increasing vectorization_sz and sleep time
-    //                                                                                     - we want to profile the critical sections - like binary tree push - we probably want to do key sort first before the mutex acquisition and do one AVL batch push - this should be very fast
-    //                                                                                     - if that affects code quality - we want to increase affinity of tasks - like using affined ports or increasing the number of containers + randomization
-    
-    //the flow I'm looking for is a component implements FeedBackMachine + SchedMachine (this guy collects data and offload the job to the transformer to run heuristics + etc)
-    //a Scheduler that stays affined and trigger an observable update by calling the SchedMachineInterface
-    //a TransmitFrequencySuggestor that stays affined and trigger an observable update by calling the SchedMachineInterface 
-    //we want to stay affined for as long as possible - before we invoke a payload for every interval - to offset the cost of memory_ordering + mutex acquisition + etc 
-    //we'd hope to stay < 10000 lines of code 
-    //ETA: next week - or next next week - we'll see how complex this task is
-    //we dont really care about the recv_from(wait) - yet it imposes a very significant overhead on the system (memory orderings)
-
-    class FeedBackMachineInterface{
+    class RTTFeedBackInterface{
 
         public:
 
-            virtual ~FeedBackMachineInterface() noexcept = default;
-            virtual void rtt_fb(RTTFeedBack *, size_t, exception_t *) noexcept = 0;
-            virtual void outbound_frequency_fb(OutBoundFeedBack *, size_t, exception_t *) noexcept = 0; 
-            virtual void inbound_frequency_ff(InBoundFeedFront *, size_t, exception_t *) noexcept = 0;
+            virtual ~RTTFeedBackInterface() noexcept = default;
+            virtual void feedback(RTTFeedBack *, size_t, exception_t *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
+    class OutBoundFeedBackInterface{
+
+        public:
+
+            virtual ~OutBoundFrequencyFeedBackInterface() noexcept = default;
+            virtual void feedback(OutBoundFeedBack *, size_t, exception_t *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
+    class InBoundFeedFrontInterface{
+
+        public:
+
+            virtual ~InBoundFeedFrontInterface() noexcept = default;
+            virtual void feedfront(InBoundFeedFront *, size_t, exception_t *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class TransmitFrequencySuggestorInterface{
@@ -423,11 +365,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual auto get(Address, PacketBase *, size_t) noexcept -> std::expected<AckPacket, exception_t> = 0;
     };
 
-    //we must abstract the SuggestionPacket + InformPacket to not compromise future implementations (we have not thought of the expanding direction yet)
-    //this means we have to encapsulate the low level details of what SuggestionPacket or InformPacket mean
-    //at the high level - we just know that these guys do NAT handshakes - we inform and suggest each other
-    //says 1 packet/ second for example - this should suffice in most scenerios
-
     class SuggestionPacketGetterInterface{
 
         public:
@@ -454,114 +391,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual void get_retriables(Packet *, size_t&, size_t) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
-
-    //I admit the container is strange - yet it's hard to split the responsibilities here
-    //we'd try to use an intermediate container to avoid recv delays
-    //we want to empty the kernel buffer as fast as possible (this really means that we have no overhead except for reading the kernel buffers)
-    //how fast? consuming_rate must be == producing rate
-    //otherwise we are (1): incorrect flood management (we are processing outdated data - and ingoring new data)
-    //                 (2): consuming_rate < producing_rate == flood
-    //                 (3): consuming_rate > producing_rate - dropped packets + delays + wasted energy
-
-    //we are internally calibrating this by using a read-ahead meter - somewhat like a branch predictor - if a queue_full is triggered or queue_empty is triggered - the meter is adjusted accordingly
-    //this is also a machine learning model - such is the negative label is full and empty - and positive label is no full no empty (equilibrium of producer and consumer has been achieved)
-    //for every real-time practical machine learning model - there must be a model, a normalization layer (to clamp into the correct states), and a computation reset of the model
-
-    //let's get through the list of the optimizables
-    //(1): affinity_hint + RPS
-    //SO_REUSEPORT
-    //SO_ATTACH
-    //Pin threads
-    //affined rx-queues
-    //Disable GRO
-    //Unload iptables
-    //Disable validation
-    //Disable audit
-    //Skip ID calculation
-    //Hyper threading
-    //affined ports
-    //we'll be back tomorrow to run the benchs
-    //hopefully we can sat the bandwidth
-
-    //alright - we'll postpone this to next week - we'll implement the machine learning algorithm of sparse centrality + try to optimize it as far as we could - we'll run some A* algorithm to optimize the convergence of the torch model - that should be our baseline    
-    //our goal is to dynamically change the consumption_sz + production_sz - keep the kernel queue sizable (preferably no kernel container - by using recv_block) - and leave the flood management to the kernel
-    //we don't really care if our metrics are accurate - like round-trip time - as long as it is predictable (in the sense of metering the meterables) - the sense maker responsibility is the machine learning model responsibility
-
-    //our implementation of the comm protocol is the guarantee of one_send == max one_recv
-    //it can mean a lot of things - one_succcesful_send                     = one_recv
-    //                            - one_successful_send                     = no_recv
-    //                            - one_unsuccessful_send                   = one_recv (we dont know what happened - kernel panic kicked in and the stack unwinds)
-    //                            - one_unsuccessful_send                   = no_recv
-    //                            - one_partially_successful_send           = one_recv
-    //                            - one_partially_successful_send           = no_recv
-
-    //we want to leverage this to implement our request | respond event_driven protocol - one_request == max_one_respond within a validation window - retry after the validation window is expired (we need to take in time-dilation to avoid bugs) to make sure that the request is not overriden
-    //its the programmers' responsibility to know that unsuccessful request could mean successful receive - and write code in a progressive way to avoid bugs - take orphan tiles + adopt tiles for example - a lost orphan order is happened post the adopt order and now we are out of sync
-    //90% of the web bugs are from overriden requests - it's extremely hard to code web or frontend - I doubt that there even exists a frontend without bugs
-    //I dont even know if apache or nginx implement these time-out methods
-    //essentially - the practice of request synchronization is a lost practice - and it's extremely dangerous in certain scenerios where attackers want to do timing attack on clients or servers
-    //in the world of software engineering - if you dont abstract your components - you wont make it
-    //there are literally thousands of updates along the development - and you can't change the calling stack every time you have a new update
-    //this is stable engineering - even though there are old dinosaur folks who would disagree with me on this matter
-    //it's literally impossible to design things in a hollistic picture - we just care what the component does, what the component needs, and do dependency injection
-
-    //says now I want all exhaustion controlled containers to be subcripted to a machine learning model - input + output
-    //what I'd want to do is to "extend" the interface, do dependency injection of the machine learning model and returns the new result    
-    //for best practices, we almost always need composition of base_object interface + extend - and never inheritance
-    //because the inheritance of a component exposes the protected + private interface which are not supposed to be exposed
-    //in other words, if a class is not extensible via public interface - it should not be extended AT ALL
-
-    //alright the exhaustion control pushes the statistics data to the machine learning model
-    //how about the traffic controller? we definitely can't extend the interface for every subscriber
-    //this is where multiple interface extension shines - we want to inherit the TrafficControllerInterface and the TrafficDataCollectibleInterface
-    //the machine learning model now "observes" the traffic_controller intervally and pull the traffic data
-
-    //we don't have such blessing in the world of C - this is precisely why C++ is good if correctly practiced
-
-    //"real life" programming is that - each component is independent of each other - it does not look "dry" but when they fuse together - it just makes sense 
-    //we want to be accurate - maybe maintainable - debuggable - and provide an abstraction of initialization + reset + how to use the component
-    //we can't aim to have all of those "practices" - it's hard - abstraction is always your friend in terms of software engineering
-
-    //we'll implement these tomorrow:
-    //offset shared_ptr<char[]> - to avoid buffer copy + friends - this is very important for retriables
-    //and malloc initialization for std::string(sz, ' ') to avoid cpu + memfetch
-    //this is the very hard part - the std::memory_order_seq_cst optimization for std::shared_ptr<char[]> destruction
-    //memory fragmentation + locality of reference by using node_lifetime cyclic allocations
-    //the thing that we worry is whether the memory being fetched is the correct deinitialization memory as if we dont need memory_order_seq_cst or memory_order_acquire for that matter if we dont do std::destroy(static_cast<object *>(buffer))
-    //we'll postpone the implementations because there are negative feedbacks - we dont want to compromise the readability for the unquantifiables
-    //this further hinders the serialization optimization on the buffer - and the serialization of memory access + etc. -  this is hard
-
-    //recall that std::shared_ptr<> uses std::memory_order_relaxed for the reference of the pointing block
-    //the reason being is the pointer value of std::shared_ptr<> is not the responsibility of the acquisition, and the pointing value of std::shared_ptr<> is also not the responsibility of the acquisition
-    //remember that copying std::shared_ptr<> without memory ordering or a lock is also considered malicious - this is where most people get it wrong
-
-    //if referencing memory without synchronization is malicious - then who is responsibile for the memory ordering of the buffers - it is the affined allocator's - the allocator at the time of malloc must guarantee that the underlying data of the returning pointer is synchronized
-    //we'd want to do affined memory address free (a memory pool) before we trigger free in the global memory pool or another partially affined memory pool
-
-    //well, we are on track fellas - probably a year or 2 years or 5 years - we'll implement all of the mentioned things correctly  
-
-    //this can actually work really well in the mass requests + atomic_flag relaxed implementation - we only need to wait for one or two requests
-    //this is partially the nginx implementation
-    //yet we have full control over our p2p system, so we can assume that all requests are event_driven
-    //we might need to implement a liasion as an abstraction layer to talk to the system
-
-    //we have considered long and hard - recv_block cannot be replaced by recv_noblock
-    //                                 - a write from NIC -> kernel queue is expensive
-    //                                 - kernel queue size should be kept small to avoid flood (this includes CPU flood + network flood + system flood - it should be the NIC internal responsibility to not contaminate the system)
-    //                                 - we want to have full control over the runtime
-
-    //our 10000 lines of network protocol might not be dry - yet we want to establish basic interfaces:
-    //send
-    //recv
-    //inbound_rule (opt - by using dependency injection std::shared_ptr<IPSieverInterface>)
-    //outbound_rule (opt - by using dependency injection std::shared_ptr<IPSieverInterface>)
-    //the heart of performance is to event-driven everything - so that's where we are heading
-
-    //things are hard to code - we can't really blame anybody because its our job to move forward based on the given arguments
-    //there is no better description than just to keep it under 5000 memory orderings/ second + minimize mutex collisions and hope for the best 
-    //I dont know what's wrong with people and their BDSM std::memory_order_consume
-    //why can't we just be civil and do compiler concurrent transactional payload where EVERYTHING inside the payload is dirty - I guess we'll never know - we are talking hardware instruction - not compiler's reordering yet
-    //smart people tend to optimize things maliciously by thinking acquire and release are two different operations - when most of the time - we almost always need a transactional payload 
 
     class BufferContainerInterface{
 
@@ -605,14 +434,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             virtual ~TrafficControllerInterface() noexcept = default;
-            virtual void thru(Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
-            virtual auto max_consume_size() noexcept -> size_t = 0;
+            virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
+            virtual void reset() noexcept = 0;
     };
 
-    //an address is considered when it appears in inbound and outbound 
-    //an address can also be considered in other manners 
-    //this is the interface of friend addresses - we do observer pattern to pull this to traffic controller
-    //we want to stay affined for as long as possible
+    class BorderControllerInterface{
+
+        public:
+
+            virtual ~BorderControllerInterface() noexcept = default;
+            virtual void thru(Address *, size_t, exception_t *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
 
     class NATIPControllerInterface{
 
@@ -2309,7 +2142,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class InBoundTrafficController: public virtual TrafficControllerInterface, public virtual UpdatableInterface{
+    class TrafficController: public virtual TrafficControllerInterface{
 
         private:
 
@@ -2318,28 +2151,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t global_cap;
             size_t map_cap;
             size_t global_counter;
-            std::unique_ptr<std::mutex> mtx;
-            stdx::hdi_container<size_t> consume_sz_per_load;
-        
+
         public:
 
-            InBoundTrafficController(dg::unordered_unstable_map<Address, size_t> address_counter_map,
-                                     size_t address_cap,
-                                     size_t global_cap,
-                                     size_t map_cap,
-                                     size_t global_counter,
-                                     std::unique_ptr<std::mutex> mtx,
-                                     stdx::hdi_container<size_t> consume_sz_per_load) noexcept: address_counter_map(std::move(address_counter_map)),
-                                                                                                address_cap(address_cap),
-                                                                                                global_cap(global_cap),
-                                                                                                map_cap(map_cap),
-                                                                                                global_counter(global_counter),
-                                                                                                mtx(std::move(mtx)),
-                                                                                                consume_sz_per_load(std::move(consume_sz_per_load)){}
+            TrafficController(dg::unordered_unstable_map<Address, size_t> address_counter_map,
+                              size_t address_cap,
+                              size_t global_cap,
+                              size_t map_cap,
+                              size_t global_counter) noexcept: address_counter_map(std::move(address_counter_map)),
+                                                               address_cap(address_cap),
+                                                               global_cap(global_cap),
+                                                               map_cap(map_cap),
+                                                               global_counter(global_counter){}
 
             auto thru(Address addr) noexcept -> std::expected<bool, exception_t>{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 if (this->global_counter == this->global_cap){
                     return false;
@@ -2371,17 +2196,175 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 return true;
             }
 
-            void update() noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+            void reset() noexcept{
 
                 this->address_counter_map.clear();
                 this->global_counter = 0u;
+            }
+    };
+
+    class InBoundBorderController: public virtual BorderControllerInterface, public virtual UpdatableInterface{
+
+        private:
+
+            std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
+            dg::unordered_set<Address> thru_ip_set;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> consume_sz_per_load;
+
+        public:
+
+            InBoundBorderController(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
+                                    std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
+                                    dg::unordered_set<Address> thru_ip_set,
+                                    std::unique_ptr<std::mutex> mtx,
+                                    stdx::hdi_container<size_t> consume_sz_per_load) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
+                                                                                               traffic_controller(std::move(traffic_controller)),
+                                                                                               thru_ip_set(std::move(thru_ip_set)),
+                                                                                               mtx(std::move(mtx)),
+                                                                                               consume_sz_per_load(std::move(consume_sz_per_load)){}
+
+            void thru(Address * addr_arr, size_t sz, exception_t * response_exception_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                this->nat_ip_controller->add_inbound(addr_arr, sz, exception_arr.get());
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (dg::network_exception::is_failed(exception_arr[i])){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                    }
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (!this->thru_ip_set.contains(addr_arr[i])){
+                        response_exception_arr[i] = dg::network_exception::BAD_IP_RULE;
+                        continue;
+                    }
+
+                    std::expected<bool, exception_t> traffic_status = this->traffic_controller->thru(addr_arr[i]);
+
+                    if (!traffic_status.has_value()){
+                        response_exception_arr[i] = traffic_status.error();
+                        continue;
+                    }
+
+                    if (!traffic_status.value()){
+                        response_exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        continue;
+                    }
+
+                    response_exception_arr[i] = dg::network_exception::SUCCESS;
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
 
                 return this->consume_sz_per_load.value;
+            }
+
+            void update() noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                this->traffic_controller->reset();
+                this->thru_ip_set.clear();
+
+                size_t inbound_addr_cap = this->nat_ip_controller->get_inbound_friend_addr_size();
+                size_t inbound_addr_sz  = {};
+
+                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(inbound_addr_cap);
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(inbound_addr_cap);
+
+                this->nat_ip_controller->get_inbound_friend_addr(addr_arr.get(), 0u, inbound_addr_sz, inbound_addr_cap);
+
+                for (size_t i = 0u; i < inbound_addr_sz; ++i){
+                    this->thru_ip_set.insert(addr_arr[i]);
+                }
+            }
+    };
+
+    //we dont know the implementations yet - so it's best to copy paste things here - 
+    class OutBoundBorderController: public virtual BorderControllerInterface, public virtual UpdatableInterface{
+
+        private:
+
+            std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
+            dg::unordered_set<Address> thru_ip_set;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> consume_sz_per_load;
+        
+        public:
+
+            OutBoundBorderController(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
+                                     std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
+                                     dg::unordered_set<Address> thru_ip_set,
+                                     std::unique_ptr<std::mutex> mtx,
+                                     stdx::hdi_container<size_t> consume_sz_per_load) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
+                                                                                                traffic_controller(std::move(traffic_controller)),
+                                                                                                thru_ip_set(std::move(thru_ip_set)),
+                                                                                                mtx(std::move(mtx)),
+                                                                                                consume_sz_per_load(std::move(consume_sz_per_load)){}
+
+            void thru(Address * addr_arr, size_t sz, exception_t * response_exception_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                this->nat_ip_controller->add_outbound(addr_arr, sz, exception_arr.get());
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (dg::network_exception::is_failed(exception_arr[i])){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                    }
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (!this->thru_ip_set.contains(addr_arr[i])){
+                        response_exception_arr[i] = dg::network_exception::BAD_IP_RULE;
+                        continue;
+                    }
+
+                    std::expected<bool, exception_t> traffic_status = this->traffic_controller->thru(addr_arr[i]);
+
+                    if (!traffic_status.has_value()){
+                        response_exception_arr[i] = traffic_status.error();
+                        continue;
+                    }
+
+                    if (!traffic_status.value()){
+                        response_exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        continue;
+                    }
+
+                    response_exception_arr[i] = dg::network_exception::SUCCESS;
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->consume_sz_per_load.value;
+            }
+
+            void update() noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                this->thru_ip_set.clear();
+                this->traffic_controller->reset();
+
+                size_t outbound_addr_cap    = this->nat_ip_controller->get_outbound_friend_addr_size();
+                size_t outbound_addr_sz     = {};
+                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(outbound_addr_cap);
+
+                this->nat_ip_controller->get_outbound_friend_addr(addr_arr.get(), 0u, outbound_addr_sz, outbound_addr_cap);
+
+                for (size_t i = 0u; i < outbound_addr_sz; ++i){
+                    this->thru_ip_set.insert(addr_arr[i]);
+                }
             }
     };
 
@@ -2925,12 +2908,16 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //these optimizables seem simple yet they are very important in real-life scenerios - where the problem of betweenness centrality + maxflow arise
     //we want a model to actually extract pattern + think to make the best possible min-max move
 
+    //I was thinking about software engineering and the best practices 
+    //it all comes down to std::unique_ptr<> and std::shared_ptr<>
+    //the amount of std::shared_ptr<> increases == the quality decreases
+
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
-            std::shared_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
+            std::shared_ptr<packet_controller::BorderControllerInterface> border_controller;
             std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller;
             std::shared_ptr<model::SocketHandle> socket;
             size_t packet_consumption_cap;
@@ -2940,13 +2927,13 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         public:
 
             OutBoundWorker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
-                           std::shared_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
+                           std::shared_ptr<packet_controller::BorderControllerInterface> border_controller,
                            std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller,
                            std::shared_ptr<model::SocketHandle> socket,
                            size_t packet_consumption_cap,
                            size_t packet_transmit_cap,
                            size_t rest_threshold_sz) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
-                                                               traffic_controller(std::move(traffic_controller)),
+                                                               border_controller(std::move(border_controller)),
                                                                exhaustion_controller(std::move(exhaustion_controller)),
                                                                socket(std::move(socket)),
                                                                packet_consumption_cap(packet_consumption_cap),
@@ -2964,10 +2951,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     //
                     dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(packet_arr_sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> traffic_response_arr(packet_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> traffic_response_arr(packet_arr_sz);
 
                     std::tranform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return ptk.to_addr;});
-                    this->traffic_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
+                    this->border_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
 
                     //
                     auto mailchimp_resolutor                    = InternalMailChimpResolutor{};
@@ -2983,11 +2970,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     for (size_t i = 0u; i < packet_arr_sz; ++i){
                         if (!traffic_response_arr[i].has_value()){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(traffic_response_arr[i].error()));
-                            continue;
-                        }
-
-                        if (!traffic_response_arr[i].value()){
-                            dg::network_log_stackdump::error_fast_optional("Outgoing Packets dropped at OutBoundWorker Traffic Stop");
                             continue;
                         }
 
@@ -3136,7 +3118,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post;
-            std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen;
+            std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen;
             size_t rescue_packet_sz;
             std::chrono::nanoseconds rescue_threshold;
 
@@ -3144,7 +3126,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             KernelRescueWorker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
                                std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
-                               std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen,
+                               std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen,
                                size_t rescue_packet_sz,
                                std::chrono::nanoseconds rescue_threshold) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
                                                                                     rescue_post(std::move(rescue_post)),
@@ -3197,16 +3179,16 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
         private:
 
-            std::shared_ptr<packet_controller::NATIPController> nat_ip_controller;
-            std::shared_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor;
+            std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::unique_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor;
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container;
             size_t addr_consumption_sz;
             size_t outbound_container_accum_sz;
 
         public:
 
-            InBoundInformerWorker(std::shared_ptr<packet_controller::NATIPController> nat_ip_controller,
-                                  std::shared_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor,
+            InBoundInformerWorker(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
+                                  std::unique_ptr<packet_controller::InformPacketGetterInterface> inbound_suggestor,
                                   std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container,
                                   size_t addr_consumption_sz,
                                   size_t outbound_container_accum_sz) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
@@ -3283,8 +3265,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
         private:
 
-            std::shared_ptr<packet_controller::NATIPController> nat_ip_controller;
-            std::shared_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor;
+            std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::unique_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor;
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container;
             size_t addr_consumption_sz;
             size_t outbound_container_accum_sz; 
@@ -3292,7 +3274,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         public:
 
             OutBoundSuggestorWorker(std::shared_ptr<packet_controller::NATIPController> nat_ip_controller,
-                                    std::shared_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor,
+                                    std::unique_ptr<packet_controller::SuggestionPacketGetterInterface> outbound_suggestor,
                                     std::shared_ptr<packet_controller::PacketContainerInterface> outbound_container,
                                     size_t addr_consumption_sz,
                                     size_t outbound_container_accum_sz) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
@@ -3448,97 +3430,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             };
     };
 
-    //I was trying to think of the general solutions for network transportation
-    //what precisely are we trying to achieve - are we trying to saturate + uniformly distribute the bandwidth? 
-    //or we are trying to transport packets as fast as possible and leave the optimizable to the frequency regions which allow upstream optimizations?
-    //I guess we dont know the answer to that yet - so we are in the middle ground - we optimize things that wont compromise | hinder future decisions - and will circle back to dot-the-i-cross-the-t later
-
-    //let's talk in depth about our two very important variables - frequency & rtt
-    //those alone could tell everything we need to know about the congestion
-
-    //recall how we did the ballinger stock model prediction, our semantic space of sorted chart and sliding window
-    //well it has its use here
-
-    //f(t)  = round-trip time tells us about the state the receipient is in
-    //f1(t) = transmit_frequency + f(t) tells us about the client influence on the server
-    //f2(t) = suggested_frequency tells us about the normalization data
-
-    //alright - let's talks in terms of actionables and deliverables
-    //assume we are in a perfect environment, such is there is no problem of maxflow - we are a <nice balanced distributed Voronoi diagrams>
-    //everyone is everyone - there is no one more special than another (we'll patch this later)
-    //we communicate by gossiping - there is no communicado in our graph - it's prohibited
-    //we want to "observe" the system and do local optimizations in an acceptable window - this is a path search problem 
-
-    //we want to propagate the system stats to the neighbor - and prop that to another neighbor - what is this called? it's called centrality
-    //we want to "compress" the system stats by mapping it into another compact semantic space (pretrained)
-    //we want to maximize self thru-put - because we are in a uniformly distributed environment - we can do local optimization to approx global optimization
-    //we want to re-route the packets - by exploring neighbor nodes (A * search) - recall that local optimization is global optimization in a uniform distribution
-    //we probably dont want to re-route - because it would hinder the holistic upstream optimization (using memregion frequency)
-
-    //the things that are in our control, and do not interfere with upstream optimizations, are the obvious optimizables - like maximizing thru-put ack/s - by mutating the adjustables in an acceptable window (like suggested frequency, consume_sz, produce_sz, etc.)
-    //we'll advance in the optimization direction - we'll do very simple things like chartifying the acks per IP, chartifying the CPU consumption, chartifying the network consumption, chartifying the consumption_sz, chartifying the production_sz
-    //                                                                               chartifying the round-trip time per IP, chartifying the suggested_frequency per IP, etc.
-
-    //                                            - we want to inch forward in the direction (mutating the suggestion, mutating the production_sz, etc.) that approxes local maxima (we dont really care if we inch in the right direction - we actually care, this does create a ripple effect for training - we want to gather data for the stock market prediction)
-    //                                            - alright - this is an entire different algorithm - yet the idea is to "observe" the behavior of the system by using "stock prediction" - and inch the system in the direction that is categorized as beneficial
-    //                                            - the way that we did stock prediction is actually good - we established the support lines by mapping data into a new semantic space
-    //                                            - I was thinking of how that worked so well - to explain it in a nutshell, assume you have an array, you remove the left most element, and you insert a next element, the former is actually 100% predictable - it has clear rules of vec.erase(vec.begin())
-    //                                                                                        -                                                                                                                         the latter punishes based on how far down you are in the insertion sort (if your newly inserter moves n - 1 elements to the right - then it has stronger hint of training than moving 1 element to the right which is push_back)
-    //                                                                                                                                                                                                                  this is the clear rule of support line in stock market - stock market ALWAYS goes up - and when it doesn't, then we have a problem, we ask how far down it is through the support lines
-    
-    //                                            - how does this tell about system calibration? system optimization is like stock optimization, we want to maximize everything - it means that the charts we are optimizing must have a clear uptrend reaches the stop and stay there - stock doesn't behave in the way, this is where it differs 
-    //                                                                                                                                                                          - system chart also has support lines - says spending 20% of resource on quicksort is not as beneficial as spending 5% of resource on radix sort(in terms of sorted elements/ second)
-    //                                            - we want to collect these data to make "better" decisions in terms of future forcast - which creates a loop of <the forcast is based on the data collected from the heuristics and the heuristics is from the output of the forcast>
-    //                                                                                                                                  - we dont really care, because the data we collect is always the base source of truth - we want to decrease the bias by adding sliding windows of the mutables  
-    //                                                                                                                                  - or we actually care, because we are stuck in the gradient descent of bad heuristics which created bad forcast
-    //                                                                                                                                  - or we dont care because the forcast will "learn" the heuristics and still inch into the right direction
-    //                                                                                                                                  - I guess we dont know - except for <do your best on the forcast and the heuristics part> - and pray for the best
-    //                                                                                                                                  - real time system is actually way more complicated than we think, they are already very heavily optimized - so stepping in the "forcastable beneficial" direction is actually the optimizable that we could safely make without compromising upstream optimizations
-    //                                                                                                                                  - I was thinking of the things categorized as forcastable beneficial - it's back to the sliding window problem of 1 day 1 month 1 year or 3 year or 1000 year
-    //                                                                                                                                                                                                       - what is the right "unit" sliding window time? I guess it depends - as long as the chart we are observing is somewhat of an avg ack_packet/s vs s
-    //                                                                                                                                                                                                       - in the transactional world - we want to approximate the transaction time - and unitize the sliding window based on such
-    //
-
-    //                                                  + transformer is a radix of sparse centrality - so the model can actually think in a complex semantic space - can even predict things very accurately in the natural enviroment - not manipulated environment like stock market 
-    //                                                  + I think transformer should suffice in this particular use case - we want to twist the model by using simple path search but the optimization stops there 
-    //                                                  + Like every machine learning predictions, we want to have 3 things - a base algorithm (also a normalization layer of machine learning output), a machine learning algorithm, and an interval reset of the machine learning algorithm
-    //
-
-    //                                            - approxing local maximma is approxing global maxima in a uniform distribution environment, we want to do "good" individually in terms of request_acks/s, and the system will behave in the direction
-    //                                            - suggested frequency does more than just suggesting frequency - it's a temporal encoder | decoder by using continuity compression (we must be Cooper writing on the watch)
-    //                                            - we map our current buffer to an arbitrary trainable space (which is pretrained or real-time trained) - we convert it to a n! * n! * n! * ... space - and we broadcast it temporally - so that's the plan)
-    //                                            - we are the edge of an important history anchor - we hope that humanity could stay human in the near future and understand philosophically that all things are seen relatively
-
-    //we'll implement the first draft - this is a very complicated implementation in terms of performance + accuracy + worst case scenerios + failsafes + compromission of system + etc.
-    //                                - yet a very important flood management algorithm - it observes the system holistically to inch the system in the good direction (we define good in the heuristics)
-
-    //thru-put in terms of network is ack/s
-    //thru-put in terms of compute is matrix/s
-    //thru-put in terms of disk is read_byte/s
-    //uniform distribution in terms of network is uniformly distributed ack/s across IP
-
-    //what do we want to do? we want to chartify all of those statistics - sort those statistics (thru-put | unif_dist + etc) - and place them on a buffer - we can actually specify the importance of those guys by allocating more space for one than another  
-    //we want to do centrality of system stats - the things that we've just chartified - and broadcast that to the closest neighbors - who would do compression of incoming data + their data and broadcast to another neighbor - it's a radix of dense centrality algorithm - we want something like floyed
-
-    //what's our grand goal again? its to saturate + uniform_distribute the bandwidth?
-    //recall that our consumption must be equal production - and we leave the flood management to the kernel (because kernel is good at this)
-
-    //we'll talk about locality of dynamic memory allocations and how that would affect the system
-    //we can't spend all RAM bus on the network because that's bad
-    //it's the cyclic dynamic memory allocations + allocation_life_time + etc.  
-
-    //we'll try to implement this this week
-    //the light of consciousness is the cache L1 L2 L3, RAM
-    //it has always been about "attention" - this attention is actually about temporal access of data
-    //our attention is about frequency of appearance and temporal access - we'll come up with a way
-    //what if we core-dump everything, take snapshots and train our neural network on the buffer?
-    //well, it's a very nice topic to explore
-    //we'll post our result in a month - it's complicated
-
-    //this is extremely hard to code efficiently - so let's just accept the implementation - we'll be back later to tune kernel - we are expecting to affine 32 cores out of 1024 cores to pull all bandwidth (soon to be scaled to 64GB/s) without contaminating other tasks
-    //we dont have time to argue with the non-reasonables - we have a performance constraint to meet and a bandwidth to saturate 
-    //we'll rewrite part of the sys if we have to
-
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -3548,9 +3439,11 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container;
             std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container;
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller;
-            std::shared_ptr<packet_controller::TrafficControllerInterface> inbound_traffic_controller;
-            std::shared_ptr<packet_controller::FeedBackMachineInterface> feedback_machine;
-            std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
+            std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller;
+            std::shared_ptr<packet_controller::RTTFeedBackInterface> rtt_feedback_dropbox;
+            std::shared_ptr<packet_controller::OutBoundFeedBackInterface> outbound_feedback_dropbox;
+            std::shared_ptr<packet_controller::InBoundFeedFrontInterface> inbound_feedfront_dropbox;
+            std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
             size_t ack_vectorization_sz;
             size_t inbound_consumption_sz;
             size_t rest_threshold_sz;
@@ -3562,9 +3455,11 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container,
                           std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
                           std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller,
-                          std::shared_ptr<packet_controller::TrafficControllerInterface> inbound_traffic_controller,
-                          std::shared_ptr<packet_controller::FeedBackMachineInterface> feedback_machine,
-                          std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
+                          std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller,
+                          std::shared_ptr<packet_controller::RTTFeedBackInterface> rtt_feedback_dropbox,
+                          std::shared_ptr<packet_controller::OutBoundFeedBackInterface> outbound_feedback_dropbox,
+                          std::shared_ptr<packet_controller::InBoundFeedFrontInterface> inbound_feedfront_dropbox,
+                          std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
                           size_t ack_vectorization_sz,
                           size_t inbound_consumption_sz,
                           size_t rest_threshold_sz) noexcept: retransmission_controller(std::move(retransmission_controller)),
@@ -3572,8 +3467,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                               inbound_packet_container(std::move(inbound_packet_container)),
                                                               inbound_buffer_container(std::move(inbound_buffer_container)),
                                                               inbound_id_controller(std::move(inbound_id_controller)),
-                                                              inbound_traffic_controller(std::move(inbound_traffic_controller)),
-                                                              feedback_machine(std::move(feedback_machine)),
+                                                              inbound_border_controller(std::move(inbound_border_controller)),
+                                                              rtt_feedback_dropbox(std::move(rtt_feedback_dropbox)),
+                                                              outbound_feedback_dropbox(std::move(outbound_feedback_dropbox)),
+                                                              inbound_feedfront_dropbox(std::move(inbound_feedfront_dropbox)),
                                                               ack_packet_gen(std::move(ack_packet_gen)),
                                                               ack_vectorization_sz(ack_vectorization_sz),
                                                               inbound_consumption_sz(inbound_consumption_sz),
@@ -3601,9 +3498,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     //
 
                     auto rttfb_delivery_resolutor                           = InternalRTTFeedBackDeliveryResolutor{};
-                    rttfb_delivery_resolutor.feedback_machine               = this->feedback_machine.get();
+                    rttfb_delivery_resolutor.feedback_machine               = this->rtt_feedback_dropbox.get();
 
-                    size_t trimmed_rttfb_delivery_sz                        = std::min(this->feedback_machine->max_consume_size(), buf_arr_sz * MAX_FEEDBACK_PER_PACKET);
+                    size_t trimmed_rttfb_delivery_sz                        = std::min(this->rtt_feedback_dropbox->max_consume_size(), buf_arr_sz * MAX_FEEDBACK_PER_PACKET);
                     size_t rttfb_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&rttfb_delivery_resolutor, trimmed_rttfb_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> rttfb_deliverer_mem(rttfb_deliverer_allocation_cost);
                     auto rttfb_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&rttfb_delivery_resolutor, trimmed_rttfb_delivery_sz, rttfb_deliverer_mem.get())); 
@@ -3611,9 +3508,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     //
 
                     auto obfb_delivery_resolutor                            = InternalOutBoundFeedBackDeliveryResolutor{};
-                    obfb_delivery_resolutor.feedback_machine                = this->feedback_machine.get();
+                    obfb_delivery_resolutor.feedback_machine                = this->outbound_feedback_dropbox.get();
 
-                    size_t trimmed_obfb_delivery_sz                         = std::min(this->feedback_machine->max_consume_size(), buf_arr_sz * MAX_FEEDBACK_PER_PACKET);
+                    size_t trimmed_obfb_delivery_sz                         = std::min(this->outbound_feedback_dropbox->max_consume_size(), buf_arr_sz * MAX_FEEDBACK_PER_PACKET);
                     size_t obfb_deliverer_allocation_cost                   = dg::network_producer_consumer::delvrsrv_allocation_cost(&obfb_delivery_resolutor, trimmed_obfb_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> obfb_deliverer_mem(obfb_deliverer_allocation_cost);
                     auto obfb_deliverer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&obfb_delivery_resolutor, trimmed_obfb_delivery_sz, obfb_deliverer_mem.get())); 
@@ -3621,9 +3518,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     //
 
                     auto ibff_delivery_resolutor                            = InternalInBoundFeedFrontDeliveryResolutor{};
-                    ibff_delivery_resolutor.feedback_machine                = this->feedback_machine.get();
+                    ibff_delivery_resolutor.feedback_machine                = this->inbound_feedfront_dropbox.get();
 
-                    size_t trimmed_ibff_delivery_sz                         = std::min(this->feedback_machine->max_consume_size(), buf_arr_sz * MAX_FEEDBACK_PER_PACKET);
+                    size_t trimmed_ibff_delivery_sz                         = std::min(this->inbound_feedfront_dropbox->max_consume_size(), buf_arr_sz * MAX_FEEDBACK_PER_PACKET);
                     size_t ibff_deliverer_allocation_cost                   = dg::network_producer_consumer::delvrsrv_allocation_cost(&ibff_delivery_resolutor, trimmed_ibff_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> ibff_deliverer_mem(ibff_deliverer_allocation_cost);
                     auto ibff_deliverer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ibff_delivery_resolutor, trimmed_ibff_delivery_sz, ibff_deliverer_mem.get()));
@@ -3740,8 +3637,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     auto traffic_resolutor                                  = InternalTrafficResolutor{};
                     traffic_resolutor.downstream_dst                        = &inbound_deliverer;
+                    traffic_resolutor.border_controller                     = &this->inbound_border_controller;
 
-                    size_t trimmed_traffic_resolutor_delivery_sz            = std::min(this->inbound_traffic_controller->max_consume_size(), buf_arr_sz);
+                    size_t trimmed_traffic_resolutor_delivery_sz            = std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz);
                     size_t traffic_resolutor_allocation_cost                = dg::network_producer_consumer::delvrsrv_allocation_cost(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> traffic_resolutor_mem(traffic_resolutor_allocation_cost);
                     auto traffic_resolutor_deliverer                        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz, traffic_resolutor_mem.get())); 
@@ -3771,7 +3669,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
         private:
 
             //alright - branch prediction pipeline is cured - we will try to minimize the memory footprint by limiting the delivery -> 256 capacity - that's about all that we could do
-            //we have more to think than just "that is not fast enough" - it is not fast because the structure is not trivially_copyable_v - which is an optimizable
+            //we have more to think than just "that is not fast enough" - it is not fast because the structure is not trivially_copyable_v - which is an optimizable (alright fellas - this is Packet * - we'll talk about this later)
             //we have to inch the optimization in the direction that is good in terms of branch prediction + memory footprint + memory synchronization (memory orderings) - and we leave the open road for future optimizations
             //we figured that there is no better way than to keep packet size at 4096-8192 bytes - because the kernel does not fragment the transmission at this size - which would heavily determine the thruput
             //recv_block + 8KB packet size are not optional
@@ -3780,7 +3678,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::packet_controller::RetransmissionControllerInterface * dst;
 
-                void push(std::move_iterator<global_packet_id_t> * data_arr, size_t sz) noexcept{
+                void push(std::move_iterator<global_packet_id_t *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     global_packet_id_t * base_data_arr = data_arr.base();
@@ -3798,7 +3696,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::packet_controller::FeedBackMachineInterface * feedback_machine;
 
-                void push(std::move_iterator<RTTFeedBack> * data_arr, size_t sz) noexcept{
+                void push(std::move_iterator<RTTFeedBack *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     RTTFeedBack * base_data_arr = data_arr.base();
@@ -3816,7 +3714,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::packet_controller::FeedBackMachineInterface * feedback_machine;
 
-                void push(std::move_iterator<OutBoundFeedBack> * data_arr, size_t sz) noexcept{
+                void push(std::move_iterator<OutBoundFeedBack *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     OutBoundFeedBack * base_data_arr = data_arr.base();
@@ -3834,7 +3732,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::packet_controller::FeedBackMachineInterface * feedback_machine;
 
-                void push(std::move_iterator<InBoundFeedFront> * data_arr, size_t sz) noexcept{
+                void push(std::move_iterator<InBoundFeedFront *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     InBoundFeedFront * base_data_arr = data_arr.base();
@@ -3895,24 +3793,20 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             struct InternalTrafficResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
 
                 dg::network_producer_consumer::DeliveryHandle<Packet> * downstream_dst;
+                packet_controller::BorderControllerInterface * border_controller;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> response_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> response_arr(sz);
 
                     Packet * base_data_arr = data_arr.base();
                     std::transform(base_data_arr, std::next(base_data_arr, sz), addr_arr.get(), [](const Packet& packet){return packet.fr_addr;});
-                    this->self->inbound_traffic_controller->thru(addr_arr.get(), sz, response_arr.get());
+                    this->border_controller->thru(addr_arr.get(), sz, response_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!response_arr[i].has_value()){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(response_arr[i].error()));
-                            continue;
-                        }
-
-                        if (!response_arr[i].value()){
-                            dg::network_log_stackdump::error_fast_optional("Incoming packet dropped at traffic controller");
                             continue;
                         }
 
@@ -4174,7 +4068,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                          std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
                                          std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
                                          std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
-                                         std::shared_ptr<packet_controller::TrafficControllerInterface> ib_traffic_controller,
+                                         std::shared_ptr<packet_controller::BorderControllerInterface> ib_traffic_controller,
                                          std::shared_ptr<packet_controller::SchedulerInterface> scheduler, 
                                          std::shared_ptr<SocketHandle> socket) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
