@@ -16,7 +16,7 @@ import random
 #we want single responsibility of projection space (we are not sure of what this means)
 #that probably means we want binary data - and we want tiles of binary data - and rotate operation operates on the tiles not the cells (alright - we are not being generalized here - is cell tile or is tile cell?)
 
-#because we are not sure of what that means - we want to train these guys on a time-series loss/validation convergence analysis (which is stock prediction)
+#because we are not sure of what that means - we want to train these guys on a time-series validation convergence analysis (which is stock prediction)
 #alright let's strategize
 #this is a state expansion problem
 #we have actionables - we have forcastables and we have heuristics to step into the min-max of the forcastable (we are, again, not sure of what this means)
@@ -31,6 +31,13 @@ import random
 #f(x) = f'(0) * x + 1/2 * f''(0) * x^2 + 1/6 * f'''(0) * x^3 + 1/24 * f''''(0) * x^4 + ... 
 
 #at a random given time - we always want to maximize the avg forcastable derivatives - because we are for sure that with an appropriate sliding window - this could work 
+
+#the problem with centrality is that we have a problem of calibration - even though plus is a calibration operation - the operating semantic space is not the calibrated semantic space
+#such does not happen in the case of string + gravitational
+#how could we solve such problem? by using dynamic projections + planet of the chimps? or is there a sophisticated approach to calibrate the semantic space - we've yet to know
+
+#what we do know is that when we chartify the velocity + acceleration + jerk + crack + snap + etc - things get better - in the sense of temporal prediction of what the loss chart shape's gonna look like
+#what we include for the input (also slided output) of the forcast training is another topic to talk about - is it potential energy? kinetic energy? from exponentially increased point in time to "rewind" and not get lost?   
 
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
