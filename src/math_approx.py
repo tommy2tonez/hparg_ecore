@@ -4,13 +4,33 @@ import math
 import json
 import random 
 
-#alright
-#I think I was right that activations are machine learning's failure from the fundamental concepts
-#activations are not differentiable and thus its interference on the result is not in the way we would expect in this math_approx (mathematically - activations do not make sense in the traditional neural network training)
-#we want continuous functions - A lot of continuous functions
-#and we want to limit the range of f(x) -> y by using decay compression approach
-#continuous function is NOT good on a larger range, but it is good for smaller range, which is precisely the supposedly existence purpose of activation functions which we are going to replace by using decay compression
-#alright - time will tell - we have 1 month to get this working 
+#alright im glad we are back
+#let's look at the fundamental concepts
+
+#there are two operations in math: calibration and projection
+#calibration is operator add
+#projection is <exp, linear, cos, sin, log, inv, neg, div, etc>
+
+#we want to focus on centrality algorithms
+#we want advanced projection functions
+#we want single responsibility of projection space (we are not sure of what this means)
+#that probably means we want binary data - and we want tiles of binary data - and rotate operation operates on the tiles not the cells (alright - we are not being generalized here - is cell tile or is tile cell?)
+
+#because we are not sure of what that means - we want to train these guys on a time-series loss/validation convergence analysis (which is stock prediction)
+#alright let's strategize
+#this is a state expansion problem
+#we have actionables - we have forcastables and we have heuristics to step into the min-max of the forcastable (we are, again, not sure of what this means)
+#does this mean that we have a larger sliding window unit? in which we calculate the "average velocity or acceleration or snap or crack or etc." of the chart? 
+
+#recall the e^x function approximation
+#f(x) = e^x
+#f'(x) = e^x
+#f''(x) = e^x
+#f'''(x) = e^x
+#e(x = 0) = 1
+#f(x) = f'(0) * x + 1/2 * f''(0) * x^2 + 1/6 * f'''(0) * x^3 + 1/24 * f''''(0) * x^4 + ... 
+
+#at a random given time - we always want to maximize the avg forcastable derivatives - because we are for sure that with an appropriate sliding window - this could work 
 
 def operation_add(lhs: object, rhs: object) -> object:
     return lhs + rhs
@@ -110,19 +130,19 @@ def operation_tree_to_callable(root: OperationTree) -> Callable[[float, float], 
 
     if root == None:
         return zero_operation()
-    
+
     if root.kind == None:
         return zero_operation()
-    
+
     if root.kind == OPS_TREE_KIND_CONST_EXTRACT:
         return const_operation(root.const_value)
-    
+
     if root.kind == OPS_TREE_KIND_LEFT_EXTRACT:
         return left_extract_operation()
-    
+
     if root.kind == OPS_TREE_KIND_RIGHT_EXTRACT:
         return right_extract_operation()
-    
+
     if root.kind == OPS_TREE_KIND_PAIR_OPS:
         return bind_operation(operation_dict[root.pair_operation_name], operation_tree_to_callable(root.left), operation_tree_to_callable(root.right))
 

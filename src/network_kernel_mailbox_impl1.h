@@ -2314,8 +2314,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    //we dont know the implementations yet - so it's best to copy paste things here
-    //we can't punch UDP if we dont relax the outbound - it's impossible
     class OutBoundBorderController: public virtual BorderControllerInterface, public virtual UpdatableInterface{
 
         private:
@@ -3056,6 +3054,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //                                                                                                       (3): only professionals can find the joins for std::shared_ptr<> and if there is a solution without std::shared_ptr<> - it's better to use the solution
 
     //we'll hook a machine learning model to load balance + tune + handle flood this week + next week - it's gonna be very hard to do this performantly - let's see what we could do
+    //let's switch gears to machine learning algorithms for now
 
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -3342,8 +3341,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 std::chrono::time_point<std::chrono::utc_clock> now = std::chrono::utc_clock::now();
                 std::chrono::nanoseconds lapsed                     = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_heartbeat.value().value());
 
-                if (lapsed < this->rescue_threshold){
-                    return true;
+                if (lapsed <= this->rescue_threshold){
+                    return false;
                 }
 
                 dg::network_log_stackdump::journal_fast_optional("UDP Rescue Packets enrouting");
