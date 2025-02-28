@@ -472,7 +472,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual void ack(global_packet_id_t *, size_t, exception_t *) noexcept = 0;
 
             virtual void get_alive_conn(Address *, size_t&, size_t) noexcept = 0;
-            virtual auto get_alive_conn_size() noexcept -> size_t = 0;
+            virtual auto get_alive_conn_max_size() noexcept -> size_t = 0;
 
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -2379,26 +2379,94 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     class PunchConnectionController: public virtual PunchConnectionControllerInterface{
 
+        private:
+
+            dg::deque<std::pair<Address, global_packet_id_t>> handshake_deque;
+            std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> ack_id_set; 
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> handshake_deque_cap;
+            stdx::hdi_container<size_t> consume_sz_per_load;
+
         public:
+
+            PunchConnectionController(dg::deque<std::pair<Address, global_packet_id_t>> handshake_deque,
+                                      std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> ack_id_set,
+                                      std::unique_ptr<std::mutex> mtx,
+                                      stdx::hdi_container<size_t> handshake_deque_cap,
+                                      stdx::hdi_container<size_t> consume_sz_per_load) noexcept: handshake_deque(std::move(handshake_deque)),
+                                                                                                 ack_id_set(std::move(ack_id_set)),
+                                                                                                 mtx(std::move(mtx)),
+                                                                                                 handshake_deque_cap(std::move(handshake_deque_cap)),
+                                                                                                 consume_sz_per_load(std::move(consume_sz_per_load)){}
 
             void outbound(std::pair<Address, global_packet_id_t> * outbound_data, size_t sz, exception_t * exception_arr) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                size_t app_cap  = this->handshake_deque_cap.value;
+                size_t app_sz   = std::min(sz, app_cap); 
+
+                for (size_t i = 0u; i < app_sz; ++i){
+                    this->finite_deque_push_back(this->handshake_deque, outbound_data[i], this->handshake_deque_cap.value);
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
+                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
             }
 
             void ack(global_packet_id_t * pkt_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->ack_id_set->insert(pkt_id_arr[i]);
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
-            void get_alive_conn(Address * addr_arr, size_t& sz, size_t cap) noexcept{
+            void get_alive_conn(Address * output_addr_arr, size_t& sz, size_t cap) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                sz                  = 0u;
+                size_t iterable_sz  = std::min(this->handshake_deque.size(), cap); 
+                auto tmp_hash_set   = dg::unordered_set<Address>(); //bad
+
+                for (size_t i = 0u; i < iterable_sz; ++i){
+                    if (!tmp_hash_set.contains(handshake_deque[i].first)){
+                        continue;
+                    }
+
+                    if (!this->ack_id_set->contains(handshake_deque[i].second)){
+                        continue;
+                    }
+
+                    output_addr_arr[sz++] = handshake_deque[i].first;
+                    tmp_hash_set.insert(handshake_deque[i].first);
+                }
             }
 
-            auto get_alive_conn_size() noexcept -> size_t{
+            auto get_alive_conn_max_size() noexcept -> size_t{
 
+                return this->handshake_deque_cap.value;
             }
 
             auto get_consume_size() noexcept -> size_t{
 
+                return this->consume_sz_per_load.value;
+            }
+
+        private:
+
+            template <class ...Args, class T>
+            void finite_deque_push_back(dg::deque<Args...>& deque, T value, size_t deque_cap) noexcept{
+
+                if (deque.size() == deque_cap){
+                    deque.pop_front();
+                }
+
+                deque.emplace_back(std::move(value));
             }
     };
 
@@ -2965,18 +3033,31 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //                                                                    - we've encountered so many nasty bugs from memory exhaustion attack -> packet queue attack -> request timeout attack -> DDoS attack + request override attack -> cross site attack
     //                                                                    - so we are afraid of being "fancy" - as long as we can hit the requirements of 1 transmission == 1 recv + correct load flood management + saturate network bandwidth - it's considered mission accomplished 
 
+    //getting started is definitely the hardest part - 
+    //yet we want to actually "internally" manage these components and provide an abstraction for users to initialize + reset + dependency inject
+    //what do we learn about interface designs + component designs + shared_ptr<> + unique_ptr<>
+    //interface usually does (1): declares expectations of the users
+    //                       (2): declares responsibilities of the component
+
+    //shared_ptr<> is not encouraged yet it is impossible to design without shared_ptr<> in many scenerios - (1): detached + concurrent + no-synchronous programming
+    //                                                                                                       (2): unified resource (std::malloc + std::free, machine learning data at a hollistic picture)
+    //                                                                                                       (3): only professionals can find the joins for std::shared_ptr<> and if there is a solution without std::shared_ptr<> - it's better to use the solution
+
+    //we'll hook a machine learning model to load balance + tune + handle flood this week + next week - it's gonna be very hard to do this performantly - let's see what we could do
+
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             std::shared_ptr<packet_controller::BorderControllerInterface> border_controller;
-            std::shared_ptr<packet_controller::PunchConnectionControllerInterface> punch_conn_controller,
+            std::shared_ptr<packet_controller::PunchConnectionControllerInterface> punch_conn_controller;
             std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller;
             std::shared_ptr<model::SocketHandle> socket;
             size_t packet_consumption_cap;
+            size_t punch_conn_delivery_cap;
             size_t packet_transmit_cap;
-            size_t rest_threshold_sz; 
+            size_t rest_threshold_sz;
 
         public:
 
@@ -2986,6 +3067,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                            std::shared_ptr<packet_controller::KernelOutBoundExhaustionControllerInterface> exhaustion_controller,
                            std::shared_ptr<model::SocketHandle> socket,
                            size_t packet_consumption_cap,
+                           size_t punch_conn_delivery_cap,
                            size_t packet_transmit_cap,
                            size_t rest_threshold_sz) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
                                                                border_controller(std::move(border_controller)),
@@ -2993,6 +3075,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                                exhaustion_controller(std::move(exhaustion_controller)),
                                                                socket(std::move(socket)),
                                                                packet_consumption_cap(packet_consumption_cap),
+                                                               punch_conn_delivery_cap(punch_conn_delivery_cap),
                                                                packet_transmit_cap(packet_transmit_cap),
                                                                rest_threshold_sz(rest_threshold_sz){}
 
@@ -3000,19 +3083,43 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 size_t success_sz = {};
 
+                dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->packet_consumption_cap);
+                size_t packet_arr_sz = {};
+                this->outbound_packet_container->pop(packet_arr.get(), packet_arr_sz, this->packet_consumption_cap);
+
+                //
+                dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(packet_arr_sz);
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> traffic_response_arr(packet_arr_sz);
+
+                std::tranform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return ptk.to_addr;});
+                this->border_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
+
                 {
-                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->packet_consumption_cap);
-                    size_t packet_arr_sz = {};
-                    this->outbound_packet_container->pop(packet_arr.get(), packet_arr_sz, this->packet_consumption_cap);
+                    //bottleneck the # of ack_ids/ address before delivery - unclear if this is the component responsibility or this guy responsibility - we'll see
 
-                    //
-                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(packet_arr_sz);
-                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> traffic_response_arr(packet_arr_sz);
+                    auto conn_controller_resolutor                      = InternalConnControllerResolutor{};
+                    conn_controller_resolutor.punch_conn_controller     = this->punch_conn_controller.get();
 
-                    std::tranform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return ptk.to_addr;});
-                    this->border_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
+                    size_t trimmed_conn_controller_delivery_sz          = std::min(std::min(this->punch_conn_delivery_cap, this->punch_conn_controller->max_consume_size()), packet_arr_sz);
+                    size_t conn_controller_deliverer_alloc_sz           = dg::network_producer_consumer::delvrsrv_alloction_cost(&conn_controller_resolutor, trimmed_conn_controller_delivery_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> conn_controller_deliverer_mem(conn_controller_deliverer_alloc_sz);
+                    auto conn_controller_deliverer                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&conn_controller_resolutor, trimmed_conn_controller_delivery_sz, conn_controller_deliverer_mem.get()));  
 
-                    //
+                    for (size_t i = 0u; i < packet_arr_sz; ++i){
+                        if (!traffic_response_arr[i].has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(traffic_response_arr[i].error()));
+                            continue;
+                        }
+
+                        auto punchconn_arg      = std::pair<Address, global_packet_id_t>{};
+                        punchconn_arg.first     = packet_arr[i].to_addr;
+                        punchconn_arg.second    = packet_arr[i].id; 
+
+                        dg::network_producer_consumer::delvrsrv_deliver(conn_controller_deliverer.get(), std::move(punchconn_arg));
+                    }
+                }
+
+                {
                     auto mailchimp_resolutor                    = InternalMailChimpResolutor{};
                     mailchimp_resolutor.socket                  = this->socket.get();
                     mailchimp_resolutor.exhaustion_controller   = this->exhaustion_controller.get();  
@@ -3022,15 +3129,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     size_t mailchimp_deliverer_alloc_sz         = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailchimp_resolutor, trimmed_mailchimp_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> mailchimp_deliverer_mem(mailchimp_deliverer_alloc_sz);
                     auto mailchimp_deliverer                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mailchimp_resolutor, trimmed_mailchimp_delivery_sz, mailchimp_deliverer_mem.get())); 
-
-                    //
-                    auto conn_controller_resolutor                      = InternalConnControllerResolutor{};
-                    conn_controller_resolutor.punch_conn_controller     = this->punch_conn_controller.get();
-
-                    size_t trimmed_conn_controller_delivery_sz          = std::min(this->punch_conn_controller->max_consume_size(), packet_arr_sz);
-                    size_t conn_controller_deliverer_alloc_sz           = dg::network_producer_consumer::delvrsrv_alloction_cost(&conn_controller_resolutor, trimmed_conn_controller_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> conn_controller_deliverer_me(conn_controller_deliverer_alloc_sz);
-                    auto conn_controller_deliverer                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&conn_controller_resolutor, trimmed_conn_controller_delivery_sz, conn_controller_deliverer_me.get()));  
 
                     for (size_t i = 0u; i < packet_arr_sz; ++i){
                         if (!traffic_response_arr[i].has_value()){
@@ -3044,15 +3142,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(stamp_err));
                         }
 
-                        auto punchconn_arg      = std::pair<Address, global_packet_id_t>{};
-                        punchconn_arg.first     = packet_arr[i].to_addr;
-                        punchconn_arg.second    = packet_arr[i].id; 
-
                         auto mailchimp_arg      = InternalMailChimpArgument{};
                         mailchimp_arg.dst       = packet_arr[i].to_addr;
                         mailchimp_arg.content   = utility::serialize_packet(std::move(packet_arr[i]));
 
-                        dg::network_producer_consumer::delvrsrv_deliver(conn_controller_deliverer.get(), std::move(punchconn_arg)); //this has to be delivered before mailchimp
                         dg::network_producer_consumer::delvrsrv_deliver(mailchimp_deliverer.get(), std::move(mailchimp_arg));
                     }
                 }
@@ -3283,7 +3376,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             bool run_one_epoch() noexcept{
 
-                size_t addr_cap = this->punch_conn_controller->get_alive_conn_size();
+                size_t addr_cap = this->punch_conn_controller->get_alive_conn_max_size();
                 size_t addr_sz  = {};
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(addr_cap);                
 
@@ -3354,7 +3447,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             bool run_one_epoch() noexcept{
 
                 size_t addr_sz  = {};
-                size_t addr_cap = this->punch_conn_controller->get_alive_conn_size();
+                size_t addr_cap = this->punch_conn_controller->get_alive_conn_max_size();
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(addr_cap);
 
                 this->punch_conn_controller->get_alive_conn(addr_arr.get(), addr_sz, addr_cap);
@@ -4195,7 +4288,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                                                    consume_sz_per_load(consume_sz_per_load){}
 
             void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
-                
+
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
