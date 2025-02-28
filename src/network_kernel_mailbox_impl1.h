@@ -2382,7 +2382,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         private:
 
             dg::deque<std::pair<Address, global_packet_id_t>> handshake_deque;
-            std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> ack_id_set; 
+            std::unique_ptr<datastructure::unordered_map_interface<global_packet_id_t, std::chrono::time_point<std::chrono::utc_clock>>> ack_id_hashmap; 
+            std::chrono::nanoseconds alive_conn_duration;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> handshake_deque_cap;
             stdx::hdi_container<size_t> consume_sz_per_load;
@@ -2390,11 +2391,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             PunchConnectionController(dg::deque<std::pair<Address, global_packet_id_t>> handshake_deque,
-                                      std::unique_ptr<datastructure::unordered_set_interface<global_packet_id_t>> ack_id_set,
+                                      std::unique_ptr<datastructure::unordered_map_interface<global_packet_id_t, std::chrono::time_point<std::chrono::utc_clock>>> ack_id_hashmap,
+                                      std::chrono::nanoseconds alive_conn_duration,
                                       std::unique_ptr<std::mutex> mtx,
                                       stdx::hdi_container<size_t> handshake_deque_cap,
                                       stdx::hdi_container<size_t> consume_sz_per_load) noexcept: handshake_deque(std::move(handshake_deque)),
-                                                                                                 ack_id_set(std::move(ack_id_set)),
+                                                                                                 ack_id_hashmap(std::move(ack_id_hashmap)),
+                                                                                                 alive_conn_duration(std::move(alive_conn_duration)),
                                                                                                  mtx(std::move(mtx)),
                                                                                                  handshake_deque_cap(std::move(handshake_deque_cap)),
                                                                                                  consume_sz_per_load(std::move(consume_sz_per_load)){}
@@ -2418,11 +2421,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                for (size_t i = 0u; i < sz; ++i){
-                    this->ack_id_set->insert(pkt_id_arr[i]);
-                }
+                auto now = std::chrono::utc_clock::now(); 
 
-                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+                for (size_t i = 0u; i < sz; ++i){
+                    exception_arr[i] = this->ack_id_hashmap->insert(pkt_id_arr[i], now);
+                }
             }
 
             void get_alive_conn(Address * output_addr_arr, size_t& sz, size_t cap) noexcept{
@@ -2432,13 +2435,22 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 sz                  = 0u;
                 size_t iterable_sz  = std::min(this->handshake_deque.size(), cap); 
                 auto tmp_hash_set   = dg::unordered_set<Address>(); //bad
+                auto now            = std::chrono::utc_clock::now();
 
                 for (size_t i = 0u; i < iterable_sz; ++i){
-                    if (!tmp_hash_set.contains(handshake_deque[i].first)){
+                    if (tmp_hash_set.contains(handshake_deque[i].first)){
                         continue;
                     }
 
-                    if (!this->ack_id_set->contains(handshake_deque[i].second)){
+                    std::optional<std::chrono::timepoint<std::chrono::utc_clock>> ts = this->ack_id_hashmap->get(handshake_deque[i].second);
+
+                    if (!ts.has_value()){
+                        continue;
+                    }
+
+                    std::chrono::nanoseconds lapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(ts.value() - now);
+
+                    if (lapsed > this->alive_conn_duration){
                         continue;
                     }
 
