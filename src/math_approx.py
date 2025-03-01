@@ -36,7 +36,7 @@ import random
 #such does not happen in the case of string + gravitational
 #how could we solve such problem? by using dynamic projections + planet of the chimps? or is there a sophisticated approach to calibrate the semantic space - we've yet to know
 
-#what we do know is that when we chartify the velocity + acceleration + jerk + crack + snap + etc - things get better - in the sense of temporal prediction of what the loss chart shape's gonna look like
+#what we do know is that when we chartify the velocity + acceleration + jerk + crack + snap + etc - things get better - in the sense of temporal prediction of what the loss chart's gonna look like
 #what we include for the input (also slided output) of the forcast training is another topic to talk about - is it potential energy? kinetic energy? from exponentially increased point in time to "rewind" and not get lost?   
 
 def operation_add(lhs: object, rhs: object) -> object:
