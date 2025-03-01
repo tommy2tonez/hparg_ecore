@@ -65,6 +65,10 @@ import math
 #taylor swift + centrality is probably the proof of concept that we are going to write this week
 #yall better hurry with the ballistic missiles before taylor swift smacking your asses 
 
+#let's talk about f(x, y, z) -> <value_1, value_2, value_3>
+#we want to find the differential vector (velocity vector) instead of a scalar velocity value 
+#what does that mean? that means we want to do taylor series binary projections + hypertraining by using time-series prediction 
+
 def e(x: int) -> float:
 
     rs = float()
