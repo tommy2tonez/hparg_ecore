@@ -181,4 +181,10 @@ def e(x: int) -> float:
 
     return rs
 
+#I tried to explain to Dad that this is a fission operation - we want no synchronization - not justin timberlake
+#the operation is so fast that it reaches 10 ^ 24 flops/ second - pulling all data from all virtual machines
+#we hope that we could be as swift as possible - we'll see if we, me, you could reach socialism in this very decade
+#C++ is fast - IF cache + affinity + correct branching techniques are utilized - let me tell you that python is on par with C++ if you are accessing L3 data or memory data in C++
+#                                                                              - this happens a lot in C++ where you have a dictionary of size 1 << 20 - or 1 << 25 - it's meaningless to code in C or even C++ in this situation
+
 print(e(12))
