@@ -63,7 +63,7 @@ import math
 #by using induction - taylor-series is probably the most important concept in machine learning - taylor swift is, therefore, very important to approx modern infrastructure
 
 #taylor swift + centrality is probably the proof of concept that we are going to write this week
-#yall better hurry with the ballistic missles before taylor swift smacking your asses 
+#yall better hurry with the ballistic missiles before taylor swift smacking your asses 
 
 def e(x: int) -> float:
 
@@ -74,4 +74,4 @@ def e(x: int) -> float:
 
     return rs
 
-print(e(13))
+print(e(12))
