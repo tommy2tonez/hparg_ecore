@@ -154,7 +154,9 @@ def get_directional_vector(vector: list[float]) -> list[float]:
 
 def train(approximator: TaylorApprox, instrument: Callable[[float], float], training_epoch_sz: int, directional_optimization_sz: int, x_range: int, discretization_sz: int):
 
-    newton_iteration_sz             = 16
+    newton_iteration_sz             = 20
+    newton_discretization_sz        = 20
+    newton_exp_base                 = 1.3
     grad_dimension_sz: list[float]  = get_taylor_series_size(approximator.taylor_series)
 
     for _ in range(training_epoch_sz):
@@ -164,7 +166,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
 
         for __ in range(directional_optimization_sz):
             random_vec: list[float]         = get_random_vector(grad_dimension_sz)
-            directional_vec: list[float]    = get_directional_vector(random_vec) 
+            directional_vec: list[float]    = random_vec
 
             def newton_approx_func(multiplier: float):
                 previous_value: list[float] = taylor_series_to_value_arr(approximator.taylor_series)
@@ -177,12 +179,14 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
 
                 return rs
 
-            (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, 0)
+            for j in range(newton_discretization_sz):
+                exp_offset              = newton_exp_base ** j
+                (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
 
-            if y < inching_direction_value:
-                inching_direction               = directional_vec
-                inching_direction_multiplier    = est_new_multiplier
-                inching_direction_value         = y
+                if y < inching_direction_value:
+                    inching_direction               = directional_vec
+                    inching_direction_multiplier    = est_new_multiplier
+                    inching_direction_value         = y
 
         print(inching_direction_value)
 
@@ -196,13 +200,14 @@ def main():
     #something went wrong
     #let me show them mfs the real power of taylor fast + electrical engineering designs
     #legend says this algorithm still runs 1000 years later
+    #well... it's a fission operation - we specialize in rocket + nuke
 
     approxer: TaylorApprox  = get_taylor_series(5, 1)
-    sqrt_func               = lambda x: math.sqrt(x) + x ** 2 + x
+    sqrt_func               = lambda x: x ** 4 + x ** 3 + x ** 2 + x + 1
 
     # print(approxer.operation(1))
 
-    train(approxer, sqrt_func, 256, 256, 64, 64)
+    train(approxer, sqrt_func, 256, 16, 64, 64)
     # # approxer.taylor_series.series[0].value = 01
     # # approxer.taylor_series.series[1].value = 0.5
 
