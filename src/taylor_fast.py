@@ -1,6 +1,7 @@
 from typing import Callable
 import math 
 import random
+import copy
 
 class TaylorValue:
 
@@ -47,7 +48,7 @@ def get_taylor_series(differential_order_sz: int, differential_step_sz: int) -> 
 
     return TaylorApprox(taylor_series, sum_function)
 
-def newton_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> float:
+def newton_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
 
     cur_x       = initial_x
     min_y       = operation(cur_x)
@@ -71,7 +72,7 @@ def newton_approx(operation: Callable[[float], float], iteration_sz: int, initia
 
         cur_x   -= cur_y / slope
 
-    return cand_x
+    return cand_x, min_y
 
 def discretize(first: float, last: float, discretization_sz: int) -> list[float]:
 
@@ -93,74 +94,123 @@ def calc_deviation(lhs: Callable[[float], float], rhs: Callable[[float], float],
 
     return normalized
 
-def get_distribution_vector(sz: int, decay: float, resolution: int) -> list[int]:
+#alright - we want to be able to approx EVERYTHING today - including exp - sin - cos - linear - sqrt - or - xor - etc.
+#let's see what's wrong
+#the first thing is the differential order - which heavily affect the approximation
+#the second thing is the dynamic "collaboration" of the slopes - which turns thing up down and around 
+#is there a solution to solve this problem? hmm...
+#it seems like a dynamic programming problem
+#alright - what we actually CARE is the direction of the "newton slope" - in this very example - we only move in one direction - which is dx or dy or dz
+#what happens if we move in the direction of <1, 1, 1> without loss of generality - and "approx" the gradient?
+#let's make things complicated - we discretize all directional unit vector
+#and choose the "right" way to inch our rocket into
+
+def taylor_series_to_value_arr(series: TaylorSeries) -> list[float]:
+
+    return [e.value for e in series.series]
+
+def write_taylor_series_value(series: TaylorSeries, value: list[float]):
+
+    for i in range(len(series.series)):
+        series.series[i].value = value[i] 
+
+def get_taylor_series_size(series: TaylorSeries) -> int:
+
+    return len(series.series) 
+
+def add_vector(lhs: list[float], rhs: list[float]) -> list[float]:
     
-    pre_normalized_perc_list: list[float]   = []
-    cursor_perc: float                      = float(1)
+    return [e + e1 for (e, e1) in zip(lhs, rhs)]
 
-    for i in range(sz):
-        pre_normalized_perc_list += [cursor_perc]
-        cursor_perc *= decay
+def scalar_multiply_vector(c: float, rhs: list[float]) -> list[float]:
+    
+    return [c * e for e in rhs]
 
-    total_perc: float                   = sum(pre_normalized_perc_list)
-    normalized_perc_list: list[float]   = [e / total_perc for e in pre_normalized_perc_list]  
-    rs: list[int]                       = []
+def random_0(sz: int) -> float:
 
-    for i in range(sz):
-        arr_sz: int = int(normalized_perc_list[i] * resolution)
-        rs          += [i] * arr_sz
+    dice = random.randrange(0, sz)
+    
+    if dice == 0:
+        return float(0)
+    
+    return float(1)
 
-    return rs[:resolution]
+def get_random_vector(dimension_sz: int) -> list[float]:
 
-def reverse_distribution_vector(inp: list[int], sz: int) -> list[int]:
+    return [random.random() * random_0(2) for _ in range(dimension_sz)]
 
-    rs = []
+def dot_product(lhs: list[float], rhs: list[float]) -> float:
 
-    for i in range(len(inp)):
-        rs += [sz - inp[i] - 1]
+    return sum([e * e1 for (e, e1) in zip(lhs, rhs)]) 
 
-    return rs
+def to_scalar_value(vector: list[float]) -> float:
 
-def train(approximator: TaylorApprox, instrument: Callable[[float], float], training_epoch_sz: int, x_range: int, discretization_sz: int):
+    return math.sqrt(dot_product(vector, vector)) 
+
+def get_directional_vector(vector: list[float]) -> list[float]:
+
+    vector_scalar_value = to_scalar_value(vector)    
+    return [e / max(vector_scalar_value, 0.001) for e in vector]
+
+def train(approximator: TaylorApprox, instrument: Callable[[float], float], training_epoch_sz: int, directional_optimization_sz: int, x_range: int, discretization_sz: int):
 
     newton_iteration_sz             = 16
-    training_decay: float           = 0.5
-    distribution_vector: list[int]  = reverse_distribution_vector(get_distribution_vector(len(approximator.taylor_series.series), training_decay, 100), len(approximator.taylor_series.series))
+    grad_dimension_sz: list[float]  = get_taylor_series_size(approximator.taylor_series)
 
     for _ in range(training_epoch_sz):
-        idx     = random.randrange(0, len(distribution_vector))
-        cursor  = distribution_vector[idx]
+        inching_direction: list[float]          = [float(0)] * grad_dimension_sz
+        inching_direction_multiplier: float     = float(0) 
+        inching_direction_value: float          = float(100000000)
 
-        def newton_approx_func(x: float):
-            previous_value: float                               = approximator.taylor_series.series[cursor].value
-            approximator.taylor_series.series[cursor].value     = x
-            rs:float                                            = calc_deviation(approximator.operation, instrument, x_range, discretization_sz) 
-            approximator.taylor_series.series[cursor].value     = previous_value
+        for __ in range(directional_optimization_sz):
+            random_vec: list[float]         = get_random_vector(grad_dimension_sz)
+            directional_vec: list[float]    = get_directional_vector(random_vec) 
 
-            return rs
+            def newton_approx_func(multiplier: float):
+                previous_value: list[float] = taylor_series_to_value_arr(approximator.taylor_series)
+                copied_value: list[float]   = copy.deepcopy(previous_value)
+                adjusted_value: list[float] = add_vector(copied_value, scalar_multiply_vector(multiplier, directional_vec))
 
-        est_new_x: float = newton_approx(newton_approx_func, newton_iteration_sz, approximator.taylor_series.series[cursor].value)
-        approximator.taylor_series.series[cursor].value = est_new_x
+                write_taylor_series_value(approximator.taylor_series, adjusted_value)
+                rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
+                write_taylor_series_value(approximator.taylor_series, previous_value)
+
+                return rs
+
+            (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, 0)
+
+            if y < inching_direction_value:
+                inching_direction               = directional_vec
+                inching_direction_multiplier    = est_new_multiplier
+                inching_direction_value         = y
+
+        print(inching_direction_value)
+
+        current_value: list[float]  = taylor_series_to_value_arr(approximator.taylor_series) 
+        adjusted_value: list[float] = add_vector(current_value, scalar_multiply_vector(inching_direction_multiplier, inching_direction))
+
+        write_taylor_series_value(approximator.taylor_series, adjusted_value)
 
 def main():
 
     #something went wrong
     #let me show them mfs the real power of taylor fast + electrical engineering designs
+    #legend says this algorithm still runs 1000 years later
 
     approxer: TaylorApprox  = get_taylor_series(5, 1)
-    sqrt_func               = lambda x: math.sqrt(x)
+    sqrt_func               = lambda x: math.sqrt(x) + x ** 2 + x
 
     # print(approxer.operation(1))
 
-    train(approxer, sqrt_func, 1024, 64, 64)
+    train(approxer, sqrt_func, 256, 256, 64, 64)
     # # approxer.taylor_series.series[0].value = 01
     # # approxer.taylor_series.series[1].value = 0.5
 
     print(approxer.operation(16))
     print(calc_deviation(approxer.operation, sqrt_func, 64, 64))
 
-    # for i in range(len(approxer.taylor_series.series)):
-    #     print(approxer.taylor_series.series[i].value)
+    for i in range(len(approxer.taylor_series.series)):
+        print(approxer.taylor_series.series[i].value)
 
     # print()
     # print(approxer.operation(1))
