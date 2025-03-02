@@ -172,6 +172,7 @@ def newton_approx(f: Callable[[float], float], x: int, newton_iteration_sz: int)
 def train(approximator: TaylorApprox, instrument: Callable[[list[object]], list[object]]):
     pass 
 
+
 def e(x: int) -> float:
 
     rs = float()
@@ -181,10 +182,16 @@ def e(x: int) -> float:
 
     return rs
 
-#I tried to explain to Dad that this is a fission operation - we want no synchronization - not justin timberlake
-#the operation is so fast that it reaches 10 ^ 24 flops/ second - pulling all data from all virtual machines
-#we hope that we could be as swift as possible - we'll see if we, me, you could reach socialism in this very decade
-#C++ is fast - IF cache + affinity + correct branching techniques are utilized - let me tell you that python is on par with C++ if you are accessing L3 data or memory data in C++
-#                                                                              - this happens a lot in C++ where you have a dictionary of size 1 << 20 - or 1 << 25 - it's meaningless to code in C or even C++ in this situation
+#let's consider this like a real circuit - we have voltage + current + resistance
+#we want to find the correct voltage + current for every <electrical_component> in the circuit
+#let's look at what we want - we want to have different training % for different leafs
+#we'd achieve that by using blkr - or resistance node
+#we choose resistance node just for the sake of simplicity + static training for now 
+#things we want to implement today are proof of concept for taylor series + resistance tile node (resistance tile decays gradient by 10% for example)
+#we want 100% accurate magnet training - we'll figure out a way to mess with the training percentages per leaf tile
+#we'll loose the synchronization - even for the orphan + adopt - we'll also figure out a way  
+#we want to store leaf logits + their gradient on the HOST only - to avoid misflops of GPU - which is very common
+#we also want to <bottleneck> + <clamp> the gradient update - because EVERY input could be malicious - we'll also work on this  
+#let's build this electrical circuit + fission training guys - I have a good feeling that we are going to make this
 
 print(e(12))
