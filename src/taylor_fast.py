@@ -135,9 +135,18 @@ def random_0(sz: int) -> float:
     
     return float(1)
 
+def random_sign(sz: int) -> float:
+
+    dice = random.randrange(0, sz)
+
+    if dice == 0:
+        return float(-1)
+
+    return float(1) 
+
 def get_random_vector(dimension_sz: int) -> list[float]:
 
-    return [random.random() * random_0(2) for _ in range(dimension_sz)]
+    return [random.random() * random_0(4) * random_sign(4) for _ in range(dimension_sz)]
 
 def dot_product(lhs: list[float], rhs: list[float]) -> float:
 
@@ -154,15 +163,15 @@ def get_directional_vector(vector: list[float]) -> list[float]:
 
 def train(approximator: TaylorApprox, instrument: Callable[[float], float], training_epoch_sz: int, directional_optimization_sz: int, x_range: int, discretization_sz: int):
 
-    newton_iteration_sz             = 20
-    newton_discretization_sz        = 20
-    newton_exp_base                 = 1.3
+    newton_iteration_sz             = 8
+    newton_discretization_sz        = 64
+    newton_exp_base                 = 1.001
     grad_dimension_sz: list[float]  = get_taylor_series_size(approximator.taylor_series)
 
     for _ in range(training_epoch_sz):
         inching_direction: list[float]          = [float(0)] * grad_dimension_sz
         inching_direction_multiplier: float     = float(0) 
-        inching_direction_value: float          = float(100000000)
+        inching_direction_value: float          = None
 
         for __ in range(directional_optimization_sz):
             random_vec: list[float]         = get_random_vector(grad_dimension_sz)
@@ -172,7 +181,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 previous_value: list[float] = taylor_series_to_value_arr(approximator.taylor_series)
                 copied_value: list[float]   = copy.deepcopy(previous_value)
                 adjusted_value: list[float] = add_vector(copied_value, scalar_multiply_vector(multiplier, directional_vec))
-
+                
                 write_taylor_series_value(approximator.taylor_series, adjusted_value)
                 rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
                 write_taylor_series_value(approximator.taylor_series, previous_value)
@@ -183,17 +192,24 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 exp_offset              = newton_exp_base ** j
                 (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
 
-                if y < inching_direction_value:
+                if inching_direction_value == None or y < inching_direction_value:
                     inching_direction               = directional_vec
                     inching_direction_multiplier    = est_new_multiplier
                     inching_direction_value         = y
+
+        if inching_direction_value == None:
+            continue
 
         print(inching_direction_value)
 
         current_value: list[float]  = taylor_series_to_value_arr(approximator.taylor_series) 
         adjusted_value: list[float] = add_vector(current_value, scalar_multiply_vector(inching_direction_multiplier, inching_direction))
+        
+        previous_deviation          = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
+        if (previous_deviation > inching_direction_value):
+            write_taylor_series_value(approximator.taylor_series, adjusted_value)
+            print("update", inching_direction_value)
 
 def main():
 
@@ -201,15 +217,22 @@ def main():
     #let me show them mfs the real power of taylor fast + electrical engineering designs
     #legend says this algorithm still runs 1000 years later
     #well... it's a fission operation - we specialize in rocket + nuke
+    #I just met my brother in my dream - that was a very happy event
+    #I wanted to show my brother how far we have come in our rocket science
+    #this is like level 1 of our hacking career
 
-    approxer: TaylorApprox  = get_taylor_series(5, 1)
-    sqrt_func               = lambda x: x ** 4 + x ** 3 + x ** 2 + x + 1
+    approxer: TaylorApprox  = get_taylor_series(8, 1)
+    sqrt_func               = lambda x: math.sin(2*x) + math.sin(3*x) + math.sin(x) + math.sin(5*x) + math.cos(x) + math.cos(4*x)
 
+    # write_taylor_series_value(approxer.taylor_series, [0, 1, 0, -1, 0, 1, 0, -1])
+
+    # print(approxer.operation(2))
+    # print(math.sin(2))
     # print(approxer.operation(1))
 
-    train(approxer, sqrt_func, 256, 16, 64, 64)
-    # # approxer.taylor_series.series[0].value = 01
-    # # approxer.taylor_series.series[1].value = 0.5
+    train(approxer, sqrt_func, 8192, 16, 2, 64)
+    # # # approxer.taylor_series.series[0].value = 01
+    # # # approxer.taylor_series.series[1].value = 0.5
 
     print(approxer.operation(16))
     print(calc_deviation(approxer.operation, sqrt_func, 64, 64))
@@ -217,7 +240,7 @@ def main():
     for i in range(len(approxer.taylor_series.series)):
         print(approxer.taylor_series.series[i].value)
 
-    # print()
-    # print(approxer.operation(1))
+    # # print()
+    # # print(approxer.operation(1))
 
 main()
