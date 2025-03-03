@@ -174,8 +174,8 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         for __ in range(directional_optimization_sz):
             random_vec: list[float]         = get_random_vector(grad_dimension_sz)
             directional_vec: list[float]    = random_vec
-            newton_exp_base                 = random.random() + 1
-            newton_discretization_sz        = random.randrange(1, 64)
+            newton_exp_base                 = random.random() + 2
+            newton_discretization_sz        = random.randrange(1, 8)
 
             def newton_approx_func(multiplier: float):
                 previous_value: list[float] = taylor_series_to_value_arr(approximator.taylor_series)
@@ -230,9 +230,25 @@ def main():
     #I was thinking of cosine simularity, HUGO, and newton approx - if we make a one shot on a par 3 - we don't even need gradient descend
     #it seems like this is a fission + mining operation - but it is not a fission operation - more like a centrality + fission operation - because our resource is finite
     #let's hope guys - I have a good feeling that we are going to make this
+    #we dont really know how that works so well - for every function - we just know that this is dangerous if weaponized in this current planet of the chimp technology - we can break through every possible security layers and access data in an instant
 
-    approxer: TaylorApprox  = get_taylor_series(8, 1)
-    sqrt_func               = lambda x: math.sin(math.sin(x))
+    #now tell me what's the difference between f(x), f(x, y), f(x, y, z)?
+    #it's the euclidean locality - x, z and y makes more sense than x,y and z
+    #this is a very important concept for training - we want to regroup these guys to have faster training time
+    #apart from that - I dont think there is a difference between f(x), f(x,y), x(x, y, z)
+    #we'll find a way
+    #it's not that difficult to understand things - you need to be able to listen to the music and find your true compass of logic - not what the school taught you
+
+    mapper: dict[int, float] = {}
+
+    for i in range(32):
+        mapper[i] = random.random() * 1024
+
+    approxer: TaylorApprox  = get_taylor_series(32, 1)
+
+    def sqrt_func(x: float):
+
+        return x ** 3 + x ** 2 * mapper[min(int(x), 31)] + 2 * x + 1
 
     # write_taylor_series_value(approxer.taylor_series, [0, 1, 0, -1, 0, 1, 0, -1])
 
@@ -240,7 +256,11 @@ def main():
     # print(math.sin(2))
     # print(approxer.operation(1))
 
-    train(approxer, sqrt_func, 8192, 16, 2, 32)
+    #65000
+    #00536
+    #1072
+
+    train(approxer, sqrt_func, 131072, 16, 16, 32) #if this could run - it passes my turing test of approximation
     # # # approxer.taylor_series.series[0].value = 01
     # # # approxer.taylor_series.series[1].value = 0.5
 
