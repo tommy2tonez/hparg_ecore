@@ -220,6 +220,12 @@ def main():
     #I just met my brother in my dream - that was a very happy event
     #I wanted to show my brother how far we have come in our rocket science
     #this is like level 1 of our hacking career
+    #"you can't organize an ostrich race with just one ostrich" - Prince of Persia
+    #you can't make a bomb with just one Uranium
+    #that's the truth - because we are in a "golf game" of finding the coordinates 
+    #in real life - most of the time, deviation is not even a clue - you might just get one big blackhole and nothing at all on the surroundings (path is not suitable in this situation - we are optimizing things that are not quantifiable)
+    #this is why we need fission - to open up a chain-reaction of "where the golf balls might have been" - and try to find the final destination 
+    #exponential direction discretization is the correct approach - we also need to add <random_discretization> or chaotics of HUGO's "broista" to increase the randomness of the rocket projections
 
     approxer: TaylorApprox  = get_taylor_series(8, 1)
     sqrt_func               = lambda x: math.sin(2*x) + math.sin(3*x) + math.sin(x) + math.sin(5*x) + math.cos(x) + math.cos(4*x)
