@@ -268,6 +268,26 @@ def main():
     #we want centrality because our resource is finite - we keep our pool of best fit candidates and maintain our pool of best fit candidates - like SPY 500
     #because of those reasons, this algorithm is radixed as a mining operation + centrality operation + fissing operation (we do "fission" by random projection around the focusing area of optimizations)
 
+    #alright - let's implement this - we have directions, we have magnitude, => we have vector => we have pointer
+    #                               - we have exponential => we have focus
+
+    #what are we focusing on? we are focusing on the "gucci" - the spots (regions) that we statistically know that are better
+    #this hints us that the operation we are looking for is a reordering operation (bijective space map)
+    #what is wrong with this? we are using a "smarter" operation to improvise a dumb + naive operation - so who's gay?
+    #we don't know who's gay - we just know that it must be a dumber operation to improvise a smarter operation - this proves that coach must be dumber than player in real life - otherwise he's not a socially productive coach
+    #this sounds like the human-kind - because it really is so - we have the formula of taylor-fast - yet we don't have a recursive coach
+    #how about coach coaching another person to be a coach? This is what we want
+
+    #what if your coach is wrong? Do we listen to our coach or coach of the coach or coach of the coach of the coach or all of them?
+    #alright - we have a window of things - and centrality to keep our resource finite
+    #let's aim for 2 coaches - the random coach and the statistically best coach
+
+    #alright, so to offset this problem, we use another radix of approximation called centrality - which we will implement 
+    #centrality will boost our dumbness into another level - which we will leverage to coach another centrality
+
+    #the best thing about centrality is the ability to create another word - lightning fast context projection from n dimension -> 1 dimension (linear) - and context diffraction
+    #we will change the 1 dimension -> multi-dimensions to improve the context accuracy by using taylor approximation
+
     approxer: TaylorApprox  = get_taylor_series(8, 1)
 
     def sqrt_func(x: float):
