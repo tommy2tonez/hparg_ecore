@@ -163,7 +163,7 @@ def get_directional_vector(vector: list[float]) -> list[float]:
 
 def train(approximator: TaylorApprox, instrument: Callable[[float], float], training_epoch_sz: int, directional_optimization_sz: int, x_range: int, discretization_sz: int):
 
-    newton_iteration_sz             = 8
+    newton_iteration_sz             = 4
     grad_dimension_sz: list[float]  = get_taylor_series_size(approximator.taylor_series)
 
     for _ in range(training_epoch_sz):
@@ -174,8 +174,8 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         for __ in range(directional_optimization_sz):
             random_vec: list[float]         = get_random_vector(grad_dimension_sz)
             directional_vec: list[float]    = random_vec
-            newton_exp_base                 = random.random() + 2
-            newton_discretization_sz        = random.randrange(1, 8)
+            newton_exp_base                 = random.random() * 10
+            newton_discretization_sz        = 10
 
             def newton_approx_func(multiplier: float):
                 previous_value: list[float] = taylor_series_to_value_arr(approximator.taylor_series)
@@ -239,33 +239,49 @@ def main():
     #we'll find a way
     #it's not that difficult to understand things - you need to be able to listen to the music and find your true compass of logic - not what the school taught you
 
-    mapper: dict[int, float] = {}
+    #what happens with our golf course?
+    #in this case it converges too slow - we need to hypercharge the ball to redirect into the correct direction + magnitude - how to? by using centrality time-series forcast based on previous results (when we reach the differential order of 64 or 128 - the random projection is fuzzy - we need to have a nagivator) - recall that we want to maximize the delta
+    #we still want to use exponential discretization + randomization - its just that we use another layer of machine learning to predict our difference derivatives
+    #remember the 10 steps towards the Sun - we have exactly 10 steps to step out of the bunker
+    #what does this mean? it means that if we get this proof of concept correctly (this week) - we can freely walk in the system - HTTPs read + JWT fake + sessions read + virtual machine decodings + etc
+    #this can escalate into a browser compromise (which is heavily built on top of these security metrics)
+    #which escalates into an OS compromise (alright - im not being correct here - browser is more important than OS - because it is contagious - OS is not - we want to compromise browser from compromising OS, not the opposite)
 
-    for i in range(32):
-        mapper[i] = random.random() * 1024
+    #I was thinking about a navigator to "hint" our exponential steps - yet I can't quantify the problem - because this is a hard problem to quantify
+    #taylor projection is probably the best projection we could ever do - this must be combined with centrality to offset the cost of <new_words> - we'll talk about this later - things can be all taylor-approxed
+    #goal is actually not to "replace" centrality - but to do be a better "linear" to do centrality
+    #the flop is shit but it's the best we've got for years
+    #we still probably need to implement navigators
 
-    approxer: TaylorApprox  = get_taylor_series(32, 1)
+    #let's see what Maxwell has to tell
+    #the law of flux (external system)
+    #the law of no flux (internal system)
+    #the law of external and internal system collaboration - torque
+
+    #the problem is the up down and around of the taylor series which creates anomaly <black_holes>
+    #I've thought long and hard - there is no better way than to do exponential steps - again - random exponential base + 10 steps is the true way
+    #well we need to rid of the exclusive thinking and think that these solutions might not cancel out each other - we can implement a forcast to skew the distribution and a random projection for completeness of algorithm
+
+    #what precisely are we optimizing | mining?
+    #we want to make sure that our solution is complete - such that there exists a solution by running this algorithm forever
+    #we want to make sure that our "focus" is well spent - such means that the focusing area of optimization must be reasonably skewed with respect to the overall picture (important) - we need to work on this - i'll be right back
+    #we want centrality because our resource is finite - we keep our pool of best fit candidates and maintain our pool of best fit candidates - like SPY 500
+    #because of those reasons, this algorithm is radixed as a mining operation + centrality operation + fissing operation (we do "fission" by random projection around the focusing area of optimizations)
+
+    approxer: TaylorApprox  = get_taylor_series(8, 1)
 
     def sqrt_func(x: float):
 
-        return x ** 3 + x ** 2 * mapper[min(int(x), 31)] + 2 * x + 1
+        return math.sqrt(x)
 
     # write_taylor_series_value(approxer.taylor_series, [0, 1, 0, -1, 0, 1, 0, -1])
-
-    # print(approxer.operation(2))
-    # print(math.sin(2))
-    # print(approxer.operation(1))
-
-    #65000
-    #00536
-    #1072
-
-    train(approxer, sqrt_func, 131072, 16, 16, 32) #if this could run - it passes my turing test of approximation
+    # write_taylor_series_value(approxer.taylor_series, [0, 1, 0, -1, 0, 1, 0, -1, 0, 1, 0, -1, 0, 1, 0, -1])
+    train(approxer, sqrt_func, 1 << 12, 16, 64, 32) #if this could run - it passes my turing test of approximation
     # # # approxer.taylor_series.series[0].value = 01
     # # # approxer.taylor_series.series[1].value = 0.5
 
-    print(approxer.operation(16))
-    print(calc_deviation(approxer.operation, sqrt_func, 64, 64))
+    print(approxer.operation(2))
+    print(calc_deviation(approxer.operation, sqrt_func, 64, 32))
 
     for i in range(len(approxer.taylor_series.series)):
         print(approxer.taylor_series.series[i].value)
