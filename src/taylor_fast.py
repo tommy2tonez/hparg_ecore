@@ -73,29 +73,6 @@ def newton_approx(operation: Callable[[float], float], iteration_sz: int, initia
 
     return cand_x, min_y
 
-def newton_org_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
-
-    #this is not correctly implemented
-    cur_x       = initial_x
-    min_y       = operation(cur_x)
-    cand_x      = cur_x 
-    epsilon     = float(0.01)
-
-    for _ in range(iteration_sz):
-        cur_y   = operation(cur_x)
-        cand_x  = cur_x
-        min_y   = cur_y
-
-        a_y     = operation(cur_x + a)
-        slope   = (a_y - cur_y) / a
-
-        if (abs(slope) < epsilon):
-            break 
-
-        cur_x   -= cur_y / slope
-
-    return cand_x, min_y
-
 def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: float = 0.000001) -> float:
 
     if derivative_order == 0:
@@ -139,7 +116,7 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
 
             for differential_order in range(differential_order_sz):
                 func                                = lambda x: get_slope(operation, x, differential_order, a)
-                (projected_x, deviation)            = newton_org_approx(func, base_newton_iteration_sz, x, a)
+                (projected_x, deviation)            = newton_approx(func, base_newton_iteration_sz, x, a)
                 scope_differential_projection_arr   +=  [(projected_x, deviation)]
                 local_differential_projection_arr   +=  [(projected_x, deviation)]
 
