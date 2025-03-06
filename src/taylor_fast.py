@@ -75,6 +75,26 @@ def newton_approx(operation: Callable[[float], float], iteration_sz: int, initia
 
     return cand_x, min_y
 
+def newton2_approx(operation: Callable[[float, float], float], iteration_sz: int, initial_x1: float, initial_x2: float, a: float = 0.001) -> tuple[float, float, float]:
+
+    cur_x1          = initial_x1
+    cur_x2          = initial_x2
+    cur_deviation   = operation(cur_x1, cur_x2) 
+
+    for _ in range(iteration_sz):
+        if flip_a_coin():
+            func                    = lambda x: operation(x, cur_x2)
+            (next_x1, deviation)    = newton_approx(func, iteration_sz, cur_x1, a)
+            cur_x1                  = next_x1
+            cur_deviation           = deviation
+        else:
+            func                    = lambda x: operation(cur_x1, x)
+            (next_x2, deviation)    = newton_approx(func, iteration_sz, cur_x2, a)
+            cur_x2                  = next_x2
+            cur_deviation           = deviation
+
+    return cur_x1, cur_x2, cur_deviation
+
 def discretize(first: float, last: float, discretization_sz: int) -> list[float]:
 
     width: float    = (last - first) / discretization_sz
@@ -179,6 +199,8 @@ def taylor_derivative(vector: list[float]) -> list[float]:
 
     return left_shift(vector) 
 
+# def taylor_div() 
+
 def unscale_taylor(vector: list[float]) -> list[float]:
 
     return [vector[i] * math.factorial(i) for i in range(len(vector))] 
@@ -204,6 +226,21 @@ def taylor_convolution(lhs: list[float], rhs: list[float], window_sz: int = None
         return scale_taylor(unscaled_rs)[:window_sz]
 
     return scale_taylor(unscaled_rs)
+
+def taylor_plus(lhs: list[float], rhs: list[float]) -> list[float]:
+
+    if (len(lhs) > len(rhs)):
+        return taylor_plus(rhs, lhs)
+
+    rs = copy.deepcopy(lhs)
+
+    for i in range(len(lhs)):
+        rs[i] += rhs[i]
+   
+    for i in range(len(rhs) - len(lhs)):
+        rs += [rhs[len(lhs) + i]]
+
+    return rs
 
 def get_directional_vector(vector: list[float]) -> list[float]:
 
@@ -263,9 +300,24 @@ def get_gravity_taylor(dimension_sz: int) -> list[float]:
     func = lambda x: 1 / (x ** 2)
     return [get_slope(func, 0.000001, i) for i in range(dimension_sz)] 
 
-def get_sin_gravity_taylor(dimension_sz: int) -> list[float]:
+def get_sin_gravity_taylor(dimension_sz: int, amplitude: float, frequency: float) -> list[float]:
 
-    func = lambda x: math.sin(x) / x
+    func = lambda x: amplitude * math.sin(frequency * x) / (frequency * x)
+    return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
+
+def get_sqsin_gravity_taylor(dimension_sz: int, amplitude: float, frequency: float) -> list[float]:
+
+    func = lambda x: amplitude * (math.sin(frequency * x) / (frequency * x)) ** 2
+    return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
+
+def get_powsin_gravity_taylor(dimension_sz: int, amplitude: float, frequency: float, pow_sz: int) -> list[float]:
+
+    func = lambda x: amplitude * (math.sin(frequency * x) / (frequency * x)) ** pow_sz
+    return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
+
+def get_div_function_taylor(dimension_sz: int, divisor: float):
+
+    func = lambda x: x / divisor
     return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
 
 def get_cos_gravity_taylor(dimension_sz: int) -> list[float]:
@@ -285,7 +337,14 @@ def get_log_taylor(dimension_sz: int) -> list[float]:
 
 def taylor_projection(f: list[float], x: float) -> float:
 
-    return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
+    # print(f)
+    try:
+
+        return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
+    except:
+        return sys.float_info.max
+        print(f)
+        raise Exception()
 
 def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 
@@ -300,9 +359,19 @@ def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 #alright let's see what we could do - we want to approx every basic functions - and move to complex functions tmr - and multi-variables taylor the day after tomorrow - and centrality the day after that 
 #x1*sin(x2*x)
 
-#x2 * x         == taylor_convolution
-#x1 * sin(x)    == taylor_convolution
-#this is harder than expected
+#these are the list of the basic calibrated functions
+#we'll try to come up with more optimization strategies before moving on to the next topic of flux == 0 (what goes around comes around by MaxLake) - this involes multi-variables taylor projection + advanced calibration in such environment
+
+#there exists - random taylor optimization (with taylor's multipliers as stablizers) + gravitational waves (ripple effects) + damped gravitational waves (exponential)
+#             - damped gravitational wave is lossless compression - there always exists a solution to compress x if the differential order + data_type resolution are high enough
+#             - random step + exponential step newton optimization
+#             - random_direction + exponential 2-step newton optimization (beneficial if the two variables are entirely not related - in the sense of gravitational waves x, y displacement)
+
+#we'll move on to the difference of f(x) -> y or f(x, x1) -> y or f(x) -> <y, y1> or f(x, x1) -> <y, y1>
+#what's the difference?
+#the only difference is locality of those projections or x
+#we want to reorder those guys to have a smoother projection (by using centrality - context diffractor + multi_dimensional projection)
+#remember what MaxLake got to tell
 
 def random_taylor_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
@@ -379,28 +448,6 @@ def calibrated_maxwell_optimization(approximator: TaylorApprox, instrument: Call
 
     return (directional_vec, deviation)
 
-#1/f(x)^2 * g(x)
-#1/x^2
-#f(x)
-#g(x)
-
-#sqrt(x)
-#log(x)
-#e^x
-
-#the problem is the calibration - we haven't found the answer just yet
-#how about another random
-#let's skim through the options of fog(x)
-#exp
-#log
-#sin
-#cos
-#inv
-#sqrt
-#let's do one very simple optimizable
-#we randomize the function f(x) - and we do fog + taylor convolution
-#because we dont really know the calibratables at this level - that's probably the best option we could opt for
-
 def calibrated_gravity_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     dimension_sz                = get_taylor_series_size(approximator.taylor_series)
@@ -447,7 +494,11 @@ def calibrated_sin_gravity_optimization(approximator: TaylorApprox, instrument: 
     dimension_sz                = get_taylor_series_size(approximator.taylor_series)
     x1_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 2)
     x2_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 2)
-    gravity_directional_vec     = get_sin_gravity_taylor(dimension_sz)
+
+    wave_amplitude              = (random.random() * 2) ** (random.randrange(0, 10)) * random_sign(2)
+    wave_frequency              = (random.random() * 2) ** (random.randrange(0, 10))
+
+    gravity_directional_vec     = get_sin_gravity_taylor(dimension_sz, wave_amplitude, wave_frequency)
     newton_exp_base             = random.random() * 10
     newton_discretization_sz    = 10
     newton_iteration_sz         = 2
@@ -459,7 +510,7 @@ def calibrated_sin_gravity_optimization(approximator: TaylorApprox, instrument: 
         copied_value: list[float]       = copy.deepcopy(previous_value)
         scaled_x1_vec                   = scalar_multiply_vector(multiplier, x1_directional_vec)
         scaled_x2_vec                   = scalar_multiply_vector(multiplier, x2_directional_vec)
-        directional_vec                 = taylor_convolution(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
+        directional_vec                 = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
         write_taylor_series_value(approximator.taylor_series, adjusted_value)
@@ -479,7 +530,103 @@ def calibrated_sin_gravity_optimization(approximator: TaylorApprox, instrument: 
     if (deviation != None and multiplier != None):
         scaled_x1_vec       = scalar_multiply_vector(multiplier, x1_directional_vec)
         scaled_x2_vec       = scalar_multiply_vector(multiplier, x2_directional_vec)
-        directional_vec     = taylor_convolution(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec))
+        directional_vec     = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec))
+
+    return (directional_vec, deviation)
+
+def calibrated_sin2_gravity_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                = get_taylor_series_size(approximator.taylor_series)
+    x1_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 2)
+    x2_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 2)
+
+    wave_amplitude              = (random.random() * 10) ** (random.randrange(0, 10)) * random_sign(2)
+    wave_frequency              = (random.random() * 10) ** (random.randrange(0, 10))
+
+    gravity_directional_vec     = get_sqsin_gravity_taylor(dimension_sz, wave_amplitude, wave_frequency)
+    newton_exp_base             = random.random() * 10
+    newton_discretization_sz    = 5
+    newton_iteration_sz         = 4
+    
+    x1_multiplier               = None
+    x2_multiplier               = None
+    deviation                   = None
+
+    def newton_approx_func(x1_multiplier: float, x2_multiplier: float):
+        previous_value: list[float]     = taylor_series_to_value_arr(approximator.taylor_series)
+        copied_value: list[float]       = copy.deepcopy(previous_value)
+        scaled_x1_vec                   = scalar_multiply_vector(x1_multiplier, x1_directional_vec)
+        scaled_x2_vec                   = scalar_multiply_vector(x2_multiplier, x2_directional_vec)
+        directional_vec                 = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration - something is very off here
+        adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
+
+        write_taylor_series_value(approximator.taylor_series, adjusted_value)
+        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
+        write_taylor_series_value(approximator.taylor_series, previous_value)
+
+        return rs
+
+    for j in range(newton_discretization_sz):
+        for j1 in range(newton_discretization_sz):
+            x1_offset                   = (newton_exp_base ** j) - 1
+            x2_offset                   = (newton_exp_base ** j1) - 1
+            (new_x1_mul, new_x2_mul, y) = newton2_approx(newton_approx_func, newton_iteration_sz, x1_offset, x2_offset)
+
+            if deviation == None or y < deviation:
+                deviation       = y
+                x1_multiplier   = new_x1_mul
+                x2_multiplier   = new_x2_mul
+
+    if (deviation != None and x1_multiplier != None and x2_multiplier != None):
+        scaled_x1_vec       = scalar_multiply_vector(x1_multiplier, x1_directional_vec)
+        scaled_x2_vec       = scalar_multiply_vector(x2_multiplier, x2_directional_vec)
+        directional_vec     = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec))
+
+    return (directional_vec, deviation)
+
+def calibrated_powsin_gravity_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                = get_taylor_series_size(approximator.taylor_series)
+    x1_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 2)
+    x2_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 2)
+
+    wave_amplitude              = (random.random() * 2) ** (random.randrange(0, 10)) * random_sign(2)
+    wave_frequency              = (random.random() * 2) ** (random.randrange(0, 10))
+    pow_sz                      = random.randrange(0, 8) + 1
+
+    gravity_directional_vec     = get_powsin_gravity_taylor(dimension_sz, wave_amplitude, wave_frequency, pow_sz)
+    newton_exp_base             = random.random() * 10
+    newton_discretization_sz    = 10
+    newton_iteration_sz         = 4
+    multiplier                  = None
+    deviation                   = None
+
+    def newton_approx_func(multiplier: float):
+        previous_value: list[float]     = taylor_series_to_value_arr(approximator.taylor_series)
+        copied_value: list[float]       = copy.deepcopy(previous_value)
+        scaled_x1_vec                   = scalar_multiply_vector(multiplier, x1_directional_vec)
+        scaled_x2_vec                   = scalar_multiply_vector(multiplier, x2_directional_vec)
+        directional_vec                 = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
+        adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
+
+        write_taylor_series_value(approximator.taylor_series, adjusted_value)
+        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
+        write_taylor_series_value(approximator.taylor_series, previous_value)
+
+        return rs
+
+    for j in range(newton_discretization_sz):
+        exp_offset              = (newton_exp_base ** j) - 1
+        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            deviation   = y
+            multiplier  = est_new_multiplier
+
+    if (deviation != None and multiplier != None):
+        scaled_x1_vec       = scalar_multiply_vector(multiplier, x1_directional_vec)
+        scaled_x2_vec       = scalar_multiply_vector(multiplier, x2_directional_vec)
+        directional_vec     = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec))
 
     return (directional_vec, deviation)
 
@@ -536,15 +683,18 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
     #centrality is finite nodes - edges - and value propagations
     #we'll build from there
     
+
     for _ in range(training_epoch_sz):
         inching_direction: list[float]  = [float(0)] * grad_dimension_sz
         inching_deviation: float        = None
 
         for __ in range(directional_optimization_sz):
-            random_value        = random.randrange(0, 5)
+            random_value        = random.randrange(0, 7)
             new_directional_vec = None
             deviation           = None 
- 
+
+            (new_directional_vec, deviation)    = calibrated_sin2_gravity_optimization(approximator, instrument, x_range, discretization_sz)
+
             if random_value == 0:
                 (new_directional_vec, deviation)    = random_taylor_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 1:
@@ -555,9 +705,13 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 (new_directional_vec, deviation)    = calibrated_cos_gravity_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 4:
                 (new_directional_vec, deviation)    = calibrated_gravity_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 5:
+                (new_directional_vec, deviation)    = calibrated_sin2_gravity_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 6:
+                (new_directional_vec, deviation)    = calibrated_powsin_gravity_optimization(approximator, instrument, x_range, discretization_sz)
 
             if new_directional_vec != None and deviation != None:
-                if (inching_deviation == None or deviation < inching_deviation):
+                if (inching_deviation == None) or (deviation < inching_deviation):
                     inching_direction   = new_directional_vec
                     inching_deviation   = deviation
                     print(random_value)
@@ -572,7 +726,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         write_taylor_series_value(approximator.taylor_series, adjusted_value)
         optimized_deviation         = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
 
-        if (best_deviation == None or best_deviation > optimized_deviation):
+        if (best_deviation == None) or (best_deviation > optimized_deviation):
             print("update", optimized_deviation)
             best_deviation = optimized_deviation
         else:
@@ -685,13 +839,16 @@ def main():
     #usually we want to increase the dimension size because we want to smoothen the curves - which helps with the training
 
     # print(get_sin_taylor(10))
-    approxer: TaylorApprox  = get_taylor_series(7, 1)
+
+    approxer: TaylorApprox  = get_taylor_series(4, 1)
     mapper: list[float]     = [random.random() for _ in range(32)] 
     def sqrt_func(x: float):
 
-        return 1024 * mapper[int(x) % 32] + 3 * x**3 + 2 * x**2 + x + 1 #if this reaches < 10 deviation today - it is a success - if not then we must make sure that'd happen tmr - this is a hard task
+        return 1024 * mapper[int(x) % 32] + 3 * x**3 + 2 * x**2 + x + 1 #if this reaches < 10 deviation today - it is a success - if not then we must make sure that'd happen tmr - this is a hard task - we of course can increase the differential order -> 128 or 256 and do all sin waves - yet it is not optimization
+                                                                        #what is this called? this is taylor lossless compression - by using sin waves 
+                                                                        #this is a very hard task - because the <exponential focus> is the correct approach yet the calibrated environment is not - we need advanced calibration (a coach)
 
-    train(approxer, sqrt_func, 1 << 13, 512, 32, 64)
+    train(approxer, sqrt_func, 1 << 13, 128, 32, 64)
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
