@@ -30,10 +30,9 @@ def bind_add_operation(lhs: Callable[[float], float], rhs: Callable[[float], flo
 def get_taylor_series(differential_order_sz: int, differential_step_sz: int) -> TaylorApprox:
 
     taylor_series           = TaylorSeries([])
-    # sum_function: Callable  = lambda x: 0
     sum_list: list          = []
 
-    for i in range(0, differential_order_sz, differential_step_sz):
+    for _ in range(0, differential_order_sz, differential_step_sz):
         random_value            = 0
         container: TaylorValue  = TaylorValue(random_value)
         sum_list                += [container]
@@ -51,14 +50,15 @@ def get_taylor_series(differential_order_sz: int, differential_step_sz: int) -> 
 
 def newton_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
 
+    #this is not correctly implemented
     cur_x       = initial_x
     min_y       = operation(cur_x)
     cand_x      = cur_x 
     epsilon     = float(0.01)
-    
+
     for _ in range(iteration_sz):
         cur_y   = operation(cur_x)
-        
+
         if (cur_y < min_y):
             cand_x  = cur_x
             min_y   = cur_y
@@ -66,7 +66,28 @@ def newton_approx(operation: Callable[[float], float], iteration_sz: int, initia
         a_y     = operation(cur_x + a)
         slope   = (a_y - cur_y) / a
 
-        # print("slope", slope)
+        if (abs(slope) < epsilon):
+            break 
+
+        cur_x   -= cur_y / slope
+
+    return cand_x, min_y
+
+def newton_org_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
+
+    #this is not correctly implemented
+    cur_x       = initial_x
+    min_y       = operation(cur_x)
+    cand_x      = cur_x 
+    epsilon     = float(0.01)
+
+    for _ in range(iteration_sz):
+        cur_y   = operation(cur_x)
+        cand_x  = cur_x
+        min_y   = cur_y
+
+        a_y     = operation(cur_x + a)
+        slope   = (a_y - cur_y) / a
 
         if (abs(slope) < epsilon):
             break 
@@ -74,6 +95,64 @@ def newton_approx(operation: Callable[[float], float], iteration_sz: int, initia
         cur_x   -= cur_y / slope
 
     return cand_x, min_y
+
+def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: float = 0.000001) -> float:
+
+    if derivative_order == 0:
+        return f(x)
+
+    return (get_slope(f, x + a, derivative_order - 1) - get_slope(f, x, derivative_order - 1)) / a  
+
+def get_left_right_closest(e_arr: list[float], pos_arr: list[float]) -> list[float]:
+
+    if len(pos_arr) == 0:
+        return []
+
+    left_most_pos: float        = min(pos_arr)
+    right_most_pos: float       = max(pos_arr)
+
+    e_left_cand_list: float     = [(left_most_pos - e, i) for (i, e) in enumerate(e_arr)]
+    e_right_cand_list: float    = [(e - right_most_pos, i) for (i, e) in enumerate(e_arr)]
+
+    filtered_left_cand          = list(filter(lambda x: x[0] > 0, e_left_cand_list))
+    filtered_right_cand         = list(filter(lambda x: x[0] > 0, e_right_cand_list))
+
+    if len(filtered_left_cand) != 0:
+        filtered_left_cand  = [e_arr[min(filtered_left_cand)[1]]]
+
+    if len(filtered_right_cand) != 0:
+        filtered_right_cand = [e_arr[min(filtered_right_cand)[1]]]
+
+    return filtered_left_cand + filtered_right_cand
+
+def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, differential_order_sz: int = 4, a: float = 0.00001) -> tuple[float, float]:
+
+    current_x: list[float]          = [initial_x]
+    base_newton_iteration_sz: int   = 2
+    total_projection_arr: list      = []
+
+    for _ in range(iteration_sz):
+        scope_differential_projection_arr = []
+
+        for x in current_x:
+            local_differential_projection_arr = []
+
+            for differential_order in range(differential_order_sz):
+                func                                = lambda x: get_slope(operation, x, differential_order, a)
+                (projected_x, deviation)            = newton_org_approx(func, base_newton_iteration_sz, x, a)
+                scope_differential_projection_arr   +=  [(projected_x, deviation)]
+                local_differential_projection_arr   +=  [(projected_x, deviation)]
+
+            if len(local_differential_projection_arr) != 0:
+                total_projection_arr    += [local_differential_projection_arr]
+
+        current_x = get_left_right_closest([e[0] for e in scope_differential_projection_arr], current_x)
+
+    if len(total_projection_arr) == 0:
+        return newton_approx(operation, iteration_sz, initial_x)
+
+    candidate_x = min([(total_projection_arr[i][0][1], total_projection_arr[i][0][0]) for i in range(len(total_projection_arr))])[1] #this is not correct
+    return newton_approx(operation, base_newton_iteration_sz, candidate_x, a)
 
 def newton2_approx(operation: Callable[[float, float], float], iteration_sz: int, initial_x1: float, initial_x2: float, a: float = 0.001) -> tuple[float, float, float]:
 
@@ -84,12 +163,12 @@ def newton2_approx(operation: Callable[[float, float], float], iteration_sz: int
     for _ in range(iteration_sz):
         if flip_a_coin():
             func                    = lambda x: operation(x, cur_x2)
-            (next_x1, deviation)    = newton_approx(func, iteration_sz, cur_x1, a)
+            (next_x1, deviation)    = newton_approxx(func, iteration_sz, cur_x1)
             cur_x1                  = next_x1
             cur_deviation           = deviation
         else:
             func                    = lambda x: operation(cur_x1, x)
-            (next_x2, deviation)    = newton_approx(func, iteration_sz, cur_x2, a)
+            (next_x2, deviation)    = newton_approxx(func, iteration_sz, cur_x2)
             cur_x2                  = next_x2
             cur_deviation           = deviation
 
@@ -287,14 +366,6 @@ def get_exp_taylor(dimension_sz: int) -> list[float]:
 
     return [1] * dimension_sz
 
-
-def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: float = 0.000001) -> float:
-
-    if derivative_order == 0:
-        return f(x)
-
-    return (get_slope(f, x + a, derivative_order - 1) - get_slope(f, x, derivative_order - 1)) / a  
-
 def get_gravity_taylor(dimension_sz: int) -> list[float]:
 
     func = lambda x: 1 / (x ** 2)
@@ -337,9 +408,7 @@ def get_log_taylor(dimension_sz: int) -> list[float]:
 
 def taylor_projection(f: list[float], x: float) -> float:
 
-    # print(f)
     try:
-
         return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
     except:
         return sys.float_info.max
@@ -396,7 +465,7 @@ def random_taylor_optimization(approximator: TaylorApprox, instrument: Callable[
 
     for j in range(newton_discretization_sz):
         exp_offset              = (newton_exp_base ** j) - 1
-        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
 
         if deviation == None or y < deviation:
             deviation   = y
@@ -435,7 +504,7 @@ def calibrated_maxwell_optimization(approximator: TaylorApprox, instrument: Call
 
     for j in range(newton_discretization_sz):
         exp_offset              = (newton_exp_base ** j) - 1
-        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
 
         if deviation == None or y < deviation:
             deviation   = y
@@ -476,7 +545,7 @@ def calibrated_gravity_optimization(approximator: TaylorApprox, instrument: Call
 
     for j in range(newton_discretization_sz):
         exp_offset              = (newton_exp_base ** j) - 1
-        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
 
         if deviation == None or y < deviation:
             deviation   = y
@@ -521,7 +590,7 @@ def calibrated_sin_gravity_optimization(approximator: TaylorApprox, instrument: 
 
     for j in range(newton_discretization_sz):
         exp_offset              = (newton_exp_base ** j) - 1
-        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
 
         if deviation == None or y < deviation:
             deviation   = y
@@ -617,7 +686,7 @@ def calibrated_powsin_gravity_optimization(approximator: TaylorApprox, instrumen
 
     for j in range(newton_discretization_sz):
         exp_offset              = (newton_exp_base ** j) - 1
-        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
 
         if deviation == None or y < deviation:
             deviation   = y
@@ -658,7 +727,7 @@ def calibrated_cos_gravity_optimization(approximator: TaylorApprox, instrument: 
 
     for j in range(newton_discretization_sz):
         exp_offset              = (newton_exp_base ** j) - 1
-        (est_new_multiplier, y) = newton_approx(newton_approx_func, newton_iteration_sz, exp_offset)
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
 
         if deviation == None or y < deviation:
             deviation   = y
@@ -692,8 +761,6 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
             random_value        = random.randrange(0, 7)
             new_directional_vec = None
             deviation           = None 
-
-            (new_directional_vec, deviation)    = calibrated_sin2_gravity_optimization(approximator, instrument, x_range, discretization_sz)
 
             if random_value == 0:
                 (new_directional_vec, deviation)    = random_taylor_optimization(approximator, instrument, x_range, discretization_sz)
@@ -838,17 +905,32 @@ def main():
     #if we can approx sin(x) without cheating - I think we can move forward to implement centrality algorithm - this is a hard task
     #usually we want to increase the dimension size because we want to smoothen the curves - which helps with the training
 
-    # print(get_sin_taylor(10))
+    #alright - we want newton_approx of 4 differential orders - I dont really know how this works    
+    
+    #ax^4 + bx^3 + cx^2 + dx + e = 0
+    #we care about the turning points - the zeros
+    #let's jog our memory about calculus 1
+    #we have local minima - local maxima - turning points - zeros    
 
-    approxer: TaylorApprox  = get_taylor_series(4, 1)
+    #x turned because of x^2
+    #x^2 turned because of x^3
+    #x^3 turned because of x^4
+
+    #we only care about x turning points - which means x^2 turning x before x^3 - or x^3 turning x before x^4 or x^4 turning x
+    #alright let's implement newton_approxx
+    #we find 4 differential values - find the closest x - refind the 4 differential values - continue until the estimation exhausts
+    #the problem is that this is not mathematically correct - but approximationally correct (in terms of compute + simplicity) 
+    #we'll be back tomorrow - this is harder than expected
+    #we want the proof of concept that this must work
+    #we'll do logit density mining built on top of this later
+
+    approxer: TaylorApprox  = get_taylor_series(6, 1)
     mapper: list[float]     = [random.random() for _ in range(32)] 
     def sqrt_func(x: float):
 
-        return 1024 * mapper[int(x) % 32] + 3 * x**3 + 2 * x**2 + x + 1 #if this reaches < 10 deviation today - it is a success - if not then we must make sure that'd happen tmr - this is a hard task - we of course can increase the differential order -> 128 or 256 and do all sin waves - yet it is not optimization
-                                                                        #what is this called? this is taylor lossless compression - by using sin waves 
-                                                                        #this is a very hard task - because the <exponential focus> is the correct approach yet the calibrated environment is not - we need advanced calibration (a coach)
+        return 1024 * mapper[int(x) % 32] + 3 * x**3 + 2 * x**2 + x + 1 
 
-    train(approxer, sqrt_func, 1 << 13, 128, 32, 64)
+    train(approxer, sqrt_func, 1 << 13, 256, 32, 64)
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
