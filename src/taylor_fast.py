@@ -359,7 +359,7 @@ def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 #alright let's see what we could do - we want to approx every basic functions - and move to complex functions tmr - and multi-variables taylor the day after tomorrow - and centrality the day after that 
 #x1*sin(x2*x)
 
-#these are the list of the basic calibrated functions
+#this is the list of the basic calibrated functions
 #we'll try to come up with more optimization strategies before moving on to the next topic of flux == 0 (what goes around comes around by MaxLake) - this involes multi-variables taylor projection + advanced calibration in such environment
 
 #there exists - random taylor optimization (with taylor's multipliers as stablizers) + gravitational waves (ripple effects) + damped gravitational waves (exponential)
@@ -369,7 +369,7 @@ def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 
 #we'll move on to the difference of f(x) -> y or f(x, x1) -> y or f(x) -> <y, y1> or f(x, x1) -> <y, y1>
 #what's the difference?
-#the only difference is locality of those projections or x
+#the only difference is the locality of those projections or x
 #we want to reorder those guys to have a smoother projection (by using centrality - context diffractor + multi_dimensional projection)
 #remember what MaxLake got to tell
 
