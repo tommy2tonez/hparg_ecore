@@ -48,18 +48,19 @@ def get_taylor_series(differential_order_sz: int, differential_step_sz: int) -> 
 
     return TaylorApprox(taylor_series, sum_function)
 
+#lets assume we are approxing 0s
 def newton_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
 
     #this is not correctly implemented
     cur_x       = initial_x
-    min_y       = operation(cur_x)
+    min_y       = abs(operation(cur_x))
     cand_x      = cur_x 
     epsilon     = float(0.01)
 
     for _ in range(iteration_sz):
         cur_y   = operation(cur_x)
 
-        if (cur_y < min_y):
+        if (abs(cur_y) < min_y):
             cand_x  = cur_x
             min_y   = cur_y
 
@@ -80,7 +81,7 @@ def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: flo
 
     return (get_slope(f, x + a, derivative_order - 1) - get_slope(f, x, derivative_order - 1)) / a  
 
-def get_left_right_closest(e_arr: list[float], pos_arr: list[float]) -> list[float]:
+def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: float = 0.2) -> list[float]:
 
     if len(pos_arr) == 0:
         return []
@@ -95,18 +96,35 @@ def get_left_right_closest(e_arr: list[float], pos_arr: list[float]) -> list[flo
     filtered_right_cand         = list(filter(lambda x: x[0] > 0, e_right_cand_list))
 
     if len(filtered_left_cand) != 0:
-        filtered_left_cand  = [e_arr[min(filtered_left_cand)[1]]]
+        filtered_left_cand  = [e_arr[min(filtered_left_cand)[1]] * (float(1) - random.random() * noise)] #assume the event is the sole event to trigger the derivatves' sign flip sequence - noise must be considered
 
     if len(filtered_right_cand) != 0:
-        filtered_right_cand = [e_arr[min(filtered_right_cand)[1]]]
+        filtered_right_cand = [e_arr[min(filtered_right_cand)[1]] * (float(1) + random.random() * noise)] #assume the event is the sole event to trigger the derivatives' sign flip sequence - noise must be considered
 
     return filtered_left_cand + filtered_right_cand
 
-def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, differential_order_sz: int = 4, a: float = 0.00001) -> tuple[float, float]:
+#we dont know how to keep the numerical stability of the 1024th order newton_approxx
+#the idea is simple - we have our <data_lake> being the taylor model
+#we have a "dynamic" model (our fancy word is calibration) being the rocket launching operation - whatever your torch model or jax model or tensorflow model could be converted into a taylor model
+#we have an exponential focus
+#we have a newton approx
+#as long as EVERY OPERATION is operated on the <taylor_lake> - we are fine - we want to not explode the model_size which decreases the intellect of the model (or the logit density - the very skewed sin-waves) 
+#and we optimize from there
 
-    current_x: list[float]          = [initial_x]
-    base_newton_iteration_sz: int   = 2
-    total_projection_arr: list      = []
+#recall that a gravity calibration function is actually a ... convolution of differential taylor functions  
+#recall that df/dx = df/dy * dy/dx
+
+#alright - because we are in vector calculus - we need to speak in terms of vector calculus
+#assume that our origin is fixed - then our function is f = (pos(x) - pos(origin)) / dt
+#pos(origin) = f()...
+#calibration in this case is ... a pos(x) - pos(y) function
+
+def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, differential_order_sz: int = 3, a: float = 0.00001) -> tuple[float, float]:
+
+    current_x: list[float]              = [initial_x]
+    base_newton_iteration_sz: int       = 2
+    total_projection_arr: list          = []
+    derivative_local_minmax_sampling_sz = 3 
 
     for _ in range(iteration_sz):
         scope_differential_projection_arr = []
@@ -128,8 +146,15 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
     if len(total_projection_arr) == 0:
         return newton_approx(operation, iteration_sz, initial_x)
 
-    candidate_x = min([(total_projection_arr[i][0][1], total_projection_arr[i][0][0]) for i in range(len(total_projection_arr))])[1] #this is not correct
-    return newton_approx(operation, base_newton_iteration_sz, candidate_x, a)
+    cand_list   = []
+
+    for i in range(len(total_projection_arr)):
+        for j in range(min(len(total_projection_arr[i]), derivative_local_minmax_sampling_sz)):
+            cand_list += [(abs(operation(total_projection_arr[i][j][0])), total_projection_arr[i][j][0])] 
+
+    min_y, candidate_x = min(cand_list)
+
+    return candidate_x, min_y 
 
 def newton2_approx(operation: Callable[[float, float], float], iteration_sz: int, initial_x1: float, initial_x2: float, a: float = 0.001) -> tuple[float, float, float]:
 
@@ -177,17 +202,6 @@ def calc_deviation(lhs: Callable[[float], float], rhs: Callable[[float], float],
         return normalized
     except:
         return sys.float_info.max
-
-#alright - we want to be able to approx EVERYTHING today - including exp - sin - cos - linear - sqrt - or - xor - etc.
-#let's see what's wrong
-#the first thing is the differential order - which heavily affect the approximation
-#the second thing is the dynamic "collaboration" of the slopes - which turns thing up down and around 
-#is there a solution to solve this problem? hmm...
-#it seems like a dynamic programming problem
-#alright - what we actually CARE is the direction of the "newton slope" - in this very example - we only move in one direction - which is dx or dy or dz
-#what happens if we move in the direction of <1, 1, 1> without loss of generality - and "approx" the gradient?
-#let's make things complicated - we discretize all directional unit vector
-#and choose the "right" way to inch our rocket into
 
 def taylor_series_to_value_arr(series: TaylorSeries) -> list[float]:
 
@@ -418,6 +432,7 @@ def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 #the only difference is the locality of those projections or x
 #we want to reorder those guys to have a smoother projection (by using centrality - context diffractor + multi_dimensional projection)
 #remember what MaxLake got to tell
+#advanced calibration is rocket launching at 1024th differential order - at the direction of the anomaly - we dont know the tech yet (we just know that we "cut" the anomaly - we approx the anomaly - and we rocket launch it to fit in the overall picture)
 
 def random_taylor_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
@@ -728,7 +743,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
     #yeah yeah yall argued that it is not a centrality algorithm - but it is a centrality algorithm
     #centrality is finite nodes - edges - and value propagations
     #we'll build from there
-    
+
 
     for _ in range(training_epoch_sz):
         inching_direction: list[float]  = [float(0)] * grad_dimension_sz
@@ -901,20 +916,50 @@ def main():
     #we want the proof of concept that this must work
     #we'll do logit density mining built on top of this later
 
-    approxer: TaylorApprox  = get_taylor_series(6, 1)
+    #in our new newton_approx
+    #we have things called event points
+    #they are the points where derivative values flipped, such is when the event is decayed into other events (flipping signs of lower derivatives to be specific)
+    #assume at any given time - we can accurately predict our next derivative sign flip event points
+    #we want to move to the closest event point - because we are for sure that at such event point, we can "retrieve" the just mentioned "other event points"
+    #                                           - this event point is decayed into other events (which we want to leverage to "update" our prediction accuracy)
+
+    #the answer of the mystery of the universe lies right here in taylor approximation - how we train the model is an entire another thing to talk about
+    #it's not complicated - it involes dynamic calibration - rocket launching - mining + recursive coach
+    #we'll build the thing - yet we need to "aim" where we are heading to  
+    #we need to move very slowly in the theory - we dont want to rush because we might miss what we'd want to optimize
+
+    #we have always talked about time as one dimensional - what if time is not one dimensional? well there is literally no difference - d/dt now is just d/dvec_t - this is described in the interstellar movie
+    #vec_t -> <x, y>
+    #we have another pointer f(ptr) -> <x, y>
+    #we have d/d_vec_t * d_vec_t/d_ptr = d/d_ptr - chaim rules - taylor approximation still holds at 0
+
+    #now think about atoms - electrons - particles - nucleis - people - earth - sun - galaxy - etc. 
+    #it's just a simple convolution operation of the taylor functions
+    #alright - the function we wrote in centrality_approx and our newly invented function - what's the difference - the difference is the "focus" of our exponenial expansions - our focus can do more good than the focus of the other function 
+
+    #move forward to internal system operations and external system operations
+    #external system operations are the operations that do complete calibration - things inside the system and outside the system are two different things - (people - Eath + Eath - Sun + Sun - galaxy)
+    #internal system operations are the operations that look like the 3-body-problem
+
+    #its been years of optimizations - and the conclusion that we could tell is educated random is probably the best choice we could make
+    #there are optimization steps - and we want "centrality" to mine the logit density for each of the step - this is a very important note
+    #we might reach super-intellegent by running this on a massive parallel computer
+    #we'll be back to optimize this
+
+    approxer: TaylorApprox  = get_taylor_series(8, 1)
     mapper: list[float]     = [random.random() for _ in range(32)] 
     def sqrt_func(x: float):
 
-        return 1024 * mapper[int(x) % 32] + 3 * x**3 + 2 * x**2 + x + 1 
+        return (x-1)*(x-2)*(x-3)*(x-4)*(x+5)
 
-    train(approxer, sqrt_func, 1 << 13, 256, 32, 64)
+    train(approxer, sqrt_func, 1 << 13, 512, 6, 64)
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
     for i in range(len(approxer.taylor_series.series)):
         print(approxer.taylor_series.series[i].value)
 
-    print()
-    print(approxer.operation(1))
+    # print()
+    # print(approxer.operation(1))
 
 main()
