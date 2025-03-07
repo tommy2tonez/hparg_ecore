@@ -945,6 +945,27 @@ def main():
     #there are optimization steps - and we want "centrality" to mine the logit density for each of the step - this is a very important note
     #we might reach super-intellegent by running this on a massive parallel computer
     #we'll be back to optimize this
+    #we'll leverage cu - yet the idea is to "project" the model - not project the data 
+    #the instrument's probably gonna be 100s of GB stored on SSDs - we'll leverage taylor compression
+    #we have found the answer to stable diffusion - it's not what people think
+    #remember that the basic is just this
+    #we do random step - calibration - optimization of taylor model - 1024 differential order newton optimization 
+    #the only thing that we care about is input + output + sliding window (or context window)
+    #we'll leave the rest to the optimization engine
+
+    #we actually have succeeded walking this road in 1989  - there was a small group of specialized researchers that took the same approach of taylor approximation + calibration
+    #                                                      - what missing back then was a centrality algorithm (a context diffractor to build another words + smooth out the linearity)
+    #                                                      - advanced multi-threading kernels + GPUs 
+    #                                                      - we have all of those now - what we are missing is an algorithm to run this taylor approx on
+    #                                                      -                          - multiprecision to run 1024th differential order newton approx
+    #                                                      -                          - "datalake" to do atomic update by using 1GB of sampling data (instrument)
+    #                                                      -                          - a global centrality algorithm (global centrality algorithm can be seen as step optimizers - we mine the logit density for every step - and reupdate once a new maxmima has been reached) 
+    #                                                      -                          - a recursive coach (advanced analyzer TARs - to find the difference between the instrument and the approximator to do accurate calibration)
+    #-- swifties 2025 --
+    #we are back after 30 years 
+
+    #this would take a team of 50 good people at least 2-3 years to have a good product
+    #we'll try to see if we could make that
 
     approxer: TaylorApprox  = get_taylor_series(8, 1)
     mapper: list[float]     = [random.random() for _ in range(32)] 
