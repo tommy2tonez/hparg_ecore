@@ -113,6 +113,13 @@ def tom_approx(operation: Callable[[float], float], iteration_sz: int, initial_x
 
     return newton_approx(operation, iteration_sz, x, a)
 
+def stable_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
+
+    try:
+        return tom_approx(operation, iteration_sz, initial_x, a)
+    except:
+        return initial_x, operation(initial_x) 
+
 def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: float = 0.1) -> list[float]:
 
     if len(pos_arr) == 0:
@@ -137,7 +144,7 @@ def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: floa
 
 def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, differential_order_sz: int = 4, a: float = 0.00001) -> tuple[float, float]:
 
-    return tom_approx(operation, iteration_sz, initial_x, a)
+    return stable_approx(operation, iteration_sz, initial_x, a)
     # current_x: list[float]              = [initial_x]
     # base_newton_iteration_sz: int       = 2
     # total_projection_arr: list          = []
@@ -483,22 +490,20 @@ def get_random_taylor(dimension_sz: int, function_sz: int) -> list[float]:
     if random_value == 1:
         return taylor_plus(lhs_f, rhs_f)
 
-    return taylor_convolution(lhs_f, rhs_f)
+    return taylor_convolution(lhs_f, rhs_f, dimension_sz)
 
 def calibrated_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
-    random_func_sz              = 3
+    random_func_sz              = random.randrange(0, 10) + 1
     dimension_sz                = get_taylor_series_size(approximator.taylor_series)
     x1_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 4)
     x2_directional_vec          = get_leading_dimension(get_random_vector(dimension_sz), 4)
-    random_vec                  = taylor_plus(taylor_plus(clamp_taylor(get_random_taylor(dimension_sz, random_func_sz), -10, 10, 4), get_minimum_cos_wave(dimension_sz)), get_minimum_sin_wave(dimension_sz))
+    random_vec                  = get_random_taylor(dimension_sz, random_func_sz)
     newton_exp_base             = random.random() * 10
     newton_discretization_sz    = 10
     newton_iteration_sz         = 8
     multiplier                  = None
     deviation                   = None
-
-    print(random_vec)
 
     def newton_approx_func(multiplier: float):
         previous_value: list[float]     = taylor_series_to_value_arr(approximator.taylor_series)
@@ -849,8 +854,6 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
             new_directional_vec = None
             deviation           = None 
 
-            print(idx, random_value)
-
             if random_value == 0:
                 (new_directional_vec, deviation)    = random_taylor_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 1:
@@ -1067,6 +1070,55 @@ def main():
     #we'll try to see if we could make that
 
     #the problem is that we have to do educated random - not random random
+    #assume that we have our taylor function f
+    #assume we have our torch model of a*sin(x) + b*cos(x) + c * x^3 + d * x^2
+    #point is we want to train the <a, b, c, d> coefficients - which means we need calibration
+    #we'll probably want to do decode(f) = a1*<sin(x)> + b1*<cos(x)> + c1 * <x^3> + d1 * <x^2>
+    #then new_f = (a1 + a2) * <sin(x)> + (b1 + b2) * <cos(x)> + (c1 + c2) * <x^3> + (d1 + d2) * <x^2>
+    #then encode(new_f) -> taylor function
+    #that's our basic calibration of coefficients
+    #the next optimizable is curved bullet - we want the magnetic fields - <what goes around comes around>
+    #yet we need to ask - whether curved in the <current coordinate> is straight in <another coodinate> ? 
+    #we dont really know - maybe we want curved bullets for numerical stability - maybe -
+    #and we need to take the 1024th derivative to approximate the local minima + maxima
+    #I was proving the equivalency of curved bullet vs straight bullet
+    
+    #assume curved bullet projectile is f(t) = <x1, x2, x3>
+    #d f(t) / dx    =
+    #d2 f(t) / dx   = 
+    #d3 f(t) / dx   = 
+
+    #d f(t) / dy    = 
+    #d2 f(t) / dy   = 
+    #d3 f(t) / dy   = 
+
+    #...
+
+    #d difference/ dt = d difference/ df . df/ dt + ... (taylor expansion)
+    #what does this really mean? 
+    #it means that we assumed our <time_vector> is fixed at x = 0, and we do things normally for d_difference/ dt
+    #then we <project> the time vector (with respect to another time) on the original time_vector (at 0) - and we do normal multiplication to get our d_difference / d_other_time 
+    #why dot product? because it is a projection function - recall that dot product = |projected_segment| * |projecting_segment|
+    #so it's (d_difference / df) . (df/dt)
+    #or <difference> * unit_vector . (df/dt)
+
+    #so this is a fixed + static function
+    #assume our straight bullet projectile is ...
+
+    #d difference / dt now is ...
+    #prove the surjectiveness of calibration 
+
+    #thing is this way of doing thing (training) is stable - to the point that we could fully trust AI to do EVERYTHING
+    #this creates jobs + mining opportunities for coiners like us - we have tons of compute and we are wasting the compute to solve stupid puzzles
+    #imagine that within 2-3 years - we'll be bidding + asking for logit density for every step of training
+    #I'm telling you that the logit density (this is the new gold + diamond in our generation) could be more profitable than EVERYTHING that you could think of capable of doing
+    #AI wont destroy our world Son - it always will be the human that destroys the world - rotten minds driven by money
+    #we often ask the question of being - and afraid to be of <lower_intellect>
+    #its the fear that blinds us from the truth
+
+    #why are we still at one dimensional projection again?
+    #because this is a very important concept that we need to get right - otherwise we cant do 2 dimensional projections or 2-2 dimensional projections for that matter
+
     #such is if the random distribution is not good - we must rearrange the context - not changing the random method
     #we took the right approach yet the "calibrated" functions are probably not good enough
     #and the differential order is too low to do any good
@@ -1077,11 +1129,11 @@ def main():
 
     def sqrt_func(x: float):
 
-        return (x-1) * (x-2) * (x- 3) * (x-4)
+        return (x-1) * (x-2) * (x-3) * (x-4)
 
     # print(newton_approxx(sqrt_func, 8, 32, 5))
 
-    train(approxer, sqrt_func, 1 << 13, 128, 8, 64)
+    train(approxer, sqrt_func, 1 << 13, 512, 8, 64)
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
