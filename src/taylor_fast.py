@@ -1156,6 +1156,9 @@ def main():
     #if we are to outsmart soyboy - we know that f(g(x)) = mean_sqrt is f(x) with x being the one dimensional pointer - and we only care about approxing f(x) by using taylor approximation at 0
     #so tell me - what if our taylor_cursor is a curvy one dimensional f(t)?
     #what is the differential order we need to reach to approx the global extremes?
+    #alright - we love Angelina Jolie in wanted, she did make a point by doing a curved sling shot and throwing the gun to the next point - it's called magnetic search + explosive exponential linear step in Taylor Series approximation 
+    #we'll try to implement that
+
     #we are close - we'll post the result this week
 
     approxer: TaylorApprox  = get_taylor_series(5, 1)
