@@ -498,6 +498,10 @@ def get_random_taylor(dimension_sz: int, function_sz: int) -> list[float]:
     return taylor_convolution(lhs_f, rhs_f, dimension_sz)
 
 
+def pairwise_multiply_vector(lhs: list[float], rhs: list[float]):
+
+    return [lhs[i] * rhs[i] for i in range(len(lhs))] 
+
 def magnetic_equation(dimension_sz: int) -> list[str]:
 
     #slicing x
@@ -514,15 +518,13 @@ def magnetic_equation(dimension_sz: int) -> list[str]:
         return ["1"]
 
     sliced_equation: list[str] = magnetic_equation(dimension_sz - 1)
-    return ["cos(x_%s)" % str(dimension_sz)] + ["sin(x_%s)*%s" % (str(dimension_sz), e) for e in sliced_equation]
+    return ["cos(x_%s)" % str(dimension_sz)] + ["sin(x_%s)*%s" % (str(dimension_sz), e) for e in sliced_equation] 
 
 def rand_multidimensional_sphere_radius(dimension_sz: int) -> list[float]:
 
-    return [math.pi * random.random() for _ in range(dimension_sz)] 
+    return [2 * math.pi * random.random() for _ in range(dimension_sz)] 
 
 def radian_coordinate_to_euclidean_coordinate(coor: list[float]) -> list[float]:
-
-    #its off by one here - yet its intentional
 
     if len(coor) == 0:
         return []
@@ -583,6 +585,113 @@ def magnetic_random_optimization(approximator: TaylorApprox, instrument: Callabl
         tmp_radius_value_arr[iteration_dimension_idx]   = t
         taylor_directional_arr: list[float]             = scalar_multiply_vector(explosion_range, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
         directional_vec                                 = taylor_directional_arr
+
+    return (directional_vec, deviation)
+
+def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
+    explosion_exp_base                          = random.random() * 10
+    explosion_exp_step                          = random.randrange(0, 10)
+    explosion_range                             = explosion_exp_base ** explosion_exp_step
+    iteration_dimension_idx                     = random.randrange(0, dimension_sz)
+    radius_value_arr: list[float]               = rand_multidimensional_sphere_radius(dimension_sz)
+    radius_value_arr[iteration_dimension_idx]   = 0
+
+    oval_direction: list[float]                 = get_random_vector(dimension_sz)
+    adjusted_oval_direction: list[float]        = scalar_multiply_vector(explosion_range, oval_direction) 
+
+    t_exponential_base                          = random.random() * 10
+    t_discretization_sz                         = 10
+    newton_iteration_sz                         = 4
+
+    t                                           = None
+    deviation                                   = None
+    directional_vec                             = None
+
+    def newton_approx_func(t: float):
+        tmp_radius_value_arr                            = copy.deepcopy(radius_value_arr)
+        tmp_radius_value_arr[iteration_dimension_idx]   = t
+        taylor_directional_arr: list[float]             = pairwise_multiply_vector(adjusted_oval_direction, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
+        previous_value: list[float]                     = taylor_series_to_value_arr(approximator.taylor_series)
+        copied_value: list[float]                       = copy.deepcopy(previous_value)
+        adjusted_value: list[float]                     = add_vector(copied_value, taylor_directional_arr)
+
+        write_taylor_series_value(approximator.taylor_series, adjusted_value)
+        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
+        write_taylor_series_value(approximator.taylor_series, previous_value)
+
+        return rs
+
+    for j in range(t_discretization_sz):
+        exp_offset  = radian_rescale((t_exponential_base ** j) - 1, t_exponential_base ** t_discretization_sz)
+        (new_t, y)  = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            deviation   = y
+            t           = new_t
+
+    if (deviation != None and t != None):
+        tmp_radius_value_arr                            = copy.deepcopy(radius_value_arr)
+        tmp_radius_value_arr[iteration_dimension_idx]   = t
+        taylor_directional_arr: list[float]             = pairwise_multiply_vector(adjusted_oval_direction, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
+        directional_vec                                 = taylor_directional_arr
+
+    return (directional_vec, deviation)
+
+def photon_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
+    directional_vec: list[float]                = get_random_vector(dimension_sz)
+    newton_exp_base                             = random.random() * 10
+    newton_discretization_sz                    = 10
+    newton_iteration_sz                         = 8
+
+    explosion_exp_base                          = random.random() * 10
+    explosion_exp_step                          = random.randrange(0, 10)
+    explosion_range                             = explosion_exp_base ** explosion_exp_step
+    iteration_dimension_idx                     = random.randrange(0, dimension_sz)
+    radius_value_arr: list[float]               = rand_multidimensional_sphere_radius(dimension_sz)
+    radius_value_arr[iteration_dimension_idx]   = 0
+    random_alpha                                = random.random() 
+
+    oval_direction: list[float]                 = get_random_vector(dimension_sz)
+    adjusted_oval_direction: list[float]        = scalar_multiply_vector(explosion_range, oval_direction) 
+
+    deviation                                   = None
+
+    def newton_approx_func(multiplier: float):
+        previous_value: list[float]                     = taylor_series_to_value_arr(approximator.taylor_series)
+        copied_value: list[float]                       = copy.deepcopy(previous_value)
+
+        segment_vector: list[float]                     = scalar_multiply_vector(multiplier, directional_vec)
+
+        tmp_radius_value_arr                            = copy.deepcopy(radius_value_arr)
+        tmp_radius_value_arr[iteration_dimension_idx]   = random_alpha * multiplier
+        magnetic_vector: list[float]                    = pairwise_multiply_vector(adjusted_oval_direction, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
+        delta_vector: list[float]                       = add_vector(segment_vector, magnetic_vector)
+
+        adjusted_vector: list[float]                    = add_vector(copied_value, delta_vector)
+
+        write_taylor_series_value(approximator.taylor_series, adjusted_vector)
+        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
+        write_taylor_series_value(approximator.taylor_series, previous_value)
+
+        return rs
+
+    for j in range(newton_discretization_sz):
+        exp_offset              = (newton_exp_base ** j) - 1
+        (est_new_multiplier, y) = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            segment_vector: list[float]                     = scalar_multiply_vector(est_new_multiplier, directional_vec)
+            tmp_radius_value_arr                            = copy.deepcopy(radius_value_arr)
+            tmp_radius_value_arr[iteration_dimension_idx]   = random_alpha * est_new_multiplier
+            magnetic_vector: list[float]                    = pairwise_multiply_vector(adjusted_oval_direction, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
+            delta_vector: list[float]                       = add_vector(segment_vector, magnetic_vector)
+
+            deviation                                       = y
+            directional_vec                                 = delta_vector
 
     return (directional_vec, deviation)
 
@@ -939,13 +1048,12 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
     #centrality is finite nodes - edges - and value propagations
     #we'll build from there
 
-
     for _ in range(training_epoch_sz):
         inching_direction: list[float]  = [float(0)] * grad_dimension_sz
         inching_deviation: float        = None
 
         for idx in range(directional_optimization_sz):
-            random_value        = random.randrange(0, 9)
+            random_value        = random.randrange(0, 11)
             new_directional_vec = None
             deviation           = None 
 
@@ -967,6 +1075,10 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 (new_directional_vec, deviation)    = calibrated_random_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 8:
                 (new_directional_vec, deviation)    = magnetic_random_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 9:
+                (new_directional_vec, deviation)    = magnetic_oval_random_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 10:
+                (new_directional_vec, deviation)    = photon_random_optimization(approximator, instrument, x_range, discretization_sz)
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
@@ -1261,7 +1373,6 @@ def main():
     #Taylor is not hot, my Mom is
 
     #we'll try to implement that
-
     #we are close - we'll post the result this week
 
     # print(magnetic_equation(4))
@@ -1274,7 +1385,7 @@ def main():
 
     # print(newton_approxx(sqrt_func, 8, 32, 5))
 
-    train(approxer, sqrt_func, 1 << 13, 512, 8, 64)
+    train(approxer, sqrt_func, 1 << 13, 512, 8, 64) #we'll move on if this ever reach < 0.01
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
