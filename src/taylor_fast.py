@@ -1143,7 +1143,19 @@ def main():
     #such is if the random distribution is not good - we must rearrange the context - not changing the random method
     #we took the right approach yet the "calibrated" functions are probably not good enough
     #and the differential order is too low to do any good
+    #this is harder than we actually think
 
+    #assume this function f(g(x))
+    #the usual flow is we getting the footprint of f(x) and g(x) - and try to come up with everything that we could with f(g(x))
+    #assume g(x) is time_vector
+    #what we want to do is to extract the footprint of f(x) - one dimensionally - differentiable = f(t)
+    #then we want to map g(x) -> t
+    #then we want to do f(map(g(x))) == f(t)
+    #alright that's the soyboy approach
+
+    #if we are to outsmart soyboy - we know that f(g(x)) = mean_sqrt is f(x) with x being the one dimensional pointer - and we only care about approxing f(x) by using taylor approximation at 0
+    #so tell me - what if our taylor_cursor is a curvy one dimensional f(t)?
+    #what is the differential order we need to reach to approx the global extremes?
     #we are close - we'll post the result this week
 
     approxer: TaylorApprox  = get_taylor_series(5, 1)
