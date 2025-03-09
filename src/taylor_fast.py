@@ -497,6 +497,95 @@ def get_random_taylor(dimension_sz: int, function_sz: int) -> list[float]:
 
     return taylor_convolution(lhs_f, rhs_f, dimension_sz)
 
+
+def magnetic_equation(dimension_sz: int) -> list[str]:
+
+    #slicing x
+    #f(x)   = <x, x1, x2, x3, ...>
+    #|f(x)| = x^2 + <x1, x2, x3, ...> * <x1, x2, x3, ...> = 1
+    #<x1, x2, x3, ...> * <x1, x2, x3, ...> = 1 - x^2 = sin(x)
+
+    #x^2 is fixed - detached - so we can call a recursive call
+
+    if dimension_sz == 0:
+        return []
+
+    if dimension_sz == 1:
+        return ["1"]
+
+    sliced_equation: list[str] = magnetic_equation(dimension_sz - 1)
+    return ["cos(x_%s)" % str(dimension_sz)] + ["sin(x_%s)*%s" % (str(dimension_sz), e) for e in sliced_equation]
+
+def rand_multidimensional_sphere_radius(dimension_sz: int) -> list[float]:
+
+    return [math.pi * random.random() for _ in range(dimension_sz)] 
+
+def radian_coordinate_to_euclidean_coordinate(coor: list[float]) -> list[float]:
+
+    #its off by one here - yet its intentional
+
+    if len(coor) == 0:
+        return []
+
+    if len(coor) == 1:
+        return [float(1)]
+    
+    sliced_coor: list[float] = radian_coordinate_to_euclidean_coordinate(coor[1:])
+
+    return [math.cos(coor[0])] + [math.sin(coor[0]) * sliced_coor[i] for i in range(len(sliced_coor))] 
+
+def radian_rescale(org_value: float, max_range: float) -> float:
+
+    return org_value * (float(2 * math.pi) / max_range)
+
+def magnetic_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
+    explosion_exp_base                          = random.random() * 10
+    explosion_exp_step                          = random.randrange(0, 10)
+    explosion_range                             = explosion_exp_base ** explosion_exp_step
+    iteration_dimension_idx                     = random.randrange(0, dimension_sz)
+    radius_value_arr: list[float]               = rand_multidimensional_sphere_radius(dimension_sz)
+    radius_value_arr[iteration_dimension_idx]   = 0
+
+    t_exponential_base                          = random.random() * 10
+    t_discretization_sz                         = 10
+    newton_iteration_sz                         = 4
+
+    t                                           = None
+    deviation                                   = None
+    directional_vec                             = None
+
+    def newton_approx_func(t: float):
+        tmp_radius_value_arr                            = copy.deepcopy(radius_value_arr)
+        tmp_radius_value_arr[iteration_dimension_idx]   = t
+        taylor_directional_arr: list[float]             = scalar_multiply_vector(explosion_range, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
+        previous_value: list[float]                     = taylor_series_to_value_arr(approximator.taylor_series)
+        copied_value: list[float]                       = copy.deepcopy(previous_value)
+        adjusted_value: list[float]                     = add_vector(copied_value, taylor_directional_arr)
+
+        write_taylor_series_value(approximator.taylor_series, adjusted_value)
+        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
+        write_taylor_series_value(approximator.taylor_series, previous_value)
+
+        return rs
+
+    for j in range(t_discretization_sz):
+        exp_offset  = radian_rescale((t_exponential_base ** j) - 1, t_exponential_base ** t_discretization_sz)
+        (new_t, y)  = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            deviation   = y
+            t           = new_t
+
+    if (deviation != None and t != None):
+        tmp_radius_value_arr                            = copy.deepcopy(radius_value_arr)
+        tmp_radius_value_arr[iteration_dimension_idx]   = t
+        taylor_directional_arr: list[float]             = scalar_multiply_vector(explosion_range, radian_coordinate_to_euclidean_coordinate(tmp_radius_value_arr))
+        directional_vec                                 = taylor_directional_arr
+
+    return (directional_vec, deviation)
+
 def calibrated_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     random_func_sz              = random.randrange(0, 10) + 1
@@ -509,6 +598,7 @@ def calibrated_random_optimization(approximator: TaylorApprox, instrument: Calla
     newton_iteration_sz         = 8
     multiplier                  = None
     deviation                   = None
+    directional_vec             = None
 
     def newton_approx_func(multiplier: float):
         previous_value: list[float]     = taylor_series_to_value_arr(approximator.taylor_series)
@@ -855,7 +945,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         inching_deviation: float        = None
 
         for idx in range(directional_optimization_sz):
-            random_value        = random.randrange(0, 8)
+            random_value        = random.randrange(0, 9)
             new_directional_vec = None
             deviation           = None 
 
@@ -875,6 +965,8 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 (new_directional_vec, deviation)    = calibrated_powsin_gravity_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 7:
                 (new_directional_vec, deviation)    = calibrated_random_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 8:
+                (new_directional_vec, deviation)    = magnetic_random_optimization(approximator, instrument, x_range, discretization_sz)
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
@@ -1157,9 +1249,22 @@ def main():
     #so tell me - what if our taylor_cursor is a curvy one dimensional f(t)?
     #what is the differential order we need to reach to approx the global extremes?
     #alright - we love Angelina Jolie in wanted, she did make a point by doing a curved sling shot and throwing the gun to the next point - it's called magnetic search + explosive exponential linear step in Taylor Series approximation 
+    #that was a good movie - yet it has a sinister vibe of God
+
+    #what we learned from the movie is:
+
+    #that we could know the differential values from the string at any random point in the universe (or the taylor series approximation) - yet there is a limit to that which is bignum saturation of floating accuracy
+    #thread calibrations (sin-cos Maxwell waves) + puzzle solvings
+    #explosive rats
+    #curved bullets to one-dimensionalize the universe
+    #binary strings
+    #Taylor is not hot, my Mom is
+
     #we'll try to implement that
 
     #we are close - we'll post the result this week
+
+    # print(magnetic_equation(4))
 
     approxer: TaylorApprox  = get_taylor_series(5, 1)
 
