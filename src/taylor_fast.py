@@ -1125,6 +1125,10 @@ def main():
     #recall our sin waves - or cos waves
     #yet this requires us to take a very high order derivative - probably (1 << 16)th derivative order - we'll definitely break numerical stability there
 
+    #what's wrong with one dimensionalizing the space <x, y, z> -> x * y * z and using one dimensional pointer approach? (this was my competition back in 2015)
+    #the function that we used to <one_dimensionalize_the_space> is not differentiable - such are div + modulo
+    #we probably want to use our very skewed sin_wave of (sin(x)/x)^n - yet this breaks numerical stability very easily - so we are back to taking the (1 << 16)th derivative order - yet we dont have the tech for that
+
     #thing is this way of doing thing (training) is stable - to the point that we could fully trust AI to do EVERYTHING
     #this creates jobs + mining opportunities for coiners like us - we have tons of compute and we are wasting the compute to solve stupid puzzles
     #imagine that within 2-3 years - we'll be bidding + asking for logit density for every step of training
