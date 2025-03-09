@@ -448,6 +448,11 @@ def get_sqrt_taylor(dimension_sz: int) -> list[float]:
     func = lambda x: math.sqrt(x)
     return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
 
+def get_inverse_taylor(dimension_sz: int) -> list[float]:
+
+    func = lambda x: 1 / x
+    return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
+
 def get_log_taylor(dimension_sz: int) -> list[float]:
 
     func = lambda x: math.log(x)
@@ -469,7 +474,7 @@ def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 
 def get_random_taylor(dimension_sz: int, function_sz: int) -> list[float]:
 
-    func_arr    = [get_cos_taylor, get_exp_taylor, get_log_taylor, get_sin_taylor, get_sqrt_taylor, get_x_taylor, get_polynomial_taylor, get_const_taylor]
+    func_arr    = [get_cos_taylor, get_exp_taylor, get_log_taylor, get_sin_taylor, get_sqrt_taylor, get_x_taylor, get_polynomial_taylor, get_inverse_taylor, get_const_taylor]
 
     if function_sz == 0:
         return [float(0)] * dimension_sz 
@@ -1106,7 +1111,19 @@ def main():
     #assume our straight bullet projectile is ...
 
     #d difference / dt now is ...
-    #prove the surjectiveness of calibration 
+    #prove the surjectiveness of calibration
+
+    #I was tempted to say that is correct
+    #yet the correct way of doing so is to project the time on x, y coordinates - take the derivative of d difference / dx, d difference/ dy
+    #                                                                           - and do a dot product there 
+
+    #recall that our time function is f(t) = s0 + v0 * t + 1/2 * a * t^2 + ...
+    #we would want to project the time function at t on x y z, and do a dot product with the other taylor expansion (difference w.r.t x, differenrce w.r.t y @ x, differernce w.r.t z @ x,y)
+    
+    #alright - we are smart - we probably don't want to recalculate our derivatives w.r.t x,y,z
+    #so how about we only take one derivative with respect to time? of a very curvy bullet (such bullet has to be continuous) that touches every possible points in the space <x,y,z> 
+    #recall our sin waves - or cos waves
+    #yet this requires us to take a very high order derivative - probably (1 << 16)th derivative order - we'll definitely break numerical stability there
 
     #thing is this way of doing thing (training) is stable - to the point that we could fully trust AI to do EVERYTHING
     #this creates jobs + mining opportunities for coiners like us - we have tons of compute and we are wasting the compute to solve stupid puzzles
