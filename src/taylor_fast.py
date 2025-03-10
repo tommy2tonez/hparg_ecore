@@ -4,6 +4,15 @@ import random
 import copy
 import sys
 
+def taylor_projection(f: list[float], x: float) -> float:
+
+    try:
+        return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
+    except:
+        return sys.float_info.max
+        print(f)
+        raise Exception()
+
 class TaylorOperation(object):
 
     def __init__(self, taylor_series_value: list[float]):
@@ -12,12 +21,7 @@ class TaylorOperation(object):
 
     def __call__(self, x: float):
 
-        rs = float()
-
-        for i in range(len(self.taylor_series_value)):
-            rs += float(1) / math.factorial(i) * self.taylor_series_value[i] * (x ** i)
-
-        return rs
+        return taylor_projection(self.taylor_series_value, x)
 
 class TaylorValue:
 
@@ -69,6 +73,18 @@ def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: flo
         return f(x)
 
     return (get_slope(f, x + a, derivative_order - 1) - get_slope(f, x, derivative_order - 1)) / a  
+
+#recall our 4th order zeros approx
+#(x+a)(x+b)(x+c)(x+d) = 0
+
+#3rd order zeros approx
+#(x+a)(x+b)(x+c) = 0
+
+#2nd order zeros approx
+#(x+a)(x+b) = 0
+
+#alright - what's the advanced way of doing things? - there isnt except for linear algebra - 4 zeros - 4 eqns, each polynomial order has bijective map with a coefficient
+#this needs high precision of numerical stability - because real life zeros est is not like theoretical approximation
 
 #lets assume we are approxing 0s
 def newton_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
@@ -135,6 +151,7 @@ def stable_approx(operation: Callable[[float], float], iteration_sz: int, initia
     except:
         return initial_x, operation(initial_x) 
 
+#I think this is the best way to solve the problem
 def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: float = 0.1) -> list[float]:
 
     if len(pos_arr) == 0:
@@ -473,15 +490,6 @@ def get_log_taylor(dimension_sz: int) -> list[float]:
     func = lambda x: math.log(x)
     return [get_slope(func, 0.000001, i) for i in range(dimension_sz)]
 
-def taylor_projection(f: list[float], x: float) -> float:
-
-    try:
-        return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
-    except:
-        return sys.float_info.max
-        print(f)
-        raise Exception()
-
 def taylor_fog(f: list[float], g: list[float]) -> list[float]:
 
     func = lambda x: taylor_projection(f, taylor_projection(g, x))
@@ -579,6 +587,81 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 
     return org_value * (float(2 * math.pi) / max_range)
 
+def rotating_multiarm_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+    
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)    
+    arm1_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
+    arm1_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm1_rotating_dimension_idx                 = random.randrange(0, dimension_sz)
+
+    arm2_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
+    arm2_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm2_rotating_dimension_idx                 = random.randrange(0, dimension_sz)
+
+    arm3_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
+    arm3_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm3_rotating_dimension_idx                 = random.randrange(0, dimension_sz)
+
+    arm1_frequency_coeff                        = random.random()
+    arm2_frequency_coeff                        = random.random()
+    arm3_frequency_coeff                        = random.random()
+
+    t_exponential_base                          = random.random() * 10
+    t_discretization_sz                         = 10
+    newton_iteration_sz                         = 4
+
+    t                                           = None
+    deviation                                   = None
+
+    def newton_approx_func(t: float):
+        arm1_current_radian                                 = copy.deepcopy(arm1_starting_radian)
+        arm1_current_radian[arm1_rotating_dimension_idx]    += t * arm1_frequency_coeff
+        arm1_current_coordinate                             = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+
+        arm2_current_radian                                 = copy.deepcopy(arm2_starting_radian)
+        arm2_current_radian[arm2_rotating_dimension_idx]    += t * arm2_frequency_coeff
+        arm2_current_coordinate                             = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+
+        arm3_current_radian                                 = copy.deepcopy(arm3_starting_radian)
+        arm3_current_radian[arm3_rotating_dimension_idx]    += t * arm3_frequency_coeff
+        arm3_current_coordinate                             = scalar_multiply_vector(arm3_radius, radian_coordinate_to_euclidean_coordinate(arm3_current_radian))
+
+        arm_tip_coordinate                                  = add_vector(arm1_current_coordinate, add_vector(arm2_current_coordinate, arm3_current_coordinate))
+
+        copied_value: list[float]                           = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+        adjusted_value: list[float]                         = add_vector(copied_value, arm_tip_coordinate)
+
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
+
+        return rs
+
+    for j in range(t_discretization_sz):
+        exp_offset  = radian_rescale((t_exponential_base ** j) - 1, t_exponential_base ** t_discretization_sz)
+        (new_t, y)  = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            deviation   = y
+            t           = new_t
+
+    if deviation == None or t == None:
+        return ([float(0)] * dimension_sz, float(0))  
+
+    arm1_current_radian                                 = copy.deepcopy(arm1_starting_radian)
+    arm1_current_radian[arm1_rotating_dimension_idx]    += t * arm1_frequency_coeff
+    arm1_current_coordinate                             = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+
+    arm2_current_radian                                 = copy.deepcopy(arm2_starting_radian)
+    arm2_current_radian[arm2_rotating_dimension_idx]    += t * arm2_frequency_coeff
+    arm2_current_coordinate                             = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+
+    arm3_current_radian                                 = copy.deepcopy(arm3_starting_radian)
+    arm3_current_radian[arm3_rotating_dimension_idx]    += t * arm3_frequency_coeff
+    arm3_current_coordinate                             = scalar_multiply_vector(arm3_radius, radian_coordinate_to_euclidean_coordinate(arm3_current_radian))
+
+    directional_vec                                     = add_vector(arm1_current_coordinate, add_vector(arm2_current_coordinate, arm3_current_coordinate))
+
+    return directional_vec, deviation
+
 def magnetic_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
@@ -605,9 +688,7 @@ def magnetic_random_optimization(approximator: TaylorApprox, instrument: Callabl
         copied_value: list[float]                       = copy.deepcopy(previous_value)
         adjusted_value: list[float]                     = add_vector(copied_value, taylor_directional_arr)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -656,9 +737,7 @@ def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Ca
         copied_value: list[float]                       = copy.deepcopy(previous_value)
         adjusted_value: list[float]                     = add_vector(copied_value, taylor_directional_arr)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -692,11 +771,63 @@ def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Ca
 #no offends, yet I do think it's hard to write the current universe - I'll try for 10 years 
 #that was funny
 
-def circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+def oval_circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
     
-    integral_sampling_sz                        = 32
+    integral_sampling_sz                        = 16
+    newton_iteration_sz                         = 4
+
+    r_exponential_base                          = random.random() * 10
+    r_discretization_sz                         = 10
+
+    r_deviation                                 = None
+    r                                           = None
+
+    random_radian_arr                           = [rand_multidimensional_sphere_radian(dimension_sz) for _ in range(integral_sampling_sz)]
+    initial_radius_vec                          = get_random_vector(dimension_sz)
+
+    def newton_radius_approx_func(r: float):
+        copied_value: list[float]   = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+        deviation_list: list[float] = []
+
+        for i in range(integral_sampling_sz):
+            taylor_directional_arr: list[float]     = pairwise_multiply_vector(scalar_multiply_vector(r, initial_radius_vec), radian_coordinate_to_euclidean_coordinate(random_radian_arr[i]))
+            adjusted_value: list[float]             = add_vector(copied_value, taylor_directional_arr)
+            deviation: float                        = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
+            deviation_list                          += [deviation]
+
+        avg_deviation: float = avg_invsqr_list(deviation_list) #alright what's our aim ? we want global extremes - what is the differentiable version of the function ? log? 1/x - we'll settle for (1/x)^2 for now 
+
+        return avg_deviation
+
+    for i in range(r_discretization_sz):
+        exp_offset          = (r_exponential_base ** i) - 1
+        (new_r, new_r_dev)  = newton_approxx(newton_radius_approx_func, newton_iteration_sz, exp_offset)
+
+        if r_deviation == None or new_r_dev < r_deviation:
+            r_deviation = new_r_dev
+            r           = new_r
+
+    if r_deviation == None or r == None:
+        return ([float(0)] * dimension_sz, float(0))  
+
+    deviation_rad_arr: list[float]  = []
+
+    for i in range(len(random_radian_arr)):
+        cur_radian_vec: list[float]         = random_radian_arr[i]
+        taylor_directional_arr: list[float] = pairwise_multiply_vector(scalar_multiply_vector(r, initial_radius_vec), radian_coordinate_to_euclidean_coordinate(cur_radian_vec))
+        adjusted_value: list[float]         = add_vector(taylor_series_to_value_arr(approximator.taylor_series), taylor_directional_arr)
+        deviation: float                    = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
+        deviation_rad_arr                   += [(deviation, taylor_directional_arr)]
+
+    return tuple(list(min(deviation_rad_arr))[::-1]) 
+
+def sphere_circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
+    
+    integral_sampling_sz                        = 16
     newton_iteration_sz                         = 4
 
     r_exponential_base                          = random.random() * 10
@@ -741,8 +872,6 @@ def circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[
         deviation: float                    = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
         deviation_rad_arr                   += [(deviation, taylor_directional_arr)]
 
-    print(tuple(list(min(deviation_rad_arr))[::-1]))
-
     return tuple(list(min(deviation_rad_arr))[::-1]) 
 
 def photon_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
@@ -779,9 +908,7 @@ def photon_random_optimization(approximator: TaylorApprox, instrument: Callable[
 
         adjusted_vector: list[float]                    = add_vector(copied_value, delta_vector)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_vector)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_vector), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -823,9 +950,7 @@ def calibrated_random_optimization(approximator: TaylorApprox, instrument: Calla
         directional_vec                 = taylor_convolution(scaled_x1_vec, taylor_fog(random_vec, scaled_x2_vec)) #sin-cos calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -859,9 +984,7 @@ def random_taylor_optimization(approximator: TaylorApprox, instrument: Callable[
         copied_value: list[float]   = copy.deepcopy(previous_value)
         adjusted_value: list[float] = add_vector(copied_value, scalar_multiply_vector(multiplier, directional_vec))
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -898,9 +1021,7 @@ def calibrated_maxwell_optimization(approximator: TaylorApprox, instrument: Call
         directional_vec                 = taylor_convolution(scaled_x1_vec, taylor_fog(sin_cos_directional_vec, scaled_x2_vec)) #sin-cos calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -939,9 +1060,7 @@ def calibrated_gravity_optimization(approximator: TaylorApprox, instrument: Call
         directional_vec                 = taylor_convolution(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -984,9 +1103,7 @@ def calibrated_sin_gravity_optimization(approximator: TaylorApprox, instrument: 
         directional_vec                 = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -1031,9 +1148,7 @@ def calibrated_sin2_gravity_optimization(approximator: TaylorApprox, instrument:
         directional_vec                 = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration - something is very off here
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -1080,9 +1195,7 @@ def calibrated_powsin_gravity_optimization(approximator: TaylorApprox, instrumen
         directional_vec                 = taylor_plus(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -1121,9 +1234,7 @@ def calibrated_cos_gravity_optimization(approximator: TaylorApprox, instrument: 
         directional_vec                 = taylor_convolution(scaled_x1_vec, taylor_fog(gravity_directional_vec, scaled_x2_vec)) #gravity calibration
         adjusted_value: list[float]     = add_vector(copied_value, directional_vec)
 
-        write_taylor_series_value(approximator.taylor_series, adjusted_value)
-        rs: float = calc_deviation(approximator.operation, instrument, x_range, discretization_sz)
-        write_taylor_series_value(approximator.taylor_series, previous_value)
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
         return rs
 
@@ -1153,13 +1264,14 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
     #yeah yeah yall argued that it is not a centrality algorithm - but it is a centrality algorithm
     #centrality is finite nodes - edges - and value propagations
     #we'll build from there
+    #these are all the methods that I could come up with as of now - we'll be back tmr - its pretty decent - we just need to take a very high derivative order to get this working - it's gonna be GMP on GPU - i'm not telling yall this is easy - yet the idea is to <encode> the <differential value> as much as possible at any random point in our projection by using differential methods (very skewed synth waves)
 
     for _ in range(training_epoch_sz):
         inching_direction: list[float]  = [float(0)] * grad_dimension_sz
         inching_deviation: float        = None
 
         for idx in range(directional_optimization_sz):
-            random_value        = random.randrange(0, 12)
+            random_value        = random.randrange(0, 14)
             new_directional_vec = None
             deviation           = None 
 
@@ -1186,7 +1298,11 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
             elif random_value == 10:
                 (new_directional_vec, deviation)    = photon_random_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 11:
-                (new_directional_vec, deviation)    = circumscribe_optimization(approximator, instrument, x_range, discretization_sz)
+                (new_directional_vec, deviation)    = sphere_circumscribe_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 12:
+                (new_directional_vec, deviation)    = oval_circumscribe_optimization(approximator, instrument, x_range, discretization_sz) 
+            elif random_value == 13:
+                (new_directional_vec, deviation)    = rotating_multiarm_optimization(approximator, instrument, x_range, discretization_sz)
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
@@ -1493,7 +1609,7 @@ def main():
 
     # print(newton_approxx(sqrt_func, 8, 32, 5))
 
-    train(approxer, sqrt_func, 1 << 13, 512, 8, 64) #we'll move on if this ever reach < 0.01
+    train(approxer, sqrt_func, 1 << 13, 512, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
