@@ -4,6 +4,21 @@ import random
 import copy
 import sys
 
+class TaylorOperation(object):
+
+    def __init__(self, taylor_series_value: list[float]):
+
+        self.taylor_series_value = taylor_series_value
+
+    def __call__(self, x: float):
+
+        rs = float()
+
+        for i in range(len(self.taylor_series_value)):
+            rs += float(1) / math.factorial(i) * self.taylor_series_value[i] * (x ** i)
+
+        return rs
+
 class TaylorValue:
 
     def __init__(self, value: float):
@@ -158,7 +173,7 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
 
     #         for differential_order in range(differential_order_sz):
     #             func                                = lambda x: get_slope(operation, x, differential_order, a)
-    #             (projected_x, deviation)            = tom_approx(func, base_newton_iteration_sz, x, a)
+    #             (projected_x, deviation)            = stable_approx(func, base_newton_iteration_sz, x, a)
     #             scope_differential_projection_arr   +=  [(projected_x, deviation)]
     #             local_differential_projection_arr   +=  [(projected_x, deviation)]
 
@@ -168,7 +183,7 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
     #     current_x = get_left_right_closest([e[0] for e in scope_differential_projection_arr], current_x)
 
     # if len(total_projection_arr) == 0:
-    #     return tom_approx(operation, iteration_sz, initial_x)
+    #     return stable_approx(operation, iteration_sz, initial_x)
 
     # cand_list   = []
 
@@ -497,6 +512,30 @@ def get_random_taylor(dimension_sz: int, function_sz: int) -> list[float]:
 
     return taylor_convolution(lhs_f, rhs_f, dimension_sz)
 
+def taylor_values_to_operation(value_arr: list[float]) -> TaylorOperation:
+
+    return TaylorOperation(copy.deepcopy(value_arr)) 
+
+def min_list(a: list[float]) -> float:
+
+    if len(a) == 0:
+        return float(0)
+
+    return min(a) 
+
+def avg_list(a: list[float]) -> float:
+
+    if len(a) == 0:
+        return float(0)
+
+    return sum(a) / len(a) 
+
+def avg_invsqr_list(a: list[float]) -> float:
+
+    if len(a) == 0:
+        return float(0)
+
+    return float(1) / (sum([float(1) / (a[i] ** 4) for i in range(len(a))]) / len(a)) #what's happening? sum(1 / x^2) would approximate the global maxima - which represents the anomaly or our <looking_for> value - 1/those would turn things upside down (minima <-> maxima) - we are looking for global minima - which is the criteria for newton_approx  
 
 def pairwise_multiply_vector(lhs: list[float], rhs: list[float]):
 
@@ -520,7 +559,7 @@ def magnetic_equation(dimension_sz: int) -> list[str]:
     sliced_equation: list[str] = magnetic_equation(dimension_sz - 1)
     return ["cos(x_%s)" % str(dimension_sz)] + ["sin(x_%s)*%s" % (str(dimension_sz), e) for e in sliced_equation] 
 
-def rand_multidimensional_sphere_radius(dimension_sz: int) -> list[float]:
+def rand_multidimensional_sphere_radian(dimension_sz: int) -> list[float]:
 
     return [2 * math.pi * random.random() for _ in range(dimension_sz)] 
 
@@ -547,7 +586,7 @@ def magnetic_random_optimization(approximator: TaylorApprox, instrument: Callabl
     explosion_exp_step                          = random.randrange(0, 10)
     explosion_range                             = explosion_exp_base ** explosion_exp_step
     iteration_dimension_idx                     = random.randrange(0, dimension_sz)
-    radius_value_arr: list[float]               = rand_multidimensional_sphere_radius(dimension_sz)
+    radius_value_arr: list[float]               = rand_multidimensional_sphere_radian(dimension_sz)
     radius_value_arr[iteration_dimension_idx]   = 0
 
     t_exponential_base                          = random.random() * 10
@@ -595,7 +634,7 @@ def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Ca
     explosion_exp_step                          = random.randrange(0, 10)
     explosion_range                             = explosion_exp_base ** explosion_exp_step
     iteration_dimension_idx                     = random.randrange(0, dimension_sz)
-    radius_value_arr: list[float]               = rand_multidimensional_sphere_radius(dimension_sz)
+    radius_value_arr: list[float]               = rand_multidimensional_sphere_radian(dimension_sz)
     radius_value_arr[iteration_dimension_idx]   = 0
 
     oval_direction: list[float]                 = get_random_vector(dimension_sz)
@@ -639,6 +678,69 @@ def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Ca
 
     return (directional_vec, deviation)
 
+#alright - we want to implement sphere circumscribing
+#assume that the variable is radius (explosion_sz) - we take integral of f(x) . dx - and take the derivative - because we cant really do integral - we'll do avg + random projection for the moment being
+#alright these are estimation methods - this includes: magnetic + magnetic kameyoko to calculate density + photon + magnetic oval + random step + exponential focus
+#                                     - these aren't calibrated - this means those approximators can work on every estimation space - whether you are estimating Taylor series s0 v a or estimating the coefficients' space a, a1, a2 as in a * sin(x) + a1* cos(x) + a2 * sin*cos(x)
+
+#alright - this is a very important operation - we need to increase the numerical accuracy (bignum) + large size sampling + high derivative order (because this will 99% determine our success early on in the optimization process)
+#we dont have the tech for this yet - let's jog our memory about differentiable - it means the ability to draw graphs without lifting the pen - this includes f(x), f'(x), f''(x), f'''(x), f''''(x), etc. - differentiable is only required for f(x) because we can induce that f'(x) is also differentiable 
+#it's complicated Mom - if we increase numerical stability, we'll compromise speed - our instrument must be differentiable by using very skewed synth waves - yet the floating accuracy we are talking is probably 1 << 32 decimal accurate 
+#                     - gmp has the tech for that yet we want to port the computation to cuda (we'll write the code) - its complicated
+
+def circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
+    
+    integral_sampling_sz                        = 128
+    newton_iteration_sz                         = 4
+
+    r_exponential_base                          = random.random() * 10
+    r_discretization_sz                         = 10
+
+    r_deviation                                 = None
+    r                                           = None
+
+    random_radian_arr                           = [rand_multidimensional_sphere_radian(dimension_sz) for _ in range(integral_sampling_sz)]
+
+    def newton_radius_approx_func(r: float):
+        copied_value: list[float]   = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+        deviation_list: list[float] = []
+
+        for i in range(integral_sampling_sz):
+            taylor_directional_arr: list[float]     = scalar_multiply_vector(r, radian_coordinate_to_euclidean_coordinate(random_radian_arr[i]))
+            adjusted_value: list[float]             = add_vector(copied_value, taylor_directional_arr)
+            deviation: float                        = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
+            deviation_list                          += [deviation]
+
+        avg_deviation: float = avg_invsqr_list(deviation_list) #alright what's our aim ? we want global extremes - what is the differentiable version of the function ? log? 1/x - we'll settle for (1/x)^2 for now 
+
+        return avg_deviation
+
+    for i in range(r_discretization_sz):
+        exp_offset          = (r_exponential_base ** i) - 1
+        (new_r, new_r_dev)  = newton_approxx(newton_radius_approx_func, newton_iteration_sz, exp_offset)
+
+        if r_deviation == None or new_r_dev < r_deviation:
+            r_deviation = new_r_dev
+            r           = new_r
+
+    if r_deviation == None or r == None:
+        return ([float(0)] * dimension_sz, float(0))  
+
+    deviation_rad_arr: list[float]  = []
+
+    for i in range(len(random_radian_arr)):
+        cur_radian_vec: list[float]         = random_radian_arr[i]
+        taylor_directional_arr: list[float] = scalar_multiply_vector(r, radian_coordinate_to_euclidean_coordinate(cur_radian_vec))
+        adjusted_value: list[float]         = add_vector(taylor_series_to_value_arr(approximator.taylor_series), taylor_directional_arr)
+        deviation: float                    = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
+        deviation_rad_arr                   += [(deviation, taylor_directional_arr)]
+
+    print(tuple(list(min(deviation_rad_arr))[::-1]))
+
+    return tuple(list(min(deviation_rad_arr))[::-1]) 
+
 def photon_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
@@ -651,7 +753,7 @@ def photon_random_optimization(approximator: TaylorApprox, instrument: Callable[
     explosion_exp_step                          = random.randrange(0, 10)
     explosion_range                             = explosion_exp_base ** explosion_exp_step
     iteration_dimension_idx                     = random.randrange(0, dimension_sz)
-    radius_value_arr: list[float]               = rand_multidimensional_sphere_radius(dimension_sz)
+    radius_value_arr: list[float]               = rand_multidimensional_sphere_radian(dimension_sz)
     radius_value_arr[iteration_dimension_idx]   = 0
     random_alpha                                = random.random() 
 
@@ -1053,7 +1155,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         inching_deviation: float        = None
 
         for idx in range(directional_optimization_sz):
-            random_value        = random.randrange(0, 11)
+            random_value        = random.randrange(0, 12)
             new_directional_vec = None
             deviation           = None 
 
@@ -1079,6 +1181,8 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 (new_directional_vec, deviation)    = magnetic_oval_random_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 10:
                 (new_directional_vec, deviation)    = photon_random_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 11:
+                (new_directional_vec, deviation)    = circumscribe_optimization(approximator, instrument, x_range, discretization_sz)
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
