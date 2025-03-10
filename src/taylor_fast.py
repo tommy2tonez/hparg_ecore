@@ -688,11 +688,15 @@ def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Ca
 #it's complicated Mom - if we increase numerical stability, we'll compromise speed - our instrument must be differentiable by using very skewed synth waves - yet the floating accuracy we are talking is probably 1 << 32 decimal accurate 
 #                     - gmp has the tech for that yet we want to port the computation to cuda (we'll write the code) - its complicated
 
+#I admire God, he wrote the universe and computes 1 << 256 flops / second - that's incredible 
+#no offends, yet I do think it's hard to write the current universe - I'll try for 10 years 
+#that was funny
+
 def circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     dimension_sz                                = get_taylor_series_size(approximator.taylor_series)
     
-    integral_sampling_sz                        = 128
+    integral_sampling_sz                        = 32
     newton_iteration_sz                         = 4
 
     r_exponential_base                          = random.random() * 10
