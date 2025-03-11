@@ -1423,6 +1423,10 @@ def main():
     #how we would implement this efficiently is actually another billion dollar problem
     #i'll try guys
 
+    #in this taylor_fast.py we have only answered 5% of the problem - which is the heading direction
+    #there is distributed compute + cuda compute + network transportation + parameterized numerical stability + parameterized numerical precision + virtual machine data extraction (virtual machine extraction frequency) + data ingestion + etc.
+    #if a company heads in this direction and implements this correctly (I dont care the hows and the practices) - they would be worth at least $100B - that's the least
+
     getcontext().prec = 128
     print(getcontext())
 
