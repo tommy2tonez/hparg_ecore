@@ -3,6 +3,7 @@ import math
 import random
 import copy
 import sys
+from decimal import * 
 
 def taylor_projection(f: list[float], x: float) -> float:
 
@@ -1266,6 +1267,9 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
     #we'll build from there
     #these are all the methods that I could come up with as of now - we'll be back tmr - its pretty decent - we just need to take a very high derivative order to get this working - it's gonna be GMP on GPU - i'm not telling yall this is easy - yet the idea is to <encode> the <differential value> as much as possible at any random point in our projection by using differential methods (very skewed synth waves)
 
+    #today we are going to see what happen if we increase the numerical stability and take the (1 << 16)th derivative order of the multiarm optimization or circumscribe optimization for that matter
+    #if we could successfully approx the global exterme in one shot using the circumscribe optimization (taking the number of sampling -> inf) - it's considered a success
+
     for _ in range(training_epoch_sz):
         inching_direction: list[float]  = [float(0)] * grad_dimension_sz
         inching_deviation: float        = None
@@ -1326,297 +1330,140 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         else:
             write_taylor_series_value(approximator.taylor_series, current_value)
 
+def decimal_e(x: Decimal, iteration_sz: int = 1024) -> Decimal:
+
+    #f0 + f'(0) * x + 1/2 * f''(0) * x^2
+
+    rs: Decimal = Decimal(0)
+
+    for i in range(iteration_sz):
+        rs += Decimal(1) / math.factorial(i) * Decimal(x)**i  
+
+    return rs 
+
+def decimal_sin(x: Decimal, iteration_sz: int = 1024) -> Decimal:
+
+    #alright let's see - sin(x), cos(x), -sin(x), -cos(x)
+    #0 1 0 -1 0 1 0 -1
+    #so it is 
+
+    coeff: int      = 1
+    rs: Decimal     = Decimal(0)
+
+    for i in range(iteration_sz):
+        signness:int    = 1 if i % 2 == 0 else -1  
+        idx: int        = i * 2 + 1 
+        rs              += Decimal(1) / math.factorial(idx) * Decimal(signness * coeff) * (x ** idx)
+
+    return rs
+
+def decimal_cos(x: Decimal, iteration_sz: int = 1024) -> Decimal:
+
+    #cos = sin(90 - x) yet I want to implement taylor series for this
+    #cos(x), -sin(x), -cos(x), sin(x), cos(x)
+    #1, 0, -1, 0, 1
+
+    coeff: int      = 1
+    rs: Decimal     = Decimal(0)
+
+    for i in range(iteration_sz):
+        signness        = 1 if i % 2 == 0 else -1
+        idx             = i * 2
+        rs              += Decimal(1) / math.factorial(idx) * Decimal(signness * coeff) * (x ** idx)
+
+    return rs
+
+def decimal_synth_wave(x: Decimal, iteration_sz: int = 64) -> Decimal:
+
+    return decimal_sin(x - Decimal(16), iteration_sz) / (x - Decimal(16))
+
+def decimal_get_slope(f: Callable[[Decimal], Decimal], x: Decimal, derivative_order: int, a: Decimal = Decimal(0.0000001)):
+
+    if derivative_order == 0:
+        return f(x)
+
+    return (decimal_get_slope(f, x + a, derivative_order - 1, a) - decimal_get_slope(f, x, derivative_order - 1, a)) / a
+
+def decimal_taylorize(f: Callable[[Decimal], Decimal], derivative_order_sz: int, a: Decimal = Decimal(0.0000001)) -> list[Decimal]:
+
+    return [decimal_get_slope(f, Decimal(0.01), i, a) for i in range(derivative_order_sz)]
+
+def decimal_taylor_compute(coeff_arr: list[Decimal], x: Decimal) -> Decimal:
+
+    rs: Decimal = Decimal(0)
+
+    for i in range(len(coeff_arr)):
+        rs += Decimal(1) / math.factorial(i) * coeff_arr[i] * (x ** Decimal(i)) 
+
+    return rs
+
 def main():
 
-    #something went wrong
-    #let me show them mfs the real power of taylor fast + electrical engineering designs
-    #legend says this algorithm still runs 1000 years later
-    #well... it's a fission operation - we specialize in rocket + nuke
-    #I just met my brother in my dream - that was a very happy event
-    #I wanted to show my brother how far we have come in our rocket science
-    #this is like level 1 of our hacking career
-    #"you can't organize an ostrich race with just one ostrich" - Prince of Persia
-    #you can't make a bomb with just one Uranium
-    #that's the truth - because we are in a "golf game" of finding the coordinates 
-    #in real life - most of the time, deviation is not even a clue - you might just get one big blackhole and nothing at all on the surroundings (path is not suitable in this situation - we are optimizing things that are not quantifiable)
-    #this is why we need fission - to open up a chain-reaction of "where the golf balls might have been" - and try to find the final destination 
-    #exponential direction discretization is the correct approach - we also need to add <random_discretization> or chaotics of HUGO's "broista" to increase the randomness of the rocket projections
+    #alright - let's move to Decimal first thing first - we want to approx global extreme of this function - let's see how many floating accuracy is required
+    #something is very off
+    #we cant keep the numerical stability
+    #alright - we are doing compression via differential methods - and the numerical precision represents the volume of compressing data - this is the reason why we need explosive rats - or exponential step  
 
-    #I was thinking of cosine simularity, HUGO, and newton approx - if we make a one shot on a par 3 - we don't even need gradient descend
-    #it seems like this is a fission + mining operation - but it is not a fission operation - more like a centrality + fission operation - because our resource is finite
-    #let's hope guys - I have a good feeling that we are going to make this
-    #we dont really know how that works so well - for every function - we just know that this is dangerous if weaponized in this current planet of the chimp technology - we can break through every possible security layers and access data in an instant
+    #alright we dont know what's happening - we dont care what's happening
+    #but we know for sure - that there is a trade off between <numerical precision + numerical stability + locality compression> vs runtime
+    #as an engineer our job is not to question or research but to implement a parameterizable version so we could calibrate it
 
-    #now tell me what's the difference between f(x), f(x, y), f(x, y, z)?
-    #it's the euclidean locality - x, z and y makes more sense than x,y and z
-    #this is a very important concept for training - we want to regroup these guys to have faster training time
-    #apart from that - I dont think there is a difference between f(x), f(x,y), x(x, y, z)
-    #we'll find a way
-    #it's not that difficult to understand things - you need to be able to listen to the music and find your true compass of logic - not what the school taught you
+    #ideally - the only reason we want to increase the numerical precision is to do high order derivative extraction so we could approx <global_extremes> better
+    #approxing <global_extremes> better is a question of whether doing newton_approxx within the operating window of the numerical precision is better or iteratively jump into the next pool is better   
+    #recall our newton_approxx method - this is the very fine way to approx (we want to make sure that our numerical precision is within the delta step) - or we have to make sure that it is within the numerical precision (in other words, numerical precision is our true max_delta_step, or min(acceptable_numeric_last, heuristic_last))
+    #so... what's the point? that the numerical precision increases our <AD_range> - yet very costly - there is a practical sweet spot between the infinity range of newton approx and the cost of running the thing
+    #yet this is very crucial for the oval circumscribe + sphere circumscribe operation - we are taking the derivative to approx 1 << 30 grids all at once 
 
-    #what happens with our golf course?
-    #in this case it converges too slow - we need to hypercharge the ball to redirect into the correct direction + magnitude - how to? by using centrality time-series forcast based on previous results (when we reach the differential order of 64 or 128 - the random projection is fuzzy - we need to have a nagivator) - recall that we want to maximize the delta
-    #we still want to use exponential discretization + randomization - its just that we use another layer of machine learning to predict our difference derivatives
-    #remember the 10 steps towards the Sun - we have exactly 10 steps to step out of the bunker
-    #what does this mean? it means that if we get this proof of concept correctly (this week) - we can freely walk in the system - HTTPs read + JWT fake + sessions read + virtual machine decodings + etc
-    #this can escalate into a browser compromise (which is heavily built on top of these security metrics)
-    #which escalates into an OS compromise (alright - im not being correct here - browser is more important than OS - because it is contagious - OS is not - we want to compromise browser from compromising OS, not the opposite)
+    #I tried to explain to Dad that it is not f(x,y,z) etc. for x,y,z being the three words and f being the next word
+    #we have moved to centrality long ago because centrality can sort things VERY FAST - and bring relevant things together (y as in f(x) -> y) so we can have smoother linearity (which is our goal)
+    #the best way to do thing is the best of both worlds - we want the sortability of centrality and the flexibility of taylor_approximation
+    #2 years from now - we would realize that it's the logit density that makes the difference (f(x) -> y 99% accurate) (f1(x) -> y also 99% accurate) yet the f(x) is 2 times denser than the f1(x) - so f(x) is smarter 
 
-    #I was thinking about a navigator to "hint" our exponential steps - yet I can't quantify the problem - because this is a hard problem to quantify
-    #taylor projection is probably the best projection we could ever do - this must be combined with centrality to offset the cost of <new_words> - we'll talk about this later - things can be all taylor-approxed
-    #goal is actually not to "replace" centrality - but to do be a better "linear" to do centrality
-    #the flop is shit but it's the best we've got for years
-    #we still probably need to implement navigators
+    #how we would implement this thing is actually the worth mentioning problem
+    #how we would implement this efficiently is actually another billion dollar problem
+    #i'll try guys
 
-    #let's see what Maxwell has to tell
-    #the law of flux (external system)
-    #the law of no flux (internal system)
-    #the law of external and internal system collaboration - torque
+    getcontext().prec = 128
+    print(getcontext())
 
-    #the problem is the up down and around of the taylor series which creates anomaly <black_holes>
-    #I've thought long and hard - there is no better way than to do exponential steps - again - random exponential base + 10 steps is the true way
-    #well we need to rid of the exclusive thinking and think that these solutions might not cancel out each other - we can implement a forcast to skew the distribution and a random projection for completeness of algorithm
+    func = lambda x: decimal_synth_wave(x, 128)
+    taylor_series: list[Decimal] = decimal_taylorize(func, 24)
 
-    #what precisely are we optimizing | mining?
-    #we want to make sure that our solution is complete - such that there exists a solution by running this algorithm forever
-    #we want to make sure that our "focus" is well spent - such means that the focusing area of optimization must be reasonably skewed with respect to the overall picture (important) - we need to work on this - i'll be right back
-    #we want centrality because our resource is finite - we keep our pool of best fit candidates and maintain our pool of best fit candidates - like SPY 500
-    #because of those reasons, this algorithm is radixed as a mining operation + centrality operation + fissing operation (we do "fission" by random projection around the focusing area of optimizations)
+    print(taylor_series)
 
-    #alright - let's implement this - we have directions, we have magnitude, => we have vector => we have pointer
-    #                               - we have exponential => we have focus
+    # print(decimal_sin(Decimal(math.pi), 16))
 
-    #what are we focusing on? we are focusing on the "gucci" - the spots (regions) that we statistically know that are better
-    #this hints us that the operation we are looking for is a reordering operation (bijective space map)
-    #what is wrong with this? we are using a "smarter" operation to improvise a dumb + naive operation - so who's gay?
-    #we don't know who's gay - we just know that it must be a dumber operation to improvise a smarter operation - this proves that coach must be dumber than player in real life - otherwise he's not a socially productive coach
-    #this sounds like the human-kind - because it really is so - we have the formula of taylor-fast - yet we don't have a recursive coach
-    #how about coach coaching another person to be a coach? This is what we want
+    print(decimal_taylor_compute(taylor_series, Decimal(15.99)))
 
-    #what if your coach is wrong? Do we listen to our coach or coach of the coach or coach of the coach of the coach or all of them?
-    #alright - we have a window of things - and centrality to keep our resource finite
-    #let's aim for 2 coaches - the random coach and the statistically best coach
+    # print(math.exp(Decimal(4)))
 
-    #alright, so to offset this problem, we use another radix of approximation called centrality - which we will implement 
-    #centrality will boost our dumbness into another level - which we will leverage to coach another centrality
+    # print(decimal_synth_wave(Decimal(15.99)))
+    # print(decimal_sin(2))
+    # print(synth_wave(Decimal(0)))
 
-    #the best thing about centrality is the ability to create another word - lightning fast context projection from n dimension -> 1 dimension (linear) - and context diffraction
-    #we will change the 1 dimension -> multi-dimensions to improve the context accuracy by using taylor approximation
+    # print(approx_e(4, 40))
 
-    #alright - we want a bijective map of <directional_vector> or directional space -> sin | cos space
-    #        - damped oscillation differential equation is a subset of the optimizables
-    #        - this means we want to increase the possibility space of local randomness (we want to move more possibilities into our exponential "focus") to allow random value approximation - or turning points approximation
-    #        - this does not substitute the above heuristic function but is used in conjunction
+    # for i in range(1024)
 
-    #alright - there is x1(sin(x))
-    #        - and there is sin(x*x1)
-    #        - the general form is x1*sin(x*x2)
+    # print(Decimal(1 << 3000) + Decimal(0.1))
+    # print(sys.float_info)
 
-    #I was thinking what if we do taylor approximation differently - such is the combinatorial (or permutation) operation differs
-    #then I realized this is not a necessity - because centrality built on top of taylor approximation would reorder things in the best possible way (we dont know this - we are hoping this)
-    #so the taylor projection for centrality we wrote in the centrality_approx is the correct algorithm in the sense of completeness of approximation (we want multi-dimensional projection to not have projection collisions)
-    #the only thing that we care about is the number of projecting dimensions and the number of projected dimensions
-    #we want to do binary input and binary output - or we want hex input and hex output - we don't know
+    # approxer: TaylorApprox  = get_taylor_series(5, 1)
 
-    #because ballistic missiles can only be operated on one-dimensional time coordinate
-    #we must do dimensional reduction or dimensional expansion to dynamically adjust the number of taylor-series in our electrical circuit  
-    #f(x1,x2,x3) -> f(x) or f(x) -> f(x1, x2, x3) for example 
+    # def sqrt_func(x: float):
 
-    #yet we want to offset the numerical stability + training uncertainty by having ONE instrument function and newton approx in a random direction 
-    #we'll show people the real way of approxing (there is no cosine similarity or database) - hint that it is not fast - we want to make it fast - we'll try - let's see
+    #     return (x-1) * (x-2) * (x-3) * (x-4)
 
-    #so we are approxing the <string> from the <all the data> at once
-    #because this is the stable way of training
-    #we'll write the centrality algorithm tmr
+    # # print(newton_approxx(sqrt_func, 8, 32, 5))
 
-    #if we can approx sin(x) without cheating - I think we can move forward to implement centrality algorithm - this is a hard task
-    #usually we want to increase the dimension size because we want to smoothen the curves - which helps with the training
+    # train(approxer, sqrt_func, 1 << 13, 512, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
+    # print(approxer.operation(2))
+    # print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
-    #alright - we want newton_approx of 4 differential orders - I dont really know how this works    
-    
-    #ax^4 + bx^3 + cx^2 + dx + e = 0
-    #we care about the turning points - the zeros
-    #let's jog our memory about calculus 1
-    #we have local minima - local maxima - turning points - zeros    
+    # for i in range(len(approxer.taylor_series.series)):
+    #     print(approxer.taylor_series.series[i].value)
 
-    #x turned because of x^2
-    #x^2 turned because of x^3
-    #x^3 turned because of x^4
-
-    #we only care about x turning points - which means x^2 turning x before x^3 - or x^3 turning x before x^4 or x^4 turning x
-    #alright let's implement newton_approxx
-    #we find 4 differential values - find the closest x - refind the 4 differential values - continue until the estimation exhausts
-    #the problem is that this is not mathematically correct - but approximationally correct (in terms of compute + simplicity) 
-    #we'll be back tomorrow - this is harder than expected
-    #we want the proof of concept that this must work
-    #we'll do logit density mining built on top of this later
-
-    #in our new newton_approx
-    #we have things called event points
-    #they are the points where derivative values flipped, such is when the event is decayed into other events (flipping signs of lower derivatives to be specific)
-    #assume at any given time - we can accurately predict our next derivative sign flip event points
-    #we want to move to the closest event point - because we are for sure that at such event point, we can "retrieve" the just mentioned "other event points"
-    #                                           - this event point is decayed into other events (which we want to leverage to "update" our prediction accuracy)
-
-    #the answer of the mystery of the universe lies right here in taylor approximation - how we train the model is an entire another thing to talk about
-    #it's not complicated - it involes dynamic calibration - rocket launching - mining + recursive coach
-    #we'll build the thing - yet we need to "aim" where we are heading to  
-    #we need to move very slowly in the theory - we dont want to rush because we might miss what we'd want to optimize
-
-    #we have always talked about time as one dimensional - what if time is not one dimensional? well there is literally no difference - d/dt now is just d/dvec_t - this is described in the interstellar movie
-    #vec_t -> <x, y>
-    #we have another pointer f(ptr) -> <x, y>
-    #we have d/d_vec_t * d_vec_t/d_ptr = d/d_ptr - chaim rules - taylor approximation still holds at 0
-
-    #now think about atoms - electrons - particles - nucleis - people - earth - sun - galaxy - etc. 
-    #it's just a simple convolution operation of the taylor functions
-    #alright - the function we wrote in centrality_approx and our newly invented function - what's the difference - the difference is the "focus" of our exponenial expansions - our focus can do more good than the focus of the other function 
-
-    #move forward to internal system operations and external system operations
-    #external system operations are the operations that do complete calibration - things inside the system and outside the system are two different things - (people - Eath + Eath - Sun + Sun - galaxy)
-    #internal system operations are the operations that look like the 3-body-problem
-
-    #its been years of optimizations - and the conclusion that we could tell is educated random is probably the best choice we could make
-    #there are optimization steps - and we want "centrality" to mine the logit density for each of the step - this is a very important note
-    #we might reach super-intellegent by running this on a massive parallel computer
-    #we'll be back to optimize this
-    #we'll leverage cu - yet the idea is to "project" the model - not project the data 
-    #the instrument's probably gonna be 100s of GB stored on SSDs - we'll leverage taylor compression
-    #we have found the answer to stable diffusion - it's not what people think
-    #remember that the basic is just this
-    #we do random step - calibration - optimization of taylor model - 1024 differential order newton optimization 
-    #the only thing that we care about is input + output + sliding window (or context window)
-    #we'll leave the rest to the optimization engine
-
-    #we actually have succeeded walking this road in 1989  - there was a small group of specialized researchers that took the same approach of taylor approximation + calibration
-    #                                                      - what missing back then was a centrality algorithm (a context diffractor to build another words + smooth out the linearity)
-    #                                                      - advanced multi-threading kernels + GPUs 
-    #                                                      - we have all of those now - what we are missing is an algorithm to run this taylor approx on
-    #                                                      -                          - multiprecision to run 1024th differential order newton approx
-    #                                                      -                          - "datalake" to do atomic update by using 1GB of sampling data (instrument)
-    #                                                      -                          - a global centrality algorithm (global centrality algorithm can be seen as step optimizers - we mine the logit density for every step - and reupdate once a new maxmima has been reached) 
-    #                                                      -                          - a recursive coach (advanced analyzer TARs - to find the difference between the instrument and the approximator to do accurate calibration)
-    #-- swifties 2025 --
-    #we are back after 30 years 
-
-    #this would take a team of 50 good people at least 2-3 years to have a good product
-    #we'll try to see if we could make that
-
-    #the problem is that we have to do educated random - not random random
-    #assume that we have our taylor function f
-    #assume we have our torch model of a*sin(x) + b*cos(x) + c * x^3 + d * x^2
-    #point is we want to train the <a, b, c, d> coefficients - which means we need calibration
-    #we'll probably want to do decode(f) = a1*<sin(x)> + b1*<cos(x)> + c1 * <x^3> + d1 * <x^2>
-    #then new_f = (a1 + a2) * <sin(x)> + (b1 + b2) * <cos(x)> + (c1 + c2) * <x^3> + (d1 + d2) * <x^2>
-    #then encode(new_f) -> taylor function
-    #that's our basic calibration of coefficients
-    #the next optimizable is curved bullet - we want the magnetic fields - <what goes around comes around>
-    #yet we need to ask - whether curved in the <current coordinate> is straight in <another coodinate> ? 
-    #we dont really know - maybe we want curved bullets for numerical stability - maybe -
-    #and we need to take the 1024th derivative to approximate the local minima + maxima
-    #I was proving the equivalency of curved bullet vs straight bullet
-    
-    #assume curved bullet projectile is f(t) = <x1, x2, x3>
-    #d f(t) / dx    =
-    #d2 f(t) / dx   = 
-    #d3 f(t) / dx   = 
-
-    #d f(t) / dy    = 
-    #d2 f(t) / dy   = 
-    #d3 f(t) / dy   = 
-
-    #...
-
-    #d difference/ dt = d difference/ df . df/ dt + ... (taylor expansion)
-    #what does this really mean? 
-    #it means that we assumed our <time_vector> is fixed at x = 0, and we do things normally for d_difference/ dt
-    #then we <project> the time vector (with respect to another time) on the original time_vector (at 0) - and we do normal multiplication to get our d_difference / d_other_time 
-    #why dot product? because it is a projection function - recall that dot product = |projected_segment| * |projecting_segment|
-    #so it's (d_difference / df) . (df/dt)
-    #or <difference> * unit_vector . (df/dt)
-
-    #so this is a fixed + static function
-    #assume our straight bullet projectile is ...
-
-    #d difference / dt now is ...
-    #prove the surjectiveness of calibration
-
-    #I was tempted to say that is correct
-    #yet the correct way of doing so is to project the time on x, y coordinates - take the derivative of d difference / dx, d difference/ dy
-    #                                                                           - and do a dot product there 
-
-    #recall that our time function is f(t) = s0 + v0 * t + 1/2 * a * t^2 + ...
-    #we would want to project the time function at t on x y z, and do a dot product with the other taylor expansion (difference w.r.t x, differenrce w.r.t y @ x, differernce w.r.t z @ x,y)
-    
-    #alright - we are smart - we probably don't want to recalculate our derivatives w.r.t x,y,z
-    #so how about we only take one derivative with respect to time? of a very curvy bullet (such bullet has to be continuous) that touches every possible points in the space <x,y,z> 
-    #recall our sin waves - or cos waves
-    #yet this requires us to take a very high order derivative - probably (1 << 16)th derivative order - we'll definitely break numerical stability there
-
-    #what's wrong with one dimensionalizing the space <x, y, z> -> x * y * z and using one dimensional pointer approach? (this was my competition back in 2015)
-    #the function that we used to <one_dimensionalize_the_space> is not differentiable - such are div + modulo
-    #we probably want to use our very skewed sin_wave of (sin(x)/x)^n - yet this breaks numerical stability very easily - so we are back to taking the (1 << 16)th derivative order - yet we dont have the tech for that
-
-    #thing is this way of doing thing (training) is stable - to the point that we could fully trust AI to do EVERYTHING
-    #this creates jobs + mining opportunities for coiners like us - we have tons of compute and we are wasting the compute to solve stupid puzzles
-    #imagine that within 2-3 years - we'll be bidding + asking for logit density for every step of training
-    #I'm telling you that the logit density (this is the new gold + diamond in our generation) could be more profitable than EVERYTHING that you could think of capable of doing
-    #AI wont destroy our world Son - it always will be the human that destroys the world - rotten minds driven by money
-    #we often ask the question of being - and afraid to be of <lower_intellect>
-    #its the fear that blinds us from the truth
-
-    #why are we still at one dimensional projection again?
-    #because this is a very important concept that we need to get right - otherwise we cant do 2 dimensional projections or 2-2 dimensional projections for that matter
-
-    #such is if the random distribution is not good - we must rearrange the context - not changing the random method
-    #we took the right approach yet the "calibrated" functions are probably not good enough
-    #and the differential order is too low to do any good
-    #this is harder than we actually think
-
-    #assume this function f(g(x))
-    #the usual flow is we getting the footprint of f(x) and g(x) - and try to come up with everything that we could with f(g(x))
-    #assume g(x) is time_vector
-    #what we want to do is to extract the footprint of f(x) - one dimensionally - differentiable = f(t)
-    #then we want to map g(x) -> t
-    #then we want to do f(map(g(x))) == f(t)
-    #alright that's the soyboy approach
-
-    #if we are to outsmart soyboy - we know that f(g(x)) = mean_sqrt is f(x) with x being the one dimensional pointer - and we only care about approxing f(x) by using taylor approximation at 0
-    #so tell me - what if our taylor_cursor is a curvy one dimensional f(t)?
-    #what is the differential order we need to reach to approx the global extremes?
-    #alright - we love Angelina Jolie in wanted, she did make a point by doing a curved sling shot and throwing the gun to the next point - it's called magnetic search + explosive exponential linear step in Taylor Series approximation 
-    #that was a good movie - yet it has a sinister vibe of God
-
-    #what we learned from the movie is:
-
-    #that we could know the differential values from the string at any random point in the universe (or the taylor series approximation) - yet there is a limit to that which is bignum saturation of floating accuracy
-    #thread calibrations (sin-cos Maxwell waves) + puzzle solvings
-    #explosive rats
-    #curved bullets to one-dimensionalize the universe
-    #binary strings
-    #Taylor is not hot, my Mom is
-
-    #we'll try to implement that
-    #we are close - we'll post the result this week
-
-    # print(magnetic_equation(4))
-
-    approxer: TaylorApprox  = get_taylor_series(5, 1)
-
-    def sqrt_func(x: float):
-
-        return (x-1) * (x-2) * (x-3) * (x-4)
-
-    # print(newton_approxx(sqrt_func, 8, 32, 5))
-
-    train(approxer, sqrt_func, 1 << 13, 512, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
-    print(approxer.operation(2))
-    print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
-
-    for i in range(len(approxer.taylor_series.series)):
-        print(approxer.taylor_series.series[i].value)
-
-    print()
-    print(approxer.operation(1))
+    # print()
+    # print(approxer.operation(1))
 
 main()
