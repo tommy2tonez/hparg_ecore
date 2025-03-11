@@ -145,15 +145,59 @@ def tom_approx(operation: Callable[[float], float], iteration_sz: int, initial_x
 
     return newton_approx(operation, iteration_sz, x, a)
 
+def tom_approx2(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
+
+    NEWTON_ITER_SZ: int = 3 
+
+    if iteration_sz == 0:
+        return newton_approx(operation, NEWTON_ITER_SZ, initial_x, a)
+
+    s0      = get_slope(operation, initial_x, 0)
+    v       = get_slope(operation, initial_x, 1)
+    accel   = get_slope(operation, initial_x, 2)
+    
+    epsilon = float(0.01)
+    a       = 1/2 * accel
+    b       = v
+    c       = s0
+
+    if abs(a) < epsilon:
+        return newton_approx(operation, NEWTON_ITER_SZ, initial_x)
+
+    delta   = b ** 2 - 4 * a * c
+
+    if delta > 0:
+        x1  = (-b + math.sqrt(delta)) / (2*a)
+        x2  = (-b - math.sqrt(delta)) / (2*a)
+
+        (x1, y1)    = tom_approx2(operation, iteration_sz - 1, x1, a)
+        (x2, y2)    = tom_approx2(operation, iteration_sz - 1, x2, a)
+
+        if abs(y1) < abs(y2) and abs(y1) < abs(s0):
+            return x1, y1
+        
+        if abs(y2) < abs(s0):
+            return x2, y2
+        
+        return initial_x, s0
+
+    x           = -b / (2*a)
+    (x1, y1)    = tom_approx2(operation, iteration_sz - 1, x, a)
+
+    if abs(y1) < abs(s0):
+        return x1, y1
+
+    return initial_x, s0
+
 def stable_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
 
     try:
-        return tom_approx(operation, iteration_sz, initial_x, a)
+        return tom_approx2(operation, 3, initial_x, a)
     except:
         return initial_x, operation(initial_x) 
 
 #I think this is the best way to solve the problem
-def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: float = 0.1) -> list[float]:
+def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: float = 0.02) -> list[float]:
 
     if len(pos_arr) == 0:
         return []
@@ -175,13 +219,16 @@ def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: floa
 
     return filtered_left_cand + filtered_right_cand
 
+#I'll try to optimize this algorithm for the next day - this is the very important iterative algorithm
 def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, differential_order_sz: int = 4, a: float = 0.00001) -> tuple[float, float]:
 
     return stable_approx(operation, iteration_sz, initial_x, a)
+
     # current_x: list[float]              = [initial_x]
     # base_newton_iteration_sz: int       = 2
     # total_projection_arr: list          = []
     # derivative_local_minmax_sampling_sz = 3 
+    # total_cand_arr: list[float]         = [] 
 
     # for _ in range(iteration_sz):
     #     scope_differential_projection_arr = []
@@ -198,7 +245,8 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
     #         if len(local_differential_projection_arr) != 0:
     #             total_projection_arr    += [local_differential_projection_arr]
 
-    #     current_x = get_left_right_closest([e[0] for e in scope_differential_projection_arr], current_x)
+    #     total_cand_arr  += scope_differential_projection_arr
+    #     current_x       = get_left_right_closest([e[0] for e in total_cand_arr], current_x)
 
     # if len(total_projection_arr) == 0:
     #     return stable_approx(operation, iteration_sz, initial_x)
@@ -276,6 +324,10 @@ def get_taylor_series_size(series: TaylorSeries) -> int:
 def add_vector(lhs: list[float], rhs: list[float]) -> list[float]:
     
     return [e + e1 for (e, e1) in zip(lhs, rhs)]
+
+def sub_vector(lhs: list[float], rhs: list[float]) -> list[float]:
+
+    return [e - e1 for (e, e1) in zip(lhs, rhs)] 
 
 def scalar_multiply_vector(c: float, rhs: list[float]) -> list[float]:
     
@@ -586,26 +638,29 @@ def radian_coordinate_to_euclidean_coordinate(coor: list[float]) -> list[float]:
 
 def radian_rescale(org_value: float, max_range: float) -> float:
 
-    return org_value * (float(2 * math.pi) / max_range)
+    return org_value
+
+#why does this work?
+#because it can approx every possible solution locally (as if they are possibly touchable by the arm) - assume we are looking for the radian coordinate <1.2pi, 1.0pi, 2.0pi, 2.2 pi>
+#our original vector is <1pi, 1pi, 1pi, 1pi>, our pairwise difference is <1.2, 1, 2, 2.2> - what we need is to multiply ALL of them - and we always find a solution that is identical to the one we are looking for
+
+#dont be funny brother - I've spent years dedicated to research - I came to this very conclusion of the Taylor approximation of everything + sin|cos
+#there are backstories to how I learnt and took exams that you didnt know
+#I agree
 
 def rotating_multiarm_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
-    
+
+    MAX_ARM_SZ: int                             = 8
+    MAX_RADIUS_EXPONENTIAL_SZ: int              = 10
+    MAX_ARM_RADIUS: float                       = float(2)
+    MAX_FREQUENCY_COEFF: float                  = 32
     dimension_sz                                = get_taylor_series_size(approximator.taylor_series)    
-    arm1_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
-    arm1_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
-    arm1_rotating_dimension_idx                 = random.randrange(0, dimension_sz)
+    arm_sz: int                                 = random.randrange(MAX_ARM_SZ) + 1 
 
-    arm2_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
-    arm2_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
-    arm2_rotating_dimension_idx                 = random.randrange(0, dimension_sz)
-
-    arm3_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
-    arm3_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
-    arm3_rotating_dimension_idx                 = random.randrange(0, dimension_sz)
-
-    arm1_frequency_coeff                        = random.random()
-    arm2_frequency_coeff                        = random.random()
-    arm3_frequency_coeff                        = random.random()
+    arm_radius_arr                              = [(random.random() * MAX_ARM_RADIUS) ** random.randrange(0, MAX_RADIUS_EXPONENTIAL_SZ) for _ in range(arm_sz)]
+    arm_starting_radian_arr                     = [rand_multidimensional_sphere_radian(dimension_sz) for _ in range(arm_sz)]
+    arm_rotating_vec_arr                        = [get_random_vector(dimension_sz) for _ in range(arm_sz)]
+    arm_frequency_coeff_arr                     = [random.random() * MAX_FREQUENCY_COEFF  for _ in range(arm_sz)]
 
     t_exponential_base                          = random.random() * 10
     t_discretization_sz                         = 10
@@ -615,22 +670,15 @@ def rotating_multiarm_optimization(approximator: TaylorApprox, instrument: Calla
     deviation                                   = None
 
     def newton_approx_func(t: float):
-        arm1_current_radian                                 = copy.deepcopy(arm1_starting_radian)
-        arm1_current_radian[arm1_rotating_dimension_idx]    += t * arm1_frequency_coeff
-        arm1_current_coordinate                             = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+        arm_tip_coordinate: list[float] = [float(0)] * dimension_sz 
 
-        arm2_current_radian                                 = copy.deepcopy(arm2_starting_radian)
-        arm2_current_radian[arm2_rotating_dimension_idx]    += t * arm2_frequency_coeff
-        arm2_current_coordinate                             = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+        for i in range(arm_sz):
+            arm_current_radian      = add_vector(arm_starting_radian_arr[i], scalar_multiply_vector(arm_frequency_coeff_arr[i] * t, arm_rotating_vec_arr[i]))
+            arm_current_coordinate  = scalar_multiply_vector(arm_radius_arr[i], radian_coordinate_to_euclidean_coordinate(arm_current_radian))
+            arm_tip_coordinate      = add_vector(arm_tip_coordinate, arm_current_coordinate)
 
-        arm3_current_radian                                 = copy.deepcopy(arm3_starting_radian)
-        arm3_current_radian[arm3_rotating_dimension_idx]    += t * arm3_frequency_coeff
-        arm3_current_coordinate                             = scalar_multiply_vector(arm3_radius, radian_coordinate_to_euclidean_coordinate(arm3_current_radian))
-
-        arm_tip_coordinate                                  = add_vector(arm1_current_coordinate, add_vector(arm2_current_coordinate, arm3_current_coordinate))
-
-        copied_value: list[float]                           = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
-        adjusted_value: list[float]                         = add_vector(copied_value, arm_tip_coordinate)
+        copied_value: list[float]       = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+        adjusted_value: list[float]     = add_vector(copied_value, arm_tip_coordinate)
 
         rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
 
@@ -647,21 +695,152 @@ def rotating_multiarm_optimization(approximator: TaylorApprox, instrument: Calla
     if deviation == None or t == None:
         return ([float(0)] * dimension_sz, float(0))  
 
-    arm1_current_radian                                 = copy.deepcopy(arm1_starting_radian)
-    arm1_current_radian[arm1_rotating_dimension_idx]    += t * arm1_frequency_coeff
-    arm1_current_coordinate                             = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+    arm_tip_coordinate: list[float] = [float(0)] * dimension_sz 
 
-    arm2_current_radian                                 = copy.deepcopy(arm2_starting_radian)
-    arm2_current_radian[arm2_rotating_dimension_idx]    += t * arm2_frequency_coeff
-    arm2_current_coordinate                             = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+    for i in range(arm_sz):
+        arm_current_radian      = add_vector(arm_starting_radian_arr[i], scalar_multiply_vector(arm_frequency_coeff_arr[i] * t, arm_rotating_vec_arr[i]))
+        arm_current_coordinate  = scalar_multiply_vector(arm_radius_arr[i], radian_coordinate_to_euclidean_coordinate(arm_current_radian))
+        arm_tip_coordinate      = add_vector(arm_tip_coordinate, arm_current_coordinate)
 
-    arm3_current_radian                                 = copy.deepcopy(arm3_starting_radian)
-    arm3_current_radian[arm3_rotating_dimension_idx]    += t * arm3_frequency_coeff
-    arm3_current_coordinate                             = scalar_multiply_vector(arm3_radius, radian_coordinate_to_euclidean_coordinate(arm3_current_radian))
-
-    directional_vec                                     = add_vector(arm1_current_coordinate, add_vector(arm2_current_coordinate, arm3_current_coordinate))
+    directional_vec = arm_tip_coordinate
 
     return directional_vec, deviation
+
+def rotating_twoarm_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)    
+    arm1_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
+    arm1_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm1_rotating_vec                           = get_random_vector(dimension_sz)
+    arm1_frequency_coeff                        = random.random()
+
+    arm2_radius                                 = arm1_radius #two arms with r1 == r2 should suffice - assume there exists a point within r - then the sphere whose origin is the point must intersect with the original sphere 
+    arm2_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm2_rotating_vec                           = get_random_vector(dimension_sz)
+    arm2_frequency_coeff                        = random.random()
+
+    t_exponential_base                          = random.random() * 10
+    t_discretization_sz                         = 10
+    newton_iteration_sz                         = 4
+
+    t                                           = None
+    deviation                                   = None
+
+    def newton_approx_func(t: float):
+        arm1_current_radian         = add_vector(arm1_starting_radian, scalar_multiply_vector(arm1_frequency_coeff * t, arm1_rotating_vec))
+        arm1_current_coordinate     = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+
+        arm2_current_radian         = add_vector(arm2_starting_radian, scalar_multiply_vector(arm2_frequency_coeff * t, arm2_rotating_vec))
+        arm2_current_coordinate     = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+
+        arm_tip_coordinate          = add_vector(arm1_current_coordinate, arm2_current_coordinate)
+
+        copied_value: list[float]       = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+        adjusted_value: list[float]     = add_vector(copied_value, arm_tip_coordinate)
+
+        rs: float = calc_deviation(taylor_values_to_operation(adjusted_value), instrument, x_range, discretization_sz)
+
+        return rs
+
+    for j in range(t_discretization_sz):
+        exp_offset  = radian_rescale((t_exponential_base ** j) - 1, t_exponential_base ** t_discretization_sz)
+        (new_t, y)  = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            deviation   = y
+            t           = new_t
+
+    if deviation == None or t == None:
+        return ([float(0)] * dimension_sz, float(0))  
+
+    arm1_current_radian         = add_vector(arm1_starting_radian, scalar_multiply_vector(arm1_frequency_coeff * t, arm1_rotating_vec))
+    arm1_current_coordinate     = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+
+    arm2_current_radian         = add_vector(arm2_starting_radian, scalar_multiply_vector(arm2_frequency_coeff * t, arm2_rotating_vec))
+    arm2_current_coordinate     = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+
+    arm_tip_coordinate          = add_vector(arm1_current_coordinate, arm2_current_coordinate)
+    directional_vec             = arm_tip_coordinate
+
+    return directional_vec, deviation
+
+def rotating_hand_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
+
+    dimension_sz                                = get_taylor_series_size(approximator.taylor_series)    
+    arm1_radius                                 = (random.random() * 2) ** random.randrange(0, 10)
+    arm1_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm1_rotating_vec                           = get_random_vector(dimension_sz)
+    arm1_frequency_coeff                        = random.random()
+
+    arm2_radius                                 = arm1_radius
+    arm2_starting_radian                        = rand_multidimensional_sphere_radian(dimension_sz)
+    arm2_rotating_vec                           = get_random_vector(dimension_sz)
+    arm2_frequency_coeff                        = random.random()
+
+    integral_sampling_sz: int                   = 8
+    random_coor: list[list[float]]              = [rand_multidimensional_sphere_radian(dimension_sz) for _ in range(integral_sampling_sz)]
+    oval_ishape: list[float]                    = get_random_vector(dimension_sz)  
+    oval_scale_multiplier: float                = (random.random() * 2) ** random.randrange(0, 10)
+    oval_shape: list[float]                     = scalar_multiply_vector(oval_scale_multiplier, oval_ishape)
+
+    t_exponential_base                          = random.random() * 10
+    t_discretization_sz                         = 10
+    newton_iteration_sz                         = 4
+
+    t                                           = None
+    deviation                                   = None
+
+    def newton_approx_func(t: float):
+        arm1_current_radian             = add_vector(arm1_starting_radian, scalar_multiply_vector(arm1_frequency_coeff * t, arm1_rotating_vec))
+        arm1_current_coordinate         = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+
+        arm2_current_radian             = add_vector(arm2_starting_radian, scalar_multiply_vector(arm2_frequency_coeff * t, arm2_rotating_vec))
+        arm2_current_coordinate         = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+
+        arm_tip_coordinate              = add_vector(arm1_current_coordinate, arm2_current_coordinate)
+        copied_value: list[float]       = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+        abs_armtip_coordinate           = add_vector(copied_value, arm_tip_coordinate)
+
+        deviation_list: list[float]     = []
+
+        for i in range(integral_sampling_sz):
+            relative_finger_coordinate: list[float] = pairwise_multiply_vector(oval_shape, radian_coordinate_to_euclidean_coordinate(random_coor[i]))
+            absolute_finger_coordinate: list[float] = add_vector(abs_armtip_coordinate, relative_finger_coordinate)
+            deviation_list                          += [calc_deviation(taylor_values_to_operation(absolute_finger_coordinate), instrument, x_range, discretization_sz)]
+
+        return avg_invsqr_list(deviation_list)
+
+    for j in range(t_discretization_sz):
+        exp_offset  = radian_rescale((t_exponential_base ** j) - 1, t_exponential_base ** t_discretization_sz)
+        (new_t, y)  = newton_approxx(newton_approx_func, newton_iteration_sz, exp_offset)
+
+        if deviation == None or y < deviation:
+            deviation   = y
+            t           = new_t
+
+    if deviation == None or t == None:
+        return ([float(0)] * dimension_sz, float(0))  
+
+    deviation_list: list                = []
+
+    arm1_current_radian                 = add_vector(arm1_starting_radian, scalar_multiply_vector(arm1_frequency_coeff * t, arm1_rotating_vec))
+    arm1_current_coordinate             = scalar_multiply_vector(arm1_radius, radian_coordinate_to_euclidean_coordinate(arm1_current_radian))
+
+    arm2_current_radian                 = add_vector(arm2_starting_radian, scalar_multiply_vector(arm2_frequency_coeff * t, arm2_rotating_vec))
+    arm2_current_coordinate             = scalar_multiply_vector(arm2_radius, radian_coordinate_to_euclidean_coordinate(arm2_current_radian))
+
+    arm_tip_coordinate                  = add_vector(arm1_current_coordinate, arm2_current_coordinate)
+    copied_value: list[float]           = copy.deepcopy(taylor_series_to_value_arr(approximator.taylor_series))
+    abs_armtip_coordinate: list[float]  = add_vector(copied_value, arm_tip_coordinate)
+
+    for i in range(integral_sampling_sz):
+        relative_finger_coordinate: list[float] = pairwise_multiply_vector(oval_shape, radian_coordinate_to_euclidean_coordinate(random_coor[i]))
+        absolute_finger_coordinate: list[float] = add_vector(abs_armtip_coordinate, relative_finger_coordinate)
+        deviation_list                          += [(calc_deviation(taylor_values_to_operation(absolute_finger_coordinate), instrument, x_range, discretization_sz), absolute_finger_coordinate)]
+
+    (min_deviation, abs_coordinate) = min(deviation_list)
+    
+    return sub_vector(abs_coordinate, copied_value), min_deviation
 
 def magnetic_random_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
@@ -1275,7 +1454,7 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
         inching_deviation: float        = None
 
         for idx in range(directional_optimization_sz):
-            random_value        = random.randrange(0, 14)
+            random_value        = random.randrange(0, 16)
             new_directional_vec = None
             deviation           = None 
 
@@ -1307,6 +1486,10 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 (new_directional_vec, deviation)    = oval_circumscribe_optimization(approximator, instrument, x_range, discretization_sz) 
             elif random_value == 13:
                 (new_directional_vec, deviation)    = rotating_multiarm_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 14:
+                (new_directional_vec, deviation)    = rotating_twoarm_optimization(approximator, instrument, x_range, discretization_sz)
+            elif random_value == 15:
+                (new_directional_vec, deviation)    = rotating_hand_optimization(approximator, instrument, x_range, discretization_sz)
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
@@ -1427,17 +1610,20 @@ def main():
     #there is distributed compute + cuda compute + network transportation + parameterized numerical stability + parameterized numerical precision + virtual machine data extraction (virtual machine extraction frequency) + data ingestion + etc.
     #if a company heads in this direction and implements this correctly (I dont care the hows and the practices) - they would be worth at least $100B - that's the least
 
-    getcontext().prec = 128
-    print(getcontext())
+    #what are we missing?
+    #we have EVERYTHING - yet approxing trig is too costly - how about we add trig into our taylor approximation? - this is actually debatable
 
-    func = lambda x: decimal_synth_wave(x, 128)
-    taylor_series: list[Decimal] = decimal_taylorize(func, 24)
+    # getcontext().prec = 128
+    # print(getcontext())
 
-    print(taylor_series)
+    # func = lambda x: decimal_synth_wave(x, 128)
+    # taylor_series: list[Decimal] = decimal_taylorize(func, 24)
 
-    # print(decimal_sin(Decimal(math.pi), 16))
+    # print(taylor_series)
 
-    print(decimal_taylor_compute(taylor_series, Decimal(15.99)))
+    # # print(decimal_sin(Decimal(math.pi), 16))
+
+    # print(decimal_taylor_compute(taylor_series, Decimal(15.99)))
 
     # print(math.exp(Decimal(4)))
 
@@ -1452,22 +1638,22 @@ def main():
     # print(Decimal(1 << 3000) + Decimal(0.1))
     # print(sys.float_info)
 
-    # approxer: TaylorApprox  = get_taylor_series(5, 1)
+    approxer: TaylorApprox  = get_taylor_series(5, 1)
 
-    # def sqrt_func(x: float):
+    def sqrt_func(x: float):
 
-    #     return (x-1) * (x-2) * (x-3) * (x-4)
+        return (x-1) * (x-2) * (x-3) * (x-4)
 
-    # # print(newton_approxx(sqrt_func, 8, 32, 5))
+    # print(newton_approxx(sqrt_func, 20, 32, 5))
 
-    # train(approxer, sqrt_func, 1 << 13, 512, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
-    # print(approxer.operation(2))
-    # print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
+    train(approxer, sqrt_func, 1 << 13, 256, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
+    print(approxer.operation(2))
+    print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
-    # for i in range(len(approxer.taylor_series.series)):
-    #     print(approxer.taylor_series.series[i].value)
+    for i in range(len(approxer.taylor_series.series)):
+        print(approxer.taylor_series.series[i].value)
 
-    # print()
-    # print(approxer.operation(1))
+    print()
+    print(approxer.operation(1))
 
 main()
