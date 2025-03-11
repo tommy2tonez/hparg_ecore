@@ -644,10 +644,6 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 #because it can approx every possible solution locally (as if they are possibly touchable by the arm) - assume we are looking for the radian coordinate <1.2pi, 1.0pi, 2.0pi, 2.2 pi>
 #our original vector is <1pi, 1pi, 1pi, 1pi>, our pairwise difference is <1.2, 1, 2, 2.2> - what we need is to multiply ALL of them - and we always find a solution that is identical to the one we are looking for
 
-#dont be funny brother - I've spent years dedicated to research - I came to this very conclusion of the Taylor approximation of everything + sin|cos
-#there are backstories to how I learnt and took exams that you didnt know
-#I agree
-
 def rotating_multiarm_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
     MAX_ARM_SZ: int                             = 8
@@ -1490,6 +1486,53 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
                 (new_directional_vec, deviation)    = rotating_twoarm_optimization(approximator, instrument, x_range, discretization_sz)
             elif random_value == 15:
                 (new_directional_vec, deviation)    = rotating_hand_optimization(approximator, instrument, x_range, discretization_sz)
+
+            #there are probably 64 optimization strategies
+            #we are a quarter through
+
+            #if we only have one variable
+
+            #I was thinking of (1): circumscribe optimization (range)
+            #                  (2): bullet optimization (range)
+            #                  (3): nuclear optimization (range) - fission optimization - have original capitals - decay if there is no improvement
+            #                  (4): military rocket optimization (range) - launch rocket - explode on site (think of bullet + circumscribe + newton_approxx)
+            #                  (5): sievering optimization (range) - detect anomaly by using softmax (or large pow or friends)
+            #                  (6): one-dimensionalization optimization (melee) - including two-arms - two-arms + sievering, three-arms, three-arms + sievering
+
+            #thing is we want to build our instrument correctly - such is continuous by the summation of very skewed synth-waves (we are assuming one gay is one gay - there is no glass, game, garden, galaxy, etc.) - and we pour water over the data to extract the taylor model
+            #if we could extract the virtual machine data at the cpu frequency - we are not missing a bit of information (yeah - it's that accurate if built correctly)
+
+            #let's see how we could categorize these:
+
+            #step: - exponential step
+            #           - exponential step with uniform random
+            #      - even step
+            #           - even step with exponential random
+            #           - even step with uniform random
+
+            #continuous extremes finding strategy:  - ballistic infinite (range)
+            #                                       - ballistic finite (range)
+            #                                       - ballistic fission (range)
+            #                                       - extremes siever by circumscribing (melee)
+            #                                       - one_dimensionalization (melee)  
+            #                                       - random combination of those strategies
+
+            #calibration strategies: - sin | cos calibration
+            #                        - gravity calibration
+            #                        - synth waves calibration
+            #                        - static + engineered model calibration (randomization of the coefficients)
+            #                        - random model calibration
+
+            #one dimensional approximation strategies:  - newton_naive_approx (1st order)
+            #                                           - newton_improved_approx (2nd order)
+            #                                           - newton_improved_approx + left_right step within numerical stability 
+            #                                           - multi-variable eqn solver 
+
+            #uncommit of bad commits strategies:        - scheduled uncommits (train falls down the track if the training stops)
+            #                                           - exact inverse operation of the commit (bullets cancelling out)
+            #                                           - combination of uncommits (Angelina Jolie's)
+
+            #we'll implement those tmr
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
