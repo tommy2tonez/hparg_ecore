@@ -4,6 +4,7 @@ import random
 import copy
 import sys
 from decimal import * 
+from typing import Protocol
 
 def taylor_projection(f: list[float], x: float) -> float:
 
@@ -639,6 +640,239 @@ def radian_coordinate_to_euclidean_coordinate(coor: list[float]) -> list[float]:
 def radian_rescale(org_value: float, max_range: float) -> float:
 
     return org_value
+
+#let's see how we could categorize these:
+
+#step: - exponential step
+#           - exponential step with uniform random
+#      - even step
+#           - even step with exponential random
+#           - even step with uniform random
+
+#continuous extremes finding strategy:  - ballistic infinite (range)
+#                                       - ballistic finite (range)
+#                                       - ballistic fission (range)
+#                                       - extremes siever
+#                                       - one_dimensionalization (melee)  
+#                                       - random combination of those strategies
+
+#calibration strategies: - sin | cos calibration
+#                        - gravity calibration
+#                        - synth waves calibration
+#                        - static + engineered model calibration (randomization of the coefficients)
+#                        - random model calibration
+
+#one dimensional approximation strategies:  - newton_naive_approx (1st order)
+#                                           - newton_improved_approx (2nd order)
+#                                           - newton_improved_approx + left_right step within numerical stability 
+#                                           - multi-variable eqn solver 
+
+#uncommit of bad commits strategies:        - scheduled uncommits (train falls down the track if the training stops)
+#                                           - exact inverse operation of the commit (bullets cancelling out)
+#                                           - combination of uncommits (Angelina Jolie's)
+
+#we'll implement those tmr
+#out goal today is actually to write this accurately - we'll implement this in C or C++ + massive parallel compute later
+#we dont really know what's the best combination - we just know the techniques and let randomization figure things out - we dont have time to TIME every instrument or method
+
+#as you could see - we split the responsibility very clearly 
+#we have a space where we want to do continuous finding - we assume this space is calibrated - such the linearity is reasonable (there is no up down sin cos random waves of deviation)
+
+#the methods we have are clear      - ballistic bullet, magnetic bullet, one-dimensionalization bullet (two rotating arms), bullet bag (shot-gun), circumscribing bullet bag
+#the steps we have are also clear:  - exponential to emphasize that the <lottery_ticket_number> we are looking for is local
+#                                   - linear to emphasize that the <lottery_ticket_number> we are looking for is not local
+
+#if the space is not calibrated, we want: - calibration of space by using engineered models
+#                                         - calibration of space by using random models
+#                                         - calibration of space by using gravity waves
+#                                         - calibration of space by using sin-cos waves (because this is common)
+
+#the one dimensional optimizer we have:   - naive_newton_one_slope
+#                                         - naive_newton_two_slope
+#                                         - left_right newton_two_slope within numerical stability
+#                                         - multi-variable eqn solver
+
+#alright i'll be back after lunch break, we'll make sure to get this working in the afternoon
+#we want to be able to approx every continuous function -> we move on to approx synth waves continuous function -> we move on to <synth>esize the real-world data and train our model on such
+#it's not gonna be easy fellas
+#God spent his life to have this universe
+#what's the lottery ticket number, Old Man? i'll figure it out
+
+class Coordinate:
+
+    def __init__(self, coor_value: list[float]):
+
+        self.coor_value = coor_value
+
+    def size(self) -> int:
+
+        return len(self.coor_value) 
+
+    def at(self, idx: int) -> float:
+
+        return self.coor_value[idx] 
+
+    def raw(self) -> list[float]:
+
+        return copy.deepcopy(self.coor_value) 
+
+class StepperInterface(Protocol):
+
+    def step(self) -> float:
+        ...
+
+    def has_next_step(self) -> bool:
+        ... 
+
+class ExponentialStepper:
+
+    def __init__(self, y0: float, exp_base: float, exp_step_sz: int): #uint
+
+        self.y0             = y0
+        self.exp_base       = exp_base
+        self.exp_step_sz    = exp_step_sz
+        self.cur_step_idx   = 0
+    
+    def step(self) -> float:
+
+        rs                  = self.y0 + math.pow(self.exp_base, self.cur_step_idx)
+        self.cur_step_idx   = min(self.exp_step_sz, self.cur_step_idx + 1)
+
+        return rs
+
+    def has_next_step(self) -> bool:
+
+        return self.cur_step_idx < self.exp_step_sz
+
+class ExponentialUniformRandomStepper(ExponentialStepper):
+
+    def __init__(self, y0_first: float, y0_last: float, 
+                 exp_base_range: float, exp_base_min: float, 
+                 exp_step_range: int, exp_step_min: int):
+
+        y0: float           = random.random() * (y0_last - y0_first) + y0_first
+        exp_base: float     = max(exp_base_min, random.random() * exp_base_range)
+        exp_step: int       = max(exp_step_min, random.randrange(0, exp_step_range))
+
+        super().__init__(y0, exp_base, exp_step)
+
+class LinearStepper: 
+
+    def __init__(self, y0: float, a: float, step_sz: int):
+
+        self.y0             = y0
+        self.a              = a
+        self.step_sz        = step_sz
+        self.cur_step_idx   = 0
+
+    def step(self) -> float:
+
+        rs                  = self.y0 + self.a * self.cur_step_idx
+        self.cur_step_idx   = min(self.step_sz, self.cur_step_idx + 1)
+
+        return rs
+
+    def has_next_step(self) -> bool:
+
+        return self.cur_step_idx < self.step_sz
+
+class LinearExponentialRandomStepper(LinearStepper):
+
+    pass
+
+class LinearUniformRandomStepper(LinearStepper):
+
+    pass
+
+class RandomizerInterface(Protocol):
+
+    def randomize(self) -> float:
+        ...
+
+class ExponentialRandomizerInterface:
+
+    def randomize(self) -> float:
+        pass
+
+class UniformRandomizerInterface:
+
+    def randomize(self) -> float:
+        pass
+
+class BallisticDeviceInterface(Protocol):
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        ...
+
+class BulletBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass
+
+class SphereMagneticBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass
+
+class SpheroidMagneticBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass 
+
+class TwoArmsMeleeBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass
+
+class StaticPointBagBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass
+
+class RotatingPointBagBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass 
+
+class CircumscribingStaticPointBagBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass 
+
+class CircumscribingRotatingPointBagBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass 
+
+class ChainedBallisticDevice:
+
+    def shoot(self, t: float) -> list[Coordinate]:
+        pass
+
+class CalibrationDeviceInterface(Protocol):
+
+    def calibrate(self, coor: Coordinate) -> Coordinate:
+        ...
+
+class RandomModelCalibrationDevice:
+
+    def calibrate(self, coor: Coordinate) -> Coordinate:
+        pass
+
+class SynthWaveCalibrationDevice:
+
+    def calibrate(self, coor: Coordinate) -> Coordinate:
+        pass
+
+class NoCalibrationDevice:
+
+    def calibrate(self, coor: Coordinate) -> Coordinate:
+        pass
+
+class BallisticOptimizerInterface(Protocol):
+
+    def optimize(self, f: Callable[[float], float]) -> float:
+        ...
 
 #why does this work?
 #because it can approx every possible solution locally (as if they are possibly touchable by the arm) - assume we are looking for the radian coordinate <1.2pi, 1.0pi, 2.0pi, 2.2 pi>
@@ -1502,37 +1736,6 @@ def train(approximator: TaylorApprox, instrument: Callable[[float], float], trai
             #thing is we want to build our instrument correctly - such is continuous by the summation of very skewed synth-waves (we are assuming one gay is one gay - there is no glass, game, garden, galaxy, etc.) - and we pour water over the data to extract the taylor model
             #if we could extract the virtual machine data at the cpu frequency - we are not missing a bit of information (yeah - it's that accurate if built correctly)
 
-            #let's see how we could categorize these:
-
-            #step: - exponential step
-            #           - exponential step with uniform random
-            #      - even step
-            #           - even step with exponential random
-            #           - even step with uniform random
-
-            #continuous extremes finding strategy:  - ballistic infinite (range)
-            #                                       - ballistic finite (range)
-            #                                       - ballistic fission (range)
-            #                                       - extremes siever by circumscribing (melee)
-            #                                       - one_dimensionalization (melee)  
-            #                                       - random combination of those strategies
-
-            #calibration strategies: - sin | cos calibration
-            #                        - gravity calibration
-            #                        - synth waves calibration
-            #                        - static + engineered model calibration (randomization of the coefficients)
-            #                        - random model calibration
-
-            #one dimensional approximation strategies:  - newton_naive_approx (1st order)
-            #                                           - newton_improved_approx (2nd order)
-            #                                           - newton_improved_approx + left_right step within numerical stability 
-            #                                           - multi-variable eqn solver 
-
-            #uncommit of bad commits strategies:        - scheduled uncommits (train falls down the track if the training stops)
-            #                                           - exact inverse operation of the commit (bullets cancelling out)
-            #                                           - combination of uncommits (Angelina Jolie's)
-
-            #we'll implement those tmr
 
             if new_directional_vec != None and deviation != None:
                 if (inching_deviation == None) or (deviation < inching_deviation):
@@ -1689,7 +1892,7 @@ def main():
 
     # print(newton_approxx(sqrt_func, 20, 32, 5))
 
-    train(approxer, sqrt_func, 1 << 13, 256, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
+    train(approxer, sqrt_func, 1 << 13, 16, 8, 64) #we'll move on if this ever reach < 0.01 (alright - it finally reaches 0.008 - this proves that this method is stable - we are happy)
     print(approxer.operation(2))
     print(calc_deviation(approxer.operation, sqrt_func, 2, 32))
 
