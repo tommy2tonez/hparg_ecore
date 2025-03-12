@@ -5,15 +5,14 @@ import copy
 import sys
 from decimal import * 
 from typing import Protocol
+import functools
 
 def taylor_projection(f: list[float], x: float) -> float:
 
-    try:
-        return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
-    except:
-        return sys.float_info.max
-        print(f)
-        raise Exception()
+    if len(f) == 0:
+        return float(0)
+
+    return sum([1 / math.factorial(i) * f[i] * (x ** i) for i in range(len(f))]) 
 
 class TaylorOperation(object):
 
@@ -262,26 +261,6 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
 
     # return candidate_x, min_y 
 
-def newton2_approx(operation: Callable[[float, float], float], iteration_sz: int, initial_x1: float, initial_x2: float, a: float = 0.001) -> tuple[float, float, float]:
-
-    cur_x1          = initial_x1
-    cur_x2          = initial_x2
-    cur_deviation   = operation(cur_x1, cur_x2) 
-
-    for _ in range(iteration_sz):
-        if flip_a_coin():
-            func                    = lambda x: operation(x, cur_x2)
-            (next_x1, deviation)    = newton_approxx(func, iteration_sz, cur_x1)
-            cur_x1                  = next_x1
-            cur_deviation           = deviation
-        else:
-            func                    = lambda x: operation(cur_x1, x)
-            (next_x2, deviation)    = newton_approxx(func, iteration_sz, cur_x2)
-            cur_x2                  = next_x2
-            cur_deviation           = deviation
-
-    return cur_x1, cur_x2, cur_deviation
-
 def discretize(first: float, last: float, discretization_sz: int) -> list[float]:
 
     width: float    = (last - first) / discretization_sz
@@ -295,19 +274,12 @@ def discretize(first: float, last: float, discretization_sz: int) -> list[float]
 
 def calc_deviation(lhs: Callable[[float], float], rhs: Callable[[float], float], x_range: int, discretization_sz: int) -> float:
 
-    #what is the correct function?
-    #i'm thinking
-    #if there is no domain - range importance of value - exponential is the way - this is not a correct statement - because mean sqr emphasizes the importance of higher differential orders
+    discrete_value_arr: list[float] = discretize(0, x_range, discretization_sz)
+    sqr_sum: float                  = sum([(lhs(x) - rhs(x)) ** 2 for x in discrete_value_arr]) #i was wrong guys - x^2 is the way - we are not very sure - we really dont know - there is no proof yet of why this works so profoundly + magnificiently
+    denom: float                    = float(len(discrete_value_arr))
+    normalized: float               = math.sqrt(sqr_sum / denom)
 
-    try:
-        discrete_value_arr: list[float] = discretize(0, x_range, discretization_sz)
-        sqr_sum: float                  = sum([(lhs(x) - rhs(x)) ** 2 for x in discrete_value_arr]) #i was wrong guys - x^2 is the way - we are not very sure - we really dont know - there is no proof yet of why this works so profoundly + magnificiently
-        denom: float                    = float(len(discrete_value_arr))
-        normalized: float               = math.sqrt(sqr_sum / denom)
-
-        return normalized
-    except:
-        return sys.float_info.max
+    return normalized
 
 def taylor_series_to_value_arr(series: TaylorSeries) -> list[float]:
 
@@ -325,6 +297,13 @@ def get_taylor_series_size(series: TaylorSeries) -> int:
 def add_vector(lhs: list[float], rhs: list[float]) -> list[float]:
     
     return [e + e1 for (e, e1) in zip(lhs, rhs)]
+
+def split_vector(vec: list[float], lhs_sz: int) -> tuple[list[float], list[float]]:
+    
+    lhs: list[float]    = vec[:lhs_sz]
+    rhs: list[float]    = vec[lhs_sz:]
+    
+    return (lhs, rhs)
 
 def sub_vector(lhs: list[float], rhs: list[float]) -> list[float]:
 
@@ -698,11 +677,28 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 #God spent his life to have this universe
 #what's the lottery ticket number, Old Man? i'll figure it out
 
+#what? I have never missed a stock price prediction with this simple Taylor Approximation (every linear function -> TaylorApprox) + sorting techniques?
+#remember that stock prediction only works for one stock - in the entire world of stocks
+#well - the tech has far advanced from just simply getting the chart data - we read virtual machine data at CPU clock rate to extract finance data now
+
+def exponential_randomize_frange(frange: float, exp_base: float) -> float:
+
+    exp_first: float    = float(0) #0 for now
+    exp_last: float     = math.log(frange, exp_base)
+    exp_diff: float     = exp_last - exp_first
+    exp_rand: float     = random.random() * exp_diff
+
+    return exp_rand + exp_first
+
+def uniform_randomize_frange(frange: float) -> float:
+
+    return frange * random.random()
+
 class Coordinate:
 
     def __init__(self, coor_value: list[float]):
 
-        self.coor_value = coor_value
+        self.coor_value = copy.deepcopy(coor_value)
 
     def size(self) -> int:
 
@@ -724,6 +720,9 @@ class StepperInterface(Protocol):
     def has_next_step(self) -> bool:
         ... 
 
+    def reset(self):
+        ...
+
 class ExponentialStepper:
 
     def __init__(self, y0: float, exp_base: float, exp_step_sz: int): #uint
@@ -744,17 +743,9 @@ class ExponentialStepper:
 
         return self.cur_step_idx < self.exp_step_sz
 
-class ExponentialUniformRandomStepper(ExponentialStepper):
+    def reset(self):
 
-    def __init__(self, y0_first: float, y0_last: float, 
-                 exp_base_range: float, exp_base_min: float, 
-                 exp_step_range: int, exp_step_min: int):
-
-        y0: float           = random.random() * (y0_last - y0_first) + y0_first
-        exp_base: float     = max(exp_base_min, random.random() * exp_base_range)
-        exp_step: int       = max(exp_step_min, random.randrange(0, exp_step_range))
-
-        super().__init__(y0, exp_base, exp_step)
+        self.cur_step_idx = 0
 
 class LinearStepper: 
 
@@ -776,13 +767,9 @@ class LinearStepper:
 
         return self.cur_step_idx < self.step_sz
 
-class LinearExponentialRandomStepper(LinearStepper):
+    def reset(self):
 
-    pass
-
-class LinearUniformRandomStepper(LinearStepper):
-
-    pass
+        self.cur_step_idx = 0 
 
 class RandomizerInterface(Protocol):
 
@@ -791,13 +778,26 @@ class RandomizerInterface(Protocol):
 
 class ExponentialRandomizerInterface:
 
+    def __init__(self, y0: float, frange: float, exp_base: float):
+        
+        self.y0         = y0
+        self.frange     = frange
+        self.exp_base   = exp_base
+
     def randomize(self) -> float:
-        pass
+        
+        return exponential_randomize_frange(self.frange, self.exp_base) + self.y0
 
 class UniformRandomizerInterface:
 
+    def __init__(self, y0: float, frange: float):
+
+        self.y0         = y0
+        self.frange     = frange
+
     def randomize(self) -> float:
-        pass
+        
+        return uniform_randomize_frange(self.frange) + self.y0
 
 class BallisticDeviceInterface(Protocol):
 
@@ -806,77 +806,333 @@ class BallisticDeviceInterface(Protocol):
 
 class BulletBallisticDevice:
 
+    def __init__(self, coor: Coordinate):
+
+        self.coor = Coordinate(coor.raw()) 
+
     def shoot(self, t: float) -> list[Coordinate]:
-        pass
+
+        raw_coor: list[float]       = self.coor.raw()
+        scaled_coor: list[float]    = scalar_multiply_vector(t, raw_coor)
+
+        return [Coordinate(scaled_coor)]        
 
 class SphereMagneticBallisticDevice:
 
+    def __init__(self, s0_rad_coor: Coordinate, direction_vec: Coordinate, r: float):
+
+        self.s0_rad_coor    = Coordinate(s0_rad_coor.raw())
+        self.direction_vec  = Coordinate(direction_vec.raw())
+        self.r              = r
+
     def shoot(self, t: float) -> list[Coordinate]:
-        pass
+
+        raw_s0_rad_coor: list[float]            = self.s0_rad_coor.raw()
+        raw_dir_rad_coor: list[float]           = self.direction_vec.raw()
+
+        bullet_rad_coor: list[float]            = add_vector(raw_s0_rad_coor, scalar_multiply_vector(t, raw_dir_rad_coor))
+        bullet_euclid_coor: list[float]         = radian_coordinate_to_euclidean_coordinate(bullet_rad_coor)
+        scaled_bullet_euclid_coor: list[float]  = scalar_multiply_vector(self.r, bullet_euclid_coor)
+
+        return [Coordinate(scaled_bullet_euclid_coor)]
+
+class RandomSphereMagneticBallisticDevice(SphereMagneticBallisticDevice):
+
+    def __init__(self, dimension_sz: int, r: float):
+
+        s0_rad_coor: list[float]        = rand_multidimensional_sphere_radian(dimension_sz)
+        directional_vec: list[float]    = get_random_taylor(dimension_sz)
+
+        super().__init__(s0_rad_coor, directional_vec, r)
 
 class SpheroidMagneticBallisticDevice:
 
-    def shoot(self, t: float) -> list[Coordinate]:
-        pass 
+    def __init__(self, s0_rad_coor: Coordinate, direction_vec: Coordinate, oval_shape: Coordinate):
 
-class TwoArmsMeleeBallisticDevice:
+        self.s0_rad_coor    = Coordinate(s0_rad_coor.raw())
+        self.direction_vec  = Coordinate(direction_vec.raw())
+        self.oval_shape     = Coordinate(oval_shape.raw()) 
 
     def shoot(self, t: float) -> list[Coordinate]:
-        pass
+        
+        raw_s0_rad_coor: list[float]            = self.s0_rad_coor.raw()
+        raw_direction_vec: list[float]          = self.direction_vec.raw()
+
+        bullet_rad_coor: list[float]            = add_vector(raw_s0_rad_coor, scalar_multiply_vector(t, raw_direction_vec))
+        bullet_euclid_coor: list[float]         = radian_coordinate_to_euclidean_coordinate(bullet_rad_coor)
+        scaled_bullet_euclid_coor: list[float]  = pairwise_multiply_vector(self.oval_shape.raw(), bullet_euclid_coor)
+
+        return [Coordinate(scaled_bullet_euclid_coor)]
+
+class TwoArmsBallisticDevice:
+
+    def __init__(self, dimension_sz: int, arm1_length: float, arm2_length: float):
+
+        self.rotating_arm1: BallisticDeviceInterface  = RandomSphereMagneticBallisticDevice(dimension_sz, arm1_length)
+        self.rotating_arm2: BallisticDeviceInterface  = RandomSphereMagneticBallisticDevice(dimension_sz, arm2_length)
+
+    def shoot(self, t: float) -> list[Coordinate]:
+
+        arm1_coor: Coordinate = self.rotating_arm1.shoot(t)[0]
+        arm2_coor: Coordinate = self.rotating_arm2.shoot(t)[0]
+
+        return [Coordinate(add_vector(arm1_coor.raw(), arm2_coor.raw()))]
 
 class StaticPointBagBallisticDevice:
 
-    def shoot(self, t: float) -> list[Coordinate]:
-        pass
+    def __init__(self, point_bag: list[Coordinate]):
+        
+        self.point_bag = [Coordinate(point.raw()) for point in point_bag]
 
-class RotatingPointBagBallisticDevice:
-
     def shoot(self, t: float) -> list[Coordinate]:
-        pass 
+        
+        return [Coordinate(e.raw()) for e in self.point_bag]
+
+class UniformRandomStaticPointBagBallisticDevice(StaticPointBagBallisticDevice):
+
+    def __init__(self, dimension_sz: int, bag_sz: int, y_range: float):
+
+        point_bag: list[Coordinate] = [scalar_multiply_vector(y_range, get_random_vector(dimension_sz)) for _ in range(bag_sz)] 
+        super().__init__(point_bag)
+
+class UniformRandomStaticSpherePointBagBallisticDevice(StaticPointBagBallisticDevice):
+
+    def __init__(self, dimension_sz: int, bag_sz: int, r: float):
+
+        point_bag: list[Coordinate] = [scalar_multiply_vector(r, radian_coordinate_to_euclidean_coordinate(rand_multidimensional_sphere_radian(dimension_sz))) for _ in range(bag_sz)] 
+        super().__init__(point_bag)
 
 class CircumscribingStaticPointBagBallisticDevice:
 
-    def shoot(self, t: float) -> list[Coordinate]:
-        pass 
+    def __init__(self, dimension_sz: int, bag_sz: int, r: float):
 
-class CircumscribingRotatingPointBagBallisticDevice:
+        self.ballistic = UniformRandomStaticSpherePointBagBallisticDevice(dimension_sz, bag_sz, r) 
 
     def shoot(self, t: float) -> list[Coordinate]:
-        pass 
+
+        point_bag: list[Coordinate] = self.ballistic(t)
+        return [Coordinate(scalar_multiply_vector(t, point.raw())) for point in point_bag] 
 
 class ChainedBallisticDevice:
 
+    def __init__(self, ballistic_device_arr: list[BallisticDeviceInterface]):
+
+        self.ballistic_device_arr = ballistic_device_arr
+
     def shoot(self, t: float) -> list[Coordinate]:
-        pass
+
+        rs: list[list[Coordinate]] = []
+
+        for i in range(len(self.ballistic_device_arr)):
+            rs += [self.ballistic_device_arr[i].shoot(t)]
+
+        return self._combinatorial_reduce_add(rs)
+
+    def _combinatorial_reduce_add(inp: list[list[Coordinate]]) -> list[Coordinate]:
+
+        if len(inp) == 0:
+            return []
+
+        def _internal_reduce(lhs: list[Coordinate], rhs: list[Coordinate]) -> list[Coordinate]:
+
+            rs: list[Coordinate] = []
+
+            for e_lhs in lhs:
+                for e_rhs in rhs:
+                    e_rs    = add_vector(e_lhs.raw(), e_rhs.raw()) 
+                    rs      += [Coordinate(e_rs)]
+
+            return rs
+
+        return functools.reduce(_internal_reduce, inp[1:], inp[0])
+
+def get_random_melee_ballistic_device() -> BallisticDeviceInterface:
+    pass
+
+def get_random_range_ballistic_device() -> BallisticDeviceInterface:
+    pass
+
+def get_random_ballistic_device() -> BallisticDeviceInterface:
+    pass 
 
 class CalibrationDeviceInterface(Protocol):
 
     def calibrate(self, coor: Coordinate) -> Coordinate:
         ...
 
+#af(g(x))
 class RandomModelCalibrationDevice:
 
+    def __init__(self, dimension_sz: int, random_func_sz: int, a_dimension_sz: int):
+
+        self.taylor_model   = get_random_taylor(dimension_sz, random_func_sz)
+        self.a_dimension_sz = a_dimension_sz
+
     def calibrate(self, coor: Coordinate) -> Coordinate:
-        pass
+
+        a, b = split_vector(coor.raw(), self.a_dimension_sz)
+        return taylor_convolution(a, taylor_fog(self.taylor_model, b))
 
 class SynthWaveCalibrationDevice:
 
+    def __init__(self, dimension_sz: int, wave_amplitude: float, wave_frequency: float, pow_sz: int, a_dimension_sz: int):
+
+        self.taylor_model   = get_powsin_gravity_taylor(dimension_sz, wave_amplitude, wave_frequency, pow_sz)
+        self.a_dimension_sz = a_dimension_sz
+
     def calibrate(self, coor: Coordinate) -> Coordinate:
-        pass
+
+        a, b = split_vector(coor.raw(), self.a_dimension_sz)
+        return taylor_convolution(a, taylor_fog(self.taylor_model, b))
+
+class MaxwellCalibrationDevice:
+
+    def __init__(self, dimension_sz: int, a_dimension_sz: int):
+        
+        self.taylor_model   = get_sin_taylor(dimension_sz)
+        self.a_dimension_sz = a_dimension_sz
+    
+    def calibrate(self, coor: Coordinate) -> Coordinate:
+
+        a, b = split_vector(coor.raw(), self.a_dimension_sz)
+        return taylor_convolution(a, taylor_fog(self.taylor_model, b))
 
 class NoCalibrationDevice:
 
     def calibrate(self, coor: Coordinate) -> Coordinate:
-        pass
 
-class BallisticOptimizerInterface(Protocol):
+        return coor
 
-    def optimize(self, f: Callable[[float], float]) -> float:
+class DeviationCalculatorInterface(Protocol):
+
+    def deviation(self, f: Callable[[float], float], instrument: Callable[[float], float]) -> float:
+        ... 
+
+class MeanSquareDeviationCalculator:
+
+    def __init__(self, point_arr: list[float]):
+
+        self.point_arr = copy.deepcopy(point_arr)
+
+    def deviation(self, f: Callable[[float], float], instrument: Callable[[float], float]) -> float:
+
+        if len(self.point_arr) == 0:
+            return float(0)
+
+        sqr_sum: float      = sum([(f(x) - instrument(x)) ** 2 for x in self.point_arr])
+        denom: float        = float(len(self.point_arr))
+        normalized: float   = math.sqrt(sqr_sum / denom)
+
+        return normalized
+
+class DiscreteMeanSquareDeviationCalculator(MeanSquareDeviationCalculator):
+
+    def __init__(self, first: float, last: float, discretization_sz: int):
+
+        super().__init__(discretize(first, last, discretization_sz))
+
+class NewtonOptimizerInterface(Protocol):
+
+    def optimize(self, f: Callable[[float], float], x0: float) -> float:
         ...
 
-#why does this work?
-#because it can approx every possible solution locally (as if they are possibly touchable by the arm) - assume we are looking for the radian coordinate <1.2pi, 1.0pi, 2.0pi, 2.2 pi>
-#our original vector is <1pi, 1pi, 1pi, 1pi>, our pairwise difference is <1.2, 1, 2, 2.2> - what we need is to multiply ALL of them - and we always find a solution that is identical to the one we are looking for
+class TwoOrderStepNewtonOptimizer:
+
+    def __init__(self, stepper: StepperInterface, iteration_sz: int = 4, a: float = 0.001):
+
+        self.stepper        = stepper
+        self.iteration_sz   = iteration_sz
+        self.a              = a
+
+    def optimize(self, f: Callable[[float], float], x0: float) -> float:
+
+        x_cursor: float                         = x0
+        x_cand_list: list[tuple[float, float]]  = [(f(x0), x0)]
+
+        while self.stepper.has_next_step():
+            x_cursor    = x_cursor + self.stepper.step()            
+            (x_cand, y) = stable_approx(f, self.iteration_sz, x_cursor, self.a)
+            x_cand_list += [(y, x_cand)]
+
+        self.stepper.reset()
+
+        return min(x_cand_list)[1]  
+
+class URLinearTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
+
+    def __init__(self, y0_first: float = float(0), y0_last: float = float(0), 
+                 a_abs_range: float = float(10), a_abs_range_min: float = 0.001,
+                 step_sz_range: int = 32, step_sz_min: int = 1,
+                 iteration_sz: int = 4, derivative_offset: float = 0.001):
+
+        y0: float       = uniform_randomize_frange(y0_last - y0_first) + y0_first
+        signness: float = float(-1) if flip_a_coin() else float(1)
+        a: float        = max(uniform_randomize_frange(a_abs_range), a_abs_range_min) * signness 
+        step_sz: int    = max(step_sz_min, random.randrange(0, step_sz_range))
+
+        super().__init__(LinearStepper(y0, a, step_sz), iteration_sz, derivative_offset)
+
+class ExponentialTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
+
+    def __init__(self, y0_first: float = float(0), y0_last: float = float(0),
+                 exp_base_range: float = float(10), exp_base_range_min: float = 1,
+                 exp_step_range: int = 10, exp_step_min: int = 1,
+                 iteration_sz: int = 4, derivative_offset: float = 0.001):
+
+        y0: float       = uniform_randomize_frange(y0_last - y0_first) + y0_first
+        exp_base: float = max(uniform_randomize_frange(exp_base_range), exp_base_range_min)
+        exp_step: int   = max(random.randrange(0, exp_step_range), exp_step_min)
+
+        super().__init__(ExponentialStepper(y0, exp_base, exp_step), iteration_sz, derivative_offset)
+
+class OneDimensionalFunctionInterface(Protocol):
+
+    def __call__(self, x: float) -> float:
+        ...
+
+class SingleBallisticDeviationEncapsulator:
+
+    def __init__(self, deviation_calculator: DeviationCalculatorInterface, f: Callable[[float], Callable[[float], float]], instrument: Callable[[float], float]):
+
+        self.deviation_calculator   = deviation_calculator
+        self.f_producer             = f
+        self.instrument             = instrument
+
+    def __call__(self, x: float) -> float:
+
+        f = self.f_producer(x)
+        return self.deviation_calculator.deviation(f, self.instrument)
+
+class BatchBallisticDeviationInvSqrNegotiator:
+
+    def __init__(self, deviation_calculator: DeviationCalculatorInterface, f: Callable[[float], list[Callable[[float], float]]], instrument: Callable[[float], float]):
+
+        self.deviation_calculator   = deviation_calculator
+        self.f                      = f
+        self.instrument             = instrument
+
+    def __call__(self, x: float) -> float:
+
+        callable_list: list[Callable[[float], float]] = self.f(x)
+        deviation_list: list[float] = []
+
+        for callable in callable_list:
+            deviation_list += [self.deviation_calculator.deviation(callable, self.instrument)]
+
+        return avg_invsqr_list(deviation_list)
+
+def random_optimize(taylor_model: list[float], seed: Coordinate, instrument: Callable[[float], float], x_range: int, discretization_sz: int) -> list[float]:
+
+    pass
+
+    # ballistic_device: BallisticDeviceInterface                          = get_random_ballistic_device() #we dont know the params
+    # deviation_calculator: DeviationCalculatorInterface                  = DiscreteMeanSquareDeviationCalculator(0, x_range, discretization_sz)
+    # calibrator: CalibrationDeviceInterface                              = get_random_calibration_device()
+
+    # encapsulated_deviation_calculator: OneDimensionalFunctionInterface  = DeviationEncapsulator(deviation_calculator, BallisticTaylorizer(), instrument)
+    # optimizer: NewtonOptimizerInterface                                 = get_random_newton_optimizer()
+
+#
 
 def rotating_multiarm_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
@@ -1166,20 +1422,6 @@ def magnetic_oval_random_optimization(approximator: TaylorApprox, instrument: Ca
         directional_vec                                 = taylor_directional_arr
 
     return (directional_vec, deviation)
-
-#alright - we want to implement sphere circumscribing
-#assume that the variable is radius (explosion_sz) - we take integral of f(x) . dx - and take the derivative - because we cant really do integral - we'll do avg + random projection for the moment being
-#alright these are estimation methods - this includes: magnetic + magnetic kameyoko to calculate density + photon + magnetic oval + random step + exponential focus
-#                                     - these aren't calibrated - this means those approximators can work on every estimation space - whether you are estimating Taylor series s0 v a or estimating the coefficients' space a, a1, a2 as in a * sin(x) + a1* cos(x) + a2 * sin*cos(x)
-
-#alright - this is a very important operation - we need to increase the numerical accuracy (bignum) + large size sampling + high derivative order (because this will 99% determine our success early on in the optimization process)
-#we dont have the tech for this yet - let's jog our memory about differentiable - it means the ability to draw graphs without lifting the pen - this includes f(x), f'(x), f''(x), f'''(x), f''''(x), etc. - differentiable is only required for f(x) because we can induce that f'(x) is also differentiable 
-#it's complicated Mom - if we increase numerical stability, we'll compromise speed - our instrument must be differentiable by using very skewed synth waves - yet the floating accuracy we are talking is probably 1 << 32 decimal accurate 
-#                     - gmp has the tech for that yet we want to port the computation to cuda (we'll write the code) - its complicated
-
-#I admire God, he wrote the universe and computes 1 << 256 flops / second - that's incredible 
-#no offends, yet I do think it's hard to write the current universe - I'll try for 10 years 
-#that was funny
 
 def oval_circumscribe_optimization(approximator: TaylorApprox, instrument: Callable[[float], float], x_range: int, discretization_sz: int):
 
