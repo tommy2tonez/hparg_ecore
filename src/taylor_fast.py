@@ -686,6 +686,10 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 #in a week, we'll be releasing the 100% accurate stock prediction model, I might be bluffing, let's see 
 #i miss my intern, let's see after the proof of concept if we could reconcile
 
+#it was in the 1993 that people know of taylor series multidimensional projections (1028 bits row - 16 bits cell)
+#yet the tech for centrality was limited + there was no compute back then
+#we finally had all of those now - what we are missing is an algorithm to run the GMP on cuda 
+
 def exponential_randomize_frange(frange: float, exp_base: float) -> float:
 
     exp_first: float    = float(0) #0 for now
@@ -908,9 +912,9 @@ class RandomThreeArmBallisticDevice:
                  max_arm2_length: float, max_arm2_frequency_coeff: float, 
                  max_arm3_length: float, max_arm3_frequency_coeff: float):
 
-        self.rotating_arm1: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm1_length, max_arm1_frequency_coeff)
-        self.rotating_arm2: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm2_length, max_arm2_frequency_coeff)
-        self.rotating_arm3: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm3_length, max_arm3_frequency_coeff)
+        self.rotating_arm1: BallisticDeviceInterface = RandomSphroidMagneticBallisticDevice(dimension_sz, max_arm1_length, max_arm1_frequency_coeff)
+        self.rotating_arm2: BallisticDeviceInterface = RandomSphroidMagneticBallisticDevice(dimension_sz, max_arm2_length, max_arm2_frequency_coeff)
+        self.rotating_arm3: BallisticDeviceInterface = RandomSphroidMagneticBallisticDevice(dimension_sz, max_arm3_length, max_arm3_frequency_coeff)
 
     def shoot(self, t: float) -> list[Coordinate]:
 
@@ -1236,7 +1240,7 @@ class URLinearTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
 
         super().__init__(LinearStepper(y0, a, step_sz), iteration_sz, derivative_offset)
 
-class RandomExponentialTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
+class ERTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
 
     def __init__(self, y0_first: float = float(0), y0_last: float = float(0),
                  exp_base_range: float = float(10), exp_base_range_min: float = 1,
@@ -1251,11 +1255,12 @@ class RandomExponentialTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
 
 def get_random_linear_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
 
-    return URLinearTwoOrderNewtonOptimizer(0, 0, (random.random() * 10) ** random.randrange(0, 10))
+    a_abs_range: float = (random.random() * 10) ** random.randrange(0, 10)
+    return URLinearTwoOrderNewtonOptimizer(0, 0, a_abs_range)
 
 def get_random_exponential_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
 
-    return RandomExponentialTwoOrderNewtonOptimizer() 
+    return ERTwoOrderNewtonOptimizer() 
 
 def get_random_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
 
