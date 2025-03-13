@@ -680,6 +680,8 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 #what? I have never missed a stock price prediction with this simple Taylor Approximation (every linear function -> TaylorApprox) + sorting techniques?
 #remember that stock prediction only works for one stock - in the entire world of stocks
 #well - the tech has far advanced from just simply getting the chart data - we read virtual machine data at CPU clock rate to extract finance data now
+#in a week - we'll show you the full proof of concept of multi-dimensional taylor-projections as a replacement for linear + our new way of training and how that would forever change the stock market (im being very serious - 10000 tickers are linked together and represent every possible catalyst in the world)
+#we never miss fellas - remember that you only need to be correct once for every x seconds - you dont need to be correct ALL THE TIME - it's impossible (random + chaotic)  
 
 def exponential_randomize_frange(frange: float, exp_base: float) -> float:
 
@@ -841,7 +843,7 @@ class RandomSphereMagneticBallisticDevice(SphereMagneticBallisticDevice):
     def __init__(self, dimension_sz: int, r: float):
 
         s0_rad_coor: list[float]        = rand_multidimensional_sphere_radian(dimension_sz)
-        directional_vec: list[float]    = get_random_taylor(dimension_sz)
+        directional_vec: list[float]    = get_random_vector(dimension_sz)
 
         super().__init__(s0_rad_coor, directional_vec, r)
 
@@ -854,7 +856,7 @@ class SpheroidMagneticBallisticDevice:
         self.oval_shape     = Coordinate(oval_shape.raw()) 
 
     def shoot(self, t: float) -> list[Coordinate]:
-        
+
         raw_s0_rad_coor: list[float]            = self.s0_rad_coor.raw()
         raw_direction_vec: list[float]          = self.direction_vec.raw()
 
@@ -863,6 +865,16 @@ class SpheroidMagneticBallisticDevice:
         scaled_bullet_euclid_coor: list[float]  = pairwise_multiply_vector(self.oval_shape.raw(), bullet_euclid_coor)
 
         return [Coordinate(scaled_bullet_euclid_coor)]
+
+class RandomSphroidMagneticBallisticDevice(SpheroidMagneticBallisticDevice):
+
+    def __init__(self, dimension_sz: int, max_r: float):
+        
+        s0_rad_coor: list[float]        = rand_multidimensional_sphere_radian(dimension_sz)
+        directional_vec: list[float]    = get_random_vector(dimension_sz)
+        oval_shape: list[float]         = scalar_multiply_vector(uniform_randomize_frange(max_r), get_random_vector(dimension_sz)) 
+
+        super().__init__(s0_rad_coor, directional_vec, oval_shape) 
 
 class TwoArmsBallisticDevice:
 
