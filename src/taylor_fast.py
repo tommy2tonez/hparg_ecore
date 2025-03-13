@@ -682,6 +682,9 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 #well - the tech has far advanced from just simply getting the chart data - we read virtual machine data at CPU clock rate to extract finance data now
 #in a week - we'll show you the full proof of concept and how that would forever change the stock market (im being very serious - 10000 tickers are linked together and represent every possible catalyst in the world)
 #we never miss fellas - remember that you only need to be correct once for every x seconds - you dont need to be correct ALL THE TIME - it's impossible (random + chaotic)  
+#trust the process fellas, dont trust the threads + memory orderings (experts only)
+#in a week, we'll be releasing the 100% accurate stock prediction model, I might be bluffing, let's see 
+#i miss my intern, let's see after the proof of concept if we could reconcile
 
 def exponential_randomize_frange(frange: float, exp_base: float) -> float:
 
@@ -821,18 +824,19 @@ class BulletBallisticDevice:
 
 class SphereMagneticBallisticDevice:
 
-    def __init__(self, s0_rad_coor: Coordinate, direction_vec: Coordinate, r: float):
+    def __init__(self, s0_rad_coor: Coordinate, direction_vec: Coordinate, frequency_coeff: float, r: float):
 
-        self.s0_rad_coor    = Coordinate(s0_rad_coor.raw())
-        self.direction_vec  = Coordinate(direction_vec.raw())
-        self.r              = r
+        self.s0_rad_coor        = Coordinate(s0_rad_coor.raw())
+        self.direction_vec      = Coordinate(direction_vec.raw())
+        self.frequency_coeff    = frequency_coeff
+        self.r                  = r
 
     def shoot(self, t: float) -> list[Coordinate]:
 
         raw_s0_rad_coor: list[float]            = self.s0_rad_coor.raw()
         raw_dir_rad_coor: list[float]           = self.direction_vec.raw()
 
-        bullet_rad_coor: list[float]            = add_vector(raw_s0_rad_coor, scalar_multiply_vector(t, raw_dir_rad_coor))
+        bullet_rad_coor: list[float]            = add_vector(raw_s0_rad_coor, scalar_multiply_vector(self.frequency_coeff * t, raw_dir_rad_coor))
         bullet_euclid_coor: list[float]         = radian_coordinate_to_euclidean_coordinate(bullet_rad_coor)
         scaled_bullet_euclid_coor: list[float]  = scalar_multiply_vector(self.r, bullet_euclid_coor)
 
@@ -840,27 +844,30 @@ class SphereMagneticBallisticDevice:
 
 class RandomSphereMagneticBallisticDevice(SphereMagneticBallisticDevice):
 
-    def __init__(self, dimension_sz: int, r: float):
+    def __init__(self, dimension_sz: int, max_r: float, max_frequency_coeff: float):
 
         s0_rad_coor: list[float]        = rand_multidimensional_sphere_radian(dimension_sz)
         directional_vec: list[float]    = get_random_vector(dimension_sz)
+        r: float                        = uniform_randomize_frange(max_r)
+        frequency_coeff: float          = uniform_randomize_frange(max_frequency_coeff)
 
-        super().__init__(Coordinate(s0_rad_coor), Coordinate(directional_vec), r)
+        super().__init__(Coordinate(s0_rad_coor), Coordinate(directional_vec), frequency_coeff, r)
 
 class SpheroidMagneticBallisticDevice:
 
-    def __init__(self, s0_rad_coor: Coordinate, direction_vec: Coordinate, oval_shape: Coordinate):
+    def __init__(self, s0_rad_coor: Coordinate, direction_vec: Coordinate, frequency_coeff: float, oval_shape: Coordinate):
 
-        self.s0_rad_coor    = Coordinate(s0_rad_coor.raw())
-        self.direction_vec  = Coordinate(direction_vec.raw())
-        self.oval_shape     = Coordinate(oval_shape.raw()) 
+        self.s0_rad_coor        = Coordinate(s0_rad_coor.raw())
+        self.direction_vec      = Coordinate(direction_vec.raw())
+        self.frequency_coeff    = frequency_coeff
+        self.oval_shape         = Coordinate(oval_shape.raw()) 
 
     def shoot(self, t: float) -> list[Coordinate]:
 
         raw_s0_rad_coor: list[float]            = self.s0_rad_coor.raw()
         raw_dir_rad_coor: list[float]           = self.direction_vec.raw()
 
-        bullet_rad_coor: list[float]            = add_vector(raw_s0_rad_coor, scalar_multiply_vector(t, raw_dir_rad_coor))
+        bullet_rad_coor: list[float]            = add_vector(raw_s0_rad_coor, scalar_multiply_vector(self.frequency_coeff * t, raw_dir_rad_coor))
         bullet_euclid_coor: list[float]         = radian_coordinate_to_euclidean_coordinate(bullet_rad_coor)
         scaled_bullet_euclid_coor: list[float]  = pairwise_multiply_vector(self.oval_shape.raw(), bullet_euclid_coor)
 
@@ -868,20 +875,24 @@ class SpheroidMagneticBallisticDevice:
 
 class RandomSphroidMagneticBallisticDevice(SpheroidMagneticBallisticDevice):
 
-    def __init__(self, dimension_sz: int, max_r: float):
+    def __init__(self, dimension_sz: int, max_r: float, max_frequency_coeff: float):
 
         s0_rad_coor: list[float]        = rand_multidimensional_sphere_radian(dimension_sz)
         directional_vec: list[float]    = get_random_vector(dimension_sz)
-        oval_shape: list[float]         = scalar_multiply_vector(uniform_randomize_frange(max_r), get_random_vector(dimension_sz)) 
+        r: float                        = uniform_randomize_frange(max_r)
+        frequency_coeff: float          = uniform_randomize_frange(max_frequency_coeff)
+        oval_shape: list[float]         = scalar_multiply_vector(r, get_random_vector(dimension_sz)) 
 
-        super().__init__(Coordinate(s0_rad_coor), Coordinate(directional_vec), Coordinate(oval_shape)) 
+        super().__init__(Coordinate(s0_rad_coor), Coordinate(directional_vec), frequency_coeff, Coordinate(oval_shape)) 
 
-class TwoArmsBallisticDevice:
+class RandomTwoArmsBallisticDevice:
 
-    def __init__(self, dimension_sz: int, arm1_length: float, arm2_length: float):
+    def __init__(self, dimension_sz: int, 
+                 max_arm1_length: float, max_arm1_frequency_coeff: float, 
+                 max_arm2_length: float, max_arm2_frequency_coeff: float):
 
-        self.rotating_arm1: BallisticDeviceInterface  = RandomSphereMagneticBallisticDevice(dimension_sz, arm1_length)
-        self.rotating_arm2: BallisticDeviceInterface  = RandomSphereMagneticBallisticDevice(dimension_sz, arm2_length)
+        self.rotating_arm1: BallisticDeviceInterface  = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm1_length, max_arm1_frequency_coeff)
+        self.rotating_arm2: BallisticDeviceInterface  = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm2_length, max_arm2_frequency_coeff)
 
     def shoot(self, t: float) -> list[Coordinate]:
 
@@ -890,13 +901,16 @@ class TwoArmsBallisticDevice:
 
         return [Coordinate(add_vector(arm1_coor.raw(), arm2_coor.raw()))]
 
-class ThreeArmBallisticDevice:
+class RandomThreeArmBallisticDevice:
 
-    def __init__(self, dimension_sz: int, arm1_length: float, arm2_length: float, arm3_length: float):
+    def __init__(self, dimension_sz: int, 
+                 max_arm1_length: float, max_arm1_frequency_coeff: float, 
+                 max_arm2_length: float, max_arm2_frequency_coeff: float, 
+                 max_arm3_length: float, max_arm3_frequency_coeff: float):
 
-        self.rotating_arm1: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, arm1_length)
-        self.rotating_arm2: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, arm2_length)
-        self.rotating_arm3: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, arm3_length)
+        self.rotating_arm1: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm1_length, max_arm1_frequency_coeff)
+        self.rotating_arm2: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm2_length, max_arm2_frequency_coeff)
+        self.rotating_arm3: BallisticDeviceInterface = RandomSphereMagneticBallisticDevice(dimension_sz, max_arm3_length, max_arm3_frequency_coeff)
 
     def shoot(self, t: float) -> list[Coordinate]:
 
@@ -932,14 +946,15 @@ class UniformRandomStaticSpherePointBagBallisticDevice(StaticPointBagBallisticDe
 
 class CircumscribingStaticPointBagBallisticDevice:
 
-    def __init__(self, dimension_sz: int, bag_sz: int, r: float):
+    def __init__(self, point_bag: list[Coordinate], frequency_coeff: float):
 
-        self.ballistic = UniformRandomStaticSpherePointBagBallisticDevice(dimension_sz, bag_sz, r) 
+        self.ballistic          = StaticPointBagBallisticDevice(point_bag)
+        self.frequency_coeff    = frequency_coeff
 
     def shoot(self, t: float) -> list[Coordinate]:
 
         point_bag: list[Coordinate] = self.ballistic.shoot(t)
-        return [Coordinate(scalar_multiply_vector(t, point.raw())) for point in point_bag] 
+        return [Coordinate(scalar_multiply_vector(self.frequency_coeff * t, point.raw())) for point in point_bag] 
 
 class ChainedBallisticDevice:
 
@@ -975,24 +990,33 @@ class ChainedBallisticDevice:
         return functools.reduce(_internal_reduce, inp[1:], inp[0])
 
 def get_random_twoarms_ballistic_device(dimension_sz: int, _range: float) -> BallisticDeviceInterface:
-    
-    radius: float = uniform_randomize_frange(_range)
-    return TwoArmsBallisticDevice(dimension_sz, radius, radius)
+
+    arm1_frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
+    arm2_frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
+
+    return RandomTwoArmsBallisticDevice(dimension_sz, 
+                                        _range, arm1_frequency_coeff,
+                                        _range, arm2_frequency_coeff)
 
 def get_random_threearms_ballistic_device(dimension_sz: int, _range: float) -> BallisticDeviceInterface:
 
-    radius_1: float = uniform_randomize_frange(_range)
-    radius_2: float = uniform_randomize_frange(_range)
-    radius_3: float = uniform_randomize_frange(_range)
+    arm1_frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
+    arm2_frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
+    arm3_frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
 
-    return ThreeArmBallisticDevice(dimension_sz, radius_1, radius_2, radius_3) 
+    return RandomThreeArmBallisticDevice(dimension_sz, 
+                                         _range, arm1_frequency_coeff, 
+                                         _range, arm2_frequency_coeff,
+                                         _range, arm3_frequency_coeff)
 
 def get_random_circumscribing_ballistic_device(dimension_sz: int, _range: float, bag_sz_range: int = 16, bag_sz_min: int = 1) -> BallisticDeviceInterface:
-    
-    bag_sz: int = min(random.randrange(bag_sz_range), bag_sz_min)
-    radius: int = uniform_randomize_frange(_range)
 
-    return CircumscribingStaticPointBagBallisticDevice(dimension_sz, bag_sz, radius) #not clear
+    bag_sz: int                 = min(random.randrange(bag_sz_range), bag_sz_min)
+    radius: int                 = uniform_randomize_frange(_range)
+    frequency_coeff: float      = (random.random() * 10) ** random.randrange(10)
+    point_bag: list[Coordinate] = [Coordinate(scalar_multiply_vector(radius, radian_coordinate_to_euclidean_coordinate(rand_multidimensional_sphere_radian(dimension_sz)))) for _ in range(bag_sz)] 
+
+    return CircumscribingStaticPointBagBallisticDevice(point_bag, frequency_coeff)
 
 def get_random_point_bag_ballistic_device(dimension_sz: int, _range: float, bag_sz_range: int = 16, bag_sz_min: int = 1) -> BallisticDeviceInterface:
 
@@ -1003,7 +1027,10 @@ def get_random_point_bag_ballistic_device(dimension_sz: int, _range: float, bag_
 
 def get_random_melee_ballistic_device(dimension_sz: int, _range: float) -> BallisticDeviceInterface:
 
-    device_sz: int                                                                  = 2
+    device_sz_range: int    = 3
+    device_sz_min: int      = 1
+    device_sz: int          = max(random.randrange(device_sz_range), device_sz_min)
+
     device_list: list[BallisticDeviceInterface]                                     = []
     random_melee_device_gen: list[Callable[[int, float], BallisticDeviceInterface]] = [get_random_twoarms_ballistic_device, get_random_threearms_ballistic_device, get_random_circumscribing_ballistic_device, get_random_point_bag_ballistic_device]
 
@@ -1020,11 +1047,13 @@ def get_random_bullet_ballistic_device(dimension_sz: int) -> BallisticDeviceInte
 
 def get_random_spheremagnetic_ballistic_device(dimension_sz: int, _range: float) -> BallisticDeviceInterface:
     
-    return RandomSphereMagneticBallisticDevice(dimension_sz, _range)
+    frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
+    return RandomSphereMagneticBallisticDevice(dimension_sz, _range, frequency_coeff)
 
 def get_random_spheroidmagnetic_ballistic_device(dimension_sz: int, _range: float) -> BallisticDeviceInterface:
-    
-    return RandomSphroidMagneticBallisticDevice(dimension_sz, _range) 
+
+    frequency_coeff: float = (random.random() * 10) ** random.randrange(10)
+    return RandomSphroidMagneticBallisticDevice(dimension_sz, _range, frequency_coeff) 
 
 def get_random_range_ballistic_device(dimension_sz: int, magnetic_radius: float) -> BallisticDeviceInterface:
     
@@ -1207,7 +1236,7 @@ class URLinearTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
 
         super().__init__(LinearStepper(y0, a, step_sz), iteration_sz, derivative_offset)
 
-class ExponentialTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
+class RandomExponentialTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
 
     def __init__(self, y0_first: float = float(0), y0_last: float = float(0),
                  exp_base_range: float = float(10), exp_base_range_min: float = 1,
@@ -1220,20 +1249,20 @@ class ExponentialTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
 
         super().__init__(ExponentialStepper(y0, exp_base, exp_step), iteration_sz, derivative_offset)
 
-def get_linear_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
+def get_random_linear_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
 
-    return URLinearTwoOrderNewtonOptimizer()  
+    return URLinearTwoOrderNewtonOptimizer(0, 0, (random.random() * 10) ** random.randrange(0, 10))
 
-def get_exponential_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
+def get_random_exponential_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
 
-    return ExponentialTwoOrderNewtonOptimizer() 
+    return RandomExponentialTwoOrderNewtonOptimizer() 
 
 def get_random_twoorder_newton_optimizer() -> NewtonOptimizerInterface:
 
     if flip_a_coin():
-        return get_linear_twoorder_newton_optimizer()
+        return get_random_linear_twoorder_newton_optimizer()
     else:
-        return get_exponential_twoorder_newton_optimizer() 
+        return get_random_exponential_twoorder_newton_optimizer() 
 
 class OneDimensionalFunctionInterface(Protocol):
 
@@ -1390,7 +1419,7 @@ def train(taylor_model: list[float],
 
             try:
                 if random_value == 0:
-                    (new_taylor_model, deviation_hint) = range_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10)) 
+                    (new_taylor_model, deviation_hint) = range_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10))
                     round_rs += [(deviation_hint, new_taylor_model)]
                 elif random_value == 1:
                     (new_taylor_model, deviation_hint) = melee_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10))
@@ -1398,15 +1427,15 @@ def train(taylor_model: list[float],
                 elif random_value == 2:
                     (new_taylor_model, deviation_hint) = rangemelee_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10), (random.random() * 10) ** random.randrange(0, 10))
                     round_rs += [(deviation_hint, new_taylor_model)]
-                # elif random_value == 3:
-                #     (new_taylor_model, deviation_hint) = calibrated_range_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz)
-                #     round_rs += [(deviation_hint, new_taylor_model)]
-                # elif random_value == 4:
-                #     (new_taylor_model, deviation_hint) = calibrated_melee_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz)
-                #     round_rs += [(deviation_hint, new_taylor_model)]
-                # elif random_value == 5:
-                #     (new_taylor_model, deviation_hint) = calibrated_rangemelee_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz)
-                #     round_rs += [(deviation_hint, new_taylor_model)]
+                elif random_value == 3:
+                    (new_taylor_model, deviation_hint) = calibrated_range_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10))
+                    round_rs += [(deviation_hint, new_taylor_model)]
+                elif random_value == 4:
+                    (new_taylor_model, deviation_hint) = calibrated_melee_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10))
+                    round_rs += [(deviation_hint, new_taylor_model)]
+                elif random_value == 5:
+                    (new_taylor_model, deviation_hint) = calibrated_rangemelee_ballistic_optimize(optimizing_taylor_model, instrument, instrument_x_range, instrument_discretization_sz, (random.random() * 10) ** random.randrange(0, 10), (random.random() * 10) ** random.randrange(0, 10))
+                    round_rs += [(deviation_hint, new_taylor_model)]
 
             except Exception as e:
                 print(e)
@@ -1559,7 +1588,6 @@ def main():
         return (x-1) * (x-2) * (x-3) * (x-4)
 
     taylor_model = get_initial_taylor_model(5)
-
     train(taylor_model, sqrt_func, 16, 64, 512, 1 << 13)
 
 main()
