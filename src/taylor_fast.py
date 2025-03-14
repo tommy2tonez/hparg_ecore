@@ -690,6 +690,30 @@ def radian_rescale(org_value: float, max_range: float) -> float:
 #yet the tech for centrality was limited + there was no compute back then
 #we finally had all of those now - what we are missing is an algorithm to run the GMP on cuda 
 
+#they dont have the faintest clue about the circle of money - the law of momentum conservation - the broken string analysis
+#let me clue you in - every broken string has it coming - every stock is made of at least 32 strings - SPY string, random-string, trait-string, manipulation-string, world-catalyst string, habit-string (habit day of week, month of year, special occasions), fundamental string, empathy string, greed string, fear string, sector-string, cap-string, historic strings, etc. 
+#                   - why is our way of sorting things and spinning around to find deviation is good? because it calibrates VERY GOOD + VERY WELL - it is an absolute technique to cancel out the strings + max-rocket system optimization
+#                   - do you think <the catalyst pulls the price string> or <the price string pulls the catalyst string> (I'll let you think on this, things applied 30 years ago do not apply today)
+
+#the most difficult string to guess is ... the random string (to accurately guess the random string, we need to accurately extract the timestamp (nanoseconds-correct) as for time-based random, accurately extract the environment of the exotic random devices - maybe humans)
+#in training, we dont really care about the random string (people spent 30 years to randomize these stuffs), we need to calibrate the random string and only control what's predictable - what's in our control
+
+#strings could be intentionally broken or statistically broken, this is when all hell breaks loose, we dont precisely know when the strings would break, why the strings would break, it is random string break?
+#we are interested in the intentionally broken (low-cap stocks, penny-stocks, pump-n-dump)
+#sometimes - no strings are broken (it is only broken because we are not smart + informed enough) - let this sink in for a moment
+
+#recall our random approximation (it predicts the linearity of the <not_randomized> correctly, yet not the linearity of the random values)
+#in large language model, we increase linearity by increasing dimension and duplication of context
+#this is the secret sauce got us millionaires back in the days - I'm surprised it still applies
+#the thing with stock is you CANT get greedy - IRS + SEC only allows you to win a certain amount of money without being suspicious (I'm talking every citizen can reasonably get 5 millions without being in the radar)
+
+#if you wanna get a job at PandaKoin with us (we are not the more of Morgan Stanley)
+#you have to be able to answer this interview question
+
+#if you have one bullet to keep 500 murderers under control, what would you do?
+#assume you know the law of physics, momentum conservation, and the law of natural exponential growth - bullet ballistic + magnetic ballistic
+#i'm waiting for your answer
+
 def exponential_randomize_frange(frange: float, exp_base: float) -> float:
 
     exp_first: float    = float(0) #0 for now
@@ -1420,7 +1444,7 @@ def train(taylor_model: list[float],
         round_rs: list[tuple[list[float], float]] = []
 
         for __ in range(directional_optimization_sz):
-            random_value: int = random.randrange(0, 3)
+            random_value: int = random.randrange(0, 6)
 
             try:
                 if random_value == 0:
