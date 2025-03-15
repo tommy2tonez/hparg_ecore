@@ -191,10 +191,7 @@ def tom_approx2(operation: Callable[[float], float], iteration_sz: int, initial_
 
 def stable_approx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
 
-    try:
-        return tom_approx2(operation, 3, initial_x, a)
-    except:
-        return initial_x, operation(initial_x) 
+    return tom_approx2(operation, 3, initial_x, a)
 
 #I think this is the best way to solve the problem
 def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: float = 0.02) -> list[float]:
@@ -222,44 +219,42 @@ def get_left_right_closest(e_arr: list[float], pos_arr: list[float], noise: floa
 #I'll try to optimize this algorithm for the next day - this is the very important iterative algorithm
 def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initial_x: float, differential_order_sz: int = 4, a: float = 0.00001) -> tuple[float, float]:
 
-    return stable_approx(operation, iteration_sz, initial_x, a)
+    current_x: list[float]              = [initial_x]
+    base_newton_iteration_sz: int       = 2
+    total_projection_arr: list          = []
+    derivative_local_minmax_sampling_sz = 3 
+    total_cand_arr: list[float]         = [] 
 
-    # current_x: list[float]              = [initial_x]
-    # base_newton_iteration_sz: int       = 2
-    # total_projection_arr: list          = []
-    # derivative_local_minmax_sampling_sz = 3 
-    # total_cand_arr: list[float]         = [] 
+    for _ in range(iteration_sz):
+        scope_differential_projection_arr = []
 
-    # for _ in range(iteration_sz):
-    #     scope_differential_projection_arr = []
+        for x in current_x:
+            local_differential_projection_arr = []
 
-    #     for x in current_x:
-    #         local_differential_projection_arr = []
+            for differential_order in range(differential_order_sz):
+                func                                = lambda x: get_slope(operation, x, differential_order, a)
+                (projected_x, deviation)            = stable_approx(func, base_newton_iteration_sz, x, a)
+                scope_differential_projection_arr   +=  [(projected_x, deviation)]
+                local_differential_projection_arr   +=  [(projected_x, deviation)]
 
-    #         for differential_order in range(differential_order_sz):
-    #             func                                = lambda x: get_slope(operation, x, differential_order, a)
-    #             (projected_x, deviation)            = stable_approx(func, base_newton_iteration_sz, x, a)
-    #             scope_differential_projection_arr   +=  [(projected_x, deviation)]
-    #             local_differential_projection_arr   +=  [(projected_x, deviation)]
+            if len(local_differential_projection_arr) != 0:
+                total_projection_arr    += [local_differential_projection_arr]
 
-    #         if len(local_differential_projection_arr) != 0:
-    #             total_projection_arr    += [local_differential_projection_arr]
+        total_cand_arr  += scope_differential_projection_arr
+        current_x       = get_left_right_closest([e[0] for e in total_cand_arr], current_x)
 
-    #     total_cand_arr  += scope_differential_projection_arr
-    #     current_x       = get_left_right_closest([e[0] for e in total_cand_arr], current_x)
+    if len(total_projection_arr) == 0:
+        return stable_approx(operation, iteration_sz, initial_x)
 
-    # if len(total_projection_arr) == 0:
-    #     return stable_approx(operation, iteration_sz, initial_x)
+    cand_list   = []
 
-    # cand_list   = []
+    for i in range(len(total_projection_arr)):
+        for j in range(min(len(total_projection_arr[i]), derivative_local_minmax_sampling_sz)):
+            cand_list += [(abs(operation(total_projection_arr[i][j][0])), total_projection_arr[i][j][0])] 
 
-    # for i in range(len(total_projection_arr)):
-    #     for j in range(min(len(total_projection_arr[i]), derivative_local_minmax_sampling_sz)):
-    #         cand_list += [(abs(operation(total_projection_arr[i][j][0])), total_projection_arr[i][j][0])] 
+    min_y, candidate_x = min(cand_list)
 
-    # min_y, candidate_x = min(cand_list)
-
-    # return candidate_x, min_y 
+    return candidate_x, min_y 
 
 def discretize(first: float, last: float, discretization_sz: int) -> list[float]:
 
@@ -346,6 +341,11 @@ def dot_product(lhs: list[float], rhs: list[float]) -> float:
 def to_scalar_value(vector: list[float]) -> float:
 
     return math.sqrt(dot_product(vector, vector)) 
+
+def get_unit_vector(vector: list[float]) -> list[float]:
+
+    sz: float = to_scalar_value(vector)
+    return scalar_multiply_vector(float(1) / sz, vector)
 
 def left_shift(vector: list[float]) -> list[float]:
 
@@ -1242,12 +1242,12 @@ class TwoOrderStepNewtonOptimizer:
         x_cand_list: list[tuple[float, float]]  = [(f(x0), x0)]
 
         while self.stepper.has_next_step():
-            x_cursor    = x_cursor + self.stepper.step()            
-            (x_cand, y) = stable_approx(f, self.iteration_sz, x_cursor, self.a)
-            x_cand_list += [(y, x_cand)]
+            x_cursor    = x_cursor + self.stepper.step()
+            (x_cand, y) = tom_approx2(f, self.iteration_sz, x_cursor, self.a)
+            x_cand_list += [(abs(y), x_cand)]
 
         self.stepper.reset()
-
+    
         return min(x_cand_list)[1]  
 
 class URLinearTwoOrderNewtonOptimizer(TwoOrderStepNewtonOptimizer):
@@ -1547,11 +1547,84 @@ def decimal_taylor_compute(coeff_arr: list[Decimal], x: Decimal) -> Decimal:
     rs: Decimal = Decimal(0)
 
     for i in range(len(coeff_arr)):
-        rs += Decimal(1) / math.factorial(i) * coeff_arr[i] * (x ** Decimal(i)) 
+        rs += Decimal(1) / math.factorial(i) * coeff_arr[i] * (x ** Decimal(i))
 
     return rs
 
+def taylorize(f: Callable[[float], float], derivative_order_sz: int, a: float = 0.0001):
+
+    return [get_slope(f, 0, i, a) for i in range(derivative_order_sz)]
+
 def main():
+
+    #let's talk about finite sequences, infinite sequences, the convolution of infinite sequence + finite sequence Taylor Series
+    #the calibrated space - the cue in the calibrated space (we need to move the cue more than once to achieve higher accuracy)
+    #the finite sequence as we know it is our current Taylor Series
+    #the infinite sequence as we know it is sin, cos, 1/x, sqrt(x), log(x), e^x
+    #what is the general form of infinite sequence?
+    #we probably don't want to <calibrate> our finite space of Taylor Series to achieve infinite pattern result (it's ... not smart)
+    #now consider this, assume everything can be represented as <1, 0, -1, 0, 1, 0, -1...>
+    #we want to construct EVERY possible Taylor Series by using such sequence, how would we do that? this is a dynamic programming problem of left + right shift of sin | cos (trig) Taylor Series 
+    #... or do we even need a shift? is it a good ol' induction + dynamic programming problem of space construction? 
+    #assume we are moving from left to right, the left space is fully constructed, now construct the current space using sin or cos wave 
+    #there are three particular infinite sequences that we want to know
+
+    #the diverging sequence (e^x, etc.) - we dont care about this
+    #the converging sequence (1/x, ln(x), log(x))
+    #the neither sequence (sin + cos)
+    
+    #now what if the infinite sequence pattern is extractable?
+    #what's our smart move to approx every possible extractable infinite sequence? 
+    #can we reasonably prove that every extractable infinite sequence must be the product of a convolution of a finite sequence and an infinite sequence?
+    #we want to work on this theory today and tomorrow
+
+    #I've spent yesterday thinking
+    #its called Taylor Series compression
+
+    #recall that our semantic space is finite, we choose what to include in the semantic space
+    #what's the difference between choosing 4 order Taylor derivatives vs sin, cos, exp + their coefficients? there aren't differences in terms of shape variety, but there are differences in terms of likelyhood of shapes that are going to happen   
+
+    #alright - consider this x1*sin(x) + x2*e^x + x3*1/x
+    #>x1, x2, x3> in this case bijectively relates to the result, what the difference between this and the 3 Taylor derivative orders?
+    #there is not a difference in terms of shape variety - yet there is a difference in terms of preferred pool of shapes 
+    #<x1,x2,x3> in this case is a form of Taylor Series compression, because it compresses infinite Taylor patterns into finite variables (x1, x2, x3)
+    #Taylor Series is a complete continuity compression method if the derivative order is to approach infinity
+
+    #we dont have that infinite storage + compute, so we must map our domain space to another space where we could represent the likely <preferred_pool_of_shapes> better
+    #this poses a problem of numerical stability, assume we have found our Taylor Series, we know that the Taylor Series if added to the original Taylor Series would bring the deviation -> 0.01, without loss of generality
+    #yet our compression method would <float> the deviation -> 0.02, 0.03
+    #alright, do we want to find the Taylor Series and compress it or we find the coordinate in the already compressed domain? The latter guarantees numerical stability, because we are operating on the ground truth (yet requires the domain <-> range to be continuous)
+    #this means that multiple <semantic_domain space> are required, this sounds a lot like models and their trig functions (sin, cos, tan, etc.), exps, etc., because it really is, just in a generalized form
+
+    #why Taylor Series? because Taylor Series allows us to do iterative calibration, by taking deviation with respect to the instrument
+    #Taylor Series is continuity compression complete
+    #Taylor Series is good, yet we need to float + map the domain space of <x, x1, x2> as in <derivative_order_0th, derivative_order_1st, derivative_order_2nd> -> another engineered domain space
+    #if there exists a better method, it must not be logically less complex than doing Taylor Series compression
+        #proof by contradiction, assume it is logically less complex than TaylorSeries compression and it is continuity comnpression complete
+        #=> there must be a way to <map> the solution to our Taylor Series ...
+        #so the process can be a subprocess of the Taylor compression
+        #=> Taylor compression has equal logical complexity
+        #=> contradicts to the orginal statement
+
+    #I was thinking, what if we do a preface of data to analyze the best semantic space
+    #its actually complex, with the centrality algorithm (x = x + f(x)), things move around really quickly
+    #we'll dwell on this today
+
+    #compression is intellect, is our finite pool of Taylor Series representing finite infinite pool of Taylor Series?   
+    #we dont really know the butterfly effects, yet we must get the basic of continuity compression right
+
+    #Taylor Series has one drawback, however, it is the infinity trap 
+    #it seems like continuity discontinues at infinity
+    #we have to <hack> this by using L'Hospital rule 
+    #recall that if f(x) and g(x) are to both approach infinity or 0s then we could take the derivative of f(x) and g(x) to calculate the result
+    #goal is to turn tan(x) -> sin(x) and cos(x) to avoid infinity traps, by compute them separately and find the division of the lhs and rhs
+    #so is the Taylor Series sufficient or is it not, it is sufficient in the space where there is no infinity, and we have to find such space to do Taylor Series compression
+    #now is the confusing part - do we analyze the space or we train the space? if we are training the space then is Taylor Series alone sufficient for continuity compression, given that we place appropriate division operations?
+    #now I know the meaning of divider, it is the best security measure for continuous space
+    #what happens at the singularities, the black holes? I think a division happens fellas
+
+    #we dont have anything to do today so let's improve our newton approx
+    #I'll be right back
 
     #alright - let's move to Decimal first thing first - we want to approx global extreme of this function - let's see how many floating accuracy is required
     #something is very off
@@ -1584,39 +1657,35 @@ def main():
     #what are we missing?
     #we have EVERYTHING - yet approxing trig is too costly - how about we add trig into our taylor approximation? - this is actually debatable
 
-    # getcontext().prec = 128
-    # print(getcontext())
+    getcontext().prec = 64
 
-    # func = lambda x: decimal_synth_wave(x, 128)
-    # taylor_series: list[Decimal] = decimal_taylorize(func, 24)
+    func                            = lambda x: (x-1)*(x-2)*(x-3)*(x-4)
+    taylor_slopes: list[Decimal]    = decimal_taylorize(func, 5) #alright fellas - numerical stability is very important and float is bad
+    taylor_slope_float: list[float] = list(map(float, taylor_slopes))
 
-    # print(taylor_series)
+    print(taylor_slopes)
 
-    # # print(decimal_sin(Decimal(math.pi), 16))
+    for i in range(0, 16):
+        print(i, func(i), taylor_projection(taylor_slope_float, i))
 
-    # print(decimal_taylor_compute(taylor_series, Decimal(15.99)))
+    # print()
 
-    # print(math.exp(Decimal(4)))
+    unit_vector: list[float]                        = get_unit_vector(taylor_slope_float)
+    deviation_calc: DeviationCalculatorInterface    = get_msqr_deviation_calculator(0, 16, 64)
+    optimizer: NewtonOptimizerInterface             = get_random_linear_twoorder_newton_optimizer()
 
-    # print(decimal_synth_wave(Decimal(15.99)))
-    # print(decimal_sin(2))
-    # print(synth_wave(Decimal(0)))
+    print(deviation_calc.deviation(func, TaylorSeriesFunctionizer(taylor_slope_float)))
 
-    # print(approx_e(4, 40))
+    print("sz:", to_scalar_value(taylor_slope_float))
 
-    # for i in range(1024)
+    def _negotiator(t: float):
+        vector: list[float] = scalar_multiply_vector(t, unit_vector)
+        return deviation_calc.deviation(TaylorSeriesFunctionizer(vector), func) 
 
-    # print(Decimal(1 << 3000) + Decimal(0.1))
-    # print(sys.float_info)
+    t: float = optimizer.optimize(_negotiator, 0)
+    vector: list[float] = scalar_multiply_vector(t, unit_vector)
 
-    #thing with Taylor Series is that we cant approx the sin | cos (infinite sequence of Taylor)
-    #this means that we have to store the infinite sequence patterns as part of the model data, not only Taylor Series' coefficients (sin|cos 010101010101...)
-
-    def sqrt_func(x: float):
-
-        return (x-1) * (x-2) * (x-3) * (x-4)
-
-    taylor_model = get_initial_taylor_model(5)
-    train(taylor_model, sqrt_func, 16, 64, 512, 1 << 13)
+    print(taylor_slope_float)
+    print(vector, t)
 
 main()
