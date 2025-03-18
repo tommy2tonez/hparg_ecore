@@ -2995,66 +2995,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
     using namespace dg::network_kernel_mailbox_impl1::model; 
 
-    //we've thought long and hard about what ExhaustionControl means and how that would affect system flood
-    //system flood happens when the production_sz > consumption_sz at a random given time
-    //when that happens - we want to dynamically adjust the warehouse sizes of the supply chain to "adapt" with the flood - we want to process the data and also dump incoming data at an approriate rate
-    //we want to think in terms of extremists - think about what happen when the queue size == 0 or queue_size == inf
-    //queue_size == 0 means that we are always up-to-date - and the incoming data is always the lastest data
-    //queue_size == inf means that we are processing the data from a light year before - and the lastest data is too far away to be responded - which causes a system crash (the data we are processing is no long needed - and the data we need to process is too far away in the FIFO queue)
-    //the middle ground is probably to wait out the "sand-storm" and recalibrate the system
-
-    //I was wondering why we couldn't be civil and have production_rate == consumption_rate at all time - if life was that easy
-    //we need to handle spike in real time system - to avoid retransmission from the sender which is very energy expensive
-    //and the distribution of the consumption is not a uniform distribution chart
-    //so the only problem is the implementation of the sparse centrality (we'll implement a very efficient version of sparse centrality - that probably involves only bitwise operations - an approximation from an approximation)
-
-    //clients were kinda very stingent on the timeline - so we have to be able to infiltrate into the browser security within 2 months (browser browser browser, always the stigma - kids these days can be hackers if they know backroads into the browsers - yet that's not the scary part - browser is actually contagious - this is the scary part - we are prepared with our state-of-the-art symmetric coding methods - as long as we dont talk too much)
-    //let's see if the planet of the apes and the planet of the chimps can update their system before too late
-    //we'll have a team working on extracting the virtual machine snapshots - it's been a roadblock
-
-    //in that case, we have an invisible extension of the queue which is the data in the infretry device - the question is how long do we want that invisible queue to be?
-    //now is the question of the machine learning problem of stock prediction - what is the next best possible move to achieve the defined goals? This is the question we tried to answer in ballinger project (this is 3rd grade kid stuff) - we want a complex model yet the idea remains  
-    //now is the question of whether that would affect the upstream optimization - the answer is no - because we define our goals to be as generic as possible
-    //we'll be the firsts to implement <prediction based on centrality> + <heuristic> to optimize system
-
-    //these optimizables seem simple yet they are very important in real-life scenerios - where the problem of betweenness centrality + maxflow arise
-    //we want a model to actually extract pattern + think to make the best possible min-max move
-
-    //I was thinking about software engineering and the best practices 
-    //it all comes down to std::unique_ptr<> and std::shared_ptr<>
-    //the amount of std::shared_ptr<> increases == the quality decreases
-
-    //it's complex in agile programming - 
-    //so we'll try to limit std::shared_ptr<> yet try to add another layer of <semantic> by using interface extension - as long as the components make sense on their own - and do not carry too many responsibilities
-    //it's literally hard Mom 
-    //I doubt that C programming could code this type of complexity
-    //I dont undermine people work - yet the network comm protocol must be event-driven + punch + no-connection - if you care about performance AT ALL
-    //                             - we implement a request layer on top of this procotol + timeout technique to log errors appropriately
-    //                             - the most important is to handle flood appropriately - we'll try to implement a first draft this week or next week - it's complicated
-    //                             - the idea of correctly handling flood is to adjust the queue extension (which is in infretry_device) to adapt to + "with" the flood
-    //                             - we'll recalibrate by using centrality later Dad - it's impossible to tell what kind of router and their "drop" techniques - unless we do real-time calibration which is the machine learning + sched responsibility 
-    //                             - we are not oracle - we do what fast, what right, what not overflowing the system - we know that single responsibility of EVERYTHING is important - this includes packet + request + request fits inside a packet unit
-    //                             - we'd try to push data VERY VERY fast - because we literally dont care if the packet is dropped or if the computation tree is computed AT ALL - we just ingest data in a cyclic fashion (this cyclic fashion is not what we think - it's the reuse of computation tree by orphan + readopt) and pray that the tree learns something eventually
-    //                                                                    - the only time we care is when we want to establish synchronization for tree orphan + tree adopt - that's about it
-    //                                                                    - the people that succeeded walking this roads (reaching escape velocity of training) in my knowledge are not many
-    //                                                                    - yet the idea of fission + no synchronization + virtual machine training remains
-    //                                                                    - it's easy yet very hard to implement things correctly
-    //                                                                    - we'll try to explain the concepts to yall in the simplest forms possible - in such there is no bugs of implementations
-    //                                                                    - we've encountered so many nasty bugs from memory exhaustion attack -> packet queue attack -> request timeout attack -> DDoS attack + request override attack -> cross site attack
-    //                                                                    - so we are afraid of being "fancy" - as long as we can hit the requirements of 1 transmission == 1 recv + correct load flood management + saturate network bandwidth - it's considered mission accomplished 
-
-    //getting started is definitely the hardest part - 
-    //yet we want to actually "internally" manage these components and provide an abstraction for users to initialize + reset + dependency inject
-    //what do we learn about interface designs + component designs + shared_ptr<> + unique_ptr<>
-    //interface usually does (1): declares expectations of the users
-    //                       (2): declares responsibilities of the component
-
-    //shared_ptr<> is not encouraged yet it is impossible to design without shared_ptr<> in many scenerios - (1): detached + concurrent + no-synchronous programming
-    //                                                                                                       (2): unified resource (std::malloc + std::free, machine learning data at a hollistic picture)
-    //                                                                                                       (3): only professionals can find the joins for std::shared_ptr<> and if there is a solution without std::shared_ptr<> - it's better to use the solution
-
-    //we'll hook a machine learning model to load balance + tune + handle flood this week + next week - it's gonna be very hard to do this performantly - let's see what we could do
-    //let's switch gears to machine learning algorithms for now
+    //alright, our dream about the machine learning packet transportation is a little too futuristic,
+    //we'll do a simple reno-tahoe because Linus told me so
 
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 

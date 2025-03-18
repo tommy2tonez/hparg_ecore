@@ -6,6 +6,7 @@ import sys
 from decimal import * 
 from typing import Protocol
 import functools
+import matplotlib.pyplot as plt
 
 def taylor_projection(f: list[float], x: float) -> float:
 
@@ -145,6 +146,9 @@ def tom_approx(operation: Callable[[float], float], iteration_sz: int, initial_x
 
     return newton_approx(operation, iteration_sz, x, a)
 
+#this is appropriate for floating operation because the uncertainty for float is only good for s0, v, a, at most j
+#moving <beyond> float would require eqn_solver to solve up to 8th derivative order (because this is a realistic number without compromsing speed)
+
 def tom_approx2(operation: Callable[[float], float], iteration_sz: int, initial_x: float, a: float = 0.001) -> tuple[float, float]:
 
     NEWTON_ITER_SZ: int = 3 
@@ -157,7 +161,7 @@ def tom_approx2(operation: Callable[[float], float], iteration_sz: int, initial_
     accel   = get_slope(operation, initial_x, 2)
     
     epsilon = float(0.01)
-    a       = 1/2 * accel
+    a       = float(1)/2 * accel
     b       = v
     c       = s0
 
@@ -254,13 +258,23 @@ def newton_approxx(operation: Callable[[float], float], iteration_sz: int, initi
 
     min_y, candidate_x = min(cand_list)
 
-    return candidate_x, min_y 
+    return candidate_x, min_y
 
 def discretize(first: float, last: float, discretization_sz: int) -> list[float]:
 
     width: float    = (last - first) / discretization_sz
     rs: list[float] = []
     
+    
+    for i in range(discretization_sz):
+        rs += [first + (i * width)]
+    
+    return rs
+
+def decimal_discretize(first: Decimal, last: Decimal, discretization_sz: int) -> list[Decimal]:
+
+    width: Decimal    = (last - first) / discretization_sz
+    rs: list[Decimal] = []
     
     for i in range(discretization_sz):
         rs += [first + (i * width)]
@@ -611,7 +625,7 @@ def radian_coordinate_to_euclidean_coordinate(coor: list[float]) -> list[float]:
 
     if len(coor) == 1:
         return [float(1)]
-    
+
     sliced_coor: list[float] = radian_coordinate_to_euclidean_coordinate(coor[1:])
 
     return [math.cos(coor[0])] + [math.sin(coor[0]) * sliced_coor[i] for i in range(len(sliced_coor))] 
@@ -1209,9 +1223,26 @@ class MeanSquareDeviationCalculator:
 
         sqr_sum: float      = sum([(f(x) - instrument(x)) ** 2 for x in self.point_arr])
         denom: float        = float(len(self.point_arr))
-        normalized: float   = math.sqrt(sqr_sum / denom)
+        normalized: float   = sqr_sum / denom
 
         return normalized
+
+class DecimalMeanSquareDeviationCalculator:
+
+    def __init__(self, point_arr: list[Decimal]):
+
+        self.point_arr = copy.deepcopy(point_arr)
+
+    def deviation(self, f: Callable[[Decimal], Decimal], instrument: Callable[[Decimal], Decimal]) -> Decimal:
+
+        if len(self.point_arr) == 0:
+            return Decimal(0)
+
+        sqr_sum: Decimal    = sum([(f(x) - instrument(x)) ** 2 for x in self.point_arr])
+        denom: Decimal      = Decimal(len(self.point_arr))
+        normalized: Decimal = sqr_sum / denom
+
+        return normalized 
 
 class DiscreteMeanSquareDeviationCalculator(MeanSquareDeviationCalculator):
 
@@ -1219,9 +1250,19 @@ class DiscreteMeanSquareDeviationCalculator(MeanSquareDeviationCalculator):
 
         super().__init__(discretize(first, last, discretization_sz))
 
+class DiscreteDecimalMeanSquareDeviationCalculator(DecimalMeanSquareDeviationCalculator):
+
+    def __init__(self, first: Decimal, last: Decimal, discretization_sz: int):
+
+        super().__init__(decimal_discretize(first, last, discretization_sz)) 
+
 def get_msqr_deviation_calculator(first: float, last: float, discretization_sz: int) -> DeviationCalculatorInterface:
 
     return DiscreteMeanSquareDeviationCalculator(first, last, discretization_sz)  
+
+def get_decimal_msqr_deviation_calculator(first: Decimal, last: Decimal, discretization_sz: int) -> DiscreteDecimalMeanSquareDeviationCalculator:
+
+    return DiscreteDecimalMeanSquareDeviationCalculator(first, last, discretization_sz) 
 
 class NewtonOptimizerInterface(Protocol):
 
@@ -1307,6 +1348,16 @@ class TaylorSeriesFunctionizer:
     def __call__(self, x: float) -> float:
 
         return taylor_projection(self.taylor_series, x)
+
+class DecimalTaylorSeriesFunctionizer:
+
+    def __init__(self, taylor_series: list[Decimal]):
+        
+        self.taylor_series = taylor_series
+    
+    def __call__(self, x: Decimal) -> Decimal:
+
+        return decimal_taylor_compute(self.taylor_series, x) 
 
 def ballistic_optimize(taylor_model: list[float], ballistic_device: BallisticDeviceInterface,
                        instrument: Callable[[float], float], instrument_x_range: float, instrument_discretization_sz: int) -> tuple[list[float], float]:
@@ -1484,6 +1535,30 @@ def train(taylor_model: list[float],
 
     return optimizing_taylor_model
 
+#what we know is that Taylor Series is only good for:
+#(1): plus
+#(2): multiply
+#(3): trig
+#(4): exponential
+#(5): subtract
+
+#we must stay in the territory in order to get stable <root_finding> by using differential methods   
+#what we are going to do today is finding the very high order root, to be specific 1 << 20 -> 1 << 30 newton root + using one dimensionalization, circumscribing rotating magnetic, or ballistic to find our answer for global extremes
+
+def decimal_sqrt(x: Decimal, x0: Decimal = Decimal(1), iteration_sz: int = 64) -> Decimal:
+
+    rs: Decimal     = Decimal(0)
+    coeff: Decimal  = Decimal(1)
+    exp: Decimal    = Decimal(-1)
+
+    for i in range(iteration_sz):
+        a       = coeff * (x0 ** exp)
+        coeff   *= exp
+        exp     -= 1
+        rs      += Decimal(1) / math.factorial(i) * a * (x ** i)
+
+    return rs
+
 def decimal_e(x: Decimal, iteration_sz: int = 1024) -> Decimal:
 
     #f0 + f'(0) * x + 1/2 * f''(0) * x^2
@@ -1495,7 +1570,7 @@ def decimal_e(x: Decimal, iteration_sz: int = 1024) -> Decimal:
 
     return rs 
 
-def decimal_sin(x: Decimal, iteration_sz: int = 1024) -> Decimal:
+def decimal_sin(x: Decimal, iteration_sz: int = 256) -> Decimal:
 
     #alright let's see - sin(x), cos(x), -sin(x), -cos(x)
     #0 1 0 -1 0 1 0 -1
@@ -1511,7 +1586,7 @@ def decimal_sin(x: Decimal, iteration_sz: int = 1024) -> Decimal:
 
     return rs
 
-def decimal_cos(x: Decimal, iteration_sz: int = 1024) -> Decimal:
+def decimal_cos(x: Decimal, iteration_sz: int = 256) -> Decimal:
 
     #cos = sin(90 - x) yet I want to implement taylor series for this
     #cos(x), -sin(x), -cos(x), sin(x), cos(x)
@@ -1523,7 +1598,8 @@ def decimal_cos(x: Decimal, iteration_sz: int = 1024) -> Decimal:
     for i in range(iteration_sz):
         signness        = 1 if i % 2 == 0 else -1
         idx             = i * 2
-        rs              += Decimal(1) / math.factorial(idx) * Decimal(signness * coeff) * (x ** idx)
+        pow: Decimal    = x ** Decimal(idx) if idx != 0 else Decimal(1)
+        rs              += Decimal(1) / math.factorial(idx) * Decimal(signness * coeff) * pow
 
     return rs
 
@@ -1547,13 +1623,67 @@ def decimal_taylor_compute(coeff_arr: list[Decimal], x: Decimal) -> Decimal:
     rs: Decimal = Decimal(0)
 
     for i in range(len(coeff_arr)):
-        rs += Decimal(1) / math.factorial(i) * coeff_arr[i] * (x ** Decimal(i))
+
+        factorial: Decimal  = Decimal(1) / Decimal(math.factorial(i))
+        pow: Decimal        = x ** Decimal(i) if i != 0 else Decimal(1)
+        rs                  += factorial * coeff_arr[i] * pow
+
 
     return rs
 
 def taylorize(f: Callable[[float], float], derivative_order_sz: int, a: float = 0.0001):
 
     return [get_slope(f, 0, i, a) for i in range(derivative_order_sz)]
+
+#
+
+def decimal_get_slopes(f: Callable[[Decimal], Decimal], x: Decimal, derivative_order_sz: int, a: Decimal = Decimal(0.000000001)) -> list[Decimal]:
+
+    def _get_derivative(point_arr: list[tuple[Decimal, Decimal]]) -> list[tuple[Decimal, Decimal]]:
+        
+        if len(point_arr) == 0:
+            return []
+        
+        iteration_sz: int                   = len(point_arr) - 1
+        rs: list[tuple[Decimal, Decimal]]   = []
+
+        for i in range(iteration_sz):
+            current_x, current_y    = point_arr[i]
+            next_x, next_y          = point_arr[i + 1]
+            delta_x: Decimal        = next_x - current_x
+            delta_y: Decimal        = next_y - current_y
+            slope: Decimal          = delta_y / delta_x
+
+            rs                      += [(current_x, slope)]
+
+        return rs 
+
+    collected_points: list[Decimal] = []
+    rs: list[Decimal]               = []
+
+    for i in range(derivative_order_sz):
+        current_x: Decimal  = x + a * i
+        collected_points    += [(current_x, f(current_x))]
+
+    for i in range(derivative_order_sz):
+        rs                  += [collected_points[0][1]]
+        collected_points    = _get_derivative(collected_points)
+
+    return rs
+
+def decimal_radian_coordinate_to_euclidean_coordinate(coor: list[Decimal]) -> list[Decimal]:
+
+    if len(coor) == 0:
+        return []
+
+    if len(coor) == 1:
+        return [Decimal(1)]
+
+    sliced_coor: list[Decimal] = decimal_radian_coordinate_to_euclidean_coordinate(coor[1:])
+
+    return [decimal_cos(coor[0])] + [decimal_sin(coor[0]) * sliced_coor[i] for i in range(len(sliced_coor))] 
+
+distance_vec: list[float] = []
 
 def main():
 
@@ -1656,36 +1786,67 @@ def main():
 
     #what are we missing?
     #we have EVERYTHING - yet approxing trig is too costly - how about we add trig into our taylor approximation? - this is actually debatable
+    #alright let's attempt to improve our trig ballistic optimization
+    #what really happens is floating problem - float is only good for approxing at most 3 order derivatives, best 2 order derivatives, that's precisely why our tom_approx2 works very very well 
+    #our negotiator is too curvy - we are only allowed to <see> up to the numerical stability, exceeding the numerical stability would result in a failure of deviation space reconstruction 
+    #how could we offset this? by making sure that the sphere points are reasonably spread-outted
+    #we'll work on this problem tmr, we'd want to make sure that we can approx things fast, under 60 seconds, we, then, will move on to multivariate
 
-    getcontext().prec = 64
+    #we'll talk about how this thing fits in our core later, it's a billion dollar question, i'm being very serious
 
-    func                            = lambda x: (x-1)*(x-2)*(x-3)*(x-4)
-    taylor_slopes: list[Decimal]    = decimal_taylorize(func, 5) #alright fellas - numerical stability is very important and float is bad
-    taylor_slope_float: list[float] = list(map(float, taylor_slopes))
+    #alright let's increase the frequency + improve numerical stability
+    #if we are to increase the frequency of subarm to infinity with respect to the other arm, we should be able to reduce the iterating dimension -> the other arm 
+    #this requires us to collect d/dx, d2/dx ... up to the numerical stability allowance
+    #let's implement this
+    #we are to see if we are to increase the frequency to infinity, what is the required numerical stability to approx our deviation space  
+    #what we are missing are the directional backprop + higher order of derivatives + numerical stability + Taylor Series' compression space + GMP on cuda
+    #how does this translate to our billion dollar framework, it is a shit ton of output + input
+    #we'll get to the bottom of this numerical stability, two order + step or multiorder eqn solver tmr - it's a very important topic
 
-    print(taylor_slopes)
+    #its complicated, its about Taylor Series convergence, such is the scaling factor of Taylor Series must outrun the polynomial order
+    #we have two types of Taylor Series
+    #finite Taylor Series
+    #finite infinite Taylor Series
 
-    for i in range(0, 16):
-        print(i, func(i), taylor_projection(taylor_slope_float, i))
+    #finite infinite needs a <translation_layer> to operate on a finite domain space (Interstellar, docking space ship)
+    #such finite domain space is "linear", a.k.a Taylor Series finite
 
-    # print()
+    #consider this example
+    #<x1, x2, x3>
+    #x1 * cos(x) + x2 * sin(x) + x3 * e^x
+    #<x1, x2, x3> is Taylor linear because it could be rewritten as x1 * cos(x), x2 * sin(x), x3 * e^x
+    #<we are money monkey, we dont have time to research this, we'll be back, our main focus for the proof of concept is directional backpropagation + multivariate Taylor Series as an immediate substitution for every linear operation + training based on synth-wave deviation space> 
+    #that's precisely why yall failed, because yall never ask questions and keep implementing bad stuff
 
-    unit_vector: list[float]                        = get_unit_vector(taylor_slope_float)
-    deviation_calc: DeviationCalculatorInterface    = get_msqr_deviation_calculator(0, 16, 64)
-    optimizer: NewtonOptimizerInterface             = get_random_linear_twoorder_newton_optimizer()
+    #I was trying to generalize the finite infinite (compressing the Taylor Series) only to realize the obvious truth, it is pattern extraction, for every pattern extraction requires an intellectual move
+    #the question now becomes how exactly do we do this?
+    #how could we provide the basic storage for finite infinite and let the neural network learn the way to store such information?
+    #finite infinite also has two categories: - computable on the Taylor Series original space
+    #                                         - not computable on the Taylor Series original space (higher polynomial results outrun their scaling coefficients)
 
-    print(deviation_calc.deviation(func, TaylorSeriesFunctionizer(taylor_slope_float)))
+    #can we prove that every finite infinite is a product of add/sub/mul/div of finite Taylor Series(s)?
+    #its hard to prove, however, we can unprove this by using convolution law of Taylor Series, finite * finite = finite
+    #so that was not a good approach
+    #can we "find" the exotic infinite patterns by using <Bernoulli database collector> or <antivirus> database?
 
-    print("sz:", to_scalar_value(taylor_slope_float))
+    #recall that every function is h(x), f(g(x))
+    #a naive compression function job is just simply storing the enumerated h, f, g along with finite Taylor Series(s)
+    #so we are talking about enumeration of exotic infinite patterns, regex law of function making, and the base rule being finite Taylor Series float numbers
 
-    def _negotiator(t: float):
-        vector: list[float] = scalar_multiply_vector(t, unit_vector)
-        return deviation_calc.deviation(TaylorSeriesFunctionizer(vector), func) 
+    #so in our glass of water, being the domain space, we have the content of sin(2x) + sin(3x) + sin(4x) without loss of generality
+    #the only thing being concerned is choosing the right collection of glasses (a glass for trig, a glass for rational polynomials, a glass for N polynomials, a glass for whatever it might come)
+    #<adding> them together -> offload the responsibility to the optimization engine 
 
-    t: float = optimizer.optimize(_negotiator, 0)
-    vector: list[float] = scalar_multiply_vector(t, unit_vector)
+    #I was thinking of the interchangability of Taylor Series naive polynomial compression and our collection of glasses compression
+    #it's complicated, we'd definitely break numerical stability and probably lose training friction if not being careful  
 
-    print(taylor_slope_float)
-    print(vector, t)
+    #recall the 6 infinity stones: time, power, reality, space, mind, soul 
+    #what is the mind stone?
+    #mind is the ability to <mood_decide> the next best move
+    #mind stone is a part of stock optimization, for mood levers are stock charts, and we are to move the <soul_cursor> in the direction that satisfies the mood 
+
+    #what is the soul stone?
+    #soul is a sliding window buffer of context, roughly 1GB of sliding window buffer
+    #mind stone would find the information that is temporally best appropriate to <finite_push_back> to the sliding_window_buffer
 
 main()
