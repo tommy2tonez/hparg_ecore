@@ -880,7 +880,7 @@ def make_2d_arr(x_sz: int, y_sz: int, initial_value: object):
 #there is no just in time or fancy accelerated linear, etc.
 #like Agent Smith once told, we multiply
 #alright fellas, embrace Taylor Swift, not delusions
-#we have so many variables to compute from virtual machine snapshots that our AI's gonna know literally everything
+#we have so many variables to compute from virtual machine snapshots that our AI's gonna know literally everything, and we could read our Sunday newspaper through our AI
 
 def make_taylor_model(in_variable_sz: int, out_variable_sz: int, derivative_order_sz: int) -> TaylorApprox:
 
