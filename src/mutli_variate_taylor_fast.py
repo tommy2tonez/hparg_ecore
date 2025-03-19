@@ -631,7 +631,7 @@ def get_random_range_ballistic_device(dimension_sz: int, magnetic_radius: float)
 
     inifite_device: BallisticDeviceInterface    = infinite_ballistic_gen[random.randrange(0, len(infinite_ballistic_gen))](dimension_sz)
     finite_device: BallisticDeviceInterface     = finite_ballistic_gen[random.randrange(0, len(finite_ballistic_gen))](dimension_sz, magnetic_radius)
-
+ 
     return ChainedBallisticDevice([inifite_device, finite_device])
 
 def get_random_rangemelee_ballistic_device(dimension_sz: int, magnetic_radius: float, melee_range: float) -> BallisticDeviceInterface:
@@ -862,6 +862,10 @@ def make_2d_arr(x_sz: int, y_sz: int, initial_value: object):
 
     return [[copy.deepcopy(initial_value) for __ in range(y_sz)] for _ in range(x_sz)]
 
+#I was proving the completeness + most compactness of this approximation in terms of <there exists no better representation, only equivalent representations>
+#it's hard to prove, in order to do so, we must infer that s, v, a, j, ... are not logically-tangled in terms of entropy
+#we'll port this code to C for quant proof of concept tomorrow, it's gonna be a bumpy low-level code
+
 def make_taylor_model(in_variable_sz: int, out_variable_sz: int, derivative_order_sz: int) -> TaylorApprox:
 
     if in_variable_sz == 0:
@@ -953,7 +957,7 @@ def rangemelee_ballistic_optimize(taylor_coeff: list[float],
 def train(taylor_coeff: list[float],
           coeff_functionizer: Callable[[list[float]], Callable[[list[float]], list[float]]],
           instrument: Callable[[list[float]], list[float]], instrument_x_range: list[float], instrument_sampling_sz: int,
-          directional_optimization_sz: int, training_epoch_sz: int) -> TaylorApprox:
+          directional_optimization_sz: int, training_epoch_sz: int) -> list[float]:
 
     optimizing_taylor_model: list[float]                = copy.deepcopy(taylor_coeff)
     deviation_calculator: DeviationCalculatorInterface  = RandomDiscreteDeviationCalculator(instrument_x_range, instrument_sampling_sz)
@@ -1000,8 +1004,24 @@ def main():
     #Taylor Series is actually the way
     #I was thinking of 1 var, 2 var, 4 var, 8 var
     #the sequence of those Taylor Series' length, the centrality add operation, rotate, rinse and repeat
+    #we are gonna need a shii (I dont know why people pronounce it that way) ton of compute, a platform to run this on, yet I think its gonna be very compact, we are heading in the right direction
 
-    taylor_approx: TaylorApprox                         = make_taylor_model(3, 1, 3)
+    #I was proving the difference between a multivariate projection vs 1 dimensional projections + add operation
+    #here is the twist, add operation is another projection, alright I know this sounds silly, so is it all Taylor Series, yes, it's possible to create everything out of Taylor Series
+
+    #proof by induction:
+
+    #assume 1 dimensional projection + add suffice f(x) + f(x1) == f(x, x1)
+    #assume we are to train new variable <x> such that <x, y> -> C and <x, y1> -> C1 for y and y1 are two points c <the_already_trained_set>
+    #x now has to be of two values to keep the induction going
+
+    #its the art of variable intercourse, we give off <DNA> information by doing multidimensional projections or add operation
+    #we dont really know the exact formula for this operation, we just know the regex form of all centrality-differential-intellect-based, maybe we'll balance between reality (compute limits, resource, money vs benefits, overheads, etc.) and theoretical from there
+
+    #recall when we noticed the problem of centrality, creating a new word, that word numerical range is not always within the computable model range, such creates anomaly + skewness + requires attention to solve the problem
+    #we attempt to solve the problem by using water, we pour water over the projection space + take deviation to steer the course
+
+    taylor_approx: TaylorApprox                         = make_taylor_model(3, 3, 3)
     taylor_coeff: list[list[float]]                     = taylor_approx.coeff_dump()
     flattened_coeff: list[float]                        = flatten(taylor_coeff)
 
