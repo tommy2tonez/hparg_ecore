@@ -866,6 +866,22 @@ def make_2d_arr(x_sz: int, y_sz: int, initial_value: object):
 #it's hard to prove, in order to do so, we must infer that s, v, a, j, ... are not logically-tangled in terms of entropy
 #we'll port this code to C for quant proof of concept tomorrow, it's gonna be a bumpy low-level code
 
+#alright, the only implementable optimization we could do for our current model is directional optimization 
+#we have a crazy amount of output, we have the <magnetic_direction> for all of the logits, we find the <gradient_update> benefits, and we maxwell those 
+
+#the problem is: how could we possibly pass such information backwardly or we pass it forwardly?
+#unless we do random sampling of directions for backwarding tiles
+
+#alright consider this flow
+#we randomize the <projectile> or the cursor, we allocate computing tiles out of leafs inching in the direction, we compute the results, we crit the results, we maxwell the results (uacm + pacm), and we backprop those guys to the leafs 
+#what about our Newton approx? its the msgr_forward responsibility, we compute the deviation projection externally + add to the compute queue later on 
+#point is we have tons of compute, yet not a parallel algorithm to do this
+#client is asking for $BB if we could get this correctly from A to Z
+#there is no just in time or fancy accelerated linear, etc.
+#like Agent Smith once told, we multiply
+#alright fellas, embrace Taylor Swift, not delusions
+#we have so many variables to compute from virtual machine snapshots that our AI's gonna know literally everything
+
 def make_taylor_model(in_variable_sz: int, out_variable_sz: int, derivative_order_sz: int) -> TaylorApprox:
 
     if in_variable_sz == 0:
