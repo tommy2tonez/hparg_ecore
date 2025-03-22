@@ -97,6 +97,15 @@
 //we are going to auction this engine mining, we only get 30% fee for hosting the auction, it's legal fellas, I already asked Mark Zuck to prep a legal team for me on this matter
 //when are we publishing the mining engine again? probably a month or a year
 //yet we have to detail EVERYTHING in order to make sure that this runs correctly
+//code is clear
+//(1): exhaustion clear
+//(2): finite mempool clear
+//(3): consumption_lock clear, released by infretry_device
+//(4): memory_order clear
+//(5): memory access pattern clear
+//(6): bug clear
+//(7): leak clear
+//(8): packet_id attack patched by using random_id
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -792,9 +801,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
             return std::unexpected(dg::network_exception::BAD_POLYMORPHIC_ACCESS);
         }
 
-        AckPacket rs                         = {};
+        AckPacket rs                            = {};
         static_cast<PacketHeader&>(rs)          = std::move(static_cast<PacketHeader&>(pkt));
-        static_cast<XOnlyAckPacket&>(rs)     = std::move(std::get<XOnlyAckPacket>(pkt.xonly_content));
+        static_cast<XOnlyAckPacket&>(rs)        = std::move(std::get<XOnlyAckPacket>(pkt.xonly_content));
 
         return rs;
     }
@@ -840,6 +849,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static inline auto get_packet_polymorphic_type(const Packet& pkt) noexcept -> packet_polymorphic_t{
 
+        if (is_request_packet(pkt)){
+            return constants::request;
+        } else if (is_ack_packet(pkt)){
+            return constants::ack;
+        } else if (is_krescue_packet(pkt)){
+            return constants::krescue;
+        } else{
+            if constexpr(DEBUG_MODE_FLAG){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            } else{
+                std::unreachable();
+            }
+        }
     }
 }
 
@@ -1171,23 +1194,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto key            = QueuedPacket{};
                 key.queued_time     = time_bar;
 
-                //I implemented this a thousand times, yet I am still confused about the std-wording, lower_bound guarantees the max possible [first, return_ptr) to be of lesser value to key
                 auto last           = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), 
                                                        key, 
                                                        [](const auto& lhs, const auto& rhs){return lhs.queued_time < rhs.queued_time;});
 
                 size_t barred_sz    = std::distance(this->pkt_deque.begin(), last);
-                sz                  = std::min(output_pkt_arr_cap, barred_sz); 
-                auto new_last       = std::next(this->pkt_deque.begin(), sz);
-                auto out_iter       = output_pkt_arr;
+                size_t iterable_sz  = std::min(output_pkt_arr_cap, barred_sz);
+                auto new_last       = std::next(this->pkt_deque.begin(), iterable_sz);
+                sz                  = 0u;
 
                 for (auto it = this->pkt_deque.begin(); it != new_last; ++it){
                     if (this->acked_id_hashset.contains(it->pkt.id)){
                         continue;
                     }
 
-                    *out_iter = std::move(it->pkt);
-                    std::advance(out_iter, 1u);
+                    output_pkt_arr[sz++] = std::move(it->pkt);
                 }
 
                 this->pkt_deque.erase(this->pkt_deque.begin(), new_last);
@@ -2087,11 +2108,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 std::fill(exception_arr, std::next(exception_arr, insert_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, insert_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                std::fill(std::next(exception_arr, insert_sz), std::next(exception_arr, sz), dg::network_exception::RESOURCE_EXHAUSTION);
             }
 
             void add_outbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
-                
+
                 size_t insert_cap   = this->outbound_ip_set.capacity();
                 size_t insert_sz    = std::min(sz, insert_cap);
 
@@ -2100,7 +2121,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 std::fill(exception_arr, std::next(exception_arr, insert_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, insert_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                std::fill(std::next(exception_arr, insert_sz), std::next(exception_arr, sz), dg::network_exception::RESOURCE_EXHAUSTION);
             }
 
             void get_inbound_friend_addr(Address * out_arr, size_t off, size_t& sz, size_t cap) noexcept{
@@ -2121,8 +2142,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
             }
 
-            auto get_inbound_friend_addr_capacity() noexcept -> size_t{ //alright, we realized that in a concurrent context, get_size() is rather unrealistic + does not describe the intention + hard to implement, so it's better to change the semantics here
-                
+            auto get_inbound_friend_addr_iteration_size() noexcept -> size_t{
+
                 return this->inbound_ip_set.size();
             }
 
@@ -2137,7 +2158,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 std::copy(first, last, out_arr);
             }
 
-            auto get_outbound_friend_addr_capacity() noexcept -> size_t{
+            auto get_outbound_friend_addr_iteration_size() noexcept -> size_t{
 
                 return this->outbound_ip_set.size();
             }
@@ -2211,15 +2232,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void get_inbound_friend_addr(Address * addr_arr, size_t off, size_t& sz, size_t cap) noexcept{
 
                 size_t adjusted_off     = std::min(off, this->inbound_friend_set.size()); 
-                size_t max_topping_sz   = this->inbound_friend_set.size() - adjusted_off;
-                sz                      = std::min(cap, max_topping_sz);  
+                size_t app_cap          = this->inbound_friend_set.size() - adjusted_off;
+                sz                      = std::min(cap, app_cap);  
                 auto first              = std::next(this->inbound_friend_set.begin(), adjusted_off);
                 auto last               = std::next(first, sz);
 
                 std::copy(first, last, addr_arr);
             }
 
-            auto get_inbound_friend_addr_size() noexcept -> size_t{
+            auto get_inbound_friend_addr_iteration_size() noexcept -> size_t{
 
                 return this->inbound_friend_deque.size();
             }
@@ -2227,15 +2248,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void get_outbound_friend_addr(Address * addr_arr, size_t off, size_t& sz, size_t cap) noexcept{
 
                 size_t adjusted_off     = std::min(off, this->outbound_friend_set.size());
-                size_t max_topping_sz   = this->outbound_friend_set.size() - adjusted_off;
-                sz                      = std::min(cap, max_topping_sz);
+                size_t app_cap          = this->outbound_friend_set.size() - adjusted_off;
+                sz                      = std::min(cap, app_cap);
                 auto first              = std::next(this->outbound_friend_set.begin(), adjusted_off);
                 auto last               = std::next(first, sz);
 
                 std::copy(first, last, addr_arr);
             }
 
-            auto get_outbound_friend_addr_size() noexcept -> size_t{
+            auto get_outbound_friend_addr_iteration_size() noexcept -> size_t{
 
                 return this->outbound_friend_deque.size();
             }
@@ -2267,39 +2288,39 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void add_inbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                this->friend_controller->add_inbound(addr_arr, sz, exception_arr);
+                // this->friend_controller->add_inbound(addr_arr, sz, exception_arr);
 
-                for (size_t i = 0u; i < sz; ++i){
-                    if (dg::network_exception::is_failed(exception_arr[i])){
-                        auto arg            = InBoundPunchResolutorArgument{};
-                        arg.exception_ptr   = std::next(exception_arr, i);
-                        arg.addr            = addr_arr[i]; 
+                // for (size_t i = 0u; i < sz; ++i){
+                //     if (dg::network_exception::is_failed(exception_arr[i])){
+                //         auto arg            = InBoundPunchResolutorArgument{};
+                //         arg.exception_ptr   = std::next(exception_arr, i);
+                //         arg.addr            = addr_arr[i]; 
 
-                        dg::network_producer_consumer::delvrsrv_deliver(&inbound_punch_resolutor, std::move(arg));
-                    }
-                }
+                //         // dg::network_producer_consumer::delvrsrv_deliver(&inbound_punch_resolutor, std::move(arg));
+                //     }
+                // }
             }
 
             void add_outbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                this->friend_controller->add_outbound(addr_arr, sz, exception_arr);
+                // this->friend_controller->add_outbound(addr_arr, sz, exception_arr);
 
-                for (size_t i = 0u; i < sz; ++i){
-                    if (dg::network_exception::is_failed(exception_arr[i])){
-                        auto arg            = OutBoundPunchResolutorArgument{};
-                        arg.exception_ptr   = std::next(exception_arr, i);
-                        arg.addr            = addr_arr[i];
+                // for (size_t i = 0u; i < sz; ++i){
+                //     if (dg::network_exception::is_failed(exception_arr[i])){
+                //         auto arg            = OutBoundPunchResolutorArgument{};
+                //         arg.exception_ptr   = std::next(exception_arr, i);
+                //         arg.addr            = addr_arr[i];
 
-                        dg::network_producer_consumer::delvrsrv_deliver(&outbound_punch_resolutor, std::move(arg));
-                    }
-                }
+                //         // dg::network_producer_consumer::delvrsrv_deliver(&outbound_punch_resolutor, std::move(arg));
+                //     }
+                // }
             }
 
             void get_inbound_friend_addr(Address * output, size_t off, size_t& sz, size_t cap) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                size_t punch_controller_sz = this->punch_controller->get_inbound_friend_addr_size();
+                size_t punch_controller_sz = this->punch_controller->get_inbound_friend_addr_iteration_size();
 
                 if (off < punch_controller_sz){                    
                     if (off + cap <= punch_controller_sz){
@@ -2321,16 +2342,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 this->friend_controller->get_inbound_friend_addr(output, off - punch_controller_sz, sz, cap);
             }
 
-            auto get_inbound_friend_addr_size() noexcept -> size_t{
+            auto get_inbound_friend_addr_iteration_size() noexcept -> size_t{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                return this->punch_controller->get_inbound_friend_addr_size() + this->friend_controller->get_inbound_friend_addr_size();
+                return this->punch_controller->get_inbound_friend_addr_iteration_size() + this->friend_controller->get_inbound_friend_addr_iteration_size();
             }
 
             void get_outbound_friend_addr(Address * output, size_t off, size_t& sz, size_t cap) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                size_t punch_controller_sz = this->punch_controller->get_outbound_friend_addr_size();
+                size_t punch_controller_sz = this->punch_controller->get_outbound_friend_addr_iteration_size();
 
                 if (off < punch_controller_sz){                    
                     if (off + cap <= punch_controller_sz){
@@ -2352,10 +2373,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 this->friend_controller->get_outbound_friend_addr(output, off - punch_controller_sz, sz, cap);
             }
 
-            auto get_outbound_friend_addr_size() noexcept -> size_t{
+            auto get_outbound_friend_addr_iteration_size() noexcept -> size_t{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                return this->punch_controller->get_outbound_friend_addr_size() + this->friend_controller->get_outbound_friend_addr_size();
+                return this->punch_controller->get_outbound_friend_addr_iteration_size() + this->friend_controller->get_outbound_friend_addr_iteration_size();
             }
     };
 
@@ -2993,6 +3014,14 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //Hyper threading
     //Multiple ports
     //increase rx_queues
+
+    //https://aosabook.org/en/v2/nginx.html
+    //we essentially implemented a forked version of this in a modern language 
+
+    //it's more complicated than yall think, we invented this gay transmission protocol to do one thing, event_driven requests + memory_region_frequency
+    //it's blazingly fast, if correctly calibrated by using appropriate frequencies
+    //I admit I have spent more time to think about socket protocol than actually implementing this, because this is a very important piece of performance, most of the time performance constraints aren't from bandwidth but synchronization overheads
+    //we'll run the code tmr
 
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
