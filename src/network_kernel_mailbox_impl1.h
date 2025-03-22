@@ -55,6 +55,49 @@
 //the value would be dramatically decreased if we are to add transmission control protocol, we are breaking single responsibilities + force clients to give up compute power for the tasks that are not quantifiable, or the tasks that could not be optimially solved without being seen from a hollistic view
 //we would be able to push the bandwidth -> the saturation limit
 
+//I was running the numbers
+//it seems that UDP or every transmission protocol follows the rule of logarit, no matter how many packets we are transmitting
+//let's see what we want
+//we want for every tree operation, the success rate is 90%
+//we want to offset the synchronization overheads by doing concurrent tree operations such is synchronization overhead == last_operation_overhead
+
+//if the success rate is x, we are transmitting 1 million packets (across compute nodes), each 1KB, totalling 1GB
+//assume the logarit for 90% percentile is 1.8
+//ln(1 << 20) / ln(1.7) ~= 26 retranmissions
+//assume the logarit for 50% percentile is 3
+//ln(1 << 20) / ln(3) ~= 13 retransmissions
+
+//let's look at it from the individualism point of view
+//30% transmission fail rate (70% success rate) for individual packets @ a reasonably load balanced network
+//(1 - (30%^n)) ** (1 << 20) = 90%
+//what is n?
+//ln(1 - 90% ** (1 / (1 << 20))) / ln(30%) == 13 retransmission 
+//70% fail -> 45 retransmissions
+//we probably want to do only 10 retranmissions, and the other retranmission responsibility goes to the re-request component 
+
+//so it requires 45 retranmissions to have a 90% success rate of 1GB of internal data transferring across computing nodes
+//the number does not look very promising
+//yet this imposes a problem of multidimensional projections or compression as we call it
+//is our 1GB of raw pixels actually 1GB of data?
+//how about we map the 1GB of raw pixel -> 1MB of information by using multidimensional projection before transmitting the data to another compute nodes for var_intercourse
+//it's the art of projection (we are off topic here, we must be able to push 1GB of data for every tree computation)
+
+//assume that we have a fixed transmission -> kernel, such saturates the outbound of our transmission (we've done our best)
+//the approx equation for synchronization time is total_packet_sz / (outbound * compute_node_sz) + log(min(total_packet_sz, MAX_OUTBOUND_SZ), 3) * transmission_delay_time
+//we dont want to waste our time for synchronization overheads, how about we increase the number of concurrent operations (rocket launching operations), and reduce the total synchronization -> last_rocket_launch synchronization?
+
+//alright, so this is like a hybrid transmission_controlled protocol, it's a very gay protocol (useless without being used in conjunction with upstream optimizations of frequency, it's been 30 years and we have never gotten the TCP right, when to additive increase, when to multiply decrease, etc.)
+//when we thought that we got the protocol right, we came across different patterns for different machines, and this is another machine learning problem
+//yet it's designed to do one thing, to saturate the outbound_network_bandwidth + trigger retransmission for every interval
+
+//I think our job is not to ask but to leave room for calibration
+//we know the hollistic picture of data transmission, we dont want to do advanced transmission controlled protocol like AIMD or whatever for the reasons being we are wasting compute + the task is not quantifiable + we force the users to waste resource for unnecessary features
+
+//alright fellas, we are not in heat and we are not going to rob banks
+//we are going to auction this engine mining, we only get 30% fee for hosting the auction, it's legal fellas, I already asked Mark Zuck to prep a legal team for me on this matter
+//when are we publishing the mining engine again? probably a month or a year
+//yet we have to detail EVERYTHING in order to make sure that this runs correctly
+
 namespace dg::network_kernel_mailbox_impl1::types{
 
     using factory_id_t          = std::array<char, 32>;
@@ -853,6 +896,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    class DefaultExhaustionController: public virtual ExhaustionControllerInterface{
+
+        public:
+
+            auto is_should_wait() noexcept -> bool{
+
+                return true;
+            }
+
+            auto update_waiting_size(size_t) noexcept -> exception_t{
+
+                return dg::network_exception::SUCCESS;
+            }
+    };
+
     class IncrementalIDGenerator: public virtual IDGeneratorInterface{
 
         private:
@@ -876,6 +934,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    //we have to use random_id_generator to avoid coordinated attacks, the chances of packet_id collision are so slim that we dont even care, even if there are collisions, it still follows the rule of 1 request == max_one_receive, ack_sz <= request_sz
     class RandomIDGenerator: public virtual IDGeneratorInterface{
 
         private:
@@ -2009,49 +2068,78 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::unique_ptr<datastructure::unordered_set_interface<Address>> inbound_ip_set; //
-            std::unique_ptr<datastructure::unordered_set_interface<Address>> outbound_ip_set; //
-            dg::deque<Address> inbound_addr_deque;
-            size_t inbound_addr_deque_cap;
-            dg::deque<Address> outbound_addr_deque;
-            size_t outbound_addr_deque_cap;
+            data_structure::temporal_finite_unordered_set<Address> inbound_ip_set;
+            data_structure::temporal_finite_unordered_set<Address> outbound_ip_set;
 
         public:
 
-            NATPunchIPController(std::unique_ptr<datastructure::unordered_set_interface<Address>> inbound_ip_set,
-                                 std::unique_ptr<datastructure::unordered_set_interface<Address>> outbound_ip_set,
-                                 dg::deque<Address> inbound_addr_deque,
-                                 size_t inbound_addr_deque_cap,
-                                 dg::deque<Address> outbound_addr_deque,
-                                 size_t outbound_addr_deque_cap) noexcept: inbound_ip_set(std::move(inbound_ip_set)),
-                                                                           outbound_ip_set(std::move(outbound_ip_set)),
-                                                                           inbound_addr_deque(std::move(inbound_addr_deque)),
-                                                                           inbound_addr_deque_cap(inbound_addr_deque_cap),
-                                                                           outbound_addr_deque(std::move(outbound_addr_deque)),
-                                                                           outbound_addr_deque_cap(outbound_addr_deque_cap){}
+            NATPunchIPController(data_structure::temporal_finite_unordered_set<Address> inbound_ip_set,
+                                 data_structure::temporal_finite_unordered_set<Address> outbound_ip_set) noexcept: inbound_ip_set(std::move(inbound_ip_set)),
+                                                                                                                   outbound_ip_set(std::move(outbound_ip_set)){}
 
-            void add_inbound(Address *, size_t, exception_t *) noexcept{
+            void add_inbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                size_t insert_cap   = this->inbound_ip_set.capacity();
+                size_t insert_sz    = std::min(sz, insert_cap);
+
+                for (size_t i = 0u; i < insert_sz; ++i){
+                    this->inbound_ip_set.insert(addr_arr[i]);
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, insert_sz), dg::network_exception::SUCCESS);
+                std::fill(std::next(exception_arr, insert_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+            }
+
+            void add_outbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
                 
+                size_t insert_cap   = this->outbound_ip_set.capacity();
+                size_t insert_sz    = std::min(sz, insert_cap);
+
+                for (size_t i = 0u; i < insert_sz; ++i){
+                    this->outbound_ip_set.insert(addr_arr[i]);
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, insert_sz), dg::network_exception::SUCCESS);
+                std::fill(std::next(exception_arr, insert_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
             }
 
-            void add_outbound(Address *, size_t, exception_t *) noexcept{
+            void get_inbound_friend_addr(Address * out_arr, size_t off, size_t& sz, size_t cap) noexcept{
 
+                sz                  = 0u;
+                size_t trimmed_off  = std::min(off, this->inbound_ip_set.size());
+                auto first          = std::next(this->inbound_ip_set.begin(), trimmed_off);  
+                auto last           = this->inbound_ip_set.end();
+
+                for (auto it = first; it != last; ++it){
+                    if (sz == cap){
+                        return;
+                    }
+
+                    if (this->outbound_ip_set.contains(*it)){
+                        out_arr[sz++] = *it; 
+                    }
+                }
             }
 
-            void get_inbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept{
-
+            auto get_inbound_friend_addr_capacity() noexcept -> size_t{ //alright, we realized that in a concurrent context, get_size() is rather unrealistic + does not describe the intention + hard to implement, so it's better to change the semantics here
+                
+                return this->inbound_ip_set.size();
             }
 
-            auto get_inbound_friend_addr_size() noexcept -> size_t{
+            void get_outbound_friend_addr(Address * out_arr, size_t off, size_t& sz, size_t cap) noexcept{
 
+                size_t trimmed_off  = std::min(off, this->outbound_ip_set.size());
+                size_t peek_cap     = this->outbound_ip_set.size() - trimmed_off;
+                sz                  = std::min(cap, peek_cap); 
+                auto first          = std::next(this->outbound_ip_set.begin(), trimmed_off);
+                auto last           = std::next(first, sz); 
+
+                std::copy(first, last, out_arr);
             }
 
-            void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept{
+            auto get_outbound_friend_addr_capacity() noexcept -> size_t{
 
-            }
-
-            auto get_outbound_friend_addr_size() noexcept -> size_t{
-
+                return this->outbound_ip_set.size();
             }
     };
 
@@ -2906,8 +2994,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //Multiple ports
     //increase rx_queues
 
-    //we'll be back fellas
-
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -2959,7 +3045,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto ackid_delivery_resolutor                           = InternalRetransmissionAckDeliveryResolutor{};
                     ackid_delivery_resolutor.retransmission_controller      = this->retransmission_controller.get();
 
-                    size_t trimmed_ackid_delivery_sz                        = std::min(this->retransmission_controller->max_consume_size(), buf_arr_sz * constants::MAX_ACK_PER_PACKET);
+                    size_t trimmed_ackid_delivery_sz                        = std::min(this->retransmission_controller->max_consume_size(), buf_arr_sz * constants::MAX_ACK_PER_PACKET); //acked_id_sz <= ack_packet_sz * corresponding_ack_pkt_sz <= ack_packet_sz * MAX_ACK_PER_PACKET <= buf_arr_sz * MAX_ACK_PER_PACKET
                     size_t ackid_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> ackid_deliverer_mem(ackid_deliverer_allocation_cost);
                     auto ackid_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz, ackid_deliverer_mem.get())); 
@@ -2969,7 +3055,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto ibpkt_delivery_resolutor                           = InternalPacketDeliveryResolutor{};
                     ibpkt_delivery_resolutor.dst                            = this->inbound_packet_container.get();
 
-                    size_t trimmed_ibpkt_delivery_sz                        = std::min(this->inbound_packet_container->max_consume_size(), buf_arr_sz);
+                    size_t trimmed_ibpkt_delivery_sz                        = std::min(this->inbound_packet_container->max_consume_size(), buf_arr_sz); //in_bound_sz == req_packet_sz <= buf_arr_sz
                     size_t ibpkt_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ibpkt_delivery_resolutor, trimmed_ibpkt_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> ibpkt_deliverer_mem(ibpkt_deliverer_allocation_cost);
                     auto ibpkt_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ibpkt_delivery_resolutor, trimmed_ibpkt_delivery_sz, ibpkt_deliverer_mem.get()));
@@ -2979,7 +3065,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto obpkt_delivery_resolutor                           = InternalPacketDeliveryResolutor{};
                     obpkt_delivery_resolutor.dst                            = this->outbound_packet_container.get();
 
-                    size_t trimmed_obpkt_delivery_sz                        = std::min(this->outbound_packet_container->max_consume_size(), buf_arr_sz);
+                    size_t trimmed_obpkt_delivery_sz                        = std::min(this->outbound_packet_container->max_consume_size(), buf_arr_sz); //outbound_sz == accumulated_ack_packet_sz <= ack_packet_sz <= buf_arr_sz  
                     size_t obpkt_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&obpkt_delivery_resolutor, trimmed_obpkt_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> obpkt_deliverer_mem(obpkt_deliverer_allocation_cost);
                     auto obpkt_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&obpkt_delivery_resolutor, trimmed_obpkt_delivery_sz, obpkt_deliverer_mem.get()));
@@ -2990,7 +3076,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     ack_vectorizer_resolutor.dst                            = &obpkt_deliverer; 
                     ack_vectorizer_resolutor.ack_packet_gen                 = this->ack_packet_gen.get();
 
-                    size_t trimmed_ack_vectorization_sz                     = std::min(this->ack_vectorization_sz, buf_arr_sz);
+                    size_t trimmed_ack_vectorization_sz                     = std::min(this->ack_vectorization_sz, buf_arr_sz); //ack_vectorization_sz <= ack_pkt_sz <= buf_arr_sz
                     size_t ack_vectorizer_allocation_cost                   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> ack_vectorizer_mem(ack_vectorizer_allocation_cost);
                     auto ack_vectorizer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz, ack_vectorizer_mem.get())); 
@@ -3000,7 +3086,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto thru_ack_delivery_resolutor                        = InternalThruAckResolutor{};
                     thru_ack_delivery_resolutor.packet_id_deliverer         = &ackid_deliverer;
 
-                    size_t trimmed_thru_ack_delivery_sz                     = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz);
+                    size_t trimmed_thru_ack_delivery_sz                     = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_ack_sz <= buf_arr_sz
                     size_t thru_ack_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_ack_delivery_resolutor, trimmed_thru_ack_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_ack_mem(thru_ack_allocation_cost);
                     auto thru_ack_deliverer                                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_ack_delivery_resolutor, trimmed_thru_ack_delivery_sz, thru_ack_mem.get())); 
@@ -3011,7 +3097,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     thru_request_delivery_resolutor.ack_vectorizer          = &ack_vectorizer;
                     thru_request_delivery_resolutor.inbound_deliverer       = &ibpkt_deliverer;
 
-                    size_t trimmed_thru_request_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz);
+                    size_t trimmed_thru_request_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_request_sz <= buf_arr_sz
                     size_t thru_request_allocation_cost                     = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_request_delivery_resolutor, trimmed_thru_request_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_request_mem(thru_request_allocation_cost);
                     auto thru_request_deliverer                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_request_delivery_resolutor, trimmed_thru_request_delivery_sz, thru_request_mem.get())); 
@@ -3020,7 +3106,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     
                     auto thru_krescue_delivery_resolutor                    = InternalThruKRescueResolutor{};
 
-                    size_t trimmed_thru_krescue_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz);
+                    size_t trimmed_thru_krescue_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_rescue_sz <= buf_arr_sz
                     size_t thru_krescue_allocation_cost                     = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_krescue_delivery_resolutor, trimmed_thru_krescue_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_krescue_mem(thru_krescue_allocation_cost);
                     auto thru_krescue_deliverer                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_krescue_delivery_resolutor, trimmed_thru_krescue_delivery_sz, thru_krescue_mem.get())); 
@@ -3032,7 +3118,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     thru_delivery_resolutor.request_thru_deliverer          = &thru_request_deliverer;
                     thru_delivery_resolutor.krescue_thru_deliverer          = &thru_krescue_deliverer;
 
-                    size_t trimmed_thru_delivery_sz                         = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz);
+                    size_t trimmed_thru_delivery_sz                         = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_sz <= buf_arr_sz
                     size_t thru_delivery_allocation_cost                    = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_delivery_resolutor, trimmed_thru_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_delivery_mem(thru_delivery_allocation_cost);
                     auto thru_deliverer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_delivery_resolutor, trimmed_thru_delivery_sz, thru_delivery_mem.get())); 
@@ -3042,7 +3128,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto nothru_ack_delivery_resolutor                      = InternalNoThruAckResolutor{};
                     nothru_ack_delivery_resolutor.ack_vectorizer            = &ack_vectorizer;
 
-                    size_t trimmed_nothru_ack_delivery_sz                   = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz);
+                    size_t trimmed_nothru_ack_delivery_sz                   = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //no_thru_sz <= buf_arr_sz
                     size_t nothru_ack_allocation_cost                       = dg::network_producer_consumer::delvrsrv_allocation_cost(&nothru_ack_delivery_resolutor, trimmed_nothru_ack_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> nothru_ack_delivery_mem(nothru_ack_allocation_cost);
                     auto nothru_ack_deliverer                               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&nothru_ack_delivery_resolutor, trimmed_nothru_ack_delivery_sz, nothru_ack_delivery_mem.get())); 
@@ -3052,8 +3138,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto inbound_delivery_resolutor                         = InternalInBoundIDResolutor{};
                     inbound_delivery_resolutor.downstream_dst               = &thru_deliverer;
                     inbound_delivery_resolutor.nothru_ack_dst               = &nothru_ack_deliverer;
+                    inbound_delivery_resolutor.inbound_id_controller        = this->inbound_id_controller.get();
 
-                    size_t trimmed_inbound_delivery_sz                      = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz);
+                    size_t trimmed_inbound_delivery_sz                      = std::min(this->inbound_id_controller->max_consume_size(), buf_arr_sz); //inbound_sz <= buf_arr_sz
                     size_t inbound_allocation_cost                          = dg::network_producer_consumer::delvsrv_allocation_cost(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> inbound_mem(inbound_allocation_cost);
                     auto inbound_deliverer                                  = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz, inbound_mem.get())); 
@@ -3064,7 +3151,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     traffic_resolutor.downstream_dst                        = &inbound_deliverer;
                     traffic_resolutor.border_controller                     = this->inbound_border_controller.get();
 
-                    size_t trimmed_traffic_resolutor_delivery_sz            = std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz);
+                    size_t trimmed_traffic_resolutor_delivery_sz            = std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz); //traffic_stop_sz <= buf_arr_sz
                     size_t traffic_resolutor_allocation_cost                = dg::network_producer_consumer::delvrsrv_allocation_cost(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> traffic_resolutor_mem(traffic_resolutor_allocation_cost);
                     auto traffic_resolutor_deliverer                        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz, traffic_resolutor_mem.get())); 
@@ -3081,7 +3168,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
                 }
 
-                return success_counter >= this->rest_threshold_sz;
+                return success_counter >= this->rest_threshold_sz; //this is absurb
             }
 
         private:
@@ -3153,7 +3240,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     Packet * base_data_arr = data_arr.base();
                     std::transform(base_data_arr, std::next(base_data_arr, sz), addr_arr.get(), [](const Packet& packet){return packet.fr_addr;});
-                    this->border_controller->thru(addr_arr.get(), sz, response_arr.get());
+                    this->border_controller->thru(addr_arr.get(), sz, response_arr.get()); //we dont want to include packet_sz because we always assume packet as a unit, like persons, we dont say that a midget Mexican != an oversized Mexican
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(response_arr[i])){
@@ -3161,7 +3248,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             continue;
                         }
 
-                        //99% branch flows here - no branch overheads
                         dg::network_producer_consumer::delvrsrv_deliver(this->downstream_dst, std::move(base_data_arr[i]));
                     }
                 }
@@ -3171,6 +3257,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::network_producer_consumer::DeliveryHandle<Packet> * downstream_dst;
                 dg::network_producer_consumer::DeliveryHandle<Packet> * nothru_ack_dst;
+                packet_controller::InBoundIDControllerInterface * inbound_id_controller;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
 
@@ -3179,7 +3266,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     Packet * base_data_arr = data_arr.base();
                     std::transform(base_data_arr, std::next(base_data_arr, sz), id_arr.get(), [](const Packet& packet){return packet.id;});
-                    this->self->inbound_id_controller->thru(id_arr.get(), sz, response_arr.get());
+                    this->inbound_id_controller->thru(id_arr.get(), sz, response_arr.get());
 
                     using radix_t   = dg::network_producer_consumer::DeliveryHandle<Packet> *;
                     radix_t radix_table[2];
@@ -3192,11 +3279,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                             continue;
                         }
 
-                        //this is expensive - there is an optimizable that breaks code readability - if the is_request_packet is likely - we want to abstract the PacketBase and Packet
-                        //and do another radix dispatch - we will talk about this later 
-
                         if (!response_arr[i].value() && packet_service::is_request_packet(base_data_arr[i]) || response_arr[i].has_value()){
-                            //99% of branch flows here
                             dg::network_producer_consumer::delvrsrv_deliver(radix_table[static_cast<int>(response_arr[i].has_value())], std::move(base_data_arr[i]));
                         }
                     }
@@ -3209,7 +3292,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
 
-                    Packet * base_data_arr = data_arr.base();
+                    Packet * base_data_arr  = data_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
                         dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, base_data_arr[i].fr, static_cast<const PacketBase&>(base_data_arr[i]));
@@ -3218,17 +3301,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             };
 
             struct InternalThruResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
-                
+
                 dg::network_producer_consumer::DeliveryHandle<Packet> * ack_thru_deliverer;
                 dg::network_producer_consumer::DeliveryHandle<Packet> * request_thru_deliverer;
                 dg::network_producer_consumer::DeliveryHandle<Packet> * krescue_thru_deliverer;
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
 
-                    Packet * base_data_arr = data_arr.base(); 
+                    Packet * base_data_arr  = data_arr.base(); 
 
                     for (size_t i = 0u; i < sz; ++i){                        
-                        //no branches - optimized into a radix dispatch (this is meaningless without is_trivial)
+                        //this is meaningless without triviality
 
                         if (packet_service::is_ack_packet(base_data_arr[i])){
                             dg::network_producer_consumer::delvrsrv_deliver(this->ack_thru_deliverer, std::move(base_data_arr[i]));
