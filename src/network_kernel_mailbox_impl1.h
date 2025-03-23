@@ -107,6 +107,21 @@
 //(7): leak clear
 //(8): packet_id attack patched by using random_id
 
+//I was thinking about shared links vs individual links
+//assume optimal conditions, we use shared link, we observe the completed time for each link
+//we can replicate the completed time by serving each of the link in the sorted order + pad delays
+//proof is conservation of energy, the shared link always uses more energy than the individual links for the <current_task>
+
+//real life is not optimal
+//there are cases where shared link would result in better response time for all
+//there are two ways to solve the problem:
+//use transmission controlled protocol
+//link aggregation, the unit is now a bag of links, not individuals
+//we aim for simplicity, so we choose the second approach
+//its complicated, we choose the path of precomputed frequencies for global optimality, not local optimality
+//we realized that the only practical thing that has ever worked is calibration + statistics
+//our job is to not tie our hands, and provide enough parameters
+
 namespace dg::network_kernel_mailbox_impl1::types{
 
     using factory_id_t          = std::array<char, 32>;
