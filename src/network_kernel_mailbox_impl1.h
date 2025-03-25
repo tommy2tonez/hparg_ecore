@@ -179,6 +179,8 @@
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
+    static_assert(sizeof(size_t) >= sizeof(uint32_t));
+
     using factory_id_t          = std::array<char, 32>;
     using local_packet_id_t     = uint64_t;
     using packet_polymorphic_t  = uint8_t;
@@ -291,12 +293,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         dg::string content;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(content);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(content);
         }
     };
@@ -304,12 +306,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
     struct RequestPacket: PacketHeader, XOnlyRequestPacket{
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(static_cast<const PacketHeader&>(*this), static_cast<const XOnlyRequestPacket&>(*this));
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyRequestPacket&>(*this));
         }
     };
@@ -318,12 +320,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         dg::vector<PacketBase> ack_vec;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ack_vec);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ack_vec);
         }
     };
@@ -331,12 +333,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
     struct AckPacket: PacketHeader, XOnlyAckPacket{
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(static_cast<const PacketHeader&>(*this), static_cast<const XOnlyAckPacket&>(*this));
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyAckPacket&>(*this))
         }
     };
@@ -344,12 +346,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
     struct XOnlyKRescuePacket{
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             (void) reflector;
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             (void) reflector;
         }
     };
@@ -357,12 +359,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
     struct KRescuePacket: PacketHeader, XOnlyKRescuePacket{
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(static_cast<const PacketHeader&>(*this), static_cast<const XOnlyKRescuePacket&>(*this));
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyKRescuePacket&>(*this));
         }
     }; 
@@ -3356,6 +3358,16 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //if plans went south, it's the plan problem yet we still know what to expect of the soft_synchronization
     //soft_synchronization is the MOST POWERFUL thing in parallel system, we use times and statistics to calibrate our system 
 
+    //we'll talk in details about the state of the art backpropagation, higher derivative orders + single responsibility of node update, integrity validation of leafs, rewind of leafs
+    //think in terms of CPU, we dont really stop, branch, get result, continue, the flow is literally endless, if the result turns out to be wrong, we throw away the results and rewind the states
+    //there is only one way to success fellas, it is DONT trust anything, dont trust everything
+    //every result should be only <for_consideration>
+
+    //if this project is to be finished in 5 years, at least we could say that God is actually spending his time working, rooting for you
+    //we dont really know fellas, after 10 ** 40 flops (maximum flops we could ever reach is 10 ** 60), is God fooling us about the logit values or they are actually the computed logit values
+    //he might get tired and give some random values, we never know
+    //what instruments do you measure this by? 
+
     //alright it sounds silly but in order for all of this to work, we must single responsibilitize every tree node updates, such is a backpropagation to the leaf of 1 is not related to that of 2, etc.
     //everything is an absolute unit of update to the tree
 
@@ -4208,7 +4220,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                               size_t transmission_consumption_cap,
                                               size_t busy_threshold_sz, 
                                               size_t transmission_accumulation_cap = constants::DEFAULT_ACCUMULATION_SIZE) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-            
+
             const size_t MIN_TRANSMISSION_CONSUMPTION_CAP   = size_t{1};
             const size_t MAX_TRANSMISSION_CONSUMPTION_CAP   = size_t{1} << 25; 
             const size_t MIN_BUSY_THRESHOLD_SZ              = size_t{0u};
@@ -4546,9 +4558,6 @@ namespace dg::network_kernel_mailbox_impl1::core{
     struct ComponentFactory{
 
         //we'll fix styles later, let's stick to the sz, cap for every var | size + capacity for methods
-        //we need consistency fellas
-
-        //it's complicated, we'll attempt to abstractize the low level details that are not calibratables for now
         static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_container,
                                                            size_t ib_buffer_accumulation_sz,
  
@@ -4559,7 +4568,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                            size_t ib_packet_busy_threshold_sz,
 
                                                            std::unique_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
-                                                           std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_generator,
+                                                           std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator,
                                                            size_t rescue_packet_sz,
                                                            std::chrono::nanoseconds rescue_dispatch_threshold,
 
@@ -4650,7 +4659,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (krescue_generator == nullptr){
+            if (krescue_packet_generator == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -4829,11 +4838,11 @@ namespace dg::network_kernel_mailbox_impl1::core{
 namespace dg::network_kernel_mailbox_impl1{
     
     struct Config{
-        size_t num_kernel_inbound_worker;
-        size_t num_process_inbound_worker;
-        size_t num_outbound_worker;
-        size_t num_kernel_rescue_worker;
-        size_t num_retry_worker;
+        uint32_t num_kernel_inbound_worker;
+        uint32_t num_process_inbound_worker;
+        uint32_t num_outbound_worker;
+        uint32_t num_kernel_rescue_worker;
+        uint32_t num_retry_worker;
 
         int sin_fam;  
         int comm;
@@ -4842,37 +4851,52 @@ namespace dg::network_kernel_mailbox_impl1{
         uint16_t host_port;
 
         std::chrono::nanoseconds retransmission_delay; 
-        size_t retransmission_queue_cap;
-        size_t retransmission_packet_cap;
-        size_t retransmission_idhashset_cap;
+        uint32_t retransmission_queue_cap;
+        uint32_t retransmission_packet_cap;
+        uint32_t retransmission_idhashset_cap;
 
-        size_t kernel_inbound_container_cap;
-        size_t packet_inbound_container_cap;
-        size_t packet_outbound_container_cap;
-        size_t packet_ack_container_cap; 
-        size_t packet_rescue_container_cap;
+        uint32_t inbound_buffer_container_cap;
+        uint32_t inbound_packet_container_cap;
+        uint32_t inbound_idhashset_cap;
 
-        size_t inbound_tc_peraddr_cap;
-        size_t inbound_tc_global_cap;
-        size_t inbound_tc_addrmap_cap;
-        size_t inbound_tc_side_cap;
+        uint32_t worker_inbound_buffer_accumulation_sz;
+        uint32_t worker_inbound_packet_consumption_cap;
+        uint32_t worker_inbound_packet_busy_threshold_sz;
+        uint32_t worker_rescue_packet_sz_per_transmit; 
+        std::chrono::nanoseconds worker_kernel_rescue_dispatch_threshold;
+        uint32_t worker_retransmission_consumption_cap;
+        uint32_t worker_retransmission_busy_threshold_sz;
+        uint32_t worker_outbound_packet_consumption_cap;
+        uint32_t worker_outbound_packet_busy_threshold_sz;
 
-        size_t outbound_tc_peraddr_cap;
-        size_t outbound_tc_global_cap;
-        size_t outbound_tc_addrmap_cap;
-        size_t outbound_tc_side_cap;
+        uint32_t mailbox_inbound_cap;
+        uint32_t mailbox_outbound_cap;
+        std::chrono::nanoseconds traffic_reset_duration;
 
-        bool is_block_on_exhaustion;
+        uint32_t outbound_ack_packet_container_cap;
+        uint32_t outbound_request_packet_container_cap; 
+        uint32_t outbound_krescue_packet_container_cap;
+        uint32_t outbound_transmit_frequency;
+
+        uint32_t inbound_tc_peraddr_cap;
+        uint32_t inbound_tc_global_cap;
+        uint32_t inbound_tc_addrmap_cap;
+        uint32_t inbound_tc_side_cap;
+
+        uint32_t outbound_tc_peraddr_cap;
+        uint32_t outbound_tc_global_cap;
+        uint32_t outbound_tc_addrmap_cap;
+        uint32_t outbound_tc_side_cap;
 
         std::shared_ptr<external_interface::NATIPController> natip_controller;
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device;
     };
 
-    auto get_natip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
-                              std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
-                              size_t inbound_set_capacity,
-                              size_t outbound_set_capacity) -> std::unique_ptr<external_interface::NATIPControllerInterface>{
-        
+    extern auto get_default_natip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
+                                             std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
+                                             uint32_t inbound_set_capacity,
+                                             uint32_t outbound_set_capacity) -> std::unique_ptr<external_interface::NATIPControllerInterface>{
+
         return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
     }
 
@@ -4880,59 +4904,120 @@ namespace dg::network_kernel_mailbox_impl1{
     //we made it fellas, the first version of the socket
     //it's hard fellas, every line is deadly
     //we made the choice of making every allocations noexcept (because we often dont know what to do otherwise, usually its bad decisions of not using finite pool of memory)
+    //alright fellas, this is the art of everything, everything is RAII, every component lifetime is this guy lifetime
+    //in the C programming, we can never do this
+    //we have to do init() deinit() for each of the component, turning the component on individually in their own namespace
 
-    auto spawn(Config config) -> std::unique_ptr<core::MailboxInterface>{
+    extern auto spawn(Config config) -> std::unique_ptr<core::MailboxInterface>{
         
         using namespace dg::network_kernel_mailbox_impl1::model;
 
-        // std::shared_ptr<packet_controller::WAPScheduler> scheduler{};
-        // std::unique_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller{};
-        // std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen{};
-        // std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container{};
-        // std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container{}; 
-        // std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller{};
-        // std::unique_ptr<packet_controller::InBoundTrafficController> ib_traffic_controller{};
+        std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_container                            = {};
+        std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container                            = {};
+        std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller                           = {};
+        std::unique_ptr<packet_controller::InBoundBorderController> ib_border_controller                            = {};
+        std::unique_ptr<packet_controller::KernelRescuePostInterface> rescue_post                                   = {};
+        std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator                = {};
+        std::unique_ptr<packet_controller::RetransmissionControllerInterface> restranmission_controller             = {};
+        std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container                            = {};
+        std::unique_ptr<packet_controller::OutBoundBorderController> ob_border_controller                           = {};
+        std::unique_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_tranmission_controller = {};
+        std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator                        = {};
+        std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator            = {};
+        std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> socket                                 = {};
+        std::unique_ptr<packet_controller::RequestPacketGeneratorInterface> req_packet_generator                    = {};
 
-        // scheduler               = packet_controller::ComponentFactory::get_wap_scheduler(config.sched_rtt_minbound, config.sched_rtt_maxbound, config.sched_rtt_discretization_sz,
-        //                                                                                  config.sched_adjecent_minbound, config.sched_adjecent_maxbound, config.sched_adjecent_discretization_sz,
-        //                                                                                  config.sched_outgoing_maxbound, config.sched_update_interval, config.sched_reset_interval,
-        //                                                                                  config.sched_map_cap, config.sched_rtt_vec_cap);
+        if (config.natip_controller == nullptr){
+            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+        }
 
-        // retransmission_controller  = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_count, config.global_id_flush_cap, config.retransmission_cap);
-
-        // packet_gen              = packet_controller::ComponentFactory::get_packet_gen(utility::to_factory_id(Address{config.host_ip, config.host_port}), Address{config.host_ip, config.host_port});
-
-        // ib_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_prioritized_packet_container(),
-        //                                                                                                           config.retry_device,
-        //                                                                                                           config.inbound_exhaustion_control_cap);
-                                                                                                                  
-        // ob_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_outbound_packet_container(scheduler), 
-        //                                                                                                           config.retry_device,
-        //                                                                                                           config.outbound_exhaustion_control_cap);
-                                                                                                                  
-
-        // ib_id_controller        = packet_controller::ComponentFactory::get_inbound_id_controller(config.global_id_flush_cap);
+        if (config.retry_device == nullptr){
+            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+        }
         
-        // ib_traffic_controller   = packet_controller::ComponentFactory::get_inbound_traffic_controller(config.inbound_traffic_addr_cap, config.inbound_traffic_global_cap, config.inbound_traffic_max_address);
+        ib_buffer_container         = packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                                                                                                                      config.retry_device,
+                                                                                                                      packet_controller::ComponentFactory::get_default_exhaustion_controller());
 
-        // if (config.sin_fam != AF_INET && config.sin_fam != AF_INET6){
-        //     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        // }
+        ib_packet_container         = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                                                                                                                      config.retry_device,
+                                                                                                                      packet_controller::ComponentFactory::get_default_exhaustion_controller());
 
-        // if (config.comm != SOCK_DGRAM){
-        //     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        // }
+        ib_id_controller            = packet_controller::ComponentFactory::get_inbound_id_controller(config.inbound_idhashset_cap);
 
-        // std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> sock_handle = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-        // dg::network_exception_handler::throw_nolog(socket_service::port_socket(*sock_handle, config.host_port));
+        ib_border_controller        = packet_controller::ComponentFactory::get_inbound_border_controller(config.natip_controller, 
+                                                                                                         config.inbound_tc_peraddr_cap,
+                                                                                                         config.inbound_tc_global_cap,
+                                                                                                         config.inbound_tc_addrmap_cap,
+                                                                                                         config.inbound_tc_side_cap);
 
-        // return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_id_controller), std::move(ib_traffic_controller),
-        //                                                                       scheduler, std::move(sock_handle), 
-        //                                                                       std::move(packet_gen), std::move(retransmission_controller),
-        //                                                                       std::move(ob_packet_container), std::move(ib_packet_container),
-        //                                                                       config.traffic_reset_dur, config.sched_update_interval, 
-        //                                                                       config.num_inbound_worker, config.num_outbound_worker, 
-        //                                                                       config.num_retry_worker);
+        rescue_post                 = packet_controller::ComponentFactory::get_kernel_rescue_post();
+
+        krescue_packet_generator    = packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+
+        retransmission_controller   = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
+                                                                                                                                                                                                  config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                                                                                                                               config.retry_device,
+                                                                                                                               packet_controller::ComponentFactory::get_default_exhaustion_controller());
+
+        ob_packet_container         = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                                                                                             config.outbound_krescue_packet_container_cap),
+                                                                                                                      config.retry_device,
+                                                                                                                      packet_controller::ComponentFactory::get_default_exhaustion_controller());
+
+        ob_border_controller        = packet_controller::ComponentFactory::get_outbound_border_controller(config.natip_controller,
+                                                                                                          config.outbound_tc_peraddr_cap,
+                                                                                                          config.outbound_tc_global_cap,
+                                                                                                          config.outbound_tc_addrmap_cap,
+                                                                                                          config.outbound_tc_side_cap);
+
+        ob_tranmission_controller   = packet_controller::ComponentFactory::get_kernel_outbound_static_transmission_controller(config.outbound_transmit_frequency);
+
+        ack_packet_generator        = packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+        packet_integrity_validator  = packet_controller::ComponentFactory::get_packet_integrity_validator(Address{config.host_ip, config.host_port});
+        req_packet_generator        = packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+        socket                      = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
+
+        dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port));
+
+        return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_buffer_container),
+                                                                              config.worker_inbound_buffer_accumulation_sz,
+
+                                                                              std::move(ib_packet_container),
+                                                                              std::move(ib_id_controller),
+                                                                              std::move(ib_border_controller),
+                                                                              config.worker_inbound_packet_consumption_cap,
+                                                                              config.worker_inbound_packet_busy_threshold_sz,
+
+                                                                              std::move(rescue_post),
+                                                                              std::move(krescue_packet_generator),
+                                                                              config.worker_rescue_packet_sz_per_transmit,
+                                                                              config.worker_kernel_rescue_dispatch_threshold,
+
+                                                                              std::move(retransmission_controller),
+                                                                              config.worker_retransmission_consumption_cap,
+                                                                              config.worker_retransmission_busy_threshold_sz,
+                                                                              
+                                                                              std::move(ob_packet_container),
+                                                                              std::move(ob_border_controller),
+                                                                              std::move(ob_tranmission_controller),
+                                                                              config.worker_outbound_packet_consumption_cap,
+                                                                              config.worker_outbound_packet_busy_threshold_sz,
+                                                                              
+                                                                              std::move(ack_packet_generator),
+                                                                              std::move(packet_integrity_validator),
+                                                                              std::move(socket),
+                                                                              
+                                                                              std::move(request_packet_generator),
+                                                                              config.mailbox_inbound_cap,
+                                                                              config.mailbox_outbound_cap,
+
+                                                                              config.traffic_reset_duration,
+
+                                                                              config.num_kernel_inbound_worker,
+                                                                              config.num_process_inbound_worker,
+                                                                              config.num_kernel_rescue_worker,
+                                                                              config.num_retry_worker);
     }
 }
 

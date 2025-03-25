@@ -159,13 +159,18 @@ namespace dg::network_hash{
         return h1;
     } 
 
-    constexpr auto hash_bytes(const char * inp, size_t n) noexcept -> size_t{
+    constexpr auto hash_bytes(const char * inp, size_t n) noexcept -> uint64_t{
 
         return murmur_hash(inp, n);
-    }      
+    }
+
+    constexpr auto hash_bytes(const char * inp, size_t n, uint32_t secret) -> uint64_t{
+
+        return murmur_hash(inp, n, secret);
+    }
 
     template <size_t N>
-    constexpr auto hash_bytes(const char * inp, const std::integral_constant<size_t, N> n) noexcept -> size_t{
+    constexpr auto hash_bytes(const char * inp, const std::integral_constant<size_t, N> n) noexcept -> uint64_t{
 
         return murmur_hash(inp, n);
     }
