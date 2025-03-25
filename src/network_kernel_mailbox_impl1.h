@@ -174,6 +174,8 @@
 
 //alright Morpheus, we'll wake you up in time, I think you are 100000x smarter than all of us combined so make wise choices
 //we have run numbers + calculations, this is probably the best socket path that we could choose
+//maybe its true that no good deed goes unpunished
+//we'll see fellas
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -366,7 +368,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
     }; 
 
     struct Packet: PacketHeader{
-        std::variant<XOnlyRequestPacket, XOnlyAckPacket, XOnlyKRescuePacket> xonly_content; //alright, the question is whether this is optional polymorphic, assume non-optimal polymorphic for now (this introduces so many complexities), we'll add measurements
+        std::variant<XOnlyKRescuePacket, XOnlyRequestPacket, XOnlyAckPacket> xonly_content; //alright, the question is whether this is optional polymorphic, assume non-optimal polymorphic for now (this introduces so many complexities), we'll add measurements
                                                                                             //or we can do it the std_way, the use-case of Packet is not defined if it is to be optional_polymorphic after being <brought_to_life> via <factory_pattern>
     };
 
@@ -397,10 +399,38 @@ namespace dg::network_kernel_mailbox_impl1::constants{
         krescue = 2u
     };
 
-    static inline constexpr size_t MAXIMUM_MSG_SIZE             = size_t{1} << 10;
-    static inline constexpr size_t MAX_PACKET_CONTENT_SIZE      = size_t{1} << 10;
-    static inline constexpr size_t MAX_ACK_PER_PACKET           = size_t{1} << 8;
-    static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE    = size_t{1} << 4;
+    static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 10;
+    static inline constexpr size_t MAX_PACKET_CONTENT_SIZE              = size_t{1} << 10;
+    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 10;
+    static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
+    static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 10;
+}
+
+namespace dg::network_kernel_mailbox_impl1::external_interface{
+
+    class IPSieverInterface{
+
+        public:
+
+            virtual ~IPSieverInterface() noexcept = default;
+            virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
+    };
+
+    class NATIPControllerInterface{
+
+        public:
+
+            virtual ~NATIPControllerInterface() noexcept = default;
+
+            virtual void add_inbound(Address *, size_t, exception_t *) noexcept = 0;
+            virtual void add_outbound(Address *, size_t, exception_t *) noexcept = 0;
+
+            virtual void get_inbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0; 
+            virtual auto get_inbound_friend_addr_size() noexcept -> size_t = 0;
+
+            virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
+            virtual auto get_outbound_friend_addr_size() noexcept -> size_t = 0;
+    };
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
@@ -413,6 +443,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual ~SchedulerInterface() noexcept = default;
             virtual auto schedule(Address) noexcept -> std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> = 0;
+    };
+
+    class PacketIntegrityValidatorInterface{
+
+        public:
+
+            virtual ~PacketIntegrityValidatorInterface() noexcept = default;
+            virtual auto is_valid(const Packet&) noexcept -> exception_t = 0;
     };
 
     class UpdatableInterface{
@@ -502,14 +540,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual void push(std::move_iterator<dg::string *>, size_t, exception_t *) noexcept = 0;
             virtual void pop(dg::string *, size_t&, size_t) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
-    };
-
-    class IPSieverInterface{
-
-        public:
-
-            virtual ~IPSieverInterface() noexcept = default;
-            virtual auto thru(Address) noexcept -> std::expected<bool, exception_t> = 0;
     };
 
     class PacketContainerInterface{
@@ -625,6 +655,35 @@ namespace dg::network_kernel_mailbox_impl1::utility{
             }
 
             return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        }
+    }
+
+    static auto validate_ipv4(const char *, size_t sz) noexcept -> exception_t{
+
+        if (sz != 4u){
+            return dg::network_exception::BAD_IP_LENGTH;
+        }
+
+        return dg::network_exception::SUCCESS; //alright, we might be delusionalists, yet we think there are rooms for checking the regex of ips, there is no way we are pinging FBI or CIA for examples
+    }
+
+    static auto validate_ipv6(const char *, size_t sz) noexcept -> exception_t{
+
+        if (sz != 16u){
+            return dg::network_exception::BAD_IP_LENGTH;
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    static auto validate_ip(const IP& ip) noexcept -> exception_t{
+
+        if (ip.sin_fam() == AF_INET){
+            return validate_ipv4(ip.data(), 4u);
+        } else if (ip.sin_fam() == AF_INET6){
+            return validate_ipv6(ip.data(), 16u);
+        } else{
+            return dg::network_exception::UNSUPPORTED_FUNCTIONALITY;
         }
     }
 }
@@ -852,7 +911,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                                                             cap(capacity){
 
                 if (capacity == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::BAD_ARGUMENT);
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
                 this->hashset.reserve(capacity);
@@ -1025,13 +1084,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto serialize_request_packet(RequestPacket packet) noexcept -> dg::string{
 
-        constexpr size_t header_sz  = dg::network_compact_serializer::integrity_size(PacketHeader{});
+        using x_header_t            = std::pair<PacketHeader, uint64_t>; 
+
+        uint64_t integrity_hash     = dg::network_hash::murmur_hash(packet.content.data(), packet_content.size());
+        auto x_header               = x_header_t{static_cast<const PacketHeader&>(packet), integrity_hash};
+        size_t header_sz            = dg::network_compact_serializer::integrity_size(x_header);
         size_t content_sz           = packet.content.size();
         size_t total_sz             = content_sz + header_sz;
         dg::string bstream          = std::move(packet.content);
         bstream.resize(total_sz);
-        char * header_ptr           = std::next(bstream.data(), content_sz); //this gives me chill without doing checksum for the buffer (I think this has to be an option), yet we have to steer in the way of <inbound_data_could_be_maliciously_engineered> and we'll come back for statistical chances later
-        dg::network_compact_serializer::integrity_serialize_into(header_ptr, static_cast<const PacketHeader&>(packet));
+        char * header_ptr           = std::next(bstream.data(), content_sz); //this gives me chill without doing checksum for the buffer (I think this has to be an option), yet we have to steer in the way of <inbound_data_could_be_maliciously_engineered> and we'll come back for statistical chances later, alright fellas, we'll include chksum for now
+        dg::network_compact_serializer::integrity_serialize_into(header_ptr, x_header);
 
         return bstream;
     }
@@ -1048,14 +1111,24 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto deserialize_request_packet(dg::string bstream) noexcept -> std::expected<RequestPacket, exception_t>{
 
-        size_t header_sz    = dg::network_compact_serializer::integrity_size(PacketHeader{});
+        using x_header_t    = std::pair<PacketHeader, uint64_t>; 
+
+        size_t header_sz    = dg::network_compact_serializer::integrity_size(x_header_t{});
+        auto x_header       = x_header_t{};
         RequestPacket rs    = {};
         auto [left, right]  = stdx::backsplit_str(std::move(bstream), header_sz);
-        rs.content          = std::move(left);
-        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<PacketHeader>)(static_cast<PacketHeader&>(rs), right.data(), right.size()); //this would crash, it's this guy responsibility to make sure the integrity of the buffer -> the underlying data (at least there is no serious corruption post the function call)
+        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<x_header_t>)(x_header, right.data(), right.size()); //this would crash, it's this guy responsibility to make sure the integrity of the buffer -> the underlying data (at least there is no serious corruption post the function call)
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
+        }
+
+        rs.content                      = std::move(left);
+        static_cast<PacketHeader&>(rs)  = std::get<0>(x_header);
+        uint64_t integrity_hash         = dg::network_hash::murmur_hash(rs.content.data(), rs.content.size());
+
+        if (integrity_hash != std::get<1>(x_header)){
+            return std::unexpected(dg::network_exception::SOCKET_CORRUPTED_PACKET);
         }
 
         return rs;
@@ -1143,6 +1216,24 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
+    class BatchUpdater: public virtual UpdatableInterface{
+
+        private:
+
+            dg::vector<std::shared_ptr<UpdatableInterface>> update_vec;
+        
+        public:
+
+            BatchUpdater(dg::vector<std::shared_ptr<UpdatableInterface>> update_vec) noexcept: update_vec(std::move(update_vec)){}
+
+            void update() noexcept{
+
+                for (const auto& updatable: this->update_vec){
+                    updatable->update();
+                }
+            }
+    };
+
     class ASAPScheduler: public virtual SchedulerInterface{
 
         public:
@@ -1189,6 +1280,36 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             auto update_waiting_size(size_t) noexcept -> exception_t{
+
+                return dg::network_exception::SUCCESS;
+            }
+    };
+
+    class PacketIntegrityValidator: public virtual PacketIntegrityValidatorInterface{
+
+        private:
+
+            Address host_addr;
+        
+        public:
+
+            PacketIntegrityValidator(Address host_addr) noexcept: host_addr(std::move(host_addr)){}
+
+            auto is_valid(const Packet& packet) noexcept -> exception_t{
+
+                if (packet.xonly_content.valueless_by_exception()){
+                    return dg::network_exception::VARIANT_VBE;
+                }
+
+                if (packet.to_addr != this->host_addr){
+                    return dg::network_exception::SOCKET_BAD_RECEIPIENT;
+                }
+                
+                exception_t ip_chk = utility::validate_ip(packet.fr_addr.ip); 
+
+                if (dg::network_exception::is_failed(ip_chk)){
+                    return ip_chk;
+                }
 
                 return dg::network_exception::SUCCESS;
             }
@@ -1298,6 +1419,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                             host_addr(std::move(host_addr)){}
 
             auto get(Address to_addr, PacketBase * pkt_base_arr, size_t sz) noexcept -> std::expected<AckPacket, exception_t>{
+
+                if (sz > constants::MAX_ACK_PER_PACKET){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
 
                 auto ack_vec                = dg::network_exception::cstyle_initialize<dg::vector<PacketBase>>(sz);
 
@@ -2006,16 +2131,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_capacity) noexcept{
 
-                //this does not look good yet it's probably a good solution - we cant radix this as a binary tree insertion 
-                //as request_container uses schedules
-                //ack uses asap priority queues (we rely on request's frequency)
-                //and other guys use different kinds of containerization
-
                 constexpr size_t CONTAINER_SZ   = 3u;
                 using container_ptr_t           = PacketContainerInterface *;
                 container_ptr_t container_arr[CONTAINER_SZ]; 
                 container_arr[0]                = this->ack_container.get();
-                container_arr[1]                = this->suggest_container.get();
+                container_arr[1]                = this->request_container.get();
                 container_arr[2]                = this->krescue_container.get();
 
                 sz                      = 0u;
@@ -2246,7 +2366,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::shared_ptr<external_interface::NATIPControllerInterface> nat_ip_controller;
             std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
             dg::unordered_set<Address> thru_ip_set;
             dg::unordered_set<Address> inbound_ip_side_set;
@@ -2256,7 +2376,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            InBoundBorderController(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
+            InBoundBorderController(std::shared_ptr<external_interface::NATIPControllerInterface> nat_ip_controller,
                                     std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
                                     dg::unordered_set<Address> thru_ip_set,
                                     dg::unordered_set<Address> inbound_ip_side_set,
@@ -2337,10 +2457,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(inbound_addr_cap);
 
                 this->nat_ip_controller->get_inbound_friend_addr(addr_arr.get(), 0u, inbound_addr_sz, inbound_addr_cap);
-
-                for (size_t i = 0u; i < inbound_addr_sz; ++i){
-                    this->thru_ip_set.insert(addr_arr[i]);
-                }
+                this->thru_ip_set.insert(addr_arr.get(), std::next(addr_arr.get(), inbound_addr_sz));
             }
     };
 
@@ -2349,7 +2466,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller;
+            std::shared_ptr<external_interface::NATIPControllerInterface> nat_ip_controller;
             std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
             dg::unordered_set<Address> outbound_ip_side_set;
             size_t outbound_ip_side_set_cap;
@@ -2358,7 +2475,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            OutBoundBorderController(std::shared_ptr<packet_controller::NATIPControllerInterface> nat_ip_controller,
+            OutBoundBorderController(std::shared_ptr<external_interface::NATIPControllerInterface> nat_ip_controller,
                                      std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
                                      dg::unordered_set<Address> outbound_ip_side_set,
                                      size_t outbound_ip_side_set_cap,
@@ -2428,7 +2545,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class NATPunchIPController: public virtual NATIPControllerInterface{
+    class NATPunchIPController: public virtual external_interface::NATIPControllerInterface{
 
         private:
 
@@ -2507,19 +2624,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class NATFriendIPController: public virtual NATIPControllerInterface{
+    class NATFriendIPController: public virtual external_interface::NATIPControllerInterface{
 
         private:
 
-            std::shared_ptr<IPSieverInterface> inbound_ip_siever;
-            std::shared_ptr<IPSieverInterface> outbound_ip_siever;
+            std::shared_ptr<external_interface::IPSieverInterface> inbound_ip_siever;
+            std::shared_ptr<external_interface::IPSieverInterface> outbound_ip_siever;
             data_structure::temporal_finite_unordered_set<Address> inbound_friend_set; //we've yet to know whether add_inbound uniqueness of entries is the caller or callee responsibility - let's make it callee responsibility for now
             data_structure::temporal_finite_unordered_set<Address> outbound_friend_set;
             
         public:
 
-            NATFriendIPController(std::shared_ptr<IPSieverInterface> inbound_ip_siever,
-                                  std::shared_ptr<IPSieverInterface> outbound_ip_siever,
+            NATFriendIPController(std::shared_ptr<external_interface::IPSieverInterface> inbound_ip_siever,
+                                  std::shared_ptr<external_interface::IPSieverInterface> outbound_ip_siever,
                                   data_structure::temporal_finite_unordered_set<Address> inbound_friend_set,
                                   data_structure::temporal_finite_unordered_set<Address> outbound_friend_set) noexcept: inbound_ip_siever(std::move(inbound_ip_siever)),
                                                                                                                         outbound_ip_siever(std::move(outbound_ip_siever)),
@@ -2599,7 +2716,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
-    class NATIPController: public virtual NATIPControllerInterface{
+    class NATIPController: public virtual external_interface::NATIPControllerInterface{
 
         private:
 
@@ -2733,6 +2850,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     };
 
     struct ComponentFactory{
+
+        static auto get_batch_updater(dg::vector<std::shared_ptr<UpdatableInterface>> updatable_vec) -> std::unique_ptr<UpdatableInterface>{
+
+            for (const auto& updatable: updatable_vec){
+                if (updatable == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
+
+            return std::make_unique<BatchUpdater>(std::move(updatable_vec));
+        }
 
         static auto get_asap_scheduler() -> std::unique_ptr<SchedulerInterface>{
 
@@ -3050,7 +3178,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                        global_counter);
         }
 
-        static auto get_inbound_border_controller(std::shared_ptr<packet_controller::NATIPControllerInterface> natip_controller,
+        static auto get_inbound_border_controller(std::shared_ptr<external_interface::NATIPControllerInterface> natip_controller,
                                                   size_t peraddr_capacity,
                                                   size_t global_capacity,
                                                   size_t addr_capacity,
@@ -3086,7 +3214,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                              stdx::hdi_container<size_t>{consume_sz});
         }
 
-        static auto get_outbound_border_controller(std::shared_ptr<packet_controller::NATIPControllerInterface> natip_controller,
+        static auto get_outbound_border_controller(std::shared_ptr<external_interface::NATIPControllerInterface> natip_controller,
                                                    size_t peraddr_capacity,
                                                    size_t global_capacity,
                                                    size_t addr_capacity,
@@ -3137,8 +3265,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                           data_structure::temporal_finite_unordered_set(outbound_set_capacity));
         }
 
-        static auto get_synchronous_natfriend_ip_controller(std::shared_ptr<IPSieverInterface> inbound_rule,
-                                                            std::shared_ptr<IPSieverInterface> outbound_rule,
+        static auto get_synchronous_natfriend_ip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
+                                                            std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
                                                             size_t inbound_set_capacity,
                                                             size_t outbound_set_capacity) -> std::unique_ptr<NATIPControllerInterface>{
 
@@ -3169,8 +3297,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                            data_structure::temporal_finite_unordered_set(outbound_set_capacity));
         }
 
-        static auto get_nat_ip_controller(std::shared_ptr<IPSieverInterface> inbound_rule,
-                                          std::shared_ptr<IPSieverInterface> outbound_rule,
+        static auto get_nat_ip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
+                                          std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
                                           size_t inbound_set_capacity,
                                           size_t outbound_set_capacity) -> std::unique_ptr<NATIPControllerInterface>{
             
@@ -3206,6 +3334,31 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
     using namespace dg::network_kernel_mailbox_impl1::model; 
 
+    //alright this was a bop
+    //we'll use timed_mutex + reactor pattern to solve this problem
+    //we'll work on this problem tmr
+    //we were thinking that 2ms sleeping time in between no_production intervals is reasonable
+    //because timed_mutex is expensive in terms of allocations + kernel queueing + unfair wake_up
+    //we'll see about that
+    //thing is the std::sleep is actually scalable, wheras abusing the std::mutex or kernel customized wake_up would reduce performance across cores very badly
+    //especially the router problem, we dont really know the latency, usually it is ~= 1ms ... so adding the control_flow might not be useful 
+    //the specific number for AWS same region latency uncertainty is ~= .5ms, ... so we can rely on the sleep() feature of std to get this right
+
+    //...
+    //the only regret we think we would have in the future is doing non-discriminated retransmissions (there are costs to uniformity)
+    //even then, we would want to have multiple ports + multiple mailboxes to do different static transmission rates (if we aim to generalize EVERYTHING in one component, our component's worth nothing, it has nouses)
+    //we probably would want to do pow2 discretization of retransmission_delay
+
+    //...
+    //coding a parallel computing system is NOT easy, because we never do explicit synchronization requests to the server but rather time guesses and agreed_upon contracts by implementation 
+    //imagine we are to implement a transmission_controlled_protocol, the uncertainty of synchronization is now the worst case scenerio of the transmission_protocol (1MB/s or 1GB/s)
+    //we dont want that to happen, so we make plans, plans of single_links instead of shared_links  
+    //if plans went south, it's the plan problem yet we still know what to expect of the soft_synchronization
+    //soft_synchronization is the MOST POWERFUL thing in parallel system, we use times and statistics to calibrate our system 
+
+    //alright it sounds silly but in order for all of this to work, we must single responsibilitize every tree node updates, such is a backpropagation to the leaf of 1 is not related to that of 2, etc.
+    //everything is an absolute unit of update to the tree
+
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -3216,7 +3369,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<model::SocketHandle> socket;
             size_t packet_consumption_cap;
             size_t packet_transmit_cap;
-            size_t rest_threshold_sz;
+            size_t busy_threshold_sz;
 
         public:
 
@@ -3226,18 +3379,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                            std::shared_ptr<model::SocketHandle> socket,
                            size_t packet_consumption_cap,
                            size_t packet_transmit_cap,
-                           size_t rest_threshold_sz) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
+                           size_t busy_threshold_sz) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
                                                                border_controller(std::move(border_controller)),
                                                                exhaustion_controller(std::move(exhaustion_controller)),
                                                                socket(std::move(socket)),
                                                                packet_consumption_cap(packet_consumption_cap),
                                                                packet_transmit_cap(packet_transmit_cap),
-                                                               rest_threshold_sz(rest_threshold_sz){}
+                                                               busy_threshold_sz(busy_threshold_sz){}
 
             bool run_one_epoch() noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->packet_consumption_cap);
-                size_t success_sz       = {};
                 size_t packet_arr_sz    = {};
                 this->outbound_packet_container->pop(packet_arr.get(), packet_arr_sz, this->packet_consumption_cap);
 
@@ -3251,7 +3403,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     auto mailchimp_resolutor                    = InternalMailChimpResolutor{};
                     mailchimp_resolutor.socket                  = this->socket.get();
                     mailchimp_resolutor.exhaustion_controller   = this->exhaustion_controller.get();  
-                    mailchimp_resolutor.success_counter         = &success_sz;
 
                     size_t trimmed_mailchimp_delivery_sz        = std::min(this->packet_transmit_cap, packet_arr_sz);
                     size_t mailchimp_deliverer_alloc_sz         = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailchimp_resolutor, trimmed_mailchimp_delivery_sz);
@@ -3272,7 +3423,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
                 }
 
-                return success_sz >= this->rest_threshold_sz;
+                return packet_arr_sz >= this->busy_threshold_sz;
             }
 
         private:
@@ -3286,7 +3437,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 model::SocketHandle * socket;
                 packet_controller::KernelOutBoundTransmissionControllerInterface * exhaustion_controller;
-                size_t * success_counter;
 
                 void push(std::move_iterator<InternalMailChimpArgument *> data_arr, size_t sz) noexcept{
 
@@ -3307,11 +3457,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                         if (dg::network_exception::is_failed(err)){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
-                        } else{
-                            *this->success_counter += 1;
                         }
 
-                        dg::network_asynchronous::hardware_sleep(transmit_period);
+                        dg::hrtimers::high_resolution_sleep(transmit_period);
                     }
                 }
             };
@@ -3324,43 +3472,41 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller;
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             size_t retransmission_consumption_cap;
-            size_t rest_threshold_sz; 
+            size_t retransmission_accumulation_cap;
+            size_t busy_threshold_sz;
 
         public:
 
             RetransmissionWorker(std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller,
                                  std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
                                  size_t retransmission_consumption_cap,
-                                 size_t rest_threshold_sz) noexcept: retransmission_controller(std::move(retransmission_controller)),
+                                 size_t retransmission_accumulation_cap,
+                                 size_t busy_threshold_sz) noexcept: retransmission_controller(std::move(retransmission_controller)),
                                                                      outbound_packet_container(std::move(outbound_packet_container)),
                                                                      retransmission_consumption_cap(retransmission_consumption_cap),
-                                                                     rest_threshold_sz(rest_threshold_sz){}
+                                                                     retransmission_accumulation_cap(retransmission_accumulation_cap),
+                                                                     busy_threshold_sz(busy_threshold_sz){}
 
             bool run_one_epoch() noexcept{
 
-                size_t success_counter = {};
+                dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->retransmission_consumption_cap);
+                size_t packet_arr_sz                = {};
+                this->retransmission_controller->get_retriables(packet_arr.get(), packet_arr_sz, this->retransmission_consumption_cap);
 
-                {
-                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(this->retransmission_consumption_cap);
-                    size_t packet_arr_sz                = {};
-                    this->retransmission_controller->get_retriables(packet_arr.get(), packet_arr_sz, this->retransmission_consumption_cap);
+                auto delivery_resolutor             = InternalDeliveryResolutor{};
+                delivery_resolutor.retransmit_dst   = this->retransmission_controller.get();
+                delivery_resolutor.container_dst    = this->outbound_packet_container.get();
 
-                    auto delivery_resolutor             = InternalDeliveryResolutor{};
-                    delivery_resolutor.retransmit_dst   = this->retransmission_controller.get();
-                    delivery_resolutor.container_dst    = this->outbound_packet_container.get();
-                    delivery_resolutor.success_counter  = &success_counter;
+                size_t trimmed_delivery_handle_sz   = std::min(std::min(std::min(this->retransmission_controller->max_consume_size(), this->outbound_packet_container->max_consume_size()), packet_arr_sz), this->retransmission_accumulation_cap);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(&delivery_resolutor, trimmed_delivery_handle_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&delivery_resolutor, trimmed_delivery_handle_sz, dh_mem.get()));
 
-                    size_t trimmed_delivery_handle_sz   = std::min(std::min(this->retransmission_controller->max_consume_size(), this->outbound_packet_container->max_consume_size()), packet_arr_sz);
-                    size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(&delivery_resolutor, trimmed_delivery_handle_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
-                    auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&delivery_resolutor, trimmed_delivery_handle_sz, dh_mem.get()));
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(packet_arr[i]));
-                    }
+                for (size_t i = 0u; i < sz; ++i){
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(packet_arr[i]));
                 }
 
-                return success_counter >= this->rest_threshold_sz;
+                return packet_arr_sz >= this->busy_threshold_sz;
             }
 
         private:
@@ -3369,7 +3515,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 packet_controller::RetransmissionControllerInterface * retransmit_dst;
                 packet_controller::PacketContainerInterface * container_dst;
-                size_t * success_counter;
 
                 void push(std::move_iterator<Packet *> packet_arr, size_t sz) noexcept{
 
@@ -3383,8 +3528,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
-                        } else{
-                            *this->success_counter += 1;
                         }
                     }
 
@@ -3405,7 +3548,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post;
-            std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen;
+            std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen;
             size_t rescue_packet_sz;
             std::chrono::nanoseconds rescue_threshold;
 
@@ -3413,7 +3556,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
             KernelRescueWorker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
                                std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
-                               std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen,
+                               std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen,
                                size_t rescue_packet_sz,
                                std::chrono::nanoseconds rescue_threshold) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
                                                                                     rescue_post(std::move(rescue_post)),
@@ -3610,11 +3753,11 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container;
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller;
             std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller;
-            std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
-            Address host_addr;
+            std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
+            std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator;
             size_t ack_vectorization_sz;
-            size_t inbound_consumption_sz;
-            size_t rest_threshold_sz;
+            size_t inbound_consumption_cap;
+            size_t busy_threshold_sz;
 
         public:
 
@@ -3624,165 +3767,163 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
                           std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller,
                           std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller,
-                          std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
-                          Address host_addr,
+                          std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
+                          std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
                           size_t ack_vectorization_sz,
-                          size_t inbound_consumption_sz,
-                          size_t rest_threshold_sz) noexcept: retransmission_controller(std::move(retransmission_controller)),
+                          size_t inbound_consumption_cap,
+                          size_t busy_threshold_sz) noexcept: retransmission_controller(std::move(retransmission_controller)),
                                                               outbound_packet_container(std::move(outbound_packet_container)),
                                                               inbound_packet_container(std::move(inbound_packet_container)),
                                                               inbound_buffer_container(std::move(inbound_buffer_container)),
                                                               inbound_id_controller(std::move(inbound_id_controller)),
                                                               inbound_border_controller(std::move(inbound_border_controller)),
                                                               ack_packet_gen(std::move(ack_packet_gen)),
-                                                              host_addr(std::move(host_addr)),
+                                                              packet_integrity_validator(std::move(packet_integrity_validator)),
                                                               ack_vectorization_sz(ack_vectorization_sz),
-                                                              inbound_consumption_sz(inbound_consumption_sz),
-                                                              rest_threshold_sz(rest_threshold_sz){}
+                                                              inbound_consumption_cap(inbound_consumption_cap),
+                                                              busy_threshold_sz(busy_threshold_sz){}
 
             bool run_one_epoch() noexcept{
 
-                size_t success_counter = {};
+                dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(this->inbound_consumption_cap);
+                size_t buf_arr_sz = {};
+                this->inbound_buffer_container->pop(buf_arr.get(), buf_arr_sz, this->inbound_consumption_cap);
 
-                {
-                    dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(this->inbound_consumption_sz);
-                    size_t buf_arr_sz = {};
-                    this->inbound_buffer_container->pop(buf_arr.get(), buf_arr_sz, this->inbound_consumption_sz);
+                //
 
-                    //
+                auto ackid_delivery_resolutor                           = InternalRetransmissionAckDeliveryResolutor{};
+                ackid_delivery_resolutor.retransmission_controller      = this->retransmission_controller.get();
 
-                    auto ackid_delivery_resolutor                           = InternalRetransmissionAckDeliveryResolutor{};
-                    ackid_delivery_resolutor.retransmission_controller      = this->retransmission_controller.get();
+                size_t trimmed_ackid_delivery_sz                        = std::min(std::min(this->retransmission_controller->max_consume_size(), buf_arr_sz * constants::MAX_ACK_PER_PACKET), constants::DEFAULT_ACCUMULATION_SIZE); //acked_id_sz <= ack_packet_sz * corresponding_ack_pkt_sz <= ack_packet_sz * MAX_ACK_PER_PACKET <= buf_arr_sz * MAX_ACK_PER_PACKET
+                size_t ackid_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ackid_deliverer_mem(ackid_deliverer_allocation_cost);
+                auto ackid_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz, ackid_deliverer_mem.get())); 
 
-                    size_t trimmed_ackid_delivery_sz                        = std::min(this->retransmission_controller->max_consume_size(), buf_arr_sz * constants::MAX_ACK_PER_PACKET); //acked_id_sz <= ack_packet_sz * corresponding_ack_pkt_sz <= ack_packet_sz * MAX_ACK_PER_PACKET <= buf_arr_sz * MAX_ACK_PER_PACKET
-                    size_t ackid_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> ackid_deliverer_mem(ackid_deliverer_allocation_cost);
-                    auto ackid_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ackid_delivery_resolutor, trimmed_ackid_delivery_sz, ackid_deliverer_mem.get())); 
+                //
 
-                    //
+                auto ibpkt_delivery_resolutor                           = InternalPacketDeliveryResolutor{};
+                ibpkt_delivery_resolutor.dst                            = this->inbound_packet_container.get();
 
-                    auto ibpkt_delivery_resolutor                           = InternalPacketDeliveryResolutor{};
-                    ibpkt_delivery_resolutor.dst                            = this->inbound_packet_container.get();
+                size_t trimmed_ibpkt_delivery_sz                        = std::min(std::min(this->inbound_packet_container->max_consume_size(), buf_arr_sz), constants::DEFAULT_ACCUMULATION_SIZE); //in_bound_sz == req_packet_sz <= buf_arr_sz
+                size_t ibpkt_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ibpkt_delivery_resolutor, trimmed_ibpkt_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ibpkt_deliverer_mem(ibpkt_deliverer_allocation_cost);
+                auto ibpkt_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ibpkt_delivery_resolutor, trimmed_ibpkt_delivery_sz, ibpkt_deliverer_mem.get()));
 
-                    size_t trimmed_ibpkt_delivery_sz                        = std::min(this->inbound_packet_container->max_consume_size(), buf_arr_sz); //in_bound_sz == req_packet_sz <= buf_arr_sz
-                    size_t ibpkt_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&ibpkt_delivery_resolutor, trimmed_ibpkt_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> ibpkt_deliverer_mem(ibpkt_deliverer_allocation_cost);
-                    auto ibpkt_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ibpkt_delivery_resolutor, trimmed_ibpkt_delivery_sz, ibpkt_deliverer_mem.get()));
+                //
 
-                    //
+                auto obpkt_delivery_resolutor                           = InternalPacketDeliveryResolutor{};
+                obpkt_delivery_resolutor.dst                            = this->outbound_packet_container.get();
 
-                    auto obpkt_delivery_resolutor                           = InternalPacketDeliveryResolutor{};
-                    obpkt_delivery_resolutor.dst                            = this->outbound_packet_container.get();
+                size_t trimmed_obpkt_delivery_sz                        = std::min(std::min(this->outbound_packet_container->max_consume_size(), buf_arr_sz), constants::DEFAULT_ACCUMULATION_SIZE); //outbound_sz == accumulated_ack_packet_sz <= ack_packet_sz <= buf_arr_sz  
+                size_t obpkt_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&obpkt_delivery_resolutor, trimmed_obpkt_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> obpkt_deliverer_mem(obpkt_deliverer_allocation_cost);
+                auto obpkt_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&obpkt_delivery_resolutor, trimmed_obpkt_delivery_sz, obpkt_deliverer_mem.get()));
 
-                    size_t trimmed_obpkt_delivery_sz                        = std::min(this->outbound_packet_container->max_consume_size(), buf_arr_sz); //outbound_sz == accumulated_ack_packet_sz <= ack_packet_sz <= buf_arr_sz  
-                    size_t obpkt_deliverer_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&obpkt_delivery_resolutor, trimmed_obpkt_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> obpkt_deliverer_mem(obpkt_deliverer_allocation_cost);
-                    auto obpkt_deliverer                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&obpkt_delivery_resolutor, trimmed_obpkt_delivery_sz, obpkt_deliverer_mem.get()));
+                //
 
-                    //
+                auto ack_vectorizer_resolutor                           = InternalAckVectorizerResolutor{};
+                ack_vectorizer_resolutor.dst                            = obpkt_deliverer.get(); 
+                ack_vectorizer_resolutor.ack_packet_gen                 = this->ack_packet_gen.get();
 
-                    auto ack_vectorizer_resolutor                           = InternalAckVectorizerResolutor{};
-                    ack_vectorizer_resolutor.dst                            = &obpkt_deliverer; 
-                    ack_vectorizer_resolutor.ack_packet_gen                 = this->ack_packet_gen.get();
+                size_t trimmed_ack_vectorization_sz                     = std::min(this->ack_vectorization_sz, buf_arr_sz); //ack_vectorization_sz <= ack_pkt_sz <= buf_arr_sz
+                size_t ack_vectorizer_allocation_cost                   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ack_vectorizer_mem(ack_vectorizer_allocation_cost);
+                auto ack_vectorizer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz, ack_vectorizer_mem.get())); 
 
-                    size_t trimmed_ack_vectorization_sz                     = std::min(this->ack_vectorization_sz, buf_arr_sz); //ack_vectorization_sz <= ack_pkt_sz <= buf_arr_sz
-                    size_t ack_vectorizer_allocation_cost                   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> ack_vectorizer_mem(ack_vectorizer_allocation_cost);
-                    auto ack_vectorizer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz, ack_vectorizer_mem.get())); 
+                //
 
-                    //
+                auto thru_ack_delivery_resolutor                        = InternalThruAckResolutor{};
+                thru_ack_delivery_resolutor.packet_id_deliverer         = ackid_deliverer.get();
 
-                    auto thru_ack_delivery_resolutor                        = InternalThruAckResolutor{};
-                    thru_ack_delivery_resolutor.packet_id_deliverer         = &ackid_deliverer;
+                size_t trimmed_thru_ack_delivery_sz                     = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_ack_sz <= buf_arr_sz
+                size_t thru_ack_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_ack_delivery_resolutor, trimmed_thru_ack_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_ack_mem(thru_ack_allocation_cost);
+                auto thru_ack_deliverer                                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_ack_delivery_resolutor, trimmed_thru_ack_delivery_sz, thru_ack_mem.get())); 
 
-                    size_t trimmed_thru_ack_delivery_sz                     = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_ack_sz <= buf_arr_sz
-                    size_t thru_ack_allocation_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_ack_delivery_resolutor, trimmed_thru_ack_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_ack_mem(thru_ack_allocation_cost);
-                    auto thru_ack_deliverer                                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_ack_delivery_resolutor, trimmed_thru_ack_delivery_sz, thru_ack_mem.get())); 
+                //
 
-                    //
+                auto thru_request_delivery_resolutor                    = InternalThruRequestResolutor{};
+                thru_request_delivery_resolutor.ack_vectorizer          = ack_vectorizer.get();
+                thru_request_delivery_resolutor.inbound_deliverer       = ibpkt_deliverer.get();
 
-                    auto thru_request_delivery_resolutor                    = InternalThruRequestResolutor{};
-                    thru_request_delivery_resolutor.ack_vectorizer          = &ack_vectorizer;
-                    thru_request_delivery_resolutor.inbound_deliverer       = &ibpkt_deliverer;
+                size_t trimmed_thru_request_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_request_sz <= buf_arr_sz
+                size_t thru_request_allocation_cost                     = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_request_delivery_resolutor, trimmed_thru_request_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_request_mem(thru_request_allocation_cost);
+                auto thru_request_deliverer                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_request_delivery_resolutor, trimmed_thru_request_delivery_sz, thru_request_mem.get())); 
 
-                    size_t trimmed_thru_request_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_request_sz <= buf_arr_sz
-                    size_t thru_request_allocation_cost                     = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_request_delivery_resolutor, trimmed_thru_request_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_request_mem(thru_request_allocation_cost);
-                    auto thru_request_deliverer                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_request_delivery_resolutor, trimmed_thru_request_delivery_sz, thru_request_mem.get())); 
+                //
 
-                    //
-                    
-                    auto thru_krescue_delivery_resolutor                    = InternalThruKRescueResolutor{};
+                auto thru_krescue_delivery_resolutor                    = InternalThruKRescueResolutor{};
 
-                    size_t trimmed_thru_krescue_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_rescue_sz <= buf_arr_sz
-                    size_t thru_krescue_allocation_cost                     = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_krescue_delivery_resolutor, trimmed_thru_krescue_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_krescue_mem(thru_krescue_allocation_cost);
-                    auto thru_krescue_deliverer                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_krescue_delivery_resolutor, trimmed_thru_krescue_delivery_sz, thru_krescue_mem.get())); 
+                size_t trimmed_thru_krescue_delivery_sz                 = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_rescue_sz <= buf_arr_sz
+                size_t thru_krescue_allocation_cost                     = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_krescue_delivery_resolutor, trimmed_thru_krescue_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_krescue_mem(thru_krescue_allocation_cost);
+                auto thru_krescue_deliverer                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_krescue_delivery_resolutor, trimmed_thru_krescue_delivery_sz, thru_krescue_mem.get())); 
 
-                    //
+                //
 
-                    auto thru_delivery_resolutor                            = InternalThruResolutor{};
-                    thru_delivery_resolutor.ack_thru_deliverer              = &thru_ack_deliverer;
-                    thru_delivery_resolutor.request_thru_deliverer          = &thru_request_deliverer;
-                    thru_delivery_resolutor.krescue_thru_deliverer          = &thru_krescue_deliverer;
+                auto thru_delivery_resolutor                            = InternalThruResolutor{};
+                thru_delivery_resolutor.ack_thru_deliverer              = thru_ack_deliverer.get();
+                thru_delivery_resolutor.request_thru_deliverer          = thru_request_deliverer.get();
+                thru_delivery_resolutor.krescue_thru_deliverer          = thru_krescue_deliverer.get();
 
-                    size_t trimmed_thru_delivery_sz                         = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_sz <= buf_arr_sz
-                    size_t thru_delivery_allocation_cost                    = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_delivery_resolutor, trimmed_thru_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_delivery_mem(thru_delivery_allocation_cost);
-                    auto thru_deliverer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_delivery_resolutor, trimmed_thru_delivery_sz, thru_delivery_mem.get())); 
+                size_t trimmed_thru_delivery_sz                         = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //thru_sz <= buf_arr_sz
+                size_t thru_delivery_allocation_cost                    = dg::network_producer_consumer::delvrsrv_allocation_cost(&thru_delivery_resolutor, trimmed_thru_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_delivery_mem(thru_delivery_allocation_cost);
+                auto thru_deliverer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&thru_delivery_resolutor, trimmed_thru_delivery_sz, thru_delivery_mem.get())); 
 
-                    //
+                //
 
-                    auto nothru_ack_delivery_resolutor                      = InternalNoThruAckResolutor{};
-                    nothru_ack_delivery_resolutor.ack_vectorizer            = &ack_vectorizer;
+                auto nothru_ack_delivery_resolutor                      = InternalNoThruAckResolutor{};
+                nothru_ack_delivery_resolutor.ack_vectorizer            = ack_vectorizer.get();
 
-                    size_t trimmed_nothru_ack_delivery_sz                   = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //no_thru_sz <= buf_arr_sz
-                    size_t nothru_ack_allocation_cost                       = dg::network_producer_consumer::delvrsrv_allocation_cost(&nothru_ack_delivery_resolutor, trimmed_nothru_ack_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> nothru_ack_delivery_mem(nothru_ack_allocation_cost);
-                    auto nothru_ack_deliverer                               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&nothru_ack_delivery_resolutor, trimmed_nothru_ack_delivery_sz, nothru_ack_delivery_mem.get())); 
+                size_t trimmed_nothru_ack_delivery_sz                   = std::min(constants::DEFAULT_ACCUMULATION_SIZE, buf_arr_sz); //no_thru_sz <= buf_arr_sz
+                size_t nothru_ack_allocation_cost                       = dg::network_producer_consumer::delvrsrv_allocation_cost(&nothru_ack_delivery_resolutor, trimmed_nothru_ack_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> nothru_ack_delivery_mem(nothru_ack_allocation_cost);
+                auto nothru_ack_deliverer                               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&nothru_ack_delivery_resolutor, trimmed_nothru_ack_delivery_sz, nothru_ack_delivery_mem.get())); 
 
-                    //
+                //
 
-                    auto inbound_delivery_resolutor                         = InternalInBoundIDResolutor{};
-                    inbound_delivery_resolutor.downstream_dst               = &thru_deliverer;
-                    inbound_delivery_resolutor.nothru_ack_dst               = &nothru_ack_deliverer;
-                    inbound_delivery_resolutor.inbound_id_controller        = this->inbound_id_controller.get();
+                auto inbound_delivery_resolutor                         = InternalInBoundIDResolutor{};
+                inbound_delivery_resolutor.downstream_dst               = thru_deliverer.get();
+                inbound_delivery_resolutor.nothru_ack_dst               = nothru_ack_deliverer.get();
+                inbound_delivery_resolutor.inbound_id_controller        = this->inbound_id_controller.get();
 
-                    size_t trimmed_inbound_delivery_sz                      = std::min(this->inbound_id_controller->max_consume_size(), buf_arr_sz); //inbound_sz <= buf_arr_sz
-                    size_t inbound_allocation_cost                          = dg::network_producer_consumer::delvsrv_allocation_cost(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> inbound_mem(inbound_allocation_cost);
-                    auto inbound_deliverer                                  = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz, inbound_mem.get())); 
+                size_t trimmed_inbound_delivery_sz                      = std::min(std::min(this->inbound_id_controller->max_consume_size(), buf_arr_sz), constants::DEFAULT_ACCUMULATION_SIZE); //inbound_sz <= buf_arr_sz
+                size_t inbound_allocation_cost                          = dg::network_producer_consumer::delvsrv_allocation_cost(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> inbound_mem(inbound_allocation_cost);
+                auto inbound_deliverer                                  = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz, inbound_mem.get())); 
 
-                    //
+                //
 
-                    auto traffic_resolutor                                  = InternalTrafficResolutor{};
-                    traffic_resolutor.downstream_dst                        = &inbound_deliverer;
-                    traffic_resolutor.border_controller                     = this->inbound_border_controller.get();
+                auto traffic_resolutor                                  = InternalTrafficResolutor{};
+                traffic_resolutor.downstream_dst                        = inbound_deliverer.get();
+                traffic_resolutor.border_controller                     = this->inbound_border_controller.get();
 
-                    size_t trimmed_traffic_resolutor_delivery_sz            = std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz); //traffic_stop_sz <= buf_arr_sz
-                    size_t traffic_resolutor_allocation_cost                = dg::network_producer_consumer::delvrsrv_allocation_cost(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> traffic_resolutor_mem(traffic_resolutor_allocation_cost);
-                    auto traffic_resolutor_deliverer                        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz, traffic_resolutor_mem.get())); 
+                size_t trimmed_traffic_resolutor_delivery_sz            = std::min(std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz), constants::DEFAULT_ACCUMULATION_SIZE); //traffic_stop_sz <= buf_arr_sz
+                size_t traffic_resolutor_allocation_cost                = dg::network_producer_consumer::delvrsrv_allocation_cost(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> traffic_resolutor_mem(traffic_resolutor_allocation_cost);
+                auto traffic_resolutor_deliverer                        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz, traffic_resolutor_mem.get())); 
 
-                    for (size_t i = 0u; i < buf_arr_sz; ++i){
-                        std::expected<Packet, exception_t> pkt = packet_service::deserialize_packet(std::move(buf_arr[i]));
+                for (size_t i = 0u; i < buf_arr_sz; ++i){
+                    std::expected<Packet, exception_t> pkt = packet_service::deserialize_packet(std::move(buf_arr[i]));
 
-                        if (!pkt.has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
-                            continue;
-                        }
-
-                        if (pkt->to_addr != this->host_addr){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::MALFORMED_PACKET)); //
-                            continue;
-                        }
-
-                        dg::network_producer_consumer::delvrsrv_deliver(traffic_resolutor_deliverer.get(), std::move(pkt.value()));
+                    if (!pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
+                        continue;
                     }
+
+                    exception_t validation_err = this->packet_integrity_validator->is_valid(pkt.value());
+
+                    if (dg::network_exception::is_failed(validation_err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(validation_err));
+                        continue;
+                    } 
+
+                    dg::network_producer_consumer::delvrsrv_deliver(traffic_resolutor_deliverer.get(), std::move(pkt.value()));
                 }
 
-                return success_counter >= this->rest_threshold_sz; //this is absurb
+                return buf_arr_sz >= this->busy_threshold_sz;
             }
 
         private:
@@ -3925,7 +4066,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     Packet * base_data_arr  = data_arr.base(); 
 
                     for (size_t i = 0u; i < sz; ++i){                        
-                        //this is meaningless without triviality
+                        //this is meaningless without triviality, alright Mom, we dont know how to do trivial copy for now, we'll come up with a way
 
                         if (packet_service::is_ack_packet(base_data_arr[i])){
                             dg::network_producer_consumer::delvrsrv_deliver(this->ack_thru_deliverer, std::move(base_data_arr[i]));
@@ -4009,10 +4150,31 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
     struct ComponentFactory{
 
-        static auto spawn_outbound_worker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
-                                          std::shared_ptr<model::SocketHandle> socket) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+        static auto get_outbound_worker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
+                                        std::shared_ptr<packet_controller::BorderControllerInterface> border_controller,
+                                        std::shared_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> transmission_controller,
+                                        std::shared_ptr<model::SocketHandle> socket,
+                                        size_t packet_consumption_cap,
+                                        size_t busy_threshold_sz,
+                                        size_t packet_aggtransmit_cap = constants::DEFAULT_ACCUMULATION_SIZE) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
+
+            const size_t MIN_PACKET_CONSUMPTION_CAP = size_t{1};
+            const size_t MAX_PACKET_CONSUMPTION_CAP = size_t{1} << 25;
+            const size_t MIN_BUSY_THRESHOLD_SZ      = size_t{0u};
+            const size_t MAX_BUSY_THRESHOLD_SZ      = std::numeric_limits<size_t>::max(); 
+            const size_t MIN_PACKET_AGGTRANSMIT_CAP = size_t{1};
+            const size_t MAX_PACKET_AGGTRANSMIT_CAP = size_t{1} << 25; 
+
             if (outbound_packet_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (border_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (transmission_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -4020,12 +4182,40 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<OutBoundWorker>(std::move(outbound_packet_container), std::move(socket));
+            if (std::clamp(packet_consumption_cap, MIN_PACKET_CONSUMPTION_CAP, MAX_PACKET_CONSUMPTION_CAP) != packet_consumption_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(busy_threshold_sz, MIN_BUSY_THRESHOLD_SZ, MAX_BUSY_THRESHOLD_SZ) != busy_threshold_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(packet_aggtransmit_cap, MIN_PACKET_AGGTRANSMIT_CAP, MAX_PACKET_AGGTRANSMIT_CAP) != packet_aggtransmit_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<OutBoundWorker>(std::move(outbound_packet_container),
+                                                    std::move(border_controller),
+                                                    std::move(transmission_controller), 
+                                                    std::move(socket),
+                                                    packet_consumption_cap,
+                                                    packet_aggtransmit_cap,
+                                                    busy_threshold_sz);
         }
 
-        static auto spawn_retransmission_worker(std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller, 
-                                                std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+        static auto get_retransmission_worker(std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller, 
+                                              std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
+                                              size_t transmission_consumption_cap,
+                                              size_t busy_threshold_sz, 
+                                              size_t transmission_accumulation_cap = constants::DEFAULT_ACCUMULATION_SIZE) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
+            const size_t MIN_TRANSMISSION_CONSUMPTION_CAP   = size_t{1};
+            const size_t MAX_TRANSMISSION_CONSUMPTION_CAP   = size_t{1} << 25; 
+            const size_t MIN_BUSY_THRESHOLD_SZ              = size_t{0u};
+            const size_t MAX_BUSY_THRESHOLD_SZ              = std::numeric_limits<size_t>::max();
+            const size_t MIN_TRANSMISSION_ACCUM_CAP         = size_t{1};
+            const size_t MAX_TRANSMISSION_ACCUM_CAP         = size_t{1} << 25;
+
             if (retransmission_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -4034,38 +4224,80 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<RetransmissionWorker>(std::move(retransmission_controller), std::move(outbound_packet_container));
+            if (std::clamp(transmission_consumption_cap, MIN_TRANSMISSION_CONSUMPTION_CAP, MAX_TRANSMISSION_CONSUMPTION_CAP) != transmission_consumption_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(busy_threshold_sz, MIN_BUSY_THRESHOLD_SZ, MAX_BUSY_THRESHOLD_SZ) != busy_threshold_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(transmission_accumulation_cap, MIN_TRANSMISSION_ACCUM_CAP, MAX_TRANSMISSION_ACCUM_CAP) != transmission_accumulation_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<RetransmissionWorker>(std::move(retransmission_controller), 
+                                                          std::move(outbound_packet_container),
+                                                          transmission_consumption_cap,
+                                                          transmission_accumulation_cap,
+                                                          busy_threshold_sz);
         }
 
-        static auto spawn_inbound_worker(std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller, 
-                                         std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
-                                         std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
-                                         std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
-                                         std::shared_ptr<packet_controller::BorderControllerInterface> ib_traffic_controller,
-                                         std::shared_ptr<packet_controller::SchedulerInterface> scheduler, 
-                                         std::shared_ptr<SocketHandle> socket) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+        static auto get_kernel_rescue_worker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
+                                             std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
+                                             std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_generator,
+                                             std::chrono::nanoseconds rescue_threshold,
+                                             size_t transmitting_rescue_packet_sz) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
-            if (retransmission_controller == nullptr){
+            const std::chrono::nanoseconds MIN_RESCUE_THRESHOLD = std::chrono::nanoseconds{size_t{0u}};
+            const std::chrono::nanoseconds MAX_RESCUE_THRESHOLD = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{size_t{1}}); 
+            const size_t MIN_TRANSMITTING_RESCUE_PACKET_SZ      = size_t{1};
+            const size_t MAX_TRANSMITTING_RESCUE_PACKET_SZ      = size_t{1} << 25;
+
+            if (outbound_packet_container == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ob_packet_container == nullptr){
+            if (rescue_post == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_packet_container == nullptr){
+            if (krescue_generator == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_id_controller == nullptr){
+            if (std::clamp(rescue_threshold, MIN_RESCUE_THRESHOLD, MAX_RESCUE_THRESHOLD) != rescue_threshold){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_traffic_controller == nullptr){
+            if (std::clamp(transmitting_rescue_packet_sz, MIN_TRANSMITTING_RESCUE_PACKET_SZ, MAX_TRANSMITTING_RESCUE_PACKET_SZ) != transmitting_rescue_packet_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (scheduler == nullptr){
+            return std::make_unique<KernelRescueWorker>(std::move(outbound_packet_container),
+                                                        std::move(rescue_post),
+                                                        std::move(krescue_generator),
+                                                        transmitting_rescue_packet_sz,
+                                                        rescue_threshold);
+        }
+
+        static auto get_kernel_inbound_worker(std::shared_ptr<packet_controller::BufferContainerInterface> buffer_container,
+                                              std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
+                                              std::shared_ptr<model::SocketHandle> socket,
+                                              size_t rescue_heartbeat_interval,
+                                              size_t buffer_accumulation_sz,
+                                              size_t container_delivery_sz = constants::DEFAULT_ACCUMULATION_SIZE){
+            
+            const size_t MIN_BUFFER_ACCUMULATION_SZ = size_t{1};
+            const size_t MAX_BUFFER_ACCUMULATION_SZ = size_t{1} << 25;
+            const size_t MIN_CONTAINER_DELIVERY_SZ  = size_t{1};
+            const size_t MAX_CONTAINER_DELIVERY_SZ  = size_t{1} << 25;
+
+            if (buffer_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            } 
+
+            if (rescue_post == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -4073,19 +4305,110 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<InBoundWorker>(std::move(retransmission_controller), std::move(ob_packet_container), 
-                                                   std::move(ib_packet_container), std::move(ib_id_controller),
-                                                   std::move(ib_traffic_controller), std::move(scheduler), 
-                                                   std::move(socket));
+            if (std::clamp(buffer_accumulation_sz, MIN_BUFFER_ACCUMULATION_SZ, MAX_BUFFER_ACCUMULATION_SZ) != buffer_accumulation_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(container_delivery_sz, MIN_CONTAINER_DELIVERY_SZ, MAX_CONTAINER_DELIVERY_SZ) != container_delivery_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(rescue_heartbeat_interval)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<InBoundKernelWorker>(std::move(buffer_container),
+                                                         std::move(rescue_post),
+                                                         std::move(socket),
+                                                         buffer_accumulation_sz,
+                                                         container_delivery_sz,
+                                                         rescue_heartbeat_interval);
+
         }
 
-        static auto spawn_update_worker(std::shared_ptr<packet_controller::UpdatableInterface> updatable,
-                                        std::chrono::nanoseconds update_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+        static auto get_process_inbound_worker(std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller, 
+                                               std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
+                                               std::shared_ptr<packet_controller::PacketContainerInterface> inbound_packet_container,
+                                               std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
+                                               std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller,
+                                               std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller,
+                                               std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator,
+                                               std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
+                                               size_t inbound_consumption_cap,
+                                               size_t busy_threshold_sz,
+                                               size_t ack_vectorization_sz = constants::DEFAULT_KEYVALUE_ACCUMULATION_SZ) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+
+            const size_t MIN_INBOUND_CONSUMPTION_CAP    = size_t{1};
+            const size_t MAX_INBOUND_CONSUMPTION_CAP    = size_t{1} << 25;
+            const size_t MIN_BUSY_THRESHOLD_SZ          = size_t{0};
+            const size_t MAX_BUSY_THRESHOLD_SZ          = std::numeric_limits<size_t>::max();
+            const size_t MIN_ACK_VECTORIZATION_SZ       = size_t{1};
+            const size_t MAX_ACK_VECTORIZATION_SZ       = constants::MAX_ACK_PER_PACKET;
+
+            if (retransmission_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (outbound_packet_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_packet_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_buffer_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_id_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_border_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (ack_packet_generator == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (packet_integrity_validator == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(inbound_consumption_cap, MIN_INBOUND_CONSUMPTION_CAP, MAX_INBOUND_CONSUMPTION_CAP) != inbound_consumption_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(busy_threshold_sz, MIN_BUSY_THRESHOLD_SZ, MAX_BUSY_THRESHOLD_SZ) != busy_threshold_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ack_vectorization_sz, MIN_ACK_VECTORIZATION_SZ, MAX_ACK_VECTORIZATION_SZ) != ack_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<InBoundWorker>(std::move(retransmission_controller), 
+                                                   std::move(outbound_packet_container), 
+                                                   std::move(inbound_packet_container), 
+                                                   std::move(inbound_buffer_container),
+                                                   std::move(inbound_id_controller),
+                                                   std::move(inbound_border_controller), 
+                                                   std::move(ack_packet_generator),
+                                                   std::move(packet_integrity_validator),
+                                                   ack_vectorization_sz,
+                                                   inbound_consumption_cap,
+                                                   busy_threshold_sz);
+        }
+
+        static auto get_update_worker(std::shared_ptr<packet_controller::UpdatableInterface> updatable,
+                                      std::chrono::nanoseconds update_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
             using namespace std::chrono_literals; 
 
-            const std::chrono::nanoseconds MIN_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(1us); 
-            const std::chrono::nanoseconds MAX_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(3600s);
+            const std::chrono::nanoseconds MIN_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::nanoseconds{1u}); 
+            const std::chrono::nanoseconds MAX_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{1u});
 
             if (updatable == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -4111,7 +4434,8 @@ namespace dg::network_kernel_mailbox_impl1::core{
             std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller;
             std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container;
             std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container;
-            size_t consume_sz_per_load;
+            size_t inbound_capacity;
+            size_t outbound_capacity; 
 
         public:
 
@@ -4120,12 +4444,14 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                              std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller,
                                              std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
                                              std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
-                                             size_t consume_sz_per_load) noexcept: daemon_vec(std::move(daemon_vec)),
-                                                                                   packet_gen(std::move(packet_gen)),
-                                                                                   retransmission_controller(std::move(retransmission_controller)),
-                                                                                   ob_packet_container(std::move(ob_packet_container)),
-                                                                                   ib_packet_container(std::move(ib_packet_container)),
-                                                                                   consume_sz_per_load(consume_sz_per_load){}
+                                             size_t inbound_capacity,
+                                             size_t outbound_capacity) noexcept: daemon_vec(std::move(daemon_vec)),
+                                                                                 packet_gen(std::move(packet_gen)),
+                                                                                 retransmission_controller(std::move(retransmission_controller)),
+                                                                                 ob_packet_container(std::move(ob_packet_container)),
+                                                                                 ib_packet_container(std::move(ib_packet_container)),
+                                                                                 inbound_capacity(inbound_capacity),
+                                                                                 outbound_capacity(outbound_capacity){}
 
             void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
 
@@ -4142,29 +4468,33 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 internal_deliverer.ob_packet_container          = this->ob_packet_container.get();
                 internal_deliverer.retransmission_controller    = this->retransmission_controller.get();
 
-                size_t trimmed_ob_delivery_sz                   = std::min(std::min(this->ob_packet_container->max_consume_size(), this->retransmission_controller->max_consume_size()), sz);
+                size_t trimmed_ob_delivery_sz                   = std::min(std::min(std::min(this->ob_packet_container->max_consume_size(), this->retransmission_controller->max_consume_size()), sz), constants::DEFAULT_ACCUMULATION_SIZE);
                 size_t ob_deliverer_allocation_cost             = dg::network_producer_consumer::delvrsrv_allocation_cost(&internal_deliverer, trimmed_ob_delivery_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ob_deliverer_mem(ob_deliverer_allocation_cost);
                 auto ob_deliverer                               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_deliverer, trimmed_ob_delivery_sz, ob_deliverer_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<Packet, exception_t> pkt = this->packet_gen->get(std::move(base_data_arr[i]));
+                    std::expected<Packet, exception_t> pkt = this->packet_gen->get(static_cast<MailBoxArgument&&>(base_data_arr[i]));
 
                     if (!pkt.has_value()){
                         exception_arr[i] = pkt.error();
                         continue;
                     }
 
-                    exception_arr[i] = dg::network_exception::SUCCESS;
+                    exception_arr[i] = dg::network_exception::SUCCESS; //not a receipt SUCCESS, only non-obvious failures, request must extends this feature to guarantee the SUCCESS SUCCESS
                     dg::network_producer_consumer::delvrsrv_deliver(ob_deliverer.get(), std::move(pkt.value()));
                 }
             }
 
-            void recv(dg::string * output_arr, size_t& sz, size_t capacity) noexcept{
+            void recv(dg::string * output_arr, size_t& sz, size_t capacity) noexcept{ //
+
+                //alright fellas, it's complicated, because this is <external_interface>, we must be considerate
+                //allocating capacity pkt_arr is NOT the right approach
 
                 sz                      = 0u;
                 size_t pkt_arr_sz       = {};
-                size_t pkt_arr_capacity = capacity; 
+                size_t pkt_arr_capacity = std::min(capacity, this->outbound_capacity);
+
                 dg::network_stack_allocation::NoExceptAllocation<Packet[]> pkt_arr(pkt_arr_capacity);
                 this->ib_packet_container->pop(pkt_arr.get(), pkt_arr_sz, pkt_arr_capacity);
 
@@ -4176,7 +4506,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
             auto max_consume_size() noexcept -> size_t{
 
-                return this->consume_sz_per_load;
+                return this->inbound_capacity;
             }
 
         private:
@@ -4215,40 +4545,112 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
     struct ComponentFactory{
 
-        static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
-                                                           std::unique_ptr<packet_controller::InBoundTrafficController> ib_traffic_controller,
-                                                           std::shared_ptr<packet_controller::WAPScheduler> scheduler,
-                                                           std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> socket,
-                                                           std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen,
-                                                           std::unique_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller,
-                                                           std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
+        //we'll fix styles later, let's stick to the sz, cap for every var | size + capacity for methods
+        //we need consistency fellas
+
+        //it's complicated, we'll attempt to abstractize the low level details that are not calibratables for now
+        static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_container,
+                                                           size_t ib_buffer_accumulation_sz,
+ 
                                                            std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
-                                                           std::chrono::nanoseconds traffic_reset_dur,
-                                                           std::chrono::nanoseconds scheduler_update_dur,
-                                                           size_t num_inbound_worker,
+                                                           std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
+                                                           std::unique_ptr<packet_controller::InBoundBorderController> ib_border_controller,
+                                                           size_t ib_packet_consumption_cap,
+                                                           size_t ib_packet_busy_threshold_sz,
+
+                                                           std::unique_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
+                                                           std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_generator,
+                                                           size_t rescue_packet_sz,
+                                                           std::chrono::nanoseconds rescue_dispatch_threshold,
+
+                                                           std::unique_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller,
+                                                           size_t retransmission_consumption_cap,
+                                                           size_t retransmission_busy_threshold_sz,
+
+                                                           std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
+                                                           std::unique_ptr<packet_controller::OutBoundBorderController> ob_border_controller,
+                                                           std::unique_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_exhaustion_controller,
+                                                           size_t ob_packet_consumption_cap,
+                                                           size_t ob_packet_busy_threshold_sz,
+
+                                                           std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator,
+                                                           std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
+                                                           std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> socket,
+
+                                                           std::unique_ptr<packet_controller::RequestPacketGeneratorInterface> req_packet_generator,
+                                                           size_t mailbox_inbound_cap,
+                                                           size_t mailbox_outbound_cap,  
+
+                                                           std::chrono::nanoseconds traffic_reset_duration,
+
+                                                           size_t num_kernel_inbound_worker,
+                                                           size_t num_process_inbound_worker,
                                                            size_t num_outbound_worker,
+                                                           size_t num_kernel_rescue_worker,
                                                            size_t num_retry_worker) -> std::unique_ptr<MailboxInterface>{
-            
-            const size_t MIN_WORKER_SIZE    = size_t{1u};
-            const size_t MAX_WORKER_SIZE    = size_t{1024u}; 
+
+            const size_t DEFAULT_HEARTBEAT_INTERVAL                         = size_t{1} << 10;
+
+            const size_t MIN_IB_BUFFER_ACCUMULATION_SZ                      = size_t{1};  
+            const size_t MAX_IB_BUFFER_ACCUMULATION_SZ                      = size_t{1} << 20;
+
+            const size_t MIN_IB_PACKET_CONSUMPTION_CAP                      = size_t{1};
+            const size_t MAX_IB_PACKET_CONSUMPTION_CAP                      = size_t{1} << 20; 
+
+            const size_t MIN_IB_PACKET_BUSY_THRESHOLD_SZ                    = size_t{0u};
+            const size_t MAX_IB_PACKET_BUSY_THRESHOLD_SZ                    = std::numeric_limits<size_t>::max();
+
+            const size_t MIN_RESCUE_PACKET_SZ                               = size_t{1};
+            const size_t MAX_RESCUE_PACKET_SZ                               = size_t{1} << 20; 
+
+            const std::chrono::nanoseconds MIN_RESCUE_DISPATCH_THRESHOLD    = std::chrono::nanoseconds{1u};
+            const std::chrono::nanoseconds MAX_RESCUE_DISPATCH_THRESHOLD    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{1u}); 
+
+            const size_t MIN_RETRANSMISSION_CONSUMPTION_CAP                 = size_t{1};
+            const size_t MAX_RETRANSMISSION_CONSUMPTION_CAP                 = size_t{1} << 20;
+
+            const size_t MIN_RETRANSMISSION_BUSY_THRESHOLD_SZ               = size_t{0u};
+            const size_t MAX_RETRANSMISSION_BUSY_THRESHOLD_SZ               = std::numeric_limits<size_t>::max();
+
+            const size_t MIN_OB_PACKET_CONSUMPTION_CAP                      = size_t{1};
+            const size_t MAX_OB_PACKET_CONSUMPTION_CAP                      = size_t{1} << 20;
+
+            const size_t MIN_OB_PACKET_BUSY_THRESHOLD_SZ                    = size_t{0u};
+            const size_t MAX_OB_PACKET_BUSY_THRESHOLD_SZ                    = std::numeric_limits<size_t>::max();
+
+            const size_t MIN_MAILBOX_INBOUND_CAP                            = size_t{1};
+            const size_t MAX_MAILBOX_INBOUND_CAP                            = size_t{1} << 20;
+
+            const size_t MIN_MAILBOX_OUTBOUND_CAP                           = size_t{1};
+            const size_t MAX_MAILBOX_OUTBOUND_CAP                           = size_t{1} << 20;
+
+            const std::chrono::nanoseconds MIN_SUBSCRIBED_UPDATE_DUR        = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds{1u});
+            const std::chrono::nanoseconds MAX_SUBSCRIBED_UPDATE_DUR        = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{1u});
+
+            const size_t MIN_WORKER_SZ                                      = size_t{1};
+            const size_t MAX_WORKER_SZ                                      = size_t{1} << 10;
+
+            if (ib_buffer_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (ib_packet_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             if (ib_id_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_traffic_controller == nullptr){
+            if (ib_border_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (scheduler == nullptr){
+            if (rescue_post == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (socket == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (packet_gen == nullptr){
+            if (krescue_generator == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -4260,152 +4662,277 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_packet_container == nullptr){
+            if (ob_border_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(num_inbound_worker, MIN_WORKER_SIZE, MAX_WORKER_SIZE) != num_inbound_worker){
+            if (ob_exhaustion_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(num_outbound_worker, MIN_WORKER_SIZE, MAX_WORKER_SIZE) != num_outbound_worker){
+            if (ack_packet_generator == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(num_retry_worker, MIN_WORKER_SIZE, MAX_WORKER_SIZE) != num_retry_worker){
+            if (packet_integrity_validator == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller_sp            = std::move(ib_id_controller);
-            std::shared_ptr<packet_controller::InBoundTrafficController> ib_traffic_controller_sp           = std::move(ib_traffic_controller);
-            std::shared_ptr<packet_controller::WAPScheduler> scheduler_sp                                   = std::move(scheduler);
-            std::shared_ptr<model::SocketHandle> socket_sp                                                  = std::move(socket);
-            std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller_sp    = std::move(retransmission_controller);
-            std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container_sp             = std::move(ob_packet_container);
-            std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container_sp             = std::move(ib_packet_container);
-            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec                            = {};
+            if (socket == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (req_packet_generator == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ib_buffer_accumulation_sz, MIN_IB_BUFFER_ACCUMULATION_SZ, MAX_IB_BUFFER_ACCUMULATION_SZ) != ib_buffer_accumulation_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ib_packet_consumption_cap, MIN_IB_PACKET_CONSUMPTION_CAP, MAX_IB_PACKET_CONSUMPTION_CAP) != ib_packet_consumption_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ib_packet_busy_threshold_sz, MIN_IB_PACKET_BUSY_THRESHOLD_SZ, MAX_IB_PACKET_BUSY_THRESHOLD_SZ) != ib_packet_busy_threshold_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(rescue_packet_sz, MIN_RESCUE_PACKET_SZ, MAX_RESCUE_PACKET_SZ) != rescue_packet_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(rescue_dispatch_threshold, MIN_RESCUE_DISPATCH_THRESHOLD, MAX_RESCUE_DISPATCH_THRESHOLD) != rescue_dispatch_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(retransmission_consumption_cap, MIN_RETRANSMISSION_CONSUMPTION_CAP, MAX_RETRANSMISSION_CONSUMPTION_CAP) != retransmission_consumption_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(retransmission_busy_threshold_sz, MIN_RETRANSMISSION_BUSY_THRESHOLD_SZ, MAX_RETRANSMISSION_BUSY_THRESHOLD_SZ) != retransmission_busy_threshold_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ob_packet_consumption_cap, MIN_OB_PACKET_CONSUMPTION_CAP, MAX_OB_PACKET_CONSUMPTION_CAP) != ob_packet_consumption_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ob_packet_busy_threshold_sz, MIN_OB_PACKET_BUSY_THRESHOLD_SZ, MAX_OB_PACKET_BUSY_THRESHOLD_SZ) != ob_packet_busy_threshold_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(mailbox_inbound_cap, MIN_MAILBOX_INBOUND_CAP, MAX_MAILBOX_INBOUND_CAP) != mailbox_inbound_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(mailbox_outbound_cap, MIN_MAILBOX_OUTBOUND_CAP, MAX_MAILBOX_OUTBOUND_CAP) != mailbox_outbound_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(traffic_reset_duration, MIN_SUBSCRIBED_UPDATE_DUR, MAX_SUBSCRIBED_UPDATE_DUR) != traffic_reset_duration){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(num_kernel_inbound_worker, MIN_WORKER_SZ, MAX_WORKER_SZ) != num_kernel_inbound_worker){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(num_process_inbound_worker, MIN_WORKER_SZ, MAX_WORKER_SZ) != num_process_inbound_worker){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(num_outbound_worker, MIN_WORKER_SZ, MAX_WORKER_SZ) != num_outbound_worker){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(num_kernel_rescue_worker, MIN_WORKER_SZ, MAX_WORKER_SZ) != num_kernel_rescue_worker){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(num_retry_worker, MIN_WORKER_SZ, MAX_WORKER_SZ) != num_retry_worker){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::shared_ptr<packet_controller::BufferContainerInterface> ib_buffer_container_sp                             = std::move(ib_buffer_container);
+            std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container_sp                             = std::move(ib_packet_container);
+            std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller_sp                            = std::move(ib_id_controller);
+            std::shared_ptr<packet_controller::InBoundBorderController> ib_border_controller_sp                             = std::move(ib_border_controller);
+            std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post_sp                                    = std::move(rescue_post);
+            std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator_sp                 = std::move(krescue_packet_generator);
+            std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller_sp              = std::move(retransmission_controller);
+
+            std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container_sp                             = std::move(ob_packet_container);
+            std::shared_ptr<packet_controller::OutBoundBorderController> ob_border_controller_sp                            = std::move(ob_border_controller);
+            std::shared_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_exhaustion_controller_sp   = std::move(ob_exhaustion_controller);
+            std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator_sp                         = std::move(ack_packet_generator);
+            std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator_sp             = std::move(packet_integrity_validator);
+            std::shared_ptr<model::SocketHandle> socket_sp                                                                  = std::move(socket);
+
+            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec                                            = {};
  
-            for (size_t i = 0u; i < num_inbound_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::spawn_inbound_worker(retransmission_controller_sp, ob_packet_container_sp, ib_packet_container_sp, ib_id_controller_sp, ib_traffic_controller_sp, scheduler_sp, socket_sp);
+            for (size_t i = 0u; i < num_kernel_inbound_worker; ++i){
+                auto worker_ins     = worker::ComponentFactory::get_kernel_inbound_worker(ib_buffer_container_sp, rescue_post_sp, socket_sp, 
+                                                                                          DEFAULT_HEARTBEAT_INTERVAL, ib_buffer_accumulation_sz);
+
+                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+                daemon_vec.emplace_back(std::move(daemon_handle));
+            }
+
+            for (size_t i = 0u; i < num_process_inbound_worker; ++i){
+                auto worker_ins     = worker::ComponentFactory::get_process_inbound_worker(retransmission_controller_sp, ob_packet_container_sp, ib_packet_container_sp, 
+                                                                                           ib_buffer_container_sp, ib_id_controller_sp, ib_border_controller_sp, 
+                                                                                           ack_packet_generator_sp, packet_integrity_validator_sp, ib_packet_consumption_cap,
+                                                                                           ib_packet_busy_threshold_sz);
+
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
             for (size_t i = 0u; i < num_outbound_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::spawn_outbound_worker(ob_packet_container_sp, socket_sp);
-                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(worker_ins)));
+                auto worker_ins     = worker::ComponentFactory::get_outbound_worker(ob_packet_container_sp, ob_border_controller_sp, ob_exhaustion_controller_sp,
+                                                                                    socket_sp, ob_packet_consumption_cap, ob_packet_busy_threshold_sz);
+
+                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+                daemon_vec.emplace_back(std::move(daemon_handle));
+            }
+
+            for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
+                auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container, rescue_post_sp, krescue_packet_generator_sp, 
+                                                                                         rescue_dispatch_threshold, rescue_packet_sz);
+
+                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
             for (size_t i = 0u; i < num_retry_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::spawn_retransmission_worker(retransmission_controller_sp, ob_packet_container_sp);
+                auto worker_ins     = worker::ComponentFactory::get_retransmission_worker(retransmission_controller_sp, ob_packet_container_sp, retransmission_consumption_cap,
+                                                                                          retransmission_busy_threshold_sz);
+
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            auto traffic_update_ins     = worker::ComponentFactory::spawn_update_worker(ib_traffic_controller_sp, traffic_reset_dur);
+            auto update_vec             = dg::vector<std::shared_ptr<UpdatableInterface>>{std::static_pointer_cast<UpdatableInterface>(ib_border_controller_sp), std::static_pointer_cast<UpdatableInterface>(ob_border_controller_sp)};
+            auto updater                = packet_controller::ComponentFactory::get_batch_updater(std::move(update_vec));
+            auto traffic_update_ins     = worker::ComponentFactory::get_update_worker(std::move(updater), traffic_reset_duration);
             auto traffic_daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(traffic_update_ins)));
-            auto sched_update_ins       = worker::ComponentFactory::spawn_update_worker(scheduler_sp, scheduler_update_dur);
-            auto sched_daemon_handle    = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(sched_update_ins)));
-
             daemon_vec.push_back(std::move(traffic_daemon_handle));
-            daemon_vec.push_back(std::move(sched_daemon_handle));
 
-            return std::make_unique<RetransmittableMailBoxController>(std::move(daemon_vec), std::move(packet_gen), 
-                                                                      std::move(retransmission_controller_sp), std::move(ob_packet_container_sp),
-                                                                      std::move(ib_packet_container_sp));
+            return std::make_unique<RetransmittableMailBoxController>(std::move(daemon_vec), std::move(req_packet_generator), retransmission_controller_sp, 
+                                                                      ob_packet_container_sp, ib_packet_container_sp, mailbox_inbound_cap, 
+                                                                      mailbox_outbound_cap);
         }
-
     };
 }
 
 namespace dg::network_kernel_mailbox_impl1{
     
     struct Config{
-        size_t num_inbound_worker;
+        size_t num_kernel_inbound_worker;
+        size_t num_process_inbound_worker;
         size_t num_outbound_worker;
+        size_t num_kernel_rescue_worker;
         size_t num_retry_worker;
+
         int sin_fam;  
         int comm;
         int protocol;
         model::IP host_ip;
         uint16_t host_port;
+
         std::chrono::nanoseconds retransmission_delay; 
-        size_t retransmission_count;
-        size_t retransmission_cap;
-        size_t inbound_exhaustion_control_cap;
-        size_t outbound_exhaustion_control_cap;
-        size_t global_id_flush_cap;
-        size_t inbound_traffic_addr_cap;
-        size_t inbound_traffic_global_cap;
-        size_t inbound_traffic_max_address;
-        std::chrono::nanoseconds traffic_reset_dur;
-        std::chrono::nanoseconds sched_rtt_minbound;
-        std::chrono::nanoseconds sched_rtt_maxbound;
-        size_t sched_rtt_discretization_sz;
-        std::chrono::nanoseconds sched_adjecent_minbound;
-        std::chrono::nanoseconds sched_adjecent_maxbound;
-        size_t sched_adjecent_discretization_sz;
-        std::chrono::nanoseconds sched_outgoing_maxbound;
-        std::chrono::nanoseconds sched_update_interval;
-        std::chrono::nanoseconds sched_reset_interval;
-        size_t sched_map_cap;
-        size_t sched_rtt_vec_cap;
+        size_t retransmission_queue_cap;
+        size_t retransmission_packet_cap;
+        size_t retransmission_idhashset_cap;
+
+        size_t kernel_inbound_container_cap;
+        size_t packet_inbound_container_cap;
+        size_t packet_outbound_container_cap;
+        size_t packet_ack_container_cap; 
+        size_t packet_rescue_container_cap;
+
+        size_t inbound_tc_peraddr_cap;
+        size_t inbound_tc_global_cap;
+        size_t inbound_tc_addrmap_cap;
+        size_t inbound_tc_side_cap;
+
+        size_t outbound_tc_peraddr_cap;
+        size_t outbound_tc_global_cap;
+        size_t outbound_tc_addrmap_cap;
+        size_t outbound_tc_side_cap;
+
+        bool is_block_on_exhaustion;
+
+        std::shared_ptr<external_interface::NATIPController> natip_controller;
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device;
     };
+
+    auto get_natip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
+                              std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
+                              size_t inbound_set_capacity,
+                              size_t outbound_set_capacity) -> std::unique_ptr<external_interface::NATIPControllerInterface>{
+        
+        return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
+    }
+
+    //...
+    //we made it fellas, the first version of the socket
+    //it's hard fellas, every line is deadly
+    //we made the choice of making every allocations noexcept (because we often dont know what to do otherwise, usually its bad decisions of not using finite pool of memory)
 
     auto spawn(Config config) -> std::unique_ptr<core::MailboxInterface>{
         
         using namespace dg::network_kernel_mailbox_impl1::model;
 
-        std::shared_ptr<packet_controller::WAPScheduler> scheduler{};
-        std::unique_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller{};
-        std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen{};
-        std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container{};
-        std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container{}; 
-        std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller{};
-        std::unique_ptr<packet_controller::InBoundTrafficController> ib_traffic_controller{};
+        // std::shared_ptr<packet_controller::WAPScheduler> scheduler{};
+        // std::unique_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller{};
+        // std::unique_ptr<packet_controller::PacketGeneratorInterface> packet_gen{};
+        // std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container{};
+        // std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container{}; 
+        // std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller{};
+        // std::unique_ptr<packet_controller::InBoundTrafficController> ib_traffic_controller{};
 
-        scheduler               = packet_controller::ComponentFactory::get_wap_scheduler(config.sched_rtt_minbound, config.sched_rtt_maxbound, config.sched_rtt_discretization_sz,
-                                                                                         config.sched_adjecent_minbound, config.sched_adjecent_maxbound, config.sched_adjecent_discretization_sz,
-                                                                                         config.sched_outgoing_maxbound, config.sched_update_interval, config.sched_reset_interval,
-                                                                                         config.sched_map_cap, config.sched_rtt_vec_cap);
+        // scheduler               = packet_controller::ComponentFactory::get_wap_scheduler(config.sched_rtt_minbound, config.sched_rtt_maxbound, config.sched_rtt_discretization_sz,
+        //                                                                                  config.sched_adjecent_minbound, config.sched_adjecent_maxbound, config.sched_adjecent_discretization_sz,
+        //                                                                                  config.sched_outgoing_maxbound, config.sched_update_interval, config.sched_reset_interval,
+        //                                                                                  config.sched_map_cap, config.sched_rtt_vec_cap);
 
-        retransmission_controller  = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_count, config.global_id_flush_cap, config.retransmission_cap);
+        // retransmission_controller  = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_count, config.global_id_flush_cap, config.retransmission_cap);
 
-        packet_gen              = packet_controller::ComponentFactory::get_packet_gen(utility::to_factory_id(Address{config.host_ip, config.host_port}), Address{config.host_ip, config.host_port});
+        // packet_gen              = packet_controller::ComponentFactory::get_packet_gen(utility::to_factory_id(Address{config.host_ip, config.host_port}), Address{config.host_ip, config.host_port});
 
-        ib_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_prioritized_packet_container(),
-                                                                                                                  config.retry_device,
-                                                                                                                  config.inbound_exhaustion_control_cap);
+        // ib_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_prioritized_packet_container(),
+        //                                                                                                           config.retry_device,
+        //                                                                                                           config.inbound_exhaustion_control_cap);
                                                                                                                   
-        ob_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_outbound_packet_container(scheduler), 
-                                                                                                                  config.retry_device,
-                                                                                                                  config.outbound_exhaustion_control_cap);
+        // ob_packet_container     = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_outbound_packet_container(scheduler), 
+        //                                                                                                           config.retry_device,
+        //                                                                                                           config.outbound_exhaustion_control_cap);
                                                                                                                   
 
-        ib_id_controller        = packet_controller::ComponentFactory::get_inbound_id_controller(config.global_id_flush_cap);
+        // ib_id_controller        = packet_controller::ComponentFactory::get_inbound_id_controller(config.global_id_flush_cap);
         
-        ib_traffic_controller   = packet_controller::ComponentFactory::get_inbound_traffic_controller(config.inbound_traffic_addr_cap, config.inbound_traffic_global_cap, config.inbound_traffic_max_address);
+        // ib_traffic_controller   = packet_controller::ComponentFactory::get_inbound_traffic_controller(config.inbound_traffic_addr_cap, config.inbound_traffic_global_cap, config.inbound_traffic_max_address);
 
-        if (config.sin_fam != AF_INET && config.sin_fam != AF_INET6){
-            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (config.sin_fam != AF_INET && config.sin_fam != AF_INET6){
+        //     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        if (config.comm != SOCK_DGRAM){
-            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (config.comm != SOCK_DGRAM){
+        //     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> sock_handle = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-        dg::network_exception_handler::throw_nolog(socket_service::port_socket(*sock_handle, config.host_port));
+        // std::unique_ptr<model::SocketHandle, socket_service::socket_close_t> sock_handle = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
+        // dg::network_exception_handler::throw_nolog(socket_service::port_socket(*sock_handle, config.host_port));
 
-        return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_id_controller), std::move(ib_traffic_controller),
-                                                                              scheduler, std::move(sock_handle), 
-                                                                              std::move(packet_gen), std::move(retransmission_controller),
-                                                                              std::move(ob_packet_container), std::move(ib_packet_container),
-                                                                              config.traffic_reset_dur, config.sched_update_interval, 
-                                                                              config.num_inbound_worker, config.num_outbound_worker, 
-                                                                              config.num_retry_worker);
+        // return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_id_controller), std::move(ib_traffic_controller),
+        //                                                                       scheduler, std::move(sock_handle), 
+        //                                                                       std::move(packet_gen), std::move(retransmission_controller),
+        //                                                                       std::move(ob_packet_container), std::move(ib_packet_container),
+        //                                                                       config.traffic_reset_dur, config.sched_update_interval, 
+        //                                                                       config.num_inbound_worker, config.num_outbound_worker, 
+        //                                                                       config.num_retry_worker);
     }
 }
 
