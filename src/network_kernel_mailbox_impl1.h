@@ -177,8 +177,6 @@
 //maybe its true that no good deed goes unpunished
 //we'll see fellas
 
-//I've implemented things that are way harder to write yet I didn't miss a line of code Ma
-
 namespace dg::network_kernel_mailbox_impl1::types{
 
     static_assert(sizeof(size_t) >= sizeof(uint32_t));
@@ -1733,10 +1731,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     //we'll try our best to actually reduce lock contention, and spawn multiple mailboxes
     //its complicated fellas
     //clients are very strict about the lock contention and stuffs
-    //I was thinking if we could add affinity of cores to increase perf, it's actually not
-    //because performance_wise, we are pushing 1024 (without loss of generality) packets/lock_acquisition, thus the mtx queueing overhead is not significant
-    //the only thing that we are worrying about is the number of concurrent tasks (energy consumption instead of power) 
-    //this would help solve the problem
 
     class HashDistributedRetransmissionController: public virtual RetransmissionControllerInterface{
 
@@ -1821,6 +1815,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 //alright, we'll attempt to do | solve this by using another relaxed atomic variable to not dig in the object, its complicated, we wont implement this if there is not a immediate benefits of doing so
                 //this is complicated, because we are depending on uniformity of consumption + production, which could be skewed, yet we dont have a way to balance this except for setting the number of consumption worker > production worker 
                 //we dont want serialization of access (which queue is full which one is not, because it is not true concurrency, it requires serialized access)
+                
+                //alright, I was thinking, it's important to unitize the packet_sz (an invisible contract of using this component)
+                //assume that our consumption > production, we can expect the consumer to empty the production queue at any given time
+                //however, we introduced the concept of break if there are no jobs
+                //the feature of zero_packet_retry_sz is to offset that cost
+
+                //without loss of generality
+                //assume 90% empty, 10% skewed
+                //assume we prop 20 times when the queue is empty
+                //the chances of we hit the skewed is 1 - (90% ** 20) == 90%
+                //assume 50% empty, 50% skewed
+                //...
 
                 for (size_t i = 0u; i < this->zero_packet_retry_sz; ++i){
                     size_t random_value = dg::network_randomizer::randomize_int<size_t>();
@@ -5092,6 +5098,24 @@ namespace dg::network_kernel_mailbox_impl1::core{
     struct ComponentFactory{
 
         //we'll fix styles later, let's stick to the sz, cap for every var | size + capacity for methods
+        //we'll move on to std::vector<> for constructions later, we'll skim thru styles tmr, let's work on this
+
+        template <class ...Args, class T>
+        static auto up_vector_to_vsp_vector(std::vector<std::unique_ptr<T>, Args...> vec) -> std::vector<std::shared_ptr<T>, Args...>{
+
+            std::vector<std::shared_ptr<T>, Args...> rs{};
+
+            for (size_t i = 0u; i < vec.size(); ++i){
+                if (vec[i] == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                rs.emplace_back(std::move(vec[i]));
+            }
+
+            return rs;
+        } 
+
         static auto get_retransmittable_mailbox_controller(std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_container,
                                                            size_t ib_buffer_accumulation_sz,
  
@@ -5116,7 +5140,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                            size_t ob_packet_consumption_cap,
                                                            size_t ob_packet_busy_threshold_sz,
 
-                                                           std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator,
+                                                           std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator, //alright these guys should be a unique_ptr injections, we dont really care about those best practices for now
                                                            std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
                                                            dg::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>> socket_vec,
 
@@ -5137,6 +5161,9 @@ namespace dg::network_kernel_mailbox_impl1::core{
             const size_t MIN_IB_BUFFER_ACCUMULATION_SZ                      = size_t{1};  
             const size_t MAX_IB_BUFFER_ACCUMULATION_SZ                      = size_t{1} << 20;
 
+            const size_t MIN_IB_BORDER_CONTROLLER_VEC_SZ                    = size_t{1};
+            const size_t MAX_IB_BORDER_CONTROLLER_VEC_SZ                    = size_t{1} << 20; 
+
             const size_t MIN_IB_PACKET_CONSUMPTION_CAP                      = size_t{1};
             const size_t MAX_IB_PACKET_CONSUMPTION_CAP                      = size_t{1} << 20; 
 
@@ -5155,11 +5182,17 @@ namespace dg::network_kernel_mailbox_impl1::core{
             const size_t MIN_RETRANSMISSION_BUSY_THRESHOLD_SZ               = size_t{0u};
             const size_t MAX_RETRANSMISSION_BUSY_THRESHOLD_SZ               = std::numeric_limits<size_t>::max();
 
+            const size_t MIN_OB_BORDER_CONTROLLER_VEC_SZ                    = size_t{1};
+            const size_t MAX_OB_BORDER_CONTROLLER_VEC_SZ                    = size_t{1} << 20; 
+
             const size_t MIN_OB_PACKET_CONSUMPTION_CAP                      = size_t{1};
             const size_t MAX_OB_PACKET_CONSUMPTION_CAP                      = size_t{1} << 20;
 
             const size_t MIN_OB_PACKET_BUSY_THRESHOLD_SZ                    = size_t{0u};
             const size_t MAX_OB_PACKET_BUSY_THRESHOLD_SZ                    = std::numeric_limits<size_t>::max();
+
+            const size_t MIN_SOCKET_VEC_SZ                                  = size_t{1};
+            const size_t MAX_SOCKET_VEC_SZ                                  = size_t{1} << 20; 
 
             const size_t MIN_MAILBOX_INBOUND_CAP                            = size_t{1};
             const size_t MAX_MAILBOX_INBOUND_CAP                            = size_t{1} << 20;
@@ -5185,7 +5218,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ib_border_controller == nullptr){
+            if (std::clamp(ib_border_controller_vec.size(), MIN_IB_BORDER_CONTROLLER_VEC_SZ, MAX_IB_BORDER_CONTROLLER_VEC_SZ) != ib_border_controller_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -5205,7 +5238,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (ob_border_controller == nullptr){
+            if (std::clamp(ob_border_controller_vec.size(), MIN_OB_BORDER_CONTROLLER_VEC_SZ, MAX_OB_BORDER_CONTROLLER_VEC_SZ) != ob_border_controller_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -5221,7 +5254,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (socket == nullptr){
+            if (std::clamp(socket_vec.size(), MIN_SOCKET_VEC_SZ, MAX_SOCKET_VEC_SZ) != socket_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -5297,25 +5330,36 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (num_kernel_inbound_worker < socket_vec.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (num_outbound_worker < socket_vec.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             std::shared_ptr<packet_controller::BufferContainerInterface> ib_buffer_container_sp                             = std::move(ib_buffer_container);
             std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container_sp                             = std::move(ib_packet_container);
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller_sp                            = std::move(ib_id_controller);
-            std::shared_ptr<packet_controller::InBoundBorderController> ib_border_controller_sp                             = std::move(ib_border_controller);
+            dg::vector<std::shared_ptr<packet_controller::InBoundBorderController>> ib_border_controller_sp_vec             = up_vector_to_vsp_vector(std::move(ib_border_controller_vec));            
             std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post_sp                                    = std::move(rescue_post);
             std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator_sp                 = std::move(krescue_packet_generator);
             std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller_sp              = std::move(retransmission_controller);
-
             std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container_sp                             = std::move(ob_packet_container);
-            std::shared_ptr<packet_controller::OutBoundBorderController> ob_border_controller_sp                            = std::move(ob_border_controller);
+            dg::vector<std::shared_ptr<packet_controller::OutBoundBorderController>> ob_border_controller_sp_vec            = up_vector_to_vsp_vector(std::move(ob_border_controller_vec)); 
             std::shared_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_exhaustion_controller_sp   = std::move(ob_exhaustion_controller);
             std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator_sp                         = std::move(ack_packet_generator);
             std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator_sp             = std::move(packet_integrity_validator);
-            std::shared_ptr<model::SocketHandle> socket_sp                                                                  = std::move(socket);
-
+            dg::vector<std::shared_ptr<model::SocketHandle>> socket_sp_vec                                                  = up_vector_to_vsp_vector(std::move(socket_vec));
             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec                                            = {};
- 
+
+            size_t ib_border_controller_sp_vec_ptr                                                                          = 0u;
+            size_t ob_border_controller_sp_vec_ptr                                                                          = 0u;
+            size_t socket_sp_vec_ptr                                                                                        = 0u;
+
             for (size_t i = 0u; i < num_kernel_inbound_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::get_kernel_inbound_worker(ib_buffer_container_sp, rescue_post_sp, socket_sp, 
+                auto worker_ins     = worker::ComponentFactory::get_kernel_inbound_worker(ib_buffer_container_sp, rescue_post_sp, 
+                                                                                          socket_sp_vec[socket_sp_vec_ptr++ % socket_sp_vec.size()], 
                                                                                           DEFAULT_HEARTBEAT_INTERVAL, ib_buffer_accumulation_sz);
 
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
@@ -5324,7 +5368,8 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
             for (size_t i = 0u; i < num_process_inbound_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_process_inbound_worker(retransmission_controller_sp, ob_packet_container_sp, ib_packet_container_sp, 
-                                                                                           ib_buffer_container_sp, ib_id_controller_sp, ib_border_controller_sp, 
+                                                                                           ib_buffer_container_sp, ib_id_controller_sp, 
+                                                                                           ib_border_controller_sp_vec[ib_border_controller_sp_vec_ptr++ % ib_border_controller_sp_vec.size()], 
                                                                                            ack_packet_generator_sp, packet_integrity_validator_sp, ib_packet_consumption_cap,
                                                                                            ib_packet_busy_threshold_sz);
 
@@ -5333,8 +5378,11 @@ namespace dg::network_kernel_mailbox_impl1::core{
             }
 
             for (size_t i = 0u; i < num_outbound_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::get_outbound_worker(ob_packet_container_sp, ob_border_controller_sp, ob_exhaustion_controller_sp,
-                                                                                    socket_sp, ob_packet_consumption_cap, ob_packet_busy_threshold_sz);
+                auto worker_ins     = worker::ComponentFactory::get_outbound_worker(ob_packet_container_sp, 
+                                                                                    ob_border_controller_sp_vec[ob_border_controller_sp_vec_ptr++ % ob_border_controller_sp_vec.size()], 
+                                                                                    ob_exhaustion_controller_sp,
+                                                                                    socket_sp_vec[socket_sp_vec_ptr++ % socket_sp_vec.size()], 
+                                                                                    ob_packet_consumption_cap, ob_packet_busy_threshold_sz);
 
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
@@ -5356,7 +5404,10 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            auto update_vec             = dg::vector<std::shared_ptr<UpdatableInterface>>{std::static_pointer_cast<UpdatableInterface>(ib_border_controller_sp), std::static_pointer_cast<UpdatableInterface>(ob_border_controller_sp)};
+            dg::vector<std::shared_ptr<UpdatableInterface>> update_vec{};
+            std::transform(ib_border_controller_sp_vec.begin(), ib_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<UpdatableInterface>(e);});
+            std::transform(ob_border_controller_sp_vec.begin(), ob_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<UpdatableInterface>(e);});
+
             auto updater                = packet_controller::ComponentFactory::get_batch_updater(std::move(update_vec));
             auto traffic_update_ins     = worker::ComponentFactory::get_update_worker(std::move(updater), traffic_reset_duration);
             auto traffic_daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(traffic_update_ins)));
@@ -5444,19 +5495,25 @@ namespace dg::network_kernel_mailbox_impl1{
         return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
     }
 
-    //...
-    //we made it fellas, the first version of the socket
-    //it's hard fellas, every line is deadly
-    //we made the choice of making every allocations noexcept (because we often dont know what to do otherwise, usually its bad decisions of not using finite pool of memory)
-    //alright fellas, this is the art of everything, everything is RAII, every component lifetime is this guy lifetime
-    //in the C programming, we can never do this
-    //we have to do init() deinit() for each of the component, turning the component on individually in their own namespace
-    //to be honest, this was NOT easy to write
-    //when we thought that we could use multiple mailboxes to leverage concurrency, we were wrong, clients didnt want that
-    //the problem was that there was no power consumption overhead (mutex spin + etc.) issue, yet the lock contention would hinder concurrent workers to do their jobs (total energy consumption) 
+    //alright fellas, we kinda glue everything here, in this very component
+    //it's ... not good, yet the deinit of the component == deinit of its dependencies, THIS IS WHAT WE WANT, not <namespace>_deinit(), etc.
+    //in case of the socket being corrupted, we just ... respawn the socket, everything is fine again
+    //we are in America fellas, if our car has a scratch, we sell the car, and get a new car
+    //we dont even bother the whys, whens, hows
+    //if the new car isn't working, we reset the upper component, or abort the program, which is very unlikely to happen
+
+    //let's look at our achievements
+
+    //no-discriminated retransmissions (no-connections)
+    //99.999999999% checksum if there are no engineered surprises, we can increase the chance to 100% by doing 2 checksums 
+    //traffic_controller, detect upper bound anomaly, stop retransmission (diplomacy achieved by good manners)
+    //empty kernel packet as soon as possible by doing aggregation + recv_block (there is no bouncing rx_queue)
+    //aggregated ack, reduce the compute power by 2 and transmission power by 1.3
+    //fixed transmission_rate -> socket, avoid surprised kernel packets dropping which is the main source of energy waste
+    // 
 
     extern auto spawn(Config config) -> std::unique_ptr<core::MailboxInterface>{
-        
+
         using namespace dg::network_kernel_mailbox_impl1::model;
 
         std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_container                            = {};
@@ -5483,6 +5540,12 @@ namespace dg::network_kernel_mailbox_impl1{
         }
         
         ib_buffer_container         = [&]{
+            if (config.inbound_buffer_concurrency_sz == 1u){
+                return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                                                                                                       config.retry_device,
+                                                                                                       packet_controller::ComponentFactory::get_default_exhaustion_controller());
+            }
+
             dg::vector<std::unique_ptr<packet_controller::BufferContainerInterface>> buffer_container_vec{};
 
             for (size_t i = 0u; i < config.inbound_buffer_concurrency_sz; ++i){
@@ -5496,8 +5559,13 @@ namespace dg::network_kernel_mailbox_impl1{
             return packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec));
         }();
 
-
         ib_packet_container         = [&]{
+            if (config.inbound_packet_concurrency_sz == 1u){
+                return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                                                                                                       config.retry_device,
+                                                                                                       packet_controller::ComponentFactory::get_default_exhaustion_controller());
+            }
+
             dg::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
 
             for (size_t i = 0u; i < config.inbound_packet_concurrency_sz; ++i){
@@ -5512,6 +5580,10 @@ namespace dg::network_kernel_mailbox_impl1{
         }();
 
         ib_id_controller            = [&]{
+            if (config.inbound_idhashset_concurrency_sz == 1u){
+                return packet_controller::ComponentFactory::get_inbound_id_controller(config.inbound_idhashset_cap);
+            }
+
             dg::vector<std::unique_ptr<packet_controller::InBoundIDControllerInterface>> inbound_id_vec{};
 
             for (size_t i = 0u; i < config.inbound_idhashset_concurrency_sz; ++i){
@@ -5538,6 +5610,13 @@ namespace dg::network_kernel_mailbox_impl1{
         krescue_packet_generator    = packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
 
         retransmission_controller   = [&]{
+            if (config.retransmission_concurrency_sz == 1u){
+                return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
+                                                                                                                                                                                   config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                                                                                                                                                                                   config.retry_device,
+                                                                                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
+            }
+
             dg::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
 
             for (size_t i = 0u; i < config.retransmission_concurrency_sz; ++i){
@@ -5553,6 +5632,13 @@ namespace dg::network_kernel_mailbox_impl1{
         }();
 
         ob_packet_container         = [&]{
+            if (config.outbound_packet_concurrency_sz == 1u){
+                return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                                                                              config.outbound_krescue_packet_container_cap),
+                                                                                                                                                                              config.retry_device,
+                                                                                                                                                                              packet_controller::ComponentFactory::get_default_exhaustion_controller());
+            }
+
             dg::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
 
             for (size_t i = 0u; i < config.outbound_packet_concurrency_sz; ++i){
@@ -5567,7 +5653,7 @@ namespace dg::network_kernel_mailbox_impl1{
             return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
         }();
 
-        size_t outbound_borderline_sz   = std::max(size_t{1}, static_cast<size_t>(config.outbound_tc_has_borderline_per_outbound_worker));
+        size_t outbound_borderline_sz = std::max(size_t{1}, static_cast<size_t>(config.outbound_tc_has_borderline_per_outbound_worker) * config.num_outbound_worker);
 
         for (size_t i = 0u; i < outbound_borderline_sz; ++i){
             auto current_border_controller = packet_controller::ComponentFactory::get_outbound_border_controller(config.natip_controller,
@@ -5582,15 +5668,21 @@ namespace dg::network_kernel_mailbox_impl1{
         ack_packet_generator        = packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
         packet_integrity_validator  = packet_controller::ComponentFactory::get_packet_integrity_validator(Address{config.host_ip, config.host_port});
         req_packet_generator        = packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
-        
-        for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
-            auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-            dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, true));
-            socket_vec.push_back(std::move(current_socket));
-        }
 
-        for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
-            dg::network_exception_handler::throw_nolog(socket_service::attach_bpf_socket(socket_vec[i]));
+        if (config.socket_concurrency_sz == 1u){
+            auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
+            dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, false));
+            socket_vec.push_back(std::move(current_socket));
+        } else{
+            for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
+                auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
+                dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, true));
+                socket_vec.push_back(std::move(current_socket));
+            }
+
+            for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
+                dg::network_exception_handler::throw_nolog(socket_service::attach_bpf_socket(socket_vec[i]));
+            }
         }
 
         return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_buffer_container),
