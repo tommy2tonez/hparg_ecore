@@ -164,7 +164,7 @@ namespace dg::network_hash{
         return murmur_hash(inp, n);
     }
 
-    constexpr auto hash_bytes(const char * inp, size_t n, uint32_t secret) -> uint64_t{
+    constexpr auto hash_bytes(const char * inp, size_t n, uint32_t secret) noexcept -> uint64_t{
 
         return murmur_hash(inp, n, secret);
     }
@@ -173,6 +173,21 @@ namespace dg::network_hash{
     constexpr auto hash_bytes(const char * inp, const std::integral_constant<size_t, N> n) noexcept -> uint64_t{
 
         return murmur_hash(inp, n);
+    }
+
+    template <class T>
+    constexpr auto hash_reflectible(const T& obj) noexcept -> uint64_t{
+
+        constexpr size_t MAX_REFLECTIBLE_SZ = size_t{1} << 5;
+        static_assert(std::has_unique_representations_v<T>);
+        
+        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(T{});
+        static_assert(SERIALIZATION_SZ <= MAX_REFLECTIBLE_SZ);
+
+        std::array<char, SERIALIZATION_SZ> buf{};
+        dg::network_trivial_serializer::serialize_into(buf.get(), obj);
+
+        return hash_bytes(buf.data(), std::integral_constant<size_t, SERIALIZATION_SZ>{});
     }
 } 
 
