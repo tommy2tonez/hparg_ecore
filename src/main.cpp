@@ -131,6 +131,7 @@ static void send_from_cpu(int cpu_id, int family, int proto)
 		error(1, errno, "failed to bind send socket");
 	if (connect(fd, (struct sockaddr *)&daddr, sizeof(daddr)))
 		error(1, errno, "failed to connect send socket");
+
 	if (send(fd, "a", 1, 0) < 0)
 		error(1, errno, "failed to send message");
 	close(fd);

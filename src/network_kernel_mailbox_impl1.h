@@ -406,6 +406,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
     static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 10;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 10;
+    static inline constexpr int KERNEL_NOBLOCK_TRANSMISSION_FLAG        = MSG_DONTROUTE | MSG_DONTWAIT;
 }
 
 namespace dg::network_kernel_mailbox_impl1::external_interface{
@@ -795,7 +796,6 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         //these are mysterious wizard codes that I dont know
         //it seems like this is doing unbalanced modulo by using offset + affinity
-        //that's good enought I think
 
         struct sock_filter code[] = {
             { BPF_LD  | BPF_W | BPF_ABS, 0, 0, static_cast<uint32_t>(SKF_AD_OFF) + SKF_AD_CPU},
@@ -842,7 +842,7 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
         server.sin6_port    = htons(to_addr.port);
         auto n              = sendto(sock.kernel_sock_fd, 
                                      buf, stdx::wrap_safe_integer_cast(sz), 
-                                     MSG_DONTWAIT, 
+                                     constants::KERNEL_NOBLOCK_TRANSMISSION_FLAG,
                                      reinterpret_cast<const struct sockaddr *>(&server), sizeof(struct sockaddr_in6));
 
         if (n == -1){
@@ -883,7 +883,7 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
         server.sin_port     = htons(to_addr.port);
         auto n              = sendto(sock.kernel_sock_fd, 
                                      buf, stdx::wrap_safe_integer_cast(sz), 
-                                     MSG_DONTWAIT, 
+                                     constants::KERNEL_NOBLOCK_TRANSMISSION_FLAG, 
                                      reinterpret_cast<const struct sockaddr *>(&server), sizeof(struct sockaddr_in)); 
 
         if (n == -1){
@@ -3260,7 +3260,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     struct ComponentFactory{
 
-        static auto get_batch_updater(dg::vector<std::shared_ptr<UpdatableInterface>> updatable_vec) -> std::unique_ptr<UpdatableInterface>{
+        template <class T, class ...Args>
+        static auto to_dg_vector(std::vector<T, Args...> vec) -> dg::vector<T>{
+
+            dg::vector<T> rs{};
+
+            for (size_t i = 0u; i < vec.size(); ++i){
+                rs.emplace_back(std::move(vec[i]));
+            }
+
+            return rs;
+        }
+
+        static auto get_batch_updater(std::vector<std::shared_ptr<UpdatableInterface>> updatable_vec) -> std::unique_ptr<UpdatableInterface>{
 
             for (const auto& updatable: updatable_vec){
                 if (updatable == nullptr){
@@ -3268,7 +3280,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
             }
 
-            return std::make_unique<BatchUpdater>(std::move(updatable_vec));
+            return std::make_unique<BatchUpdater>(to_dg_vector(std::move(updatable_vec)));
         }
 
         static auto get_asap_scheduler() -> std::unique_ptr<SchedulerInterface>{
@@ -3490,7 +3502,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                          std::move(exhaustion_controller));
         }
 
-        static auto get_randomhash_distributed_buffer_container(dg::vector<std::unique_ptr<BufferContainerInterface>> base_vec,
+        static auto get_randomhash_distributed_buffer_container(std::vector<std::unique_ptr<BufferContainerInterface>> base_vec,
                                                                 size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<BufferContainerInterface>{
 
             const size_t MIN_BASE_VEC_SZ            = size_t{1};
@@ -3621,8 +3633,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                              accum_sz,
                                                              stdx::hdi_container<size_t>{consume_sz});
         } 
-        
-        static auto get_randomhash_distributed_packet_container(dg::vector<std::unique_ptr<PacketContainerInterface>> base_vec,
+
+        static auto get_randomhash_distributed_packet_container(std::vector<std::unique_ptr<PacketContainerInterface>> base_vec,
                                                                 size_t zero_packet_retry_sz = 8u) -> std::unique_ptr<HashDistributedPacketContainer>{
 
 
@@ -3679,7 +3691,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                          stdx::hdi_container<size_t>{consume_sz});
         }
 
-        static auto get_randomhash_distributed_inbound_id_controller(dg::vector<std::unique_ptr<InBoundIDControllerInterface>> base_vec,
+        static auto get_randomhash_distributed_inbound_id_controller(std::vector<std::unique_ptr<InBoundIDControllerInterface>> base_vec,
                                                                      size_t keyvalue_aggregation_cap = 2048u) -> std::unique_ptr<InBoundIDControllerInterface>{
             
             const size_t MIN_BASE_VEC_SZ                = size_t{1};
@@ -4198,6 +4210,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     size_t sz       = {};
                     exception_t err = socket_service::recv_block(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE); //self-ping to rescue - triggered by an observable relaxed atomic variable (updated every 1024 reads for example) - the rescuer is going to look for the relaxed atomic variable to send rescue packets
                                                                                                                                   //recv block to avoid queuing - kernel optimization reads directly from NIC as soon as possible - there is unfortunately no stable interface except for that for more than 20 years - so let's stick with that for the moment being
+                                                                                                                                  //recv_block is better than select, because it avoids rx_queue bouncing, kernel optimization will subscribe the mtx and release the lock as soon as possible
 
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
@@ -5121,7 +5134,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
  
                                                            std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container,
                                                            std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller,
-                                                           dg::vector<std::unique_ptr<packet_controller::InBoundBorderController>> ib_border_controller_vec,
+                                                           std::vector<std::unique_ptr<packet_controller::InBoundBorderController>> ib_border_controller_vec,
                                                            size_t ib_packet_consumption_cap,
                                                            size_t ib_packet_busy_threshold_sz,
 
@@ -5135,14 +5148,14 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                            size_t retransmission_busy_threshold_sz,
 
                                                            std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container,
-                                                           dg::vector<std::unique_ptr<packet_controller::OutBoundBorderController>> ob_border_controller_vec,
+                                                           std::vector<std::unique_ptr<packet_controller::OutBoundBorderController>> ob_border_controller_vec,
                                                            std::unique_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_exhaustion_controller,
                                                            size_t ob_packet_consumption_cap,
                                                            size_t ob_packet_busy_threshold_sz,
 
                                                            std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator, //alright these guys should be a unique_ptr injections, we dont really care about those best practices for now
                                                            std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
-                                                           dg::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>> socket_vec,
+                                                           std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>> socket_vec,
 
                                                            std::unique_ptr<packet_controller::RequestPacketGeneratorInterface> req_packet_generator,
                                                            size_t mailbox_inbound_cap,
@@ -5341,16 +5354,16 @@ namespace dg::network_kernel_mailbox_impl1::core{
             std::shared_ptr<packet_controller::BufferContainerInterface> ib_buffer_container_sp                             = std::move(ib_buffer_container);
             std::shared_ptr<packet_controller::PacketContainerInterface> ib_packet_container_sp                             = std::move(ib_packet_container);
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller_sp                            = std::move(ib_id_controller);
-            dg::vector<std::shared_ptr<packet_controller::InBoundBorderController>> ib_border_controller_sp_vec             = up_vector_to_vsp_vector(std::move(ib_border_controller_vec));            
+            std::vector<std::shared_ptr<packet_controller::InBoundBorderController>> ib_border_controller_sp_vec            = up_vector_to_vsp_vector(std::move(ib_border_controller_vec));            
             std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post_sp                                    = std::move(rescue_post);
             std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator_sp                 = std::move(krescue_packet_generator);
             std::shared_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller_sp              = std::move(retransmission_controller);
             std::shared_ptr<packet_controller::PacketContainerInterface> ob_packet_container_sp                             = std::move(ob_packet_container);
-            dg::vector<std::shared_ptr<packet_controller::OutBoundBorderController>> ob_border_controller_sp_vec            = up_vector_to_vsp_vector(std::move(ob_border_controller_vec)); 
+            std::vector<std::shared_ptr<packet_controller::OutBoundBorderController>> ob_border_controller_sp_vec           = up_vector_to_vsp_vector(std::move(ob_border_controller_vec)); 
             std::shared_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_exhaustion_controller_sp   = std::move(ob_exhaustion_controller);
             std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator_sp                         = std::move(ack_packet_generator);
             std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator_sp             = std::move(packet_integrity_validator);
-            dg::vector<std::shared_ptr<model::SocketHandle>> socket_sp_vec                                                  = up_vector_to_vsp_vector(std::move(socket_vec));
+            std::vector<std::shared_ptr<model::SocketHandle>> socket_sp_vec                                                 = up_vector_to_vsp_vector(std::move(socket_vec));
             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec                                            = {};
 
             size_t ib_border_controller_sp_vec_ptr                                                                          = 0u;
@@ -5404,7 +5417,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            dg::vector<std::shared_ptr<UpdatableInterface>> update_vec{};
+            std::vector<std::shared_ptr<UpdatableInterface>> update_vec{};
             std::transform(ib_border_controller_sp_vec.begin(), ib_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<UpdatableInterface>(e);});
             std::transform(ob_border_controller_sp_vec.begin(), ob_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<UpdatableInterface>(e);});
 
@@ -5421,7 +5434,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 }
 
 namespace dg::network_kernel_mailbox_impl1{
-    
+
     struct Config{
         uint32_t num_kernel_inbound_worker;
         uint32_t num_process_inbound_worker;
@@ -5435,6 +5448,8 @@ namespace dg::network_kernel_mailbox_impl1{
         int protocol;
         model::IP host_ip;
         uint16_t host_port;
+
+        bool has_exhaustion_control; 
 
         std::chrono::nanoseconds retransmission_delay; 
         uint32_t retransmission_concurrency_sz;
@@ -5495,234 +5510,366 @@ namespace dg::network_kernel_mailbox_impl1{
         return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
     }
 
-    //alright fellas, we kinda glue everything here, in this very component
-    //it's ... not good, yet the deinit of the component == deinit of its dependencies, THIS IS WHAT WE WANT, not <namespace>_deinit(), etc.
-    //in case of the socket being corrupted, we just ... respawn the socket, everything is fine again
-    //we are in America fellas, if our car has a scratch, we sell the car, and get a new car
-    //we dont even bother the whys, whens, hows
-    //if the new car isn't working, we reset the upper component, or abort the program, which is very unlikely to happen
+    //we have to rewrite this because it's confusing
+    //dont worry fellas, we'll write an engine to translate this to make language
+    //we kinda keep everything in one place for easy debug + implementation + code header_control
+    //header_control is a tool for code management, such is during refactorization, it can only references lower header control
+    //you'd be amazed by how efficient (maintenance-wise and refactoring-wise) it is to keep everything in one file 
 
-    //let's look at our achievements
+    //consider this everyday kernel flow
+    //someone made a useful tool
+    //other people make a useful tool using the tool
+    //the first tool is now adding new features yet don't know what tool to reference, if it misreferences the tool, we have circular dependencies of header_control
 
-    //no-discriminated retransmissions (no-connections)
-    //99.999999999% checksum if there are no engineered surprises, we can increase the chance to 100% by doing 2 checksums 
-    //traffic_controller, detect upper bound anomaly, stop retransmission (diplomacy achieved by good manners)
-    //empty kernel packet as soon as possible by doing aggregation + recv_block (there is no bouncing rx_queue)
-    //aggregated ack, reduce the compute power by 2 and transmission power by 1.3
-    //fixed transmission_rate -> socket, avoid surprised kernel packets dropping which is the main source of energy waste
-    // 
+    //our ambition is more than just a simple protocol
+    //we want to leverage this to do planned packet transportations by using frequencies (imagine netflix + cuda compressor | decompressor by using the deviation technique, without cache bouncing, we are to broadcast a massive data from A -> B, C, D, E, F, etc.)
+    //its gonna be a very long way there fellas, the day we have 1TB -> 1PB cuda translation dictionary
+    //this means we have to consider packet latency as part of the program instead of thruput (we need to achieve 0.1ms latency from A -> B, we've yet to know the howtos)
+    //dont tell me there's a better way, there aint, maybe a better implementation
+    //static, no-discrimated retransmission is the way of high thruput + low latency, we need to spawn multiple channels of different retranmission delays to be <racist>
+
+    //there is no better instrument than doing statistics, no better implementation than not tieing our hands
+    //this is the base rule of programming
+
+    //99% packet tranmission rate if correctly routed, which is our goal of using direct linkage between A -> B
+    //each packet is 1KB
+    //we are to transport 1 million successful packets for every computation tree (to fully synchronise backprop)
+    //the possibility is 99% ** (1 million) = 0%
+
+    //1% fail rate
+    //the chances of all fail for n retransmissions is 1% ** n
+    //assume 4 retranmissions  
+    //the chance of failing is 1e-8
+    //the chance of success is 1 - (1e-8)
+    //a successful soft_synchronization at a random time possibility is <that> ^ (1 million) == 99%
+    //real-life scenerios give us the edge of 1 fail/ 1000 packets, which is 1 free retransmission
+    //so the right number of retranmissions is probably 5 for every scenerio
+    //we'll run tests later
+
+    struct ConfigMaker{
+
+        private:
+
+            static auto make_inbound_buffer_container(Config config) -> std::unique_ptr<packet_controller::BufferContainerInterface>{
+
+                if (config.inbound_buffer_concurrency_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.inbound_buffer_concurrency_sz == 1u){
+                    if (config.has_exhaustion_control){
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                                                                                                               config.retry_device,
+                                                                                                               packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    return packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap);
+                }
+
+                std::vector<std::unique_ptr<packet_controller::BufferContainerInterface>> buffer_container_vec{};
+
+                for (size_t i = 0u; i < config.inbound_buffer_concurrency_sz; ++i){
+                    auto current_buffer_container = std::unique_ptr<packet_controller::BufferContainerInterface>{};
+
+                    if (config.has_exhaustion_control){
+                        current_buffer_container = packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                                                                                                                                   config.retry_device,
+                                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    } else{
+                        current_buffer_container = packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap);
+                    }
+
+                    buffer_container_vec.push_back(std::move(current_buffer_container));
+                }
+
+                return packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec));
+            }
+
+            static auto make_inbound_packet_container(Config config) -> std::unique_ptr<packet_controller::PacketContainerInterface>{
+                
+                if (config.inbound_packet_concurrency_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.inbound_packet_concurrency_sz == 1u){
+                    if (config.has_exhaustion_control){
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                                                                                                               config.retry_device,
+                                                                                                               packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    return packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap);
+                }
+
+                std::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
+
+                for (size_t i = 0u; i < config.inbound_packet_concurrency_sz; ++i){
+                    auto current_packet_container = std::unique_ptr<packet_controller::PacketContainerInterface>{};
+                     
+                    if (config.has_exhaustion_control){
+                        current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                                                                                                                                   config.retry_device,
+                                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    } else{
+                        current_packet_container = packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap);
+                    }
+
+                    packet_container_vec.push_back(std::move(current_packet_container));
+                }
+
+                return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
+            }
+
+            static auto make_inbound_id_controller(Config config) -> std::unique_ptr<packet_controller::InBoundIDControllerInterface>{
+
+                if (config.inbound_idhashset_concurrency_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.inbound_idhashset_concurrency_sz == 1u){
+                    return packet_controller::ComponentFactory::get_inbound_id_controller(config.inbound_idhashset_cap);
+                }
+
+                std::vector<std::unique_ptr<packet_controller::InBoundIDControllerInterface>> inbound_id_vec{};
+
+                for (size_t i = 0u; i < config.inbound_idhashset_concurrency_sz; ++i){
+                    auto current_id_controller = packet_controller::ComponentFactory::get_inbound_id_controller(config.inbound_idhashset_cap);
+                    inbound_id_vec.push_back(std::move(current_id_controller)); 
+                }
+
+                return packet_controller::ComponentFactory::get_randomhash_distributed_inbound_id_controller(std::move(inbound_id_vec));
+
+            }
+
+            static auto make_inbound_border_controller(Config config) -> std::vector<std::unique_ptr<packet_controller::InBoundBorderController>>{
+
+                if (config.num_kernel_inbound_worker == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                auto ib_border_line_controller_vec  = std::vector<std::unique_ptr<packet_controller::InBoundBorderController>>{};
+                size_t inbound_borderline_sz        = static_cast<size_t>(config.inbound_tc_has_borderline_per_inbound_worker) * config.num_kernel_inbound_worker;
+
+                for (size_t i = 0u; i < inbound_borderline_sz; ++i){
+                    auto current_border_controller = packet_controller::ComponentFactory::get_inbound_border_controller(config.natip_controller, 
+                                                                                                                        config.inbound_tc_peraddr_cap,
+                                                                                                                        config.inbound_tc_global_cap,
+                                                                                                                        config.inbound_tc_addrmap_cap,
+                                                                                                                        config.inbound_tc_side_cap);
+
+                    ib_border_line_controller_vec.push_back(std::move(current_border_controller)); 
+                }
+
+                return ib_border_line_controller_vec;
+            }
+
+            static auto make_kernel_rescue_post(Config config) -> std::unique_ptr<packet_controller::KernelRescuePostInterface>{
+
+                return packet_controller::ComponentFactory::get_kernel_rescue_post();
+            }
+
+            static auto make_kernel_rescue_packet_generator(Config config) -> std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface>{
+
+                return packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+            }
+
+            static auto make_retransmission_controller(Config config) -> std::unique_ptr<packet_controller::RetransmissionControllerInterface>{
+                
+                if (config.retransmission_concurrency_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.retransmission_concurrency_sz == 1u){
+                    if (config.has_exhaustion_control){
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
+                                                                                                                                                                                           config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                                                                                                                                                                                           config.retry_device,
+                                                                                                                                                                                           packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    return packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap,
+                                                                                              config.retransmission_idhashset_cap, config.retransmission_queue_cap);
+                }
+
+                std::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
+
+                for (size_t i = 0u; i < config.retransmission_concurrency_sz; ++i){
+                    auto current_retransmission_controller = std::unique_ptr<packet_controller::RetransmissionControllerInterface>{}; 
+                    
+                    if (config.has_exhaustion_control){
+                        current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
+                                                                                                                                                                                                                        config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                                                                                                                                                                                                                        config.retry_device,
+                                                                                                                                                                                                                        packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
+                    } else{
+                        current_retransmission_controller = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap,
+                                                                                                                               config.retransmission_idhashset_cap, config.retransmission_queue_cap);
+                    }
+
+                    retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
+                }
+
+                return packet_controller::ComponentFactory::get_randomhash_distributed_retransmission_controller(std::move(retransmission_controller_vec));
+            }
+
+            static auto make_outbound_packet_container(Config config) -> std::unique_ptr<packet_controller::PacketContainerInterface>{
+                
+                if (config.outbound_packet_concurrency_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.outbound_packet_concurrency_sz == 1u){
+                    if (config.has_exhaustion_control){
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                                                                                      config.outbound_krescue_packet_container_cap),
+                                                                                                                                                                                      config.retry_device,
+                                                                                                                                                                                      packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    return packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                  config.outbound_krescue_packet_container_cap);
+                }
+
+                std::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
+
+                for (size_t i = 0u; i < config.outbound_packet_concurrency_sz; ++i){
+                    auto current_packet_container = std::unique_ptr<packet_controller::PacketContainerInterface>{}; 
+
+                    if (config.has_exhaustion_control){
+                        current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                                                                                                          config.outbound_krescue_packet_container_cap),
+                                                                                                                                                                                                          config.retry_device,
+                                                                                                                                                                                                          packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    } else{
+                        current_packet_container = packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                          config.outbound_krescue_packet_container_cap);
+                    }
+
+                    packet_container_vec.push_back(std::move(current_packet_container));
+                }
+
+                return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
+            }
+
+            static auto make_outbound_border_controller(Config config) -> std::vector<std::unique_ptr<packet_controller::OutBoundBorderController>>{
+
+                if (config.num_outbout_worker == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                auto ob_borderline_controller_vec   = std::vector<std::unique_ptr<packet_controller::OutBoundBorderController>>{};
+                size_t outbound_borderline_sz       = static_cast<size_t>(config.outbound_tc_has_borderline_per_outbound_worker) * config.num_outbound_worker;
+
+                for (size_t i = 0u; i < outbound_borderline_sz; ++i){
+                    auto current_border_controller = packet_controller::ComponentFactory::get_outbound_border_controller(config.natip_controller,
+                                                                                                                        config.outbound_tc_peraddr_cap,
+                                                                                                                        config.outbound_tc_global_cap,
+                                                                                                                        config.outbound_tc_addrmap_cap,
+                                                                                                                        config.outbound_tc_side_cap);
+
+                    ob_borderline_controller_vec.push_back(std::move(current_border_controller));
+                }
+
+                return ob_borderline_controller_vec;
+            }
+
+            static auto make_outbound_transmission_controller(Config config) -> std::unique_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface>{
+
+                return packet_controller::ComponentFactory::get_kernel_outbound_static_transmission_controller(config.outbound_transmit_frequency);
+            }
+
+            static auto make_ack_packet_generator(Config config) -> std::unique_ptr<packet_controller::AckPacketGeneratorInterface>{
+
+                return packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+            }
+
+            static auto make_packet_integrity_validator(Config config) -> std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface>{
+
+                return packet_controller::ComponentFactory::get_packet_integrity_validator(Address{config.host_ip, config.host_port});
+            }
+
+            static auto make_socket(Config config) -> std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>>{
+                
+                if (config.socket_concurrency_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                auto socket_vec = std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>>{};
+
+                if (config.socket_concurrency_sz == 1u){
+                    auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
+                    dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, false));
+                    socket_vec.push_back(std::move(current_socket));
+                } else{
+                    for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
+                        auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
+                        dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, true));
+                        socket_vec.push_back(std::move(current_socket));
+                    }
+
+                    for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
+                        dg::network_exception_handler::throw_nolog(socket_service::attach_bpf_socket(socket_vec[i]));
+                    }
+                }
+
+                return socket_vec;
+            }
+
+            static auto make_request_packet_generator(Config config) -> std::unique_ptr<packet_controller::RequestPacketGeneratorInterface>{
+
+                return packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+            }
+
+        public:
+
+            static auto make(Config config) -> std::unique_ptr<core::MailboxInterface>{
+
+                //this is confusing
+                return core::ComponentFactory::get_retransmittable_mailbox_controller(make_inbound_buffer_container(config),
+                                                                                      config.worker_inbound_buffer_accumulation_sz,
+
+                                                                                      make_inbound_packet_container(config),
+                                                                                      make_inbound_id_controller(config),
+
+                                                                                      make_inbound_border_controller(config),
+                                                                                      config.worker_inbound_packet_consumption_cap,
+                                                                                      config.worker_inbound_packet_busy_threshold_sz,
+
+                                                                                      make_kernel_rescue_post(config),
+                                                                                      make_kernel_rescue_packet_generator(config),
+                                                                                      config.worker_rescue_packet_sz_per_transmit,
+                                                                                      config.worker_kernel_rescue_dispatch_threshold,
+
+                                                                                      make_retransmission_controller(config),
+                                                                                      config.worker_retransmission_consumption_cap,
+                                                                                      config.worker_retransmission_busy_threshold_sz,
+                                                                                    
+                                                                                      make_outbound_packet_container(config),
+                                                                                      make_outbound_border_controller(config),
+                                                                                      make_outbound_transmission_controller(config),
+                                                                                      config.worker_outbound_packet_consumption_cap,
+                                                                                      config.worker_outbound_packet_busy_threshold_sz,
+
+                                                                                      make_ack_packet_generator(config),
+                                                                                      make_packet_integrity_validator(config),
+                                                                                      make_socket(config),
+
+                                                                                      make_request_packet_generator(config),
+                                                                                      config.mailbox_inbound_cap,
+                                                                                      config.mailbox_outbound_cap,
+
+                                                                                      config.traffic_reset_duration,
+
+                                                                                      config.num_kernel_inbound_worker,
+                                                                                      config.num_process_inbound_worker,
+                                                                                      config.num_kernel_rescue_worker,
+                                                                                      config.num_retry_worker);
+            }
+    };
 
     extern auto spawn(Config config) -> std::unique_ptr<core::MailboxInterface>{
 
-        using namespace dg::network_kernel_mailbox_impl1::model;
-
-        std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_container                            = {};
-        std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_container                            = {};
-        std::unique_ptr<packet_controller::InBoundIDControllerInterface> ib_id_controller                           = {};
-        dg::vector<std::unique_ptr<packet_controller::InBoundBorderController>> ib_border_line_controller_vec       = {};
-        std::unique_ptr<packet_controller::KernelRescuePostInterface> rescue_post                                   = {};
-        std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator                = {};
-        std::unique_ptr<packet_controller::RetransmissionControllerInterface> restranmission_controller             = {};
-        std::unique_ptr<packet_controller::PacketContainerInterface> ob_packet_container                            = {};
-        dg::vector<std::unique_ptr<packet_controller::OutBoundBorderController>> ob_border_line_controller_vec      = {};
-        std::unique_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> ob_tranmission_controller = {};
-        std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator                        = {};
-        std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator            = {};
-        dg::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>> socket_vec                 = {};
-        std::unique_ptr<packet_controller::RequestPacketGeneratorInterface> req_packet_generator                    = {};
-
-        if (config.natip_controller == nullptr){
-            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        }
-
-        if (config.retry_device == nullptr){
-            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        }
-        
-        ib_buffer_container         = [&]{
-            if (config.inbound_buffer_concurrency_sz == 1u){
-                return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
-                                                                                                       config.retry_device,
-                                                                                                       packet_controller::ComponentFactory::get_default_exhaustion_controller());
-            }
-
-            dg::vector<std::unique_ptr<packet_controller::BufferContainerInterface>> buffer_container_vec{};
-
-            for (size_t i = 0u; i < config.inbound_buffer_concurrency_sz; ++i){
-                auto current_buffer_container = packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
-                                                                                                                                config.retry_device,
-                                                                                                                                packet_controller::ComponentFactory::get_default_exhaustion_controller());
-
-                buffer_container_vec.push_back(std::move(current_buffer_container));
-            }
-
-            return packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec));
-        }();
-
-        ib_packet_container         = [&]{
-            if (config.inbound_packet_concurrency_sz == 1u){
-                return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
-                                                                                                       config.retry_device,
-                                                                                                       packet_controller::ComponentFactory::get_default_exhaustion_controller());
-            }
-
-            dg::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
-
-            for (size_t i = 0u; i < config.inbound_packet_concurrency_sz; ++i){
-                auto current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
-                                                                                                                                config.retry_device,
-                                                                                                                                packet_controller::ComponentFactory::get_default_exhaustion_controller());
-                
-                packet_container_vec.push_back(std::move(current_packet_container));
-            }
-
-            return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
-        }();
-
-        ib_id_controller            = [&]{
-            if (config.inbound_idhashset_concurrency_sz == 1u){
-                return packet_controller::ComponentFactory::get_inbound_id_controller(config.inbound_idhashset_cap);
-            }
-
-            dg::vector<std::unique_ptr<packet_controller::InBoundIDControllerInterface>> inbound_id_vec{};
-
-            for (size_t i = 0u; i < config.inbound_idhashset_concurrency_sz; ++i){
-                auto current_id_controller = packet_controller::ComponentFactory::get_inbound_id_controller(config.inbound_idhashset_cap);
-                inbound_id_vec.push_back(std::move(current_id_controller)); 
-            }
-
-            return packet_controller::ComponentFactory::get_randomhash_distributed_inbound_id_controller(std::move(inbound_id_vec));
-        }();
-
-        size_t inbound_borderline_sz = std::max(size_t{1}, static_cast<size_t>(config.inbound_tc_has_borderline_per_inbound_worker) * config.num_kernel_inbound_worker);
-
-        for (size_t i = 0u; i < inbound_borderline_sz; ++i){
-            auto current_border_controller = packet_controller::ComponentFactory::get_inbound_border_controller(config.natip_controller, 
-                                                                                                                config.inbound_tc_peraddr_cap,
-                                                                                                                config.inbound_tc_global_cap,
-                                                                                                                config.inbound_tc_addrmap_cap,
-                                                                                                                config.inbound_tc_side_cap);
-
-            ib_border_line_controller_vec.push_back(std::move(current_border_controller)); 
-        }
-
-        rescue_post                 = packet_controller::ComponentFactory::get_kernel_rescue_post();
-        krescue_packet_generator    = packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
-
-        retransmission_controller   = [&]{
-            if (config.retransmission_concurrency_sz == 1u){
-                return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
-                                                                                                                                                                                   config.retransmission_idhashset_cap, config.retransmission_queue_cap),
-                                                                                                                                                                                   config.retry_device,
-                                                                                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
-            }
-
-            dg::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
-
-            for (size_t i = 0u; i < config.retransmission_concurrency_sz; ++i){
-                auto current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
-                                                                                                                                                                                                                     config.retransmission_idhashset_cap, config.retransmission_queue_cap),
-                                                                                                                                                                                                                     config.retry_device,
-                                                                                                                                                                                                                     packet_controller::ComponentFactory::get_default_exhaustion_controller());
-
-                retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
-            }
-
-            return packet_controller::ComponentFactory::get_randomhash_distributed_retransmission_controller(std::move(retransmission_controller_vec));
-        }();
-
-        ob_packet_container         = [&]{
-            if (config.outbound_packet_concurrency_sz == 1u){
-                return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                                                                              config.outbound_krescue_packet_container_cap),
-                                                                                                                                                                              config.retry_device,
-                                                                                                                                                                              packet_controller::ComponentFactory::get_default_exhaustion_controller());
-            }
-
-            dg::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
-
-            for (size_t i = 0u; i < config.outbound_packet_concurrency_sz; ++i){
-                auto current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                                                                                                       config.outbound_krescue_packet_container_cap),
-                                                                                                                                                                                                       config.retry_device,
-                                                                                                                                                                                                       packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
-
-                packet_container_vec.push_back(std::move(current_packet_container));
-            }
-
-            return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
-        }();
-
-        size_t outbound_borderline_sz = std::max(size_t{1}, static_cast<size_t>(config.outbound_tc_has_borderline_per_outbound_worker) * config.num_outbound_worker);
-
-        for (size_t i = 0u; i < outbound_borderline_sz; ++i){
-            auto current_border_controller = packet_controller::ComponentFactory::get_outbound_border_controller(config.natip_controller,
-                                                                                                                 config.outbound_tc_peraddr_cap,
-                                                                                                                 config.outbound_tc_global_cap,
-                                                                                                                 config.outbound_tc_addrmap_cap,
-                                                                                                                 config.outbound_tc_side_cap);
-            ob_border_line_controller_vec.push_back(std::move(current_border_controller));
-        }
-
-        ob_tranmission_controller   = packet_controller::ComponentFactory::get_kernel_outbound_static_transmission_controller(config.outbound_transmit_frequency);
-        ack_packet_generator        = packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
-        packet_integrity_validator  = packet_controller::ComponentFactory::get_packet_integrity_validator(Address{config.host_ip, config.host_port});
-        req_packet_generator        = packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
-
-        if (config.socket_concurrency_sz == 1u){
-            auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-            dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, false));
-            socket_vec.push_back(std::move(current_socket));
-        } else{
-            for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
-                auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-                dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, true));
-                socket_vec.push_back(std::move(current_socket));
-            }
-
-            for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
-                dg::network_exception_handler::throw_nolog(socket_service::attach_bpf_socket(socket_vec[i]));
-            }
-        }
-
-        return core::ComponentFactory::get_retransmittable_mailbox_controller(std::move(ib_buffer_container),
-                                                                              config.worker_inbound_buffer_accumulation_sz,
-
-                                                                              std::move(ib_packet_container),
-                                                                              std::move(ib_id_controller),
-                                                                              std::move(ib_border_line_controller_vec),
-                                                                              config.worker_inbound_packet_consumption_cap,
-                                                                              config.worker_inbound_packet_busy_threshold_sz,
-
-                                                                              std::move(rescue_post),
-                                                                              std::move(krescue_packet_generator),
-                                                                              config.worker_rescue_packet_sz_per_transmit,
-                                                                              config.worker_kernel_rescue_dispatch_threshold,
-
-                                                                              std::move(retransmission_controller),
-                                                                              config.worker_retransmission_consumption_cap,
-                                                                              config.worker_retransmission_busy_threshold_sz,
-                                                                              
-                                                                              std::move(ob_packet_container),
-                                                                              std::move(ob_border_line_controller_vec),
-                                                                              std::move(ob_tranmission_controller),
-                                                                              config.worker_outbound_packet_consumption_cap,
-                                                                              config.worker_outbound_packet_busy_threshold_sz,
-
-                                                                              std::move(ack_packet_generator),
-                                                                              std::move(packet_integrity_validator),
-                                                                              std::move(socket_vec),
-
-                                                                              std::move(request_packet_generator),
-                                                                              config.mailbox_inbound_cap,
-                                                                              config.mailbox_outbound_cap,
-
-                                                                              config.traffic_reset_duration,
-
-                                                                              config.num_kernel_inbound_worker,
-                                                                              config.num_process_inbound_worker,
-                                                                              config.num_kernel_rescue_worker,
-                                                                              config.num_retry_worker);
+        return ConfigMaker::make(config);
     }
 }
 
