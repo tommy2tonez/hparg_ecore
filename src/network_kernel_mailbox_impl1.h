@@ -38,6 +38,8 @@
 #include <array>
 #include "network_randomizer.h"
 #include "network_exception_handler.h"
+#include "network_producer_consumer.h"
+#include "network_stack_allocation.h"
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -273,6 +275,8 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 
 namespace dg::network_kernel_mailbox_impl1::external_interface{
 
+    using namespace dg::network_kernel_mailbox_impl1::types;
+
     class IPSieverInterface{
 
         public:
@@ -291,10 +295,10 @@ namespace dg::network_kernel_mailbox_impl1::external_interface{
             virtual void add_outbound(Address *, size_t, exception_t *) noexcept = 0;
 
             virtual void get_inbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0; 
-            virtual auto get_inbound_friend_addr_size() noexcept -> size_t = 0;
+            virtual auto get_inbound_friend_addr_iteration_size() noexcept -> size_t = 0;
 
             virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
-            virtual auto get_outbound_friend_addr_size() noexcept -> size_t = 0;
+            virtual auto get_inbound_friend_addr_iteration_size() noexcept -> size_t = 0;
     };
 }
 
@@ -669,7 +673,7 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
             .filter = code,
         };
 
-        if (setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &p, sizeof(p)) == -1){
+        if (setsockopt(sock.kernel_sock_fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &p, sizeof(p)) == -1){
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
@@ -837,6 +841,11 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 
                 this->hashset.insert(key);
                 this->entry_deque.push_back(key);
+            }
+
+            inline auto capacity() const noexcept -> size_t{
+
+                return this->cap;
             }
 
             inline auto contains(const T& key) const noexcept -> bool{
@@ -1054,13 +1063,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         dg::string serialized                                                           = {};
 
         if (is_request_packet(packet)){
-            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), constants::request);
+            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::request));
             serialized = serialize_request_packet(dg::network_exception_handler::nothrow_log(devirtualize_request_packet(std::move(packet))));
         } else if (is_ack_packet(packet)){
-            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), constants::ack);
+            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::ack));
             serialized = serialize_ack_packet(dg::network_exception_handler::nothrow_log(devirtualize_ack_packet(std::move(packet))));
         } else if (is_krescue_packet(packet)){
-            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), constants::krescue);
+            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::krescue));
             serialized = serialize_krescue_packet(dg::network_exception_handler::nothrow_log(devirtualize_krescue_packet(std::move(packet))));
         } else{
             if constexpr(DEBUG_MODE_FLAG){
@@ -1618,7 +1627,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                Packet * base_pkt_arr                       = pkt.arr.base(); 
+                Packet * base_pkt_arr                       = pkt_arr.base(); 
 
                 auto internal_resolutor                     = InternalRetriableDeliveryResolutor{};
                 internal_resolutor.dst_vec                  = this->retransmission_controller_vec.get();
@@ -2967,7 +2976,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get_inbound_friend_addr_iteration_size() noexcept -> size_t{
 
-                return this->inbound_friend_deque.size();
+                return this->inbound_friend_set.size();
             }
 
             void get_outbound_friend_addr(Address * addr_arr, size_t off, size_t& sz, size_t cap) noexcept{
@@ -2983,7 +2992,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get_outbound_friend_addr_iteration_size() noexcept -> size_t{
 
-                return this->outbound_friend_deque.size();
+                return this->outbound_friend_set.size();
             }
     };
 
@@ -3305,7 +3314,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 base_vec_up[i]  = std::move(base_vec[i]);
             }
 
-            if (std::clamp(keyvalue_aggregation_cap, MIN_VALUE_AGGREGATION_CAP, MAX_VALUE_AGGREGATION_CAP) != keyvalue_aggregation_cap){
+            if (std::clamp(keyvalue_aggregation_cap, MIN_KEYVALUE_AGGREGATION_CAP, MAX_KEYVALUE_AGGREGATION_CAP) != keyvalue_aggregation_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3459,7 +3468,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             size_t tentative_consume_sz     = packet_vec_capacity >> consume_factor;
             size_t consume_sz               = std::max(tentative_consume_sz, size_t{1u});
-            auto vec                        = dg::vector<ScheuledPacket>{};
+            auto vec                        = dg::vector<ScheduledPacket>{};
             vec.reserve(packet_vec_capacity); 
 
             return std::make_unique<ScheduledPacketContainer>(std::move(vec), 
@@ -3487,7 +3496,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto rsc_container  = get_packet_fifo_container(krescue_capacity, consume_factor);
             size_t consume_sz   = std::min(std::min(ack_container->max_consume_size(), req_container->max_consume_size()), rsc_container->max_consume_size());
 
-            return std::make_unique<OutBoundPacketContainer>(std::move(ack_container),
+            return std::make_unique<OutboundPacketContainer>(std::move(ack_container),
                                                              std::move(req_container),
                                                              std::move(rsc_container),
                                                              accum_sz,
@@ -3697,7 +3706,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         }
 
         static auto get_synchronous_natpunch_ip_controller(size_t inbound_set_capacity,
-                                                           size_t outbound_set_capacity) -> std::unique_ptr<NATIPControllerInterface>{
+                                                           size_t outbound_set_capacity) -> std::unique_ptr<external_interface::NATIPControllerInterface>{
             
             const size_t MIN_INBOUND_SET_CAPACITY   = size_t{1};
             const size_t MAX_INBOUND_SET_CAPACITY   = size_t{1} << 25;
@@ -3719,7 +3728,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_synchronous_natfriend_ip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
                                                             std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
                                                             size_t inbound_set_capacity,
-                                                            size_t outbound_set_capacity) -> std::unique_ptr<NATIPControllerInterface>{
+                                                            size_t outbound_set_capacity) -> std::unique_ptr<external_interface::NATIPControllerInterface>{
 
             const size_t MIN_INBOUND_SET_CAPACITY   = size_t{1};
             const size_t MAX_INBOUND_SET_CAPACITY   = size_t{1} << 25;
@@ -3751,7 +3760,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_nat_ip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
                                           std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,
                                           size_t inbound_set_capacity,
-                                          size_t outbound_set_capacity) -> std::unique_ptr<NATIPControllerInterface>{
+                                          size_t outbound_set_capacity) -> std::unique_ptr<external_interface::NATIPControllerInterface>{
             
             return std::make_unique<NATIPController>(get_synchronous_natpunch_ip_controller(inbound_set_capacity, outbound_set_capacity),
                                                      get_synchronous_natfriend_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity),
@@ -3822,7 +3831,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(packet_arr_sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> traffic_response_arr(packet_arr_sz);
 
-                std::tranform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return pkt.to_addr;});
+                std::transform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return pkt.to_addr;});
                 this->border_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
 
                 {
@@ -3944,8 +3953,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 void push(std::move_iterator<Packet *> packet_arr, size_t sz) noexcept{
 
-                    dg::network_exception::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_exception::NoExceptAllocation<Packet[]> cpy_packet_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_packet_arr(sz);
 
                     Packet * base_packet_arr = packet_arr.base();
                     std::copy(base_packet_arr, std::next(base_packet_arr, sz), cpy_packet_arr.get());
@@ -3957,7 +3966,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
                     }
 
-                    this->retransmit_dst->push(std::make_move_iterator(cpy_packet_arr.get()), sz, exception_arr.get());
+                    this->retransmit_dst->add_retriables(std::make_move_iterator(cpy_packet_arr.get()), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -4014,11 +4023,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_stack_allocation::NoExceptAllocation<Packet[]> rescue_packet_arr(this->rescue_packet_sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(this->rescue_packet_sz);
 
-                auto gen_func = [this]() noexcept{
-                    return dg::network_exception_handler::nothrow_log(packet_service::virtualize_krescue_packet(this->krescue_gen->get()));
-                };
+                for (size_t i = 0u; i < this->rescue_packet_sz; ++i){
+                    std::expected<model::KRescuePacket, exception_t> rescue_packet = this->krescue_gen->get();            
 
-                std::generate(rescue_packet_arr.get(), std::next(rescue_packet_arr.get(), this->rescue_packet_sz), gen_func);
+                    if (!rescue_packet.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(rescue_packet.error()));
+                        return false;
+                    }
+
+                    rescue_packet_arr[i] = dg::network_exception_handler::nothrow_log(packet_service::virtualize_krescue_packet(std::move(rescue_packet.value())));
+                }
+
                 this->outbound_packet_container->push(std::make_move_iterator(rescue_packet_arr.get()), this->rescue_packet_sz, exception_arr.get());
 
                 for (size_t i = 0u; i < this->rescue_packet_sz; ++i){
@@ -4072,7 +4087,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     exception_t err = socket_service::recv_block(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE); //self-ping to rescue - triggered by an observable relaxed atomic variable (updated every 1024 reads for example) - the rescuer is going to look for the relaxed atomic variable to send rescue packets
                                                                                                                                   //recv block to avoid queuing - kernel optimization reads directly from NIC as soon as possible - there is unfortunately no stable interface except for that for more than 20 years - so let's stick with that for the moment being
                                                                                                                                   //recv_block is better than select, because it avoids rx_queue bouncing, kernel optimization will subscribe the mtx and release the lock as soon as possible
-
+                                                                                                                                  //this is not good because small_size packet wont be latencied through, yet we have to ask whether the actual large packet latency or the small packet latency is more important (we have to pad the small size packets)
+                                                                                                                                  //jumbo frame is good up to 4K packet transmissions, we are expecting to empty the packets as soon as they are on the wire, push directly to the application memory (internally managed by our best practices + virtues), so there is no CPU cost to bouncing the temporary buffers
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                         return false;
@@ -4707,7 +4723,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
                                                size_t inbound_consumption_cap,
                                                size_t busy_threshold_sz,
-                                               size_t ack_vectorization_sz = constants::DEFAULT_KEYVALUE_ACCUMULATION_SZ) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+                                               size_t ack_vectorization_sz = constants::DEFAULT_KEYVALUE_ACCUMULATION_SIZE) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
             const size_t MIN_INBOUND_CONSUMPTION_CAP    = size_t{1};
             const size_t MAX_INBOUND_CONSUMPTION_CAP    = size_t{1} << 25;
@@ -4892,7 +4908,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                     Packet * base_data_arr = data_arr.base();
                     std::copy(base_data_arr, std::next(base_data_arr, sz), cpy_data_arr.get());
 
-                    this->ob_packet_container->push(std::make_move_iterator(base_data_arr), sz, exception_arr);
+                    this->ob_packet_container->push(std::make_move_iterator(base_data_arr), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -4900,7 +4916,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                         }
                     }
 
-                    this->retransmission_controller->add_retriables(std::make_move_iterator(cpy_data_arr.get()), sz, exception_arr);
+                    this->retransmission_controller->add_retriables(std::make_move_iterator(cpy_data_arr.get()), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -4916,8 +4932,8 @@ namespace dg::network_kernel_mailbox_impl1::core{
         //we'll fix styles later, let's stick to the sz, cap for every var | size + capacity for methods
         //we'll move on to std::vector<> for constructions later, we'll skim thru styles tmr, let's work on this
 
-        template <class ...Args, class T>
-        static auto up_vector_to_vsp_vector(std::vector<std::unique_ptr<T>, Args...> vec) -> std::vector<std::shared_ptr<T>, Args...>{
+        template <class ...Args, class T, class DT>
+        static auto up_vector_to_vsp_vector(std::vector<std::unique_ptr<T, DT>, Args...> vec) -> std::vector<std::shared_ptr<T>, Args...>{
 
             std::vector<std::shared_ptr<T>, Args...> rs{};
 
@@ -5220,9 +5236,9 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            std::vector<std::shared_ptr<UpdatableInterface>> update_vec{};
-            std::transform(ib_border_controller_sp_vec.begin(), ib_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<UpdatableInterface>(e);});
-            std::transform(ob_border_controller_sp_vec.begin(), ob_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<UpdatableInterface>(e);});
+            std::vector<std::shared_ptr<packet_controller::UpdatableInterface>> update_vec{};
+            std::transform(ib_border_controller_sp_vec.begin(), ib_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<packet_controller::UpdatableInterface>(e);});
+            std::transform(ob_border_controller_sp_vec.begin(), ob_border_controller_sp_vec.end(), std::back_inserter(update_vec), [](const auto& e){return std::static_pointer_cast<packet_controller::UpdatableInterface>(e);});
 
             auto updater                = packet_controller::ComponentFactory::get_batch_updater(std::move(update_vec));
             auto traffic_update_ins     = worker::ComponentFactory::get_update_worker(std::move(updater), traffic_reset_duration);
@@ -5283,6 +5299,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t mailbox_outbound_cap;
         std::chrono::nanoseconds traffic_reset_duration;
 
+        uint32_t outbound_packet_concurrency_sz;
         uint32_t outbound_ack_packet_container_cap;
         uint32_t outbound_request_packet_container_cap; 
         uint32_t outbound_krescue_packet_container_cap;
@@ -5301,7 +5318,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t outbound_tc_addrmap_cap;
         uint32_t outbound_tc_side_cap;
 
-        std::shared_ptr<external_interface::NATIPController> natip_controller;
+        std::shared_ptr<external_interface::NATIPControllerInterface> natip_controller;
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device;
     };
 
@@ -5349,8 +5366,16 @@ namespace dg::network_kernel_mailbox_impl1{
     //so the right number of retranmissions is probably 5 for every scenerio
     //we'll run tests later
 
-    //pay very close attentions
-    //tell me the solution for backpropagation
+    //alright, we need to aggregate the logs, and choose the representative of the log accumulation for <whatever>_optional
+    //we need to not use the database, because they will consume all resources possible and there is no ecosystem synchronization between ours and theirs
+    //it seems silly but we need to write a SQLite, after all, we can only blame ourselves 
+    //we can confidently say we could get all the bid/ask system up + running in 2 years
+    //this includes full_fledged socket, database, compute machine, mining machine
+    //we'll skim through the code once more tomorrow, things got me dizzy
+
+    //we dont know why taking deviations is very good for middle_layer compressions, we can achieve 0.1% compression rate if the dictionary is large enough (cuda will finally buy our routing tech for $BB, I'm just kidding, I'll buy cuda tech), we run compression in massive parallel, we dont really care about intellect at this point, if the checksum of the data does not make sense, we throw away the decompression results, and choose another dictionary or brute force
+    //yes fellas, cuda router is not a fiction, we theoretically can achieve roughly 1 TB/s transmission rate with dg tech
+    //if we were trying to train https session (encoded -> raw), it could actually decode the https without the session keys
 
     struct ConfigMaker{
 
@@ -5476,7 +5501,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_kernel_rescue_packet_generator(Config config) -> std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface>{
 
-                return packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+                return packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}));
             }
 
             static auto make_retransmission_controller(Config config) -> std::unique_ptr<packet_controller::RetransmissionControllerInterface>{
@@ -5559,7 +5584,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_outbound_border_controller(Config config) -> std::vector<std::unique_ptr<packet_controller::OutBoundBorderController>>{
 
-                if (config.num_outbout_worker == 0u){
+                if (config.num_outbound_worker == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
@@ -5586,12 +5611,12 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_ack_packet_generator(Config config) -> std::unique_ptr<packet_controller::AckPacketGeneratorInterface>{
 
-                return packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+                return packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}));
             }
 
             static auto make_packet_integrity_validator(Config config) -> std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface>{
 
-                return packet_controller::ComponentFactory::get_packet_integrity_validator(Address{config.host_ip, config.host_port});
+                return packet_controller::ComponentFactory::get_packet_integrity_validator(model::Address{config.host_ip, config.host_port});
             }
 
             static auto make_socket(Config config) -> std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>>{
@@ -5604,17 +5629,17 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 if (config.socket_concurrency_sz == 1u){
                     auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-                    dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, false));
+                    dg::network_exception_handler::throw_nolog(socket_service::port_socket(*current_socket, config.host_port, false));
                     socket_vec.push_back(std::move(current_socket));
                 } else{
                     for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
                         auto current_socket = dg::network_exception_handler::throw_nolog(socket_service::open_socket(config.sin_fam, config.comm, config.protocol));
-                        dg::network_exception_handler::throw_nolog(socket_service::port_socket(*socket, config.host_port, true));
+                        dg::network_exception_handler::throw_nolog(socket_service::port_socket(*current_socket, config.host_port, true));
                         socket_vec.push_back(std::move(current_socket));
                     }
 
                     for (size_t i = 0u; i < config.socket_concurrency_sz; ++i){
-                        dg::network_exception_handler::throw_nolog(socket_service::attach_bpf_socket(socket_vec[i]));
+                        dg::network_exception_handler::throw_nolog(socket_service::attach_bpf_socket(*socket_vec[i]));
                     }
                 }
 
@@ -5623,7 +5648,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_request_packet_generator(Config config) -> std::unique_ptr<packet_controller::RequestPacketGeneratorInterface>{
 
-                return packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(Address{config.host_ip, config.host_port}));
+                return packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}));
             }
 
         public:

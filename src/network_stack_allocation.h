@@ -389,10 +389,10 @@ namespace dg::network_stack_allocation{
 
         public:
 
-            NoExceptAllocation() noexcept: Allocation(){}
+            NoExceptAllocation() noexcept: Allocation<T>(){}
             
             template <class ...Args>
-            NoExceptAllocation(const std::in_place_t, Args&& ...args) noexcept: Allocation(std::in_place_t{}, std::forward<Args>(args)...){}
+            NoExceptAllocation(const std::in_place_t, Args&& ...args) noexcept: Allocation<T>(std::in_place_t{}, std::forward<Args>(args)...){}
     };
 
     template <class T>
@@ -408,10 +408,10 @@ namespace dg::network_stack_allocation{
 
         public:
 
-            NoExceptRawAllocation() noexcept: RawAllocation(){}
+            NoExceptRawAllocation() noexcept: RawAllocation<T>(){}
 
             template <class ...Args>
-            NoExceptRawAllocation(const std::in_place_t, Args&& ...args) noexcept: RawAllocation(std::in_place_t{}, std::forward<Args>(args)...){}
+            NoExceptRawAllocation(const std::in_place_t, Args&& ...args) noexcept: RawAllocation<T>(std::in_place_t{}, std::forward<Args>(args)...){}
     };
 
     template <class T>
