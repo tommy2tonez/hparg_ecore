@@ -39,144 +39,6 @@
 #include "network_randomizer.h"
 #include "network_exception_handler.h"
 
-//we'll finalize these within 1-2 days
-//we realized that the performance constraint is not from low level optimization but
-
-//(1): memory access pattern
-//(2): # of memory orderings
-//(3): polymorphic dispatch overhead
-//(4): branching overhead
-//(5): affinity of tasks
-
-//we attempted to do transmission control, yet it has destructive interference with the memregion frequency feature of extnsrc, which is bad
-//so we just generalize this by doing fixed mailchimp transmission_frequency, such is 1GB/s, without loss of generality, outbound to avoid packet losses because of inappropriate frequency 
-//we leave the rest of the optimization to the memregion
-//this simple technique of packet_id uniqueness + retransmission + UDP + drop ip_tables + affined rx_queues + SO_REUSEPORT + etc. is actually very valuable
-//the value would be dramatically decreased if we are to add transmission control protocol, we are breaking single responsibilities + force clients to give up compute power for the tasks that are not quantifiable, or the tasks that could not be optimially solved without being seen from a hollistic view
-//we would be able to push the bandwidth -> the saturation limit
-
-//I was running the numbers
-//it seems that UDP or every transmission protocol follows the rule of logarit, no matter how many packets we are transmitting
-//let's see what we want
-//we want for every tree operation, the success rate is 90%
-//we want to offset the synchronization overheads by doing concurrent tree operations such is synchronization overhead == last_operation_overhead
-
-//if the success rate is x, we are transmitting 1 million packets (across compute nodes), each 1KB, totalling 1GB
-//assume the logarit for 90% percentile is 1.8
-//ln(1 << 20) / ln(1.7) ~= 26 retranmissions
-//assume the logarit for 50% percentile is 3
-//ln(1 << 20) / ln(3) ~= 13 retransmissions
-
-//let's look at it from the individualism point of view
-//30% transmission fail rate (70% success rate) for individual packets @ a reasonably load balanced network
-//(1 - (30%^n)) ** (1 << 20) = 90%
-//what is n?
-//ln(1 - 90% ** (1 / (1 << 20))) / ln(30%) == 13 retransmission 
-//70% fail -> 45 retransmissions
-//we probably want to do only 10 retranmissions, and the other retranmission responsibility goes to the re-request component 
-
-//so it requires 45 retranmissions to have a 90% success rate of 1GB of internal data transferring across computing nodes
-//the number does not look very promising
-//yet this imposes a problem of multidimensional projections or compression as we call it
-//is our 1GB of raw pixels actually 1GB of data?
-//how about we map the 1GB of raw pixel -> 1MB of information by using multidimensional projection before transmitting the data to another compute nodes for var_intercourse
-//it's the art of projection (we are off topic here, we must be able to push 1GB of data for every tree computation)
-
-//assume that we have a fixed transmission -> kernel, such saturates the outbound of our transmission (we've done our best)
-//the approx equation for synchronization time is total_packet_sz / (outbound * compute_node_sz) + log(min(total_packet_sz, MAX_OUTBOUND_SZ), 3) * transmission_delay_time
-//we dont want to waste our time for synchronization overheads, how about we increase the number of concurrent operations (rocket launching operations), and reduce the total synchronization -> last_rocket_launch synchronization?
-
-//alright, so this is like a hybrid transmission_controlled protocol, it's a very gay protocol (useless without being used in conjunction with upstream optimizations of frequency, it's been 30 years and we have never gotten the TCP right, when to additive increase, when to multiply decrease, etc.)
-//when we thought that we got the protocol right, we came across different patterns for different machines, and this is another machine learning problem
-//yet it's designed to do one thing, to saturate the outbound_network_bandwidth + trigger retransmission for every interval
-
-//I think our job is not to ask but to leave room for calibration
-//we know the hollistic picture of data transmission, we dont want to do advanced transmission controlled protocol like AIMD or whatever for the reasons being we are wasting compute + the task is not quantifiable + we force the users to waste resource for unnecessary features
-
-//alright fellas, we are not in heat and we are not going to rob banks
-//we are going to auction this engine mining, we only get 30% fee for hosting the auction, it's legal fellas, I already asked Mark Zuck to prep a legal team for me on this matter
-//when are we publishing the mining engine again? probably a month or a year
-//yet we have to detail EVERYTHING in order to make sure that this runs correctly
-//code is clear
-//(1): exhaustion clear
-//(2): finite mempool clear
-//(3): consumption_lock clear, released by infretry_device
-//(4): memory_order clear
-//(5): memory access pattern clear
-//(6): bug clear
-//(7): leak clear
-//(8): packet_id attack patched by using random_id
-
-//I was thinking about shared links vs individual links
-//assume optimal conditions, we use shared link, we observe the completed time for each link
-//we can replicate the completed time by serving each of the link in the sorted order + pad delays
-//proof is conservation of energy, the shared link always uses more energy than the individual links for the <current_task>
-
-//real life is not optimal
-//there are cases where shared link would result in better response time for all
-//there are two ways to solve the problem:
-//use transmission controlled protocol
-//link aggregation, the unit is now a bag of links, not individuals
-//we aim for simplicity, so we choose the second approach
-//its complicated, we choose the path of precomputed frequencies for global optimality, not local optimality
-//we realized that the only practical thing that has ever worked is calibration + statistics
-//our job is to not tie our hands, and provide enough parameters
-
-//whenever I feel like I might have done something wrong
-//let's see what I could do by using the branching technique
-
-//request: wait_request
-//         event_driven_request (curious_subcriber or reactive_subcriber pattern, we (observers) assign ids for each of the request, and check every interval for results in constrast to getting notified by the subject)
-//              - one_request transmission
-//              - multiple_request transmissions: - multiple_request by extending a one-time-transmit protocol
-//                                                - multiple_request by extending a multiple-time-transmit protocol
-//                                                      - multiple-time (or one_time) transmit protocol by using congestion-controlled algorithm
-//                                                          - there is a congestion-controlled component => shared-link is involed, is shared-link runtime-induced or predetermined
-//                                                          - shared-link is predetermined => there always exists a not worse solution by using single-links in the optimal condition (proof above)
-//                                                          - shared-link is not predetermined => there must exists a congestion-controlled algorithm
-//                                                                  - how do we manage connections?
-//                                                                  - how do we know the pattern of optimality for each of the connections?
-//                                                                  - how expensive is it to know the pattern of optimality for each of the connections?
-//                                                      - multiple-time (or one_time) transmission protocol by not using congestion-controlled algorithm
-//                                                              - static outbound rate
-//                                                              - ASAP outbound rate
-
-//clients are asking for 0.02 ms latency uncertainty from A -> Z, it's hard fellas
-//the only way we could achieve such latency is by using reactive_subcriber + mutex (yet abusing mutex will degrade the performance across cores, not only the current operating context)
-//we rather think that it's unrealistic for real-life requests, unless we are in a cloud environment (we must consider that our clients might be from clouds) 
-//https://github.com/torvalds/linux/blob/a351e9b9fc24e982ec2f0e76379a49826036da12/Documentation/timers/timers-howto.txt
-
-//https://github.com/torvalds/linux/blob/a351e9b9fc24e982ec2f0e76379a49826036da12/Documentation/core-api/atomic_ops.rst
-//https://www.kernel.org/doc/Documentation/memory-barriers.txt
-
-//atomic operations, how we would want to use relaxed functions, inference of compiler_code_path serialization (not hardware serialization) by using memory_ordering fences
-//what Torvalds, and his friends meant when we wrote the atomic operations are relaxed functions
-//if a function is not relaxed, it is not defined, the combination of relaxed functions to create another relaxed function
-//  - if one of the relaxed functions is not explicitly inferred in the computation tree of the returning result or its' computation is intended, there must be a fence (we never fence in and out of a void function, because it is the caller responsibility not callee responsibility)
-//  - other use-cases of atomic are not defined
-//  - after 20 years, we have come to a conclusion fellas, there are two scenerios that we often have:
-//      + a concurrent function that is relaxed (all function logics are not reordered, happens in one line of function call) + self-sufficient (push | pop | id | get | get_retriables | etc.)
-//      + an open-close pair of concurrent functions
-//          + the open-close pair is in the current scope, we would want to use <concurrent_transaction> of std::thread_signal_fence(std::memory_order_seq_cst) in and out of the transaction
-//          + the open-close pair is in two different scopes, we would want to std::memory_order_seq_cst post the open and std::memory_order_seq_cst pre the close
-//  - this is the formula that is NEVER wrong
-//  - we dont really care about the functions that do not deal with atomic variables, compilers are smarter than yall in this case 
-//  - this atomic fling is the cause of 99% major software bugs in the world
-//  - I know I've spent 90% of my time talking about this topic, because this is the topic that is never outdated 
-//  - it's very easy to get right and very easy to get wrong, to the point that I doubt there ever exists a program written in C that is not kernel uses memory orderings correctly (we with the bliss of C++ stack destructor + constructor, xlock_guard serves the purpose of fencing just right)
-//  - there are a lot of smart people, think that <concurrent_transaction> and <concurrent_function> are two different things, they're gone fellas ... to the undefined land 
-
-//when we first wrote this, we didnt expect things to be this complicated fellas
-//it seems like this is a thin extension on top of the kernel UDP protocol to do retransmission because it really is (we do non-discriminated retransmissions with one goal in mind, to saturate the outbound + inbound)
-//real-life transmission protocol is logarit-based, we aren't in a perfect lab of 100% recv
-//we'll use simple compression (huffman) if there is a usage 
-//we'll run one more code review
-
-//alright Morpheus, we'll wake you up in time, I think you are 100000x smarter than all of us combined so make wise choices
-//we have run numbers + calculations, this is probably the best socket path that we could choose
-//maybe its true that no good deed goes unpunished
-//we'll see fellas
-
 namespace dg::network_kernel_mailbox_impl1::types{
 
     static_assert(sizeof(size_t) >= sizeof(uint32_t));
@@ -1697,7 +1559,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
-                    exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return e != dg::network_exception::QUEUE_FULL;});
+                    exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_eptr_first);
                     sliding_window_sz                   = std::distance(retriable_eptr_first, retriable_eptr_last);
 
@@ -3290,8 +3152,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_kernel_outbound_static_transmission_controller(uint32_t transmit_frequency) -> std::unique_ptr<KernelOutBoundTransmissionControllerInterface>{
 
-            const size_t MIN_TRANSMIT_FREQUENCY = size_t{1};
-            const size_t MAX_TRANSMIT_FREQUENCY = size_t{1} << 30; 
+            const uint32_t MIN_TRANSMIT_FREQUENCY = size_t{1};
+            const uint32_t MAX_TRANSMIT_FREQUENCY = size_t{1} << 30; 
 
             if (std::clamp(transmit_frequency, MIN_TRANSMIT_FREQUENCY, MAX_TRANSMIT_FREQUENCY) != transmit_frequency){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -3312,8 +3174,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_incremental_id_generator(factory_id_t factory_id) -> std::unique_ptr<IDGeneratorInterface>{
 
-            return std::make_unique<IDGenerator>(dg::network_randomizer::randomize_int<local_packet_id_t>(), 
-                                                 stdx::hdi_container<factory_id_t>{factory_id});
+            return std::make_unique<IncrementalIDGenerator>(dg::network_randomizer::randomize_int<local_packet_id_t>(), 
+                                                            stdx::hdi_container<factory_id_t>{factory_id});
         }
 
         static auto get_random_id_generator(factory_id_t factory_id) -> std::unique_ptr<IDGeneratorInterface>{
@@ -3640,8 +3502,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             const size_t MIN_BASE_VEC_SZ            = size_t{1};
             const size_t MAX_BASE_VEC_SZ            = size_t{1} << 20;
-            const size_t MIN_ZERO_BUFFER_RETRY_SZ   = size_t{1};
-            const size_t MAX_ZERO_BUFFER_RETRY_SZ   = size_t{1} << 20;
+            const size_t MIN_ZERO_PACKET_RETRY_SZ   = size_t{1};
+            const size_t MAX_ZERO_PACKET_RETRY_SZ   = size_t{1} << 20;
 
             if (std::clamp(base_vec.size(), MIN_BASE_VEC_SZ, MAX_BASE_VEC_SZ) != base_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -3663,13 +3525,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 base_vec_up[i]  = std::move(base_vec[i]);
             }
 
-            if (std::clamp(zero_buffer_retry_sz, MIN_ZERO_BUFFER_RETRY_SZ, MAX_ZERO_BUFFER_RETRY_SZ) != zero_buffer_retry_sz){
+            if (std::clamp(zero_packet_retry_sz, MIN_ZERO_PACKET_RETRY_SZ, MAX_ZERO_PACKET_RETRY_SZ) != zero_packet_retry_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             return std::make_unique<HashDistributedPacketContainer>(std::move(base_vec_up),
                                                                     base_vec.size(),
-                                                                    zero_buffer_retry_sz,
+                                                                    zero_packet_retry_sz,
                                                                     consumption_sz);
         }
 
@@ -3679,7 +3541,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MIN_IDHASHSET_CAP  = size_t{1};
             const size_t MAX_IDHASHSET_CAP  = size_t{1} << 25;
 
-            if (std::clamp(id_hashset_cap, MIN_IDHASHSET_CAP, MAX_IDHASHSET_CAP) != id_hashset_cap){
+            if (std::clamp(idhashset_cap, MIN_IDHASHSET_CAP, MAX_IDHASHSET_CAP) != idhashset_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3719,7 +3581,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 base_vec_up[i]  = std::move(base_vec[i]);
             }
 
-            if (std::clamp(keyvalue_aggregation_cap, MIN_VALUE_AGGREGATION_CAP, MAX_VALUE_AGGREGATION_CAP) != keyvalue_aggregation_cap){
+            if (std::clamp(keyvalue_aggregation_cap, MIN_KEYVALUE_AGGREGATION_CAP, MAX_KEYVALUE_AGGREGATION_CAP) != keyvalue_aggregation_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3797,7 +3659,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<InBoundBorderController>(std::move(natip_controller),
                                                              get_synchronous_traffic_controller(peraddr_capacity, global_capacity, addr_capacity),
                                                              std::move(thru_ip_set),
-                                                             thru_ip_set_capacity,
                                                              std::move(inbound_ip_side_set),
                                                              side_update_buf_capacity,
                                                              std::make_unique<std::mutex>(),
@@ -3851,8 +3712,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<NATPunchIPController>(data_structure::temporal_finite_unordered_set(inbound_set_capacity),
-                                                          data_structure::temporal_finite_unordered_set(outbound_set_capacity));
+            return std::make_unique<NATPunchIPController>(data_structure::temporal_finite_unordered_set<Address>(inbound_set_capacity),
+                                                          data_structure::temporal_finite_unordered_set<Address>(outbound_set_capacity));
         }
 
         static auto get_synchronous_natfriend_ip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
@@ -3883,8 +3744,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<NATFriendIPController>(inbound_rule,
                                                            outbound_rule,
-                                                           data_structure::temporal_finite_unordered_set(inbound_set_capacity),
-                                                           data_structure::temporal_finite_unordered_set(outbound_set_capacity));
+                                                           data_structure::temporal_finite_unordered_set<Address>(inbound_set_capacity),
+                                                           data_structure::temporal_finite_unordered_set<Address>(outbound_set_capacity));
         }
 
         static auto get_nat_ip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
@@ -4252,64 +4113,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 }
             };
     };
-
-    //let's try to grasp what's going on here
-    //we are to implement an interface of one_request == max_one_receive
-    //there is a problem of retransmission
-    //why are we doing retransmission for no-transmission-controlled-protocol again?
-    //because the packet lost problem is very popular, we are heading for the 99% use-cases of success, we dont really care about the 1%, it's the <request_implements_socket> responsibility
-
-    //consider the <normal_flow> of request
-    //client requests server
-    //server responds
-    //client waits response or timeout, cancelling the request_id
-    //if timeout, client would attempt to re-request
-
-    //consider the <event_driven_flow> of request
-    //client requests server with <timeout_window> + <transmission_timestamp> 
-    //client detaches
-    //server processes
-    //server sends another <response_request_with_id> + <the_transmission_timestamp> + <the_timeout_window>
-    //client processes the request
-    //client wakes up, client gets the response
-
-    //if there was no response, client would wait timeout before sending a duplicate_request or invalidation_request (with the full awareness that server might have already processed the old request without acknowledging it)
-    //the reason we would want to wait timeout is because we want synchronization of response, otherwise we dont know the state of the server machine post the request
-
-    //because client <went_to_sleep> before sending a duplicate_request, this is a very time-consuming process, we are talking about 100ms for <timeout> because that's the realistic time for server-client real-life comm
-    //we are to wait <100ms> for every re-request, and bookkeeping the numbers, its rather very unconvenient, so we'd try to offset the cost by offloading part of the responsibility to socket, so we could smoothen the curve of overheads  
-    //plus, we aren't wasting compute, assume that a very heavy request is already processed by the server but its acknowledgement or response is lost, we are wasting 2x compute or 3x compute (assume 50% packet drop rate, we have 25% chance of getting request responses)
-    //plus, if there were packet losses, we don't know what to prioritize if we don't attempt to centralize the requests
-
-    //if things went smoothly, such is the transmission -> dst, dst receives, dst responses, we stop retransmission, diplomacy achieved
-    //if things didnt go smoothly, ack packet is lost or retranmission occurred before ack packet being acknowledged, dst is responsible for replying the duplicated requests even though the request_packet has already been processed + received
-    //the number of ack packets being sent does not exceed the number of requests being sent
-
-    //https://en.wikipedia.org/wiki/C10k_problem
-    //everything we need to know about UDP from kernel dev:
-
-    //https://events.static.linuxfound.org/sites/events/files/slides/LinuxConJapan2016_makita_160712.pdf
-    //RSS (+XPS) (mandatory)
-    //affinity hint (mandatory)
-    //SO_REUSEPORT (mandatory)
-    //SO_ATTACH (mandatory)
-    //Pin threads (mandatory)
-    //Disable GRO (optional, not encouraged)
-    //Unload iptables (optional, not encouraged)
-    //Disable validation (optional, not encouraged)
-    //Disable audit (optional, not encouraged)
-    //Skip ID calculation (optional, not encouraged)
-    //Hyper threading (mandatory)
-    //Multiple ports (optional)
-    //increase rx_queues (optional)
-
-    //https://aosabook.org/en/v2/nginx.html
-    //we essentially implemented a forked version of this in a modern language 
-
-    //it's more complicated than yall think, we invented this gay transmission protocol to do one thing, event_driven requests + memory_region_frequency
-    //it's blazingly fast, if correctly calibrated by using appropriate frequencies
-    //I admit I have spent more time to think about socket protocol than actually implementing this, because this is a very important piece of performance, most of the time performance constraints aren't from bandwidth but synchronization overheads
-    //we'll run the code tmr
 
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -5546,6 +5349,9 @@ namespace dg::network_kernel_mailbox_impl1{
     //so the right number of retranmissions is probably 5 for every scenerio
     //we'll run tests later
 
+    //pay very close attentions
+    //tell me the solution for backpropagation
+
     struct ConfigMaker{
 
         private:
@@ -5762,10 +5568,10 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 for (size_t i = 0u; i < outbound_borderline_sz; ++i){
                     auto current_border_controller = packet_controller::ComponentFactory::get_outbound_border_controller(config.natip_controller,
-                                                                                                                        config.outbound_tc_peraddr_cap,
-                                                                                                                        config.outbound_tc_global_cap,
-                                                                                                                        config.outbound_tc_addrmap_cap,
-                                                                                                                        config.outbound_tc_side_cap);
+                                                                                                                         config.outbound_tc_peraddr_cap,
+                                                                                                                         config.outbound_tc_global_cap,
+                                                                                                                         config.outbound_tc_addrmap_cap,
+                                                                                                                         config.outbound_tc_side_cap);
 
                     ob_borderline_controller_vec.push_back(std::move(current_border_controller));
                 }
@@ -5824,7 +5630,6 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make(Config config) -> std::unique_ptr<core::MailboxInterface>{
 
-                //this is confusing
                 return core::ComponentFactory::get_retransmittable_mailbox_controller(make_inbound_buffer_container(config),
                                                                                       config.worker_inbound_buffer_accumulation_sz,
 

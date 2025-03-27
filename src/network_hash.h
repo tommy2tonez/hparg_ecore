@@ -26,8 +26,8 @@ namespace dg::network_hash{
         return k;
     }
 
-    static constexpr auto murmur_hash(const char * buf, size_t len, const uint32_t seed = 0xFF) -> uint64_t{
-    
+    static constexpr auto murmur_hash_base(const char * buf, size_t len, const uint32_t seed = 0xFF) -> std::pair<uint64_t, uint64_t>{
+
         const size_t nblocks = len / 16;
 
         uint64_t h1 = seed;
@@ -89,7 +89,12 @@ namespace dg::network_hash{
         h1 += h2;
         h2 += h1;
 
-        return h1;
+        return {h1, h2};
+    } 
+
+    static constexpr auto murmur_hash(const char * buf, size_t len, const uint32_t seed = 0xFF) -> uint64_t{
+    
+        return std::get<0>(murmur_hash_base(buf, len, seed));
     }
 
     template <size_t LEN, size_t SEED = 0xFF>
@@ -179,7 +184,7 @@ namespace dg::network_hash{
     constexpr auto hash_reflectible(const T& obj) noexcept -> uint64_t{
 
         constexpr size_t MAX_REFLECTIBLE_SZ = size_t{1} << 5;
-        static_assert(std::has_unique_representations_v<T>);
+        static_assert(std::has_unique_object_representations_v<T>);
         
         constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(T{});
         static_assert(SERIALIZATION_SZ <= MAX_REFLECTIBLE_SZ);

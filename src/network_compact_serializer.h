@@ -27,7 +27,8 @@ namespace dg::network_compact_serializer::constants{
 
 namespace dg::network_compact_serializer::types{
 
-    using hash_type     = uint64_t; 
+    using hash_type     = std::pair<uint64_t, uint64_t>; //alright this seems silly, we are to increase the chances of 10 ** 18 -> 10 ** 39 (never gonna happen), we actually chance better than RAM https://www.cs.toronto.edu/~bianca/papers/sigmetrics09.pdf, https://en.wikipedia.org/wiki/ECC_memory
+                                                         //the only way to be successful in the career is to not trust everything, assume we are to deploy a massive 1 billion devices training system, we are gonna see errors very often
     using size_type     = uint64_t;
 }
 
@@ -272,10 +273,7 @@ namespace dg::network_compact_serializer::utility{
 
     auto hash(const char * buf, size_t sz, uint32_t secret) noexcept -> hash_type{
 
-        static_assert(std::is_unsigned_v<hash_type>);
-        static_assert(sizeof(hash_type) >= sizeof(uint64_t));
-
-        return dg::network_hash::hash_bytes(buf, sz, secret);
+        return dg::network_hash::murmur_hash_base(buf, sz, secret);
     }
 
     template <class T, std::enable_if_t<std::disjunction_v<types_space::is_vector<T>, 
