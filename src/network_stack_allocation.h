@@ -70,7 +70,7 @@ namespace dg::network_stack_allocation{
 
         public:
 
-            ConcurrentAllocator(std::vector<std::unique_ptr<Allocator> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
+            ConcurrentAllocator(std::vector<std::unique_ptr<StackAllocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
 
             inline auto enter_scope() noexcept -> exception_t{
 
@@ -104,7 +104,7 @@ namespace dg::network_stack_allocation{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             } 
 
-            if (std::clamp(buf_sz, MIN_BUF_SZ, MAX_BUF_SZ) != buf_sz){
+            if (std::clamp(buf_sz, MIN_BUF_SIZE, MAX_BUF_SIZE) != buf_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -400,7 +400,7 @@ namespace dg::network_stack_allocation{
 
         public:
 
-            NoExceptAllocation(size_t sz) noexcept: Allocation(sz){}
+            NoExceptAllocation(size_t sz) noexcept: Allocation<T[]>(sz){}
     };
 
     template <class T>
@@ -419,7 +419,7 @@ namespace dg::network_stack_allocation{
 
         public:
 
-            NoExceptRawAllocation(size_t sz) noexcept: RawAllocation(sz){}
+            NoExceptRawAllocation(size_t sz) noexcept: RawAllocation<T[]>(sz){}
     };
 
 } 
