@@ -788,6 +788,10 @@ namespace dg::network_compact_serializer{
             const char * iterating_ptr  = first;
             size_t deserializing_sz     = content_sz;
             dg::network_compact_serializer::archive::SafeBackward{}.put(iterating_ptr, deserializing_sz, obj);
+
+            if (deserializing_sz != 0u){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
         }
     }
 
