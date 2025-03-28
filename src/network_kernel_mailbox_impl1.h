@@ -1267,7 +1267,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     this->mtx_queue.push_back(spinning_mtx);
                 }
 
-                spinning_mtx->try_lock_for(waiting_time);
+                std::unique_lock<std::timed_mutex> lckr(*spinning_mtx, std::defer_lock);
+                lckr.try_lock_for(waiting_time);
             }
     };
 
@@ -1959,7 +1960,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->base->add_retriables(pkt_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-                this->reactor->increment(thru_sz);
+                this->reactor->increment(thru_sz); //implicit fence by referencing the sz
             }
 
             void ack(global_packet_id_t * pkt_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -1969,7 +1970,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void get_retriables(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
+                std::atomic_signal_fence(std::memory_order_seq_cst); //we dont know the memory orders compiler-wise,  the reactor->subscribe concurrent function result is not used in the computation tree, simply used for tentative-synchronization, compiler is free to reorder this post the container call 
                 this->base->get_retriables(output_pkt_arr, sz, output_pkt_arr_cap);
                 this->reactor->decrement(sz);
             }
@@ -2182,12 +2185,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->base->push(buffer_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-                this->reactor->increment(thru_sz);
+                this->reactor->increment(thru_sz); //implicit fence by referencing the sz
             }
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
+                std::atomic_signal_fence(std::memory_order_seq_cst); //we dont know the memory orders compiler-wise
                 this->base->pop(output_buffer_arr, sz, output_buffer_arr_cap);
                 this->reactor->decrement(sz);
             }
@@ -2604,12 +2609,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->base->push(pkt_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-                this->reactor->increment(thru_sz);
+                this->reactor->increment(thru_sz); //implicit fence by referencing the sz
             }
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
+                std::atomic_signal_fence(std::memory_order_seq_cst); //we dont know the memory orders compiler-wise
                 this->base->pop(output_pkt_arr, sz, output_pkt_arr_cap);
                 this->reactor->decrement(sz);
             }
@@ -3432,6 +3439,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return rs;
         }
 
+        static auto get_simple_reactor(intmax_t wakeup_threshold) -> std::unique_ptr<SimpleReactor>{
+
+            auto rs = std::make_unique<SimpleReactor>();
+            rs->set_wakeup_threshold(wakeup_threshold);
+
+            return rs;
+        } 
+
         static auto get_batch_updater(std::vector<std::shared_ptr<UpdatableInterface>> updatable_vec) -> std::unique_ptr<UpdatableInterface>{
 
             for (const auto& updatable: updatable_vec){
@@ -3620,7 +3635,33 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                              keyvalue_aggregation_cap,
                                                                              zero_packet_retry_sz,
                                                                              consumption_sz);
-        } 
+        }
+
+        static auto get_reacting_retransmission_controller(std::unique_ptr<RetransmissionControllerInterface> base,
+                                                           size_t reacting_threshold,
+                                                           std::chrono::nanoseconds wait_time) -> std::unique_ptr<RetransmissionControllerInterface>{
+ 
+            const size_t MIN_REACTING_THRESHOLD             = size_t{1};
+            const size_t MAX_REACTING_THRESHOLD             = size_t{1} << 30;
+            const std::chrono::nanoseconds MIN_WAIT_TIME    = std::chrono::nanoseconds{1}; 
+            const std::chrono::nanoseconds MAX_WAIT_TIME    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1});
+
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(reacting_threshold, MIN_REACTING_THRESHOLD, MAX_REACTING_THRESHOLD) != reacting_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(wait_time, MIN_WAIT_TIME, MAX_WAIT_TIME) != wait_time){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ReactingRetransmissionController>(std::move(base),
+                                                                      get_simple_reactor(reacting_threshold),
+                                                                      wait_time);
+        }
 
         static auto get_buffer_fifo_container(size_t buffer_capacity,
                                               size_t consume_factor = 4u) -> std::unique_ptr<BufferContainerInterface>{
@@ -3660,6 +3701,33 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<ExhaustionControlledBufferContainer>(std::move(base),
                                                                          std::move(executor),
                                                                          std::move(exhaustion_controller));
+        }
+
+        static auto get_reacting_buffer_container(std::unique_ptr<BufferContainerInterface> base,
+                                                  size_t reacting_threshold,
+                                                  std::chrono::nanoseconds wait_time) -> std::unique_ptr<BufferContainerInterface>{
+
+            const size_t MIN_REACTING_THRESHOLD             = size_t{1};
+            const size_t MAX_REACTING_THRESHOLD             = size_t{1} << 30;
+            const std::chrono::nanoseconds MIN_WAIT_TIME    = std::chrono::nanoseconds{1}; 
+            const std::chrono::nanoseconds MAX_WAIT_TIME    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1});
+
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(reacting_threshold, MIN_REACTING_THRESHOLD, MAX_REACTING_THRESHOLD) != reacting_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(wait_time, MIN_WAIT_TIME, MAX_WAIT_TIME) != wait_time){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ReactingBufferContainer>(std::move(base),
+                                                             get_simple_reactor(reacting_threshold),
+                                                             wait_time);
+
         }
 
         static auto get_randomhash_distributed_buffer_container(std::vector<std::unique_ptr<BufferContainerInterface>> base_vec,
@@ -3793,6 +3861,32 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                              accum_sz,
                                                              stdx::hdi_container<size_t>{consume_sz});
         } 
+
+        static auto get_reacting_packet_container(std::unique_ptr<PacketContainerInterface> base,
+                                                  size_t reacting_threshold,
+                                                  std::chrono::nanoseconds wait_time) -> std::unique_ptr<PacketContainerInterface>{
+
+            const size_t MIN_REACTING_THRESHOLD             = size_t{1};
+            const size_t MAX_REACTING_THRESHOLD             = size_t{1} << 30;
+            const std::chrono::nanoseconds MIN_WAIT_TIME    = std::chrono::nanoseconds{1}; 
+            const std::chrono::nanoseconds MAX_WAIT_TIME    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1});
+
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(reacting_threshold, MIN_REACTING_THRESHOLD, MAX_REACTING_THRESHOLD) != reacting_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(wait_time, MIN_WAIT_TIME, MAX_WAIT_TIME) != wait_time){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ReactingPacketContainer>(std::move(base),
+                                                             get_simple_reactor(reacting_threshold),
+                                                             wait_time);
+        }
 
         static auto get_randomhash_distributed_packet_container(std::vector<std::unique_ptr<PacketContainerInterface>> base_vec,
                                                                 size_t zero_packet_retry_sz = 8u) -> std::unique_ptr<HashDistributedPacketContainer>{
@@ -4097,14 +4191,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     //if we are to walk the hard road and decrease the latency -> 0.01ms, there is a significant eventpool design
     //this is a very important note, the design for reactor component must be fully atomic_relaxed in order for this to work
     //it's not that it's impossible, it's possible yet it requires at least a week to do the subscribing + reacting component
-
-    //too often, we are too short-sighted when we are doing extreme streaming of data, think stock streaming, video streaming, download streaming, etc streaming 
-    //what we are missing is a low-latency, pre-planned infrastructure to push data from A -> B 
-    //we pre_plan things simply by using frequency on memregions
-
-    //when we first wrote this, we didnt expect things to be this hard, this is the second time I say this
-    //because it's really hard fellas
-
+    //alright, we have implemented the first version of reactor, using full kernel support to wake up in time
+    //this should be the first version of our implementation, its not perfect, yet it answers most of the questions
+    //alright this gets me a little dizzy, I'll be back to finalize this component tmr
     //we need to avoid coordinated attacks, statistical chances, overcome retransmission, aggregated acks (prioritized ack + prioritized packet_radix), kernel buffer overflow + kernel buffer underflow bouncing + latency, good manners by doing no discriminated inbound + outbound, all kind of caps, etc.
     //avoid all kind of errors that might happen
 
@@ -5589,13 +5678,22 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t retransmission_queue_cap;
         uint32_t retransmission_packet_cap;
         uint32_t retransmission_idhashset_cap;
+        bool retransmission_has_react_pattern;
+        uint32_t retransmission_react_sz;
+        std::chrono::nanoseconds retransmission_react_time; //we almost always want this (we want latency from A -> Z within 0.05 ms, this includes getting the packet, push to the container, get by the consumers, push to processing container -> ... -> to the memregion_event_pool -> dispatch)
 
         uint32_t inbound_buffer_concurrency_sz;
         uint32_t inbound_buffer_container_cap;
+        bool inbound_buffer_has_react_pattern;
+        uint32_t inbound_buffer_react_sz;
+        std::chrono::nanoseconds inbound_buffer_react_time; 
 
         uint32_t inbound_packet_concurrency_sz;
         uint32_t inbound_packet_container_cap;
-        
+        bool inbound_packet_has_react_pattern;
+        uint32_t inbound_packet_react_sz;
+        std::chrono::nanoseconds inbound_packet_react_time;
+
         uint32_t inbound_idhashset_concurrency_sz; 
         uint32_t inbound_idhashset_cap;
 
@@ -5618,6 +5716,9 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t outbound_request_packet_container_cap; 
         uint32_t outbound_krescue_packet_container_cap;
         uint32_t outbound_transmit_frequency;
+        bool outbound_packet_has_react_pattern;
+        uint32_t outbound_packet_react_sz;
+        std::chrono::nanoseconds outbound_packet_react_time;
 
         bool inbound_tc_has_borderline_per_inbound_worker;
         uint32_t inbound_tc_peraddr_cap;
@@ -5643,54 +5744,6 @@ namespace dg::network_kernel_mailbox_impl1{
 
         return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
     }
-
-    //we have to rewrite this because it's confusing
-    //dont worry fellas, we'll write an engine to translate this to make language
-    //we kinda keep everything in one place for easy debug + implementation + code header_control
-    //header_control is a tool for code management, such is during refactorization, it can only references lower header control
-    //you'd be amazed by how efficient (maintenance-wise and refactoring-wise) it is to keep everything in one file 
-
-    //consider this everyday kernel flow
-    //someone made a useful tool
-    //other people make a useful tool using the tool
-    //the first tool is now adding new features yet don't know what tool to reference, if it misreferences the tool, we have circular dependencies of header_control
-
-    //our ambition is more than just a simple protocol
-    //we want to leverage this to do planned packet transportations by using frequencies (imagine netflix + cuda compressor | decompressor by using the deviation technique, without cache bouncing, we are to broadcast a massive data from A -> B, C, D, E, F, etc.)
-    //its gonna be a very long way there fellas, the day we have 1TB -> 1PB cuda translation dictionary
-    //this means we have to consider packet latency as part of the program instead of thruput (we need to achieve 0.1ms latency from A -> B, we've yet to know the howtos)
-    //dont tell me there's a better way, there aint, maybe a better implementation
-    //static, no-discrimated retransmission is the way of high thruput + low latency, we need to spawn multiple channels of different retranmission delays to be <racist>
-
-    //there is no better instrument than doing statistics, no better implementation than not tieing our hands
-    //this is the base rule of programming
-
-    //99% packet tranmission rate if correctly routed, which is our goal of using direct linkage between A -> B
-    //each packet is 1KB
-    //we are to transport 1 million successful packets for every computation tree (to fully synchronise backprop)
-    //the possibility is 99% ** (1 million) = 0%
-
-    //1% fail rate
-    //the chances of all fail for n retransmissions is 1% ** n
-    //assume 4 retranmissions  
-    //the chance of failing is 1e-8
-    //the chance of success is 1 - (1e-8)
-    //a successful soft_synchronization at a random time possibility is <that> ^ (1 million) == 99%
-    //real-life scenerios give us the edge of 1 fail/ 1000 packets, which is 1 free retransmission
-    //so the right number of retranmissions is probably 5 for every scenerio
-    //we'll run tests later
-
-    //alright, we need to aggregate the logs, and choose the representative of the log accumulation for <whatever>_optional
-    //we need to not use the database, because they will consume all resources possible and there is no ecosystem synchronization between ours and theirs
-    //it seems silly but we need to write a SQLite, after all, we can only blame ourselves 
-    //we can confidently say we could get all the bid/ask system up + running in 2 years
-    //this includes full_fledged socket, database, compute machine, mining machine
-    //we'll skim through the code once more tomorrow, things got me dizzy
-
-    //we dont know why taking deviations is very good for middle_layer compressions, we can achieve 0.1% compression rate if the dictionary is large enough (cuda will finally buy our routing tech for $BB, I'm just kidding, I'll buy cuda tech), we run compression in massive parallel, we dont really care about intellect at this point, if the checksum of the data does not make sense, we throw away the decompression results, and choose another dictionary or brute force
-    //yes fellas, cuda router is not a fiction, we theoretically can achieve roughly 1 TB/s transmission rate with dg tech
-    //if we were trying to train https session (encoded -> raw), it could actually decode the https without the session keys
-    //we'll post the proof of concept soon fellas, its gonna be a dark day of the internet, maybe Elliot is right, the one that controls the exit point controls the data
 
     struct ConfigMaker{
 
