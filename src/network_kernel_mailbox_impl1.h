@@ -996,16 +996,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto serialize_request_packet(RequestPacket packet) noexcept -> dg::string{
 
-        using x_header_t            = std::pair<PacketHeader, uint64_t>; 
+        using x_header_t = std::pair<PacketHeader, std::pair<uint64_t, uint64_t>>; 
 
-        uint64_t integrity_hash     = dg::network_hash::murmur_hash(packet.content.data(), packet_content.size());
-        auto x_header               = x_header_t{static_cast<const PacketHeader&>(packet), integrity_hash};
-        size_t header_sz            = dg::network_compact_serializer::integrity_size(x_header);
-        size_t content_sz           = packet.content.size();
-        size_t total_sz             = content_sz + header_sz;
-        dg::string bstream          = std::move(packet.content);
+        std::pair<uint64_t, uint64_t> integrity_hash    = dg::network_hash::murmur_hash_base(packet.content.data(), packet_content.size());
+        auto x_header                                   = x_header_t{static_cast<const PacketHeader&>(packet), integrity_hash};
+        size_t header_sz                                = dg::network_compact_serializer::integrity_size(x_header);
+        size_t content_sz                               = packet.content.size();
+        size_t total_sz                                 = content_sz + header_sz;
+        dg::string bstream                              = std::move(packet.content);
         bstream.resize(total_sz);
-        char * header_ptr           = std::next(bstream.data(), content_sz); //this gives me chill without doing checksum for the buffer (I think this has to be an option), yet we have to steer in the way of <inbound_data_could_be_maliciously_engineered> and we'll come back for statistical chances later, alright fellas, we'll include chksum for now
+        char * header_ptr                               = std::next(bstream.data(), content_sz); //this gives me chill without doing checksum for the buffer (I think this has to be an option), yet we have to steer in the way of <inbound_data_could_be_maliciously_engineered> and we'll come back for statistical chances later, alright fellas, we'll include chksum for now
         dg::network_compact_serializer::integrity_serialize_into(header_ptr, x_header);
 
         return bstream;
@@ -1023,7 +1023,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto deserialize_request_packet(dg::string bstream) noexcept -> std::expected<RequestPacket, exception_t>{
 
-        using x_header_t    = std::pair<PacketHeader, uint64_t>; 
+        using x_header_t    = std::pair<PacketHeader, std::pair<uint64_t, uint64_t>>;
 
         size_t header_sz    = dg::network_compact_serializer::integrity_size(x_header_t{});
         auto x_header       = x_header_t{};
@@ -1035,9 +1035,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
             return std::unexpected(err);
         }
 
-        rs.content                      = std::move(left);
-        static_cast<PacketHeader&>(rs)  = std::get<0>(x_header);
-        uint64_t integrity_hash         = dg::network_hash::murmur_hash(rs.content.data(), rs.content.size());
+        rs.content                                      = std::move(left);
+        static_cast<PacketHeader&>(rs)                  = std::get<0>(x_header);
+        std::pair<uint64_t, uint64_t> integrity_hash    = dg::network_hash::murmur_hash_base(rs.content.data(), rs.content.size());
 
         if (integrity_hash != std::get<1>(x_header)){
             return std::unexpected(dg::network_exception::SOCKET_CORRUPTED_PACKET);
@@ -5376,6 +5376,7 @@ namespace dg::network_kernel_mailbox_impl1{
     //we dont know why taking deviations is very good for middle_layer compressions, we can achieve 0.1% compression rate if the dictionary is large enough (cuda will finally buy our routing tech for $BB, I'm just kidding, I'll buy cuda tech), we run compression in massive parallel, we dont really care about intellect at this point, if the checksum of the data does not make sense, we throw away the decompression results, and choose another dictionary or brute force
     //yes fellas, cuda router is not a fiction, we theoretically can achieve roughly 1 TB/s transmission rate with dg tech
     //if we were trying to train https session (encoded -> raw), it could actually decode the https without the session keys
+    //we'll post the proof of concept soon fellas, its gonna be a dark day of the internet, maybe Elliot is right, the one that controls the exit point controls the data
 
     struct ConfigMaker{
 
