@@ -1179,27 +1179,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
-    //No fellas, im not going to design event_pool select, blocking recv even if socket is out, etc.
-    //I design things that work, I delete things if they dont not work, I respawn things to make it work
-    //human interactions are too confusing for me fellas
-    //I dont know what these people want | think | their habits of consuming, maximizing the unquantifiables | money | etc.
-    //we are happy if we could turn on this engine, release my child in the wild, with the 100% guarantee that my child wont be dead by stupid reasons or complex designs
-
-    //I get what you are saying
-    //50% of the job is forward
-    //forward is done correctly
-    //backward is, however, not done correctly
-    //we need advanced techniques to glue the water -> the deviation space
-    //we cant really do code injection per Mom request
-    //there are so many issues, first is security, second is frequency (we cant unitize the computation, we have cold compute, hot compute, and cold hot compute), third is JIT development, fourth is compiled code development
-    //we use power series fellas, as Agent Smith says, we multiply
-
-    //OK
-
-    //reactor pattern is fundamentally a tough topic to solve
-    //imagine you are to implement a distributed queue, serialized at an atomic variable
-    //we cant really <subscribe> the observer to the producing queue like how we did with the asynchronous because it is not a relaxed operation 
-    //this simple_reactor only offsets the cost, not fully solves the problem of worst case latency, worst case latency falls back to the sleep_time * number of bouncing containers  
+    //when we wrote this reactor, the number one use case is latency
+    //such is when the queue is from empty -> event_pool_subscribed_sz
+    //we are to smoothen the latency curve, not to have a perfect solution, ... there actually isnt a perfect solution, it's hard to write
+    //we are to make sure that every subscribe is just, such is it might mistrip the subscribe, but never has a false positive for spikes
 
     class SimpleReactor{
 
@@ -1223,26 +1206,30 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void increment(size_t sz) noexcept{
 
-                //we just spin some magic numbers because we dont really know, subscribe is a latency dampener operation, usually increment is only favored in the time of NO_BUSY -> BUSY
+                //we just spin some magic numbers because we dont really know
+                //subscribe is a latency dampener operation 
+                //increment is only favored in the time of NO_BUSY -> BUSY
                 //thus the lock is never acquired by the subscribe, only increment function, we are to retry 4 times, the chance of mutex acquistion failed for nothing is very slim, assume worst case of success == 99%, we expect to increase it to 1 - 1% ** 4
 
                 constexpr size_t INCREMENT_RETRY_SZ                 = 4u;
                 const std::chrono::nanoseconds FAILED_LOCK_SLEEP    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds{1});
 
-                this->counter.value.fetch_add(sz, std::memory_order_relaxed);
+                this->counter.value.fetch_add(sz, std::memory_order_relaxed); //increment
+                intmax_t expected = this->wakeup_threshold.value.load(std::memory_order_relaxed);
+
+                //check if the increment constitutes a notification
 
                 for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
-                    intmax_t current    = this->counter.value.load(std::memory_order_relaxed); //waste 1 relaxed operation, nobody really cares, relaxed is not important
-                    intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
+                    intmax_t current = this->counter.value.load(std::memory_order_relaxed);
 
-                    if (current < expected){ //does not trip the switch, no action is performed
+                    if (current < expected){ //does not trip the switch, no action is performed, out
                         return;
                     }
 
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     size_t current_queue_sz = this->mtx_queue_sz.value.load(std::memory_order_relaxed);
 
-                    if (current_queue_sz == 0u){ //nothing to be released, pass
+                    if (current_queue_sz == 0u){ //nothing to be released, out
                         return;
                     }
 
@@ -1250,19 +1237,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                     if (!try_lock_rs){ //try_lock is not through, either competing with increment or subscribe, last increment wins or any subscribe wins, we are to yield
                         stdx::lock_yield(FAILED_LOCK_SLEEP);
-                        continue;
+                        continue; //second chance for statistical no-reason try_lock fails + to wait over the subscriber notification payload of void subscribe()
                     }
 
                     //if competing with increment, we are definitely to yield, last increment should be the one to update
                     //if competing with subscribe:
                     //  - if subscribe code flow is before the subscriber notifications (we are to transfer the responsibility)
-                    //  - if subscribe code flow is after the subscriber notifications (we are to continue spinning, the spin time must exceed the avg execution of the subscribe tx, if there is another subscribe function invoked, we are to transfer the responsibility there, if there isnt, we have the timer on our side)
+                    //  - if subscribe code flow is after the subscriber notifications (we are to continue spinning, the spin time must exceed the avg execution time of the subscribe tx, if there is another subscribe function invoked, we are to transfer the responsibility there, if there isnt, we have the timer on our side)
 
-                    //the chance of try_lock is passed and (current_queue_sz == 0u or current < expected) are slim
-                    //initiate subscriber notifications
+                    //the chance of try_lock is passed and (current_queue_sz == 0u or current < expected) is slim
+                    //this constitutes a notification payload => initiate subscriber notifications
 
                     {
-                        stdx::seq_cst_guard seqcst_tx; //std has little documentation about how mutex is used explicitly instead of thru unique_lock and lock_guard, we must emit seq_cst_tx instruction
+                        stdx::seq_cst_guard seqcst_tx; //std has little documentation about how mutex is used explicitly, we must emit seq_cst_tx instruction
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
 
                         //we might mistrip the switches, we dont really care
@@ -1275,6 +1262,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     this->mtx_mtx_queue.unlock();
+                    return;
                 }
             }
 
@@ -1294,9 +1282,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             } 
 
             void subsribe(std::chrono::nanoseconds waiting_time) noexcept{
-                
-                constexpr uint8_t ACTION_SLEEP      = 0u;
-                constexpr uint8_t ACTION_ACQUIRE    = 1u; 
+
+                //this code is defined, how?
+                //we serialize accesses of mtx_queue by using proper mutual exclusion protocols
+                //mtx_queue_sz state is guaranteed to be correct by the mutual exclusion + atomic_signal_fences
+                //counter + wakeup_threshold are only used for guesses, a bad guess does not constitute a crash or a fatal error, at worst, we are to wait waiting_time, or to unlock when the queue is empty ... that's probably the worst penalty we could have 
+
+                constexpr uint8_t ACTION_NO         = 0u;
+                constexpr uint8_t ACTION_ACQUIRE    = 1u;
 
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
@@ -1312,42 +1305,51 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue); //this lock_guard is unavoidable
 
                     if (this->mtx_queue.size() == this->mtx_queue_cap){
-                        return ACTION_SLEEP;
+                        return ACTION_NO;
                     }
+
+                    //----subscriber-app-payload---
 
                     //bad things could happen before the push_back and in-between increments, we are productive people, we know this
                     this->mtx_queue.push_back(spinning_mtx);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     this->mtx_queue_sz.value.fecth_add(1u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                    //----------------------------
+
+                    //---subscriber-notification-payload---
+                    //we want to have the payload POST the app because there is no gap in notifications, for every check at the current time is just, and the incoming increments would continue the just
 
                     intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); //1 minute | 1 hour, we dont really know, evaluated current, expected might no longer be relevant 
 
                     if (new_current >= expected){ //we dont really care what happened between last expected and current expected or last current and current current, we are productive people, we only care what we could do to bring current < expected                        
                         //switch tripped, we are to notify subscribers
+
                         std::atomic_signal_fence(std::memory_order_seq_cst);
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed); //exchange does fencing for the last fetch_add, we dont really know this, compiler can't prove your intention of fetch_add
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
                             this->mtx_queue[i]->unlock();
                         }
 
                         this->mtx_queue.clear();
-                        return ACTION_ACQUIRE;
                     }
 
                     return ACTION_ACQUIRE;
+                    //---------------------------
                 }();
 
-                switch (action){
-                    case ACTION_SLEEP:
+                switch (action){ //serialize access by referencing action
+                    case ACTION_NO:
                     {
-                        dg::hrtimers::high_resolution_sleep(waiting_time);
                         break;
                     }
                     case ACTION_ACQUIRE:
                     {
                         std::unique_lock<std::timed_mutex> lckr(*spinning_mtx, std::defer_lock);
-                        lckr.try_lock_for(waiting_time); //my intuition tells me that I should not trust try_lock_for, yet it is implementation problem, not syntax problem
+                        lckr.try_lock_for(waiting_time); //my intuition tells me that I should not trust try_lock_for, yet it is <implementation_problem>, not <syntax_problem>
                         break;
                     }
                     default:
