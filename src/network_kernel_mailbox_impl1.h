@@ -1223,8 +1223,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void increment(size_t sz) noexcept{
 
-                constexpr size_t INCREMENT_RETRY_SZ                 = 8u; //we just spin some magic numbers because we dont really know, subscribe is a latency dampener operation, usually increment is only favored in the time of NO_BUSY -> BUSY, thus the lock is never acquired by the subscribe, only increment function
-                const std::chrono::nanoseconds FAILED_LOCK_SLEEP    = std::chrono::nanoseconds{1};
+                //we just spin some magic numbers because we dont really know, subscribe is a latency dampener operation, usually increment is only favored in the time of NO_BUSY -> BUSY
+                //thus the lock is never acquired by the subscribe, only increment function, we are to retry 4 times, the chance of mutex acquistion failed for nothing is very slim, assume worst case of success == 99%, we expect to increase it to 1 - 1% ** 4
+
+                constexpr size_t INCREMENT_RETRY_SZ                 = 4u;
+                const std::chrono::nanoseconds FAILED_LOCK_SLEEP    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds{1});
 
                 this->counter.value.fetch_add(sz, std::memory_order_relaxed);
 
@@ -1237,7 +1240,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     std::atomic_signal_fence(std::memory_order_seq_cst);
-                    size_t current_queue_sz = this->mtx_queue_sz.load(std::memory_order_relaxed);
+                    size_t current_queue_sz = this->mtx_queue_sz.value.load(std::memory_order_relaxed);
 
                     if (current_queue_sz == 0u){ //nothing to be released, pass
                         return;
@@ -1246,16 +1249,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     bool try_lock_rs = this->mtx_mtx_queue.try_lock(); //try_lock is relaxed, current_queue_sz (referenced by the if statement + return) is an implicit fencing technique
 
                     if (!try_lock_rs){ //try_lock is not through, either competing with increment or subscribe, last increment wins or any subscribe wins, we are to yield
-                        stdx::failed_lock_yield(FAILED_LOCK_SLEEP);
+                        stdx::lock_yield(FAILED_LOCK_SLEEP);
                         continue;
                     }
 
-                    //the chance of try_lock is passed and (current_queue_sz == 0u or current < expected) are slim 
+                    //if competing with increment, we are definitely to yield, last increment should be the one to update
+                    //if competing with subscribe:
+                    //  - if subscribe code flow is before the subscriber notifications (we are to transfer the responsibility)
+                    //  - if subscribe code flow is after the subscriber notifications (we are to continue spinning, the spin time must exceed the avg execution of the subscribe tx, if there is another subscribe function invoked, we are to transfer the responsibility there, if there isnt, we have the timer on our side)
+
+                    //the chance of try_lock is passed and (current_queue_sz == 0u or current < expected) are slim
+                    //initiate subscriber notifications
 
                     {
                         stdx::seq_cst_guard seqcst_tx; //std has little documentation about how mutex is used explicitly instead of thru unique_lock and lock_guard, we must emit seq_cst_tx instruction
-                        this->unsafe_notify_subscriber();
-                        this->current_queue_sz.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
 
                         //we might mistrip the switches, we dont really care
                         //because we have statistics on our side
@@ -1288,8 +1296,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void subsribe(std::chrono::nanoseconds waiting_time) noexcept{
                 
                 constexpr uint8_t ACTION_SLEEP      = 0u;
-                constexpr uint8_t ACTION_RETURN     = 1u;
-                constexpr uint8_t ACTION_ACQUIRE    = 2u; 
+                constexpr uint8_t ACTION_ACQUIRE    = 1u; 
 
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
@@ -1304,28 +1311,30 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 uint8_t action = [&, this]() noexcept{
                     stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue); //this lock_guard is unavoidable
 
-                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); //1 minute | 1 hour, we dont really know, evaluated current expected might no longer be relevant 
+                    if (this->mtx_queue.size() == this->mtx_queue_cap){
+                        return ACTION_SLEEP;
+                    }
 
-                    if (new_current >= expected){ //we dont really care what happened between last expected and current expected or last current and current current, we are productive people, we only care what we could do to bring current < expected
-                        this->current_queue_sz.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+                    //bad things could happen before the push_back and in-between increments, we are productive people, we know this
+                    this->mtx_queue.push_back(spinning_mtx);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    this->mtx_queue_sz.value.fecth_add(1u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+
+                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); //1 minute | 1 hour, we dont really know, evaluated current, expected might no longer be relevant 
+
+                    if (new_current >= expected){ //we dont really care what happened between last expected and current expected or last current and current current, we are productive people, we only care what we could do to bring current < expected                        
+                        //switch tripped, we are to notify subscribers
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed); //exchange does fencing for the last fetch_add, we dont really know this, compiler can't prove your intention of fetch_add
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
                             this->mtx_queue[i]->unlock();
                         }
 
                         this->mtx_queue.clear();
-                        return ACTION_RETURN;
+                        return ACTION_ACQUIRE;
                     }
 
-                    if (this->mtx_queue.size() == this->mtx_queue_cap){
-                        return ACTION_SLEEP;
-                    }
-
-                    this->mtx_queue.push_back(spinning_mtx);
-
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    this->current_queue_sz.fecth_add(1u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
-                    
                     return ACTION_ACQUIRE;
                 }();
 
@@ -1333,10 +1342,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     case ACTION_SLEEP:
                     {
                         dg::hrtimers::high_resolution_sleep(waiting_time);
-                        break;
-                    }
-                    case ACTION_RETURN:
-                    {
                         break;
                     }
                     case ACTION_ACQUIRE:
@@ -1355,13 +1360,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         }
                     }
                 }
-            }
-        
-        private:
-
-            void unsafe_notify_subscriber() noexcept{
-
-                
             }
     };
 
