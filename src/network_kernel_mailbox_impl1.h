@@ -311,7 +311,7 @@ namespace dg::network_kernel_mailbox_impl1::external_interface{
             virtual auto get_inbound_friend_addr_iteration_size() noexcept -> size_t = 0;
 
             virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
-            virtual auto get_inbound_friend_addr_iteration_size() noexcept -> size_t = 0;
+            virtual auto get_outbound_friend_addr_iteration_size() noexcept -> size_t = 0;
     };
 }
 
@@ -459,22 +459,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual ~BorderControllerInterface() noexcept = default;
             virtual void thru(Address *, size_t, exception_t *) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
-    };
-
-    class NATIPControllerInterface{
-
-        public:
-
-            virtual ~NATIPControllerInterface() noexcept = default;
-
-            virtual void add_inbound(Address *, size_t, exception_t *) noexcept = 0;
-            virtual void add_outbound(Address *, size_t, exception_t *) noexcept = 0;
-
-            virtual void get_inbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0; 
-            virtual auto get_inbound_friend_addr_size() noexcept -> size_t = 0;
-
-            virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
-            virtual auto get_outbound_friend_addr_size() noexcept -> size_t = 0;
     };
 }
 
@@ -1195,40 +1179,96 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
+    //No fellas, im not going to design event_pool select, blocking recv even if socket is out, etc.
+    //I design things that work, I delete things if they dont not work, I respawn things to make it work
+    //human interactions are too confusing for me fellas
+    //I dont know what these people want | think | their habits of consuming, maximizing the unquantifiables | money | etc.
+    //we are happy if we could turn on this engine, release my child in the wild, with the 100% guarantee that my child wont be dead by stupid reasons or complex designs
+
+    //I get what you are saying
+    //50% of the job is forward
+    //forward is done correctly
+    //backward is, however, not done correctly
+    //we need advanced techniques to glue the water -> the deviation space
+    //we cant really do code injection per Mom request
+    //there are so many issues, first is security, second is frequency (we cant unitize the computation, we have cold compute, hot compute, and cold hot compute), third is JIT development, fourth is compiled code development
+    //we use power series fellas, as Agent Smith says, we multiply
+
     //OK
+
+    //reactor pattern is fundamentally a tough topic to solve
+    //imagine you are to implement a distributed queue, serialized at an atomic variable
+    //we cant really <subscribe> the observer to the producing queue like how we did with the asynchronous because it is not a relaxed operation 
+    //this simple_reactor only offsets the cost, not fully solves the problem of worst case latency, worst case latency falls back to the sleep_time * number of bouncing containers  
+
     class SimpleReactor{
 
         private:
 
             dg::vector<std::shared_ptr<std::timed_mutex>> mtx_queue;
+            size_t mtx_queue_cap;
             std::mutex mtx_mtx_queue;
             stdx::hdi_container<std::atomic<intmax_t>> counter;
             stdx::hdi_container<std::atomic<intmax_t>> wakeup_threshold;
+            stdx::hdi_container<std::atomic<size_t>> mtx_queue_sz;
 
         public:
 
-            SimpleReactor(): mtx_queue(), 
-                             mtx_mtx_queue(),
-                             counter(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>(0)}),
-                             wakeup_threshold(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>{0}}){}
+            SimpleReactor(size_t mtx_queue_cap): mtx_queue(),
+                                                 mtx_queue_cap(mtx_queue_cap), 
+                                                 mtx_mtx_queue(),
+                                                 counter(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>(0)}),
+                                                 wakeup_threshold(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>{0}}),
+                                                 mtx_queue_sz(stdx::hdi_container<std::atomic<size_t>>{std::atomic<size_t>{0u}}){}
 
             void increment(size_t sz) noexcept{
 
-                intmax_t current    = this->counter.value.fetch_add(sz, std::memory_order_relaxed) + sz;
-                intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
+                constexpr size_t INCREMENT_RETRY_SZ                 = 8u; //we just spin some magic numbers because we dont really know, subscribe is a latency dampener operation, usually increment is only favored in the time of NO_BUSY -> BUSY, thus the lock is never acquired by the subscribe, only increment function
+                const std::chrono::nanoseconds FAILED_LOCK_SLEEP    = std::chrono::nanoseconds{1};
 
-                if (current < expected){ //a lot of things could happen, reactor is simply not gonna tell what has happened, just release the lock for you
-                    return;
+                this->counter.value.fetch_add(sz, std::memory_order_relaxed);
+
+                for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
+                    intmax_t current    = this->counter.value.load(std::memory_order_relaxed); //waste 1 relaxed operation, nobody really cares, relaxed is not important
+                    intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
+
+                    if (current < expected){ //does not trip the switch, no action is performed
+                        return;
+                    }
+
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    size_t current_queue_sz = this->mtx_queue_sz.load(std::memory_order_relaxed);
+
+                    if (current_queue_sz == 0u){ //nothing to be released, pass
+                        return;
+                    }
+
+                    bool try_lock_rs = this->mtx_mtx_queue.try_lock(); //try_lock is relaxed, current_queue_sz (referenced by the if statement + return) is an implicit fencing technique
+
+                    if (!try_lock_rs){ //try_lock is not through, either competing with increment or subscribe, last increment wins or any subscribe wins, we are to yield
+                        stdx::failed_lock_yield(FAILED_LOCK_SLEEP);
+                        continue;
+                    }
+
+                    //the chance of try_lock is passed and (current_queue_sz == 0u or current < expected) are slim 
+
+                    {
+                        stdx::seq_cst_guard seqcst_tx; //std has little documentation about how mutex is used explicitly instead of thru unique_lock and lock_guard, we must emit seq_cst_tx instruction
+                        this->unsafe_notify_subscriber();
+                        this->current_queue_sz.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+
+                        //we might mistrip the switches, we dont really care
+                        //because we have statistics on our side
+                        for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
+                            this->mtx_queue[i]->unlock();
+                        }
+
+                        this->mtx_queue.clear();
+                    }
+
+                    this->mtx_mtx_queue.unlock();
                 }
-
-                stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);
-
-                for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                    this->mtx_queue[i]->unlock(); //we need mtx_queue unlock relaxed
-                }
-
-                this->mtx_queue.clear();
-            } 
+            }
 
             void decrement(size_t sz) noexcept{
 
@@ -1246,6 +1286,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             } 
 
             void subsribe(std::chrono::nanoseconds waiting_time) noexcept{
+                
+                constexpr uint8_t ACTION_SLEEP      = 0u;
+                constexpr uint8_t ACTION_RETURN     = 1u;
+                constexpr uint8_t ACTION_ACQUIRE    = 2u; 
 
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
@@ -1254,21 +1298,70 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                //this might not be correct
-                //let's see what happens, we have increment, decrement, we are only interested in increment because the last increment of every decrement guarantees to replace the decrement in terms of threshold exceedability
-                //we are to worry what happens in between load(memory_order_relaxed) and push_back  
-                //we might miss a beat and trigger the worst case of try_lock_for(waiting_time), is this important enough to workaround things? or we just set the default to 1ms to offset the anomaly?
-
                 std::shared_ptr<std::timed_mutex> spinning_mtx = std::make_shared<std::timed_mutex>();
                 spinning_mtx->lock();
 
-                {
-                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);
-                    this->mtx_queue.push_back(spinning_mtx);
-                }
+                uint8_t action = [&, this]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue); //this lock_guard is unavoidable
 
-                std::unique_lock<std::timed_mutex> lckr(*spinning_mtx, std::defer_lock);
-                lckr.try_lock_for(waiting_time);
+                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); //1 minute | 1 hour, we dont really know, evaluated current expected might no longer be relevant 
+
+                    if (new_current >= expected){ //we dont really care what happened between last expected and current expected or last current and current current, we are productive people, we only care what we could do to bring current < expected
+                        this->current_queue_sz.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+
+                        for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
+                            this->mtx_queue[i]->unlock();
+                        }
+
+                        this->mtx_queue.clear();
+                        return ACTION_RETURN;
+                    }
+
+                    if (this->mtx_queue.size() == this->mtx_queue_cap){
+                        return ACTION_SLEEP;
+                    }
+
+                    this->mtx_queue.push_back(spinning_mtx);
+
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    this->current_queue_sz.fecth_add(1u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+                    
+                    return ACTION_ACQUIRE;
+                }();
+
+                switch (action){
+                    case ACTION_SLEEP:
+                    {
+                        dg::hrtimers::high_resolution_sleep(waiting_time);
+                        break;
+                    }
+                    case ACTION_RETURN:
+                    {
+                        break;
+                    }
+                    case ACTION_ACQUIRE:
+                    {
+                        std::unique_lock<std::timed_mutex> lckr(*spinning_mtx, std::defer_lock);
+                        lckr.try_lock_for(waiting_time); //my intuition tells me that I should not trust try_lock_for, yet it is implementation problem, not syntax problem
+                        break;
+                    }
+                    default:
+                    {
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                }
+            }
+        
+        private:
+
+            void unsafe_notify_subscriber() noexcept{
+
+                
             }
     };
 
@@ -3439,7 +3532,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return rs;
         }
 
-        static auto get_simple_reactor(intmax_t wakeup_threshold) -> std::unique_ptr<SimpleReactor>{
+        static auto get_simple_reactor(intmax_t wakeup_threshold,
+                                       size_t concurrent_subscriber_cap) -> std::unique_ptr<SimpleReactor>{
+            
+            const size_t MIN_CONCURRENT_SUBSCRIBER_CAP  = 1u;
+            const size_t MAX_CONCURRENT_SUBSCRIBER_CAP  = size_t{1} << 25;
+
+            if (std::clamp(concurrent_subscriber_cap, MIN_CONCURRENT_SUBSCRIBER_CAP, MAX_CONCURRENT_SUBSCRIBER_CAP) != concurrent_subscriber_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             auto rs = std::make_unique<SimpleReactor>();
             rs->set_wakeup_threshold(wakeup_threshold);
@@ -3639,6 +3740,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_reacting_retransmission_controller(std::unique_ptr<RetransmissionControllerInterface> base,
                                                            size_t reacting_threshold,
+                                                           size_t concurrent_subscriber_cap,
                                                            std::chrono::nanoseconds wait_time) -> std::unique_ptr<RetransmissionControllerInterface>{
  
             const size_t MIN_REACTING_THRESHOLD             = size_t{1};
@@ -3659,7 +3761,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<ReactingRetransmissionController>(std::move(base),
-                                                                      get_simple_reactor(reacting_threshold),
+                                                                      get_simple_reactor(reacting_threshold, concurrent_subscriber_cap),
                                                                       wait_time);
         }
 
@@ -3705,6 +3807,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_reacting_buffer_container(std::unique_ptr<BufferContainerInterface> base,
                                                   size_t reacting_threshold,
+                                                  size_t concurrent_subscriber_cap,
                                                   std::chrono::nanoseconds wait_time) -> std::unique_ptr<BufferContainerInterface>{
 
             const size_t MIN_REACTING_THRESHOLD             = size_t{1};
@@ -3725,7 +3828,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<ReactingBufferContainer>(std::move(base),
-                                                             get_simple_reactor(reacting_threshold),
+                                                             get_simple_reactor(reacting_threshold, concurrent_subscriber_cap),
                                                              wait_time);
 
         }
@@ -3864,6 +3967,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_reacting_packet_container(std::unique_ptr<PacketContainerInterface> base,
                                                   size_t reacting_threshold,
+                                                  size_t concurrent_subscriber_cap,
                                                   std::chrono::nanoseconds wait_time) -> std::unique_ptr<PacketContainerInterface>{
 
             const size_t MIN_REACTING_THRESHOLD             = size_t{1};
@@ -3884,7 +3988,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<ReactingPacketContainer>(std::move(base),
-                                                             get_simple_reactor(reacting_threshold),
+                                                             get_simple_reactor(reacting_threshold, concurrent_subscriber_cap),
                                                              wait_time);
         }
 
@@ -4286,7 +4390,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     InternalMailChimpArgument * base_data_arr       = data_arr.base();
                     uint32_t frequency                              = this->exhaustion_controller->get_transmit_frequency();
-                    std::chrono::nanoseconds transmit_period        = packet_service::frequency_to_period(frequency);
+                    uint32_t agg_frequency                          = frequency / std::max(sz, size_t{1}); 
+
+                    std::chrono::nanoseconds transmit_period        = packet_service::frequency_to_period(agg_frequency);
 
                     for (size_t i = 0u; i < sz; ++i){
                         exception_t err = socket_service::send_noblock(*this->socket,
@@ -4296,9 +4402,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         if (dg::network_exception::is_failed(err)){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                         }
-
-                        dg::hrtimers::high_resolution_sleep(transmit_period);
                     }
+
+                    dg::hrtimers::high_resolution_sleep(transmit_period); //we attempt to unitize the transmit_packet_sz -> 1, this might not be good if the rule is not adhered
                 }
             };
     };
@@ -5680,18 +5786,21 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t retransmission_idhashset_cap;
         bool retransmission_has_react_pattern;
         uint32_t retransmission_react_sz;
+        uint32_t retransmission_react_queue_cap;
         std::chrono::nanoseconds retransmission_react_time; //we almost always want this (we want latency from A -> Z within 0.05 ms, this includes getting the packet, push to the container, get by the consumers, push to processing container -> ... -> to the memregion_event_pool -> dispatch)
 
         uint32_t inbound_buffer_concurrency_sz;
         uint32_t inbound_buffer_container_cap;
         bool inbound_buffer_has_react_pattern;
         uint32_t inbound_buffer_react_sz;
+        uint32_t inbound_buffer_react_queue_cap;
         std::chrono::nanoseconds inbound_buffer_react_time; 
 
         uint32_t inbound_packet_concurrency_sz;
         uint32_t inbound_packet_container_cap;
         bool inbound_packet_has_react_pattern;
         uint32_t inbound_packet_react_sz;
+        uint32_t inbound_packet_react_queue_cap;
         std::chrono::nanoseconds inbound_packet_react_time;
 
         uint32_t inbound_idhashset_concurrency_sz; 
@@ -5718,6 +5827,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t outbound_transmit_frequency;
         bool outbound_packet_has_react_pattern;
         uint32_t outbound_packet_react_sz;
+        uint32_t outbound_packet_react_queue_cap;
         std::chrono::nanoseconds outbound_packet_react_time;
 
         bool inbound_tc_has_borderline_per_inbound_worker;
