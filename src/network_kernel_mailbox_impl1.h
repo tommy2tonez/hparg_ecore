@@ -1196,7 +1196,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             dg::vector<std::shared_ptr<std::atomic_flag>> mtx_queue;
             size_t mtx_queue_cap;
-            std::atomic_flag mtx_mtx_queue;
+            std::mutex mtx_mtx_queue;
             stdx::hdi_container<std::atomic<intmax_t>> counter;
             stdx::hdi_container<std::atomic<intmax_t>> wakeup_threshold;
             stdx::hdi_container<std::atomic<size_t>> mtx_queue_sz;
@@ -1232,14 +1232,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return;
                     }
 
-                    bool try_lock_rs    = this->mtx_mtx_queue.test_and_set(std::memory_order_relaxed);
+                    bool try_lock_rs    = this->mtx_mtx_queue.try_lock();
 
                     if (!try_lock_rs){
                         stdx::lock_yield(FAILED_LOCK_SLEEP);
                         continue;
                     }
-
-                    std::atomic_thread_fence(std::memory_order_acquire);
 
                     {
                         stdx::seq_cst_guard seqcst_tx;
@@ -1247,12 +1245,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
                             this->mtx_queue[i]->clear(std::memory_order_relaxed);
+			    this->mtx_queue[i]->notify_one();
                         }
 
                         this->mtx_queue.clear();
                     }
 
-                    this->mtx_mtx_queue.clear(std::memory_order_release);
+                    this->mtx_mtx_queue.unlock();
                     return;
                 }
             }
@@ -1284,10 +1283,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                std::shared_ptr<std::atomic_flag> spinning_mtx = std::make_shared<std::atomic_flag>(true);
+                std::shared_ptr<std::atomic_flag> spinning_mtx = std::make_shared<std::atomic_flag>();
 
                 uint8_t action = [&, this]() noexcept{
-                    stdx::xlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue); //exponential back-off
+                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);
 
                     if (this->mtx_queue.size() == this->mtx_queue_cap){
                         return ACTION_NO;
@@ -1322,7 +1321,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                     case ACTION_ACQUIRE:
                     {
-                        stdx::mutex_try_lock_for(*spinning_mtx, waiting_time);
+                        spinning_mtx->wait(); //timeout
+			std::atomic_signal_fence(std::memory_order_seq_cst);
                         break;
                     }
                     default:
