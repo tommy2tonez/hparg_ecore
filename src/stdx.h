@@ -16,6 +16,7 @@
 #include <chrono>
 #include "network_raii_x.h"
 #include <stdfloat>
+#include <immintrin.h>
 
 namespace stdx{
 

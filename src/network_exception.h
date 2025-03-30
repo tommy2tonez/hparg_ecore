@@ -96,6 +96,18 @@ namespace dg::network_exception{
     static inline constexpr exception_t TIMEOUT                             = 50u;
     static inline constexpr exception_t BAD_RETRANSMISSION                  = 51u;
     static inline constexpr exception_t INVALID_FORMAT                      = 52u;
+    static inline constexpr exception_t SOCKET_BAD_IP                       = 53u;
+    static inline constexpr exception_t UNSUPPORTED_FUNCTIONALITY           = 54u;
+    static inline constexpr exception_t BAD_POLYMORPHIC_ACCESS              = 55u;
+    static inline constexpr exception_t SOCKET_CORRUPTED_PACKET             = 56u;
+    static inline constexpr exception_t SOCKET_MALFORMED_PACKET             = 57u;
+    static inline constexpr exception_t SOCKET_BAD_RECEIPIENT               = 58u;
+    static inline constexpr exception_t SOCKET_BAD_TRAFFIC                  = 59u;
+    static inline constexpr exception_t SOCKET_BAD_IP_RULE                  = 60u;
+    static inline constexpr exception_t SOCKET_BAD_BUFFER_LENGTH            = 61u;
+    static inline constexpr exception_t SOCKET_MAX_RETRANSMISSION_REACHED   = 62u;
+    static inline constexpr exception_t SOCKET_QUEUE_FULL                   = 63u;
+    static inline constexpr exception_t VARIANT_VBE                         = 64u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 

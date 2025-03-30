@@ -160,7 +160,7 @@ namespace dg::network_stack_allocation{
 
         private:
 
-            T * data;
+            T * obj;
 
             template <class ...Args>
             Allocation(const internal_init_tag, Args&& ...args){
@@ -183,10 +183,10 @@ namespace dg::network_stack_allocation{
                 void * head = dg::memult::align(buf.value(), std::integral_constant<size_t, alignof(T)>{});
 
                 if constexpr(std::is_nothrow_constructible_v<T, Args&&...>){
-                    this->data = new (head) T(std::forward<Args>(args)...);
+                    this->obj = new (head) T(std::forward<Args>(args)...);
                 } else{
                     try{
-                        this->data = new (head) T(std::forward<Args>(args)...);
+                        this->obj = new (head) T(std::forward<Args>(args)...);
                     } catch (...){
                         allocator_ins->exit_scope();
                         std::rethrow_exception(std::current_exception());
@@ -214,18 +214,18 @@ namespace dg::network_stack_allocation{
 
             ~Allocation() noexcept{
 
-                std::destroy_at(this->data);
+                std::destroy_at(this->obj);
                 get_allocator()->exit_scope();
             }
 
             auto data() const noexcept -> T *{
 
-                return this->data;
+                return this->obj;
             }
 
             auto get() const noexcept -> T *{
 
-                return this->data;
+                return this->obj;
             }
     };
 

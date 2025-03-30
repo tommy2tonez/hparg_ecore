@@ -40,6 +40,15 @@
 #include "network_exception_handler.h"
 #include "network_producer_consumer.h"
 #include "network_stack_allocation.h"
+#include <errno.h>
+#include <error.h>
+#include <linux/filter.h>
+#include <linux/in.h>
+#include <linux/unistd.h>
+#include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -213,7 +222,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyAckPacket&>(*this))
+            reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyAckPacket&>(*this)); //alright, up for debate, we might need to use std::array<>
         }
     };
 
@@ -289,6 +298,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 namespace dg::network_kernel_mailbox_impl1::external_interface{
 
     using namespace dg::network_kernel_mailbox_impl1::types;
+    using namespace dg::network_kernel_mailbox_impl1::model;
 
     class IPSieverInterface{
 
@@ -373,7 +383,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            virtual ~PacketGeneratorInterface() noexcept = default;
+            virtual ~RequestPacketGeneratorInterface() noexcept = default;
             virtual auto get(MailBoxArgument&&) noexcept -> std::expected<RequestPacket, exception_t> = 0;
     };
 
@@ -512,7 +522,7 @@ namespace dg::network_kernel_mailbox_impl1::utility{
         dg::network_trivial_serializer::serialize_into(lhs_buf.data(), lhs);
         dg::network_trivial_serializer::serialize_into(rhs_buf.data(), rhs);
 
-        return std::memcmp(lhs_buf.data(), rhs.buf.data(), SERIALIZATION_SZ) == 0;
+        return std::memcmp(lhs_buf.data(), rhs_buf.data(), SERIALIZATION_SZ) == 0;
     }
 
     template <class ...Args, class Iterator>
@@ -1045,7 +1055,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
         using x_header_t = std::pair<PacketHeader, std::pair<uint64_t, uint64_t>>; 
 
-        std::pair<uint64_t, uint64_t> integrity_hash    = dg::network_hash::murmur_hash_base(packet.content.data(), packet_content.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
+        std::pair<uint64_t, uint64_t> integrity_hash    = dg::network_hash::murmur_hash_base(packet.content.data(), packet.content.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
         auto x_header                                   = x_header_t{static_cast<const PacketHeader&>(packet), integrity_hash};
         size_t header_sz                                = dg::network_compact_serializer::integrity_size(x_header);
         size_t content_sz                               = packet.content.size();
@@ -1076,7 +1086,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         auto x_header       = x_header_t{};
         RequestPacket rs    = {};
         auto [left, right]  = stdx::backsplit_str(std::move(bstream), header_sz);
-        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<x_header_t>)(x_header, right.data(), right.size(), REQUEST_PACKET_SERIALIZATION_SECRET); //this would crash, it's this guy responsibility to make sure the integrity of the buffer -> the underlying data (at least there is no serious corruption post the function call)
+        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<x_header_t>)(x_header, right.data(), right.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
@@ -1104,10 +1114,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     }
 
     static auto serialize_packet(Packet packet) noexcept -> dg::string{
-
-        //this is the famous JWT token attack, we dont know the howtos, except for not crashing anything by using secrets
-        //we are far more advanced fellas, we try to see what JWT means by doing <input, output> training pairs (it does not have to be from the decrypting data, it just needs to learn the way JWT does things by providing large enough input window)
-        //it works
 
         constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ                                   = dg::network_trivial_serializer::size(packet_polymorphic_t{});
         std::array<char, PACKET_POLYMORPHIC_HEADER_SZ> polymorphic_writing_container    = {}; 
@@ -1141,7 +1147,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         auto [left, right]                              = stdx::backsplit_str(std::move(bstream), PACKET_POLYMORPHIC_HEADER_SZ);
 
         if (right.size() != PACKET_POLYMORPHIC_HEADER_SZ){
-            return std::unexpected(dg::network_exception::MALFORMED_SOCKET_PACKET);
+            return std::unexpected(dg::network_exception::SOCKET_MALFORMED_PACKET);
         }
 
         packet_polymorphic_t packet_type = {};
@@ -1172,116 +1178,81 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
             return virtualize_krescue_packet(std::move(devirtualized_packet.value()));
         } else{
-            return std::unexpected(dg::network_exception::MALFORMED_SOCKET_PACKET);
+            return std::unexpected(dg::network_exception::SOCKET_MALFORMED_PACKET);
         }
     }
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
-    //the only missing piece is the backpropagation
-    //the backpropagation would 99% determine our success, fellas
-    //if the backprop goes to waste, we go to waste
-    //if the backprop glues the training space like water, we are going to heaven
-    //im not telling yall this is easy, some people spent their lifes going in the direction
-    //im not selling yall some bullshit, this could work in probably 2-3 years or 23 years
-    //yet the idea was briefly described in multi_variate_taylor_fast.py
-    //we are using tons of electric guitars to sing to our beloved child (the core), each guitar has their own set of rights (the deviation space) 
+    //OK, this is now complex, std::timed mutex try_lock_for is UNDEFINED, we need to make this defined later, it's complicated
+    //alright this is actually very complicated, we have two dedicated workers, one is always waiting, another exits gracefully (this is due to implementation constraints, ..., we have no other options but to do this)
+    //alright Mom, when I first chose the career, you didnt tell me to deal with this shit
 
-    //yeah, we've thought long and hard, forward is done correctly by using frequency, the contract of frequency needs to be horored by the current scheduler or a reimplementation of kernel scheduler
-    //now, are we the accurate accurate absolutists, or we are the statistics absolutists
-    //remember that every frequency only represents something, it is the statistics that tells us the truth
-
-    //we are to collect every bits and pieces of information of this universe and glue them like water
-    //we have something what I called collecting device, it is a very correct instrument to differentiate the surrounding space to collect the surrounding context, accurate up to 1 mile ^ 2
-
-    //when we wrote this reactor, the number one use case is latency
-    //such is when the queue is from empty -> event_pool_subscribed_sz
-    //we are to smoothen the latency curve, not to have a perfect solution, ... there actually isnt a perfect solution, it's hard to write
-    //we are to make sure that every subscribe is just, such is it might mistrip the subscribe, but never has a false positive for spikes
-
-    //alright fellas, those events are distinct events, I dont have time to do jokes, crazy, mentally ill stuffs
-    //we are to save humanity forever fellas, as last, we are to say God is rooting for us
-
-    //alright this works
-    class SimpleReactor{
+    //we'll implement atomic_flag for now
+    class ComplexReactor{
 
         private:
 
-            dg::vector<std::shared_ptr<std::timed_mutex>> mtx_queue;
+            dg::vector<std::shared_ptr<std::atomic_flag>> mtx_queue;
             size_t mtx_queue_cap;
-            std::mutex mtx_mtx_queue;
+            std::atomic_flag mtx_mtx_queue;
             stdx::hdi_container<std::atomic<intmax_t>> counter;
             stdx::hdi_container<std::atomic<intmax_t>> wakeup_threshold;
             stdx::hdi_container<std::atomic<size_t>> mtx_queue_sz;
 
         public:
 
-            SimpleReactor(size_t mtx_queue_cap): mtx_queue(),
-                                                 mtx_queue_cap(mtx_queue_cap), 
-                                                 mtx_mtx_queue(),
-                                                 counter(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>(0)}),
-                                                 wakeup_threshold(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>{0}}),
-                                                 mtx_queue_sz(stdx::hdi_container<std::atomic<size_t>>{std::atomic<size_t>{0u}}){}
+            ComplexReactor(size_t mtx_queue_cap): mtx_queue(),
+                                                  mtx_queue_cap(mtx_queue_cap), 
+                                                  mtx_mtx_queue(),
+                                                  counter(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>(0)}),
+                                                  wakeup_threshold(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>{0}}),
+                                                  mtx_queue_sz(stdx::hdi_container<std::atomic<size_t>>{std::atomic<size_t>{0u}}){}
 
             void increment(size_t sz) noexcept{
-
-                //we just spin some magic numbers because we dont really know
-                //subscribe is a latency dampener operation 
-                //increment is only favored in the time of NO_BUSY -> BUSY
-                //thus the lock is never acquired by the subscribe, only increment function, we are to retry 4 times, the chance of mutex acquistion failed for nothing is very slim, assume worst case of success == 99%, we expect to increase it to 1 - 1% ** 4
 
                 constexpr size_t INCREMENT_RETRY_SZ                 = 4u;
                 const std::chrono::nanoseconds FAILED_LOCK_SLEEP    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds{1});
 
-                this->counter.value.fetch_add(sz, std::memory_order_relaxed); //increment
+                this->counter.value.fetch_add(sz, std::memory_order_relaxed);
                 intmax_t expected = this->wakeup_threshold.value.load(std::memory_order_relaxed);
-
-                //check if the increment constitutes a notification
 
                 for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
                     intmax_t current = this->counter.value.load(std::memory_order_relaxed);
 
-                    if (current < expected){ //does not trip the switch, no action is performed, out
+                    if (current < expected){
                         return;
                     }
 
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     size_t current_queue_sz = this->mtx_queue_sz.value.load(std::memory_order_relaxed);
 
-                    if (current_queue_sz == 0u){ //nothing to be released, out
+                    if (current_queue_sz == 0u){
                         return;
                     }
 
-                    bool try_lock_rs = this->mtx_mtx_queue.try_lock(); //try_lock is relaxed, current_queue_sz (referenced by the if statement + return) is an implicit fencing technique
+                    bool try_lock_rs    = this->mtx_mtx_queue.test_and_set(std::memory_order_relaxed);
 
-                    if (!try_lock_rs){ //try_lock is not through, either competing with increment or subscribe, last increment wins or any subscribe wins, we are to yield
+                    if (!try_lock_rs){
                         stdx::lock_yield(FAILED_LOCK_SLEEP);
-                        continue; //second chance for statistical no-reason try_lock fails + to wait over the subscriber notification payload of void subscribe()
+                        continue;
                     }
 
-                    //if competing with increment, we are definitely to yield, last increment should be the one to update
-                    //if competing with subscribe:
-                    //  - if subscribe code flow is before the subscriber notifications (we are to transfer the responsibility)
-                    //  - if subscribe code flow is after the subscriber notifications (we are to continue spinning, the spin time must exceed the avg execution time of the subscribe tx, if there is another subscribe function invoked, we are to transfer the responsibility there, if there isnt, we have the timer on our side)
-
-                    //the chance of try_lock is passed and (current_queue_sz == 0u or current < expected) is slim
-                    //this constitutes a notification payload => initiate subscriber notifications
+                    std::atomic_thread_fence(std::memory_order_acquire);
 
                     {
-                        stdx::seq_cst_guard seqcst_tx; //std has little documentation about how mutex is used explicitly, we must emit seq_cst_tx instruction
-                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+                        stdx::seq_cst_guard seqcst_tx;
+                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
 
-                        //we might mistrip the switches, we dont really care
-                        //because we have statistics on our side
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            this->mtx_queue[i]->unlock();
+                            this->mtx_queue[i]->clear(std::memory_order_relaxed);
                         }
 
                         this->mtx_queue.clear();
                     }
 
-                    this->mtx_mtx_queue.unlock();
+                    this->mtx_mtx_queue.clear(std::memory_order_release);
                     return;
                 }
             }
@@ -1299,14 +1270,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto set_wakeup_threshold(intmax_t arg) noexcept{
 
                 this->wakeup_threshold.value.exchange(arg, std::memory_order_relaxed);
-            } 
+            }
 
-            void subsribe(std::chrono::nanoseconds waiting_time) noexcept{
-
-                //this code is defined, how?
-                //we serialize accesses of mtx_queue by using proper mutual exclusion protocols
-                //mtx_queue_sz state is guaranteed to be correct by the mutual exclusion + atomic_signal_fences
-                //counter + wakeup_threshold are only used for guesses, a bad guess does not constitute a crash or a fatal error, at worst, we are to wait waiting_time, or to unlock when the queue is empty ... that's probably the worst penalty we could have 
+            void subscribe(std::chrono::nanoseconds waiting_time) noexcept{
 
                 constexpr uint8_t ACTION_NO         = 0u;
                 constexpr uint8_t ACTION_ACQUIRE    = 1u;
@@ -1314,62 +1280,49 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
 
-                if (current >= expected){ //a lot of things could happen, reactor is simply not gonna tell what has happened, just release the lock for you, bring statistics in your favor
+                if (current >= expected){
                     return;
                 }
 
-                std::shared_ptr<std::timed_mutex> spinning_mtx = std::make_shared<std::timed_mutex>();
-                spinning_mtx->lock();
+                std::shared_ptr<std::atomic_flag> spinning_mtx = std::make_shared<std::atomic_flag>(true);
 
                 uint8_t action = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue); //this lock_guard is unavoidable
+                    stdx::xlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue); //exponential back-off
 
                     if (this->mtx_queue.size() == this->mtx_queue_cap){
                         return ACTION_NO;
                     }
 
-                    //----subscriber-app-payload---
-
-                    //bad things could happen before the push_back and in-between increments, we are productive people, we know this
                     this->mtx_queue.push_back(spinning_mtx);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
-                    this->mtx_queue_sz.value.fecth_add(1u, std::memory_order_relaxed); //we dont really care, current_queue_sz is only used as a cue for performance pruning
+                    this->mtx_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
 
-                    //----------------------------
+                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed);
 
-                    //---subscriber-notification-payload---
-                    //we want to have the payload POST the app because there is no gap in notifications, for every check at the current time is just, and the incoming increments would continue the just
-
-                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); //1 minute | 1 hour, we dont really know, evaluated current, expected might no longer be relevant 
-
-                    if (new_current >= expected){ //we dont really care what happened between last expected and current expected or last current and current current, we are productive people, we only care what we could do to bring current < expected                        
-                        //switch tripped, we are to notify subscribers
-
+                    if (new_current >= expected){
                         std::atomic_signal_fence(std::memory_order_seq_cst);
-                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed); //exchange does fencing for the last fetch_add, we dont really know this, compiler can't prove your intention of fetch_add
+                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
                         std::atomic_signal_fence(std::memory_order_seq_cst);
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            this->mtx_queue[i]->unlock();
+                            this->mtx_queue[i]->clear(std::memory_order_relaxed);
                         }
 
                         this->mtx_queue.clear();
                     }
 
                     return ACTION_ACQUIRE;
-                    //---------------------------
                 }();
 
-                switch (action){ //serialize access by referencing action
+                switch (action){
                     case ACTION_NO:
                     {
                         break;
                     }
                     case ACTION_ACQUIRE:
                     {
-                        std::unique_lock<std::timed_mutex> lckr(*spinning_mtx, std::defer_lock);
-                        lckr.try_lock_for(waiting_time); //my intuition tells me that I should not trust try_lock_for, yet it is <implementation_problem>, not <syntax_problem>
+                        stdx::mutex_try_lock_for(*spinning_mtx, waiting_time);
                         break;
                     }
                     default:
@@ -1485,7 +1438,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return addr_chk;
                 }
 
-                return dg::network_exception::SUCCESS; //I know what yall think I dont really care about the return validate_addr, things have to be explicit
+                return dg::network_exception::SUCCESS;
             }
     };
 
@@ -1516,7 +1469,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         public:
 
             IncrementalIDGenerator(std::atomic<local_packet_id_t> last_pkt_id,
-                                   stdx::hdi_container<factory_id_t> factory_id) noexcept: last_pkt_id(std::move(last_pkt_id)),
+                                   stdx::hdi_container<factory_id_t> factory_id) noexcept: last_pkt_id(last_pkt_id.load()),
                                                                                            factory_id(std::move(factory_id)){}
 
             auto get() noexcept -> GlobalPacketIdentifier{
@@ -1682,7 +1635,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             using Self = KernelRescuePost;
             static inline constexpr std::chrono::time_point<std::chrono::utc_clock> NULL_TIMEPOINT = std::chrono::time_point<std::chrono::utc_clock>::max(); 
 
-            KernelRescuePost(std::atomic<std::chrono::time_point<std::chrono::utc_clock>> ts) noexcept: ts(ts.load()){}
+            KernelRescuePost(std::chrono::time_point<std::chrono::utc_clock> ts) noexcept: ts(ts){}
 
             auto heartbeat() noexcept -> exception_t{
 
@@ -1712,7 +1665,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            dg::deque<QueuedPacket> pkt_deque; //its complicated, we'd fragment memory bad, we will consider a better implementation of deque
+            dg::deque<QueuedPacket> pkt_deque;
             data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset;
             std::chrono::nanoseconds transmission_delay_time;
             size_t max_retransmission_sz;
@@ -1752,7 +1705,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->pkt_deque.size() == this->pkt_deque_capacity){
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
                         continue;
                     }
 
@@ -1855,15 +1808,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto task = [&, this]() noexcept{
                     this->base->add_retriables(std::make_move_iterator(pkt_arr_first), sliding_window_sz, exception_arr_first);
 
-                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
                     exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz); 
 
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     }
 
-                    exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
-                    exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
+                    exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
+                    exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::SOCKET_QUEUE_FULL;});
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_eptr_first);
                     sliding_window_sz                   = std::distance(retriable_eptr_first, retriable_eptr_last);
 
@@ -2058,13 +2011,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         private:
 
             std::unique_ptr<RetransmissionControllerInterface> base;
-            std::unique_ptr<SimpleReactor> reactor;
+            std::unique_ptr<ComplexReactor> reactor;
             std::chrono::nanoseconds max_wait_time;
 
         public:
 
             ReactingRetransmissionController(std::unique_ptr<RetransmissionControllerInterface> base,
-                                             std::unique_ptr<SimpleReactor> reactor,
+                                             std::unique_ptr<ComplexReactor> reactor,
                                              std::chrono::nanoseconds max_wait_time) noexcept: base(std::move(base)),
                                                                                                reactor(std::move(reactor)),
                                                                                                max_wait_time(max_wait_time){}
@@ -2073,7 +2026,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->base->add_retriables(pkt_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-                this->reactor->increment(thru_sz); //implicit fence by referencing the sz
+                this->reactor->increment(thru_sz);
             }
 
             void ack(global_packet_id_t * pkt_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -2085,7 +2038,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
-                std::atomic_signal_fence(std::memory_order_seq_cst); //we dont know the memory orders compiler-wise,  the reactor->subscribe concurrent function result is not used in the computation tree, simply used for tentative-synchronization, compiler is free to reorder this post the container call 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->base->get_retriables(output_pkt_arr, sz, output_pkt_arr_cap);
                 this->reactor->decrement(sz);
             }
@@ -2136,7 +2089,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 std::copy(buffer_arr, std::next(buffer_arr, app_sz), std::next(this->buffer_vec.begin(), old_sz));
                 std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::SOCKET_QUEUE_FULL);
             }
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
@@ -2186,15 +2139,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto task = [&, this]() noexcept{
                     this->base->push(std::make_move_iterator(buffer_arr_first), sliding_window_sz, exception_arr_first);
 
-                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
                     exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz);
 
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     }
 
-                    exception_t * retriable_arr_first   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
-                    exception_t * retriable_arr_last    = std::find_if(retriable_arr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
+                    exception_t * retriable_arr_first   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
+                    exception_t * retriable_arr_last    = std::find_if(retriable_arr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::SOCKET_QUEUE_FULL;});
 
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_arr_first);
                     sliding_window_sz                   = std::distance(retriable_arr_first, retriable_arr_last);
@@ -2283,13 +2236,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         private:
 
             std::unique_ptr<BufferContainerInterface> base;
-            std::unique_ptr<SimpleReactor> reactor;
+            std::unique_ptr<ComplexReactor> reactor;
             std::chrono::nanoseconds max_wait_time;
 
         public:
 
             ReactingBufferContainer(std::unique_ptr<BufferContainerInterface> base,
-                                    std::unique_ptr<SimpleReactor> reactor,
+                                    std::unique_ptr<ComplexReactor> reactor,
                                     std::chrono::nanoseconds max_wait_time) noexcept: base(std::move(base)),
                                                                                       reactor(std::move(reactor)),
                                                                                       max_wait_time(max_wait_time){}
@@ -2298,16 +2251,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->base->push(buffer_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-                this->reactor->increment(thru_sz); //implicit fence by referencing the sz
+                this->reactor->increment(thru_sz);
             }
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
-                std::atomic_signal_fence(std::memory_order_seq_cst); //we dont know the memory orders compiler-wise
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->base->pop(output_buffer_arr, sz, output_buffer_arr_cap);
                 this->reactor->decrement(sz);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
             }
     };
 
@@ -2351,10 +2309,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 std::copy(packet_arr, std::next(packet_arr, app_sz), std::next(this->packet_deque.begin(), old_sz));
                 std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::SOCKET_QUEUE_FULL);
             }
 
-            void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap){
+            void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
@@ -2408,7 +2366,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->packet_vec.size() == this->packet_vec_capacity){
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
                         continue;
                     }
 
@@ -2479,7 +2437,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->packet_vec.size() == this->packet_vec_capacity){
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
                         continue;
                     }
 
@@ -2681,7 +2639,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 void push(std::move_iterator<DeliveryArgument *> data_arr, size_t sz) noexcept{
 
-                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> pkt_arr(sz); //whatever - we aren't excepting this - string is default initialized as a char array - and this should not overflow the stack buffer
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> pkt_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     DeliveryArgument * base_data_arr = data_arr.base();
 
@@ -2707,13 +2665,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         private:
 
             std::unique_ptr<PacketContainerInterface> base;
-            std::unique_ptr<SimpleReactor> reactor;
+            std::unique_ptr<ComplexReactor> reactor;
             std::chrono::nanoseconds max_wait_time;
         
         public:
 
             ReactingPacketContainer(std::unique_ptr<PacketContainerInterface> base,
-                                    std::unique_ptr<SimpleReactor> reactor,
+                                    std::unique_ptr<ComplexReactor> reactor,
                                     std::chrono::nanoseconds max_wait_time) noexcept: base(std::move(base)),
                                                                                       reactor(std::move(reactor)),
                                                                                       max_wait_time(max_wait_time){}
@@ -2722,16 +2680,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->base->push(pkt_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-                this->reactor->increment(thru_sz); //implicit fence by referencing the sz
+                this->reactor->increment(thru_sz);
             }
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
-                std::atomic_signal_fence(std::memory_order_seq_cst); //we dont know the memory orders compiler-wise
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->base->pop(output_pkt_arr, sz, output_pkt_arr_cap);
                 this->reactor->decrement(sz);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
             }
     };
 
@@ -2890,15 +2853,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto task = [&, this]() noexcept{
                     this->base->push(std::make_move_iterator(pkt_arr_first), sliding_window_sz, exception_arr_first);
 
-                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
                     exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz);
 
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     } 
 
-                    exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
-                    exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
+                    exception_t * retriable_eptr_first  = std::find(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
+                    exception_t * retriable_eptr_last   = std::find_if(retriable_eptr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::SOCKET_QUEUE_FULL;});
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_eptr_first);
                     sliding_window_sz                   = std::distance(retriable_eptr_first, retriable_eptr_last);
 
@@ -3045,7 +3008,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
             dg::unordered_set<Address> thru_ip_set;
             dg::unordered_set<Address> inbound_ip_side_set;
-            size_t inbound_ip_side_set_cap; //alright, this is the container's responsibility, we just want to make sure that we provide such exhaustion control by providing the interface
+            size_t inbound_ip_side_set_cap;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
@@ -3082,7 +3045,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (!this->thru_ip_set.contains(addr_arr[i])){
-                        response_exception_arr[i] = dg::network_exception::BAD_IP_RULE; //alright this might be a bug
+                        response_exception_arr[i] = dg::network_exception::SOCKET_BAD_IP_RULE; //TODOs: this might be a bug
                         continue;
                     }
 
@@ -3115,7 +3078,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> ibapp_ip_arr(this->inbound_ip_side_set.size());
 
                 std::copy(this->inbound_ip_side_set.begin(), this->inbound_ip_side_set.end(), ibapp_ip_arr.get());
-                this->nat_ip_controller->add_inbound(ibapp_ip_arr.get(), this->inbound_ip_side_set.size(), ibapp_exception_arr.get()); //.data() is not defined because it is not <new[] contiguous>, it's funny but it's C++ rule
+                this->nat_ip_controller->add_inbound(ibapp_ip_arr.get(), this->inbound_ip_side_set.size(), ibapp_exception_arr.get());
 
                 for (size_t i = 0u; i < this->inbound_ip_side_set.size(); ++i){
                     if (dg::network_exception::is_failed(ibapp_exception_arr[i])){
@@ -3145,7 +3108,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::shared_ptr<external_interface::NATIPControllerInterface> nat_ip_controller;
             std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
             dg::unordered_set<Address> outbound_ip_side_set;
-            size_t outbound_ip_side_set_cap;
+            size_t outbound_ip_side_set_cap; //TODOs: bug_control next iteration
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
@@ -3308,7 +3271,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::shared_ptr<external_interface::IPSieverInterface> inbound_ip_siever;
             std::shared_ptr<external_interface::IPSieverInterface> outbound_ip_siever;
-            data_structure::temporal_finite_unordered_set<Address> inbound_friend_set; //we've yet to know whether add_inbound uniqueness of entries is the caller or callee responsibility - let's make it callee responsibility for now
+            data_structure::temporal_finite_unordered_set<Address> inbound_friend_set;
             data_structure::temporal_finite_unordered_set<Address> outbound_friend_set;
             
         public:
@@ -3335,7 +3298,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     if (!is_thru.value()){
-                        exception_arr[i] = dg::network_exception::BAD_IP_RULE;
+                        exception_arr[i] = dg::network_exception::SOCKET_BAD_IP_RULE;
                         continue;
                     }
 
@@ -3360,7 +3323,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     if (!is_thru.value()){
-                        exception_arr[i] = dg::network_exception::BAD_IP_RULE;
+                        exception_arr[i] = dg::network_exception::SOCKET_BAD_IP_RULE;
                         continue;
                     }
 
@@ -3409,14 +3372,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            std::unique_ptr<NATPunchIPController> punch_controller;
-            std::unique_ptr<NATFriendIPController> friend_controller;
+            std::unique_ptr<external_interface::NATIPControllerInterface> punch_controller;
+            std::unique_ptr<external_interface::NATIPControllerInterface> friend_controller;
             std::unique_ptr<std::mutex> mtx;
 
         public:
 
-            NATIPController(std::unique_ptr<NATPunchIPController> punch_controller,
-                            std::unique_ptr<NATFriendIPController> friend_controller,
+            NATIPController(std::unique_ptr<external_interface::NATIPControllerInterface> punch_controller,
+                            std::unique_ptr<external_interface::NATIPControllerInterface> friend_controller,
                             std::unique_ptr<std::mutex> mtx) noexcept: punch_controller(std::move(punch_controller)),
                                                                        friend_controller(std::move(friend_controller)),
                                                                        mtx(std::move(mtx)){}
@@ -3552,8 +3515,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return rs;
         }
 
-        static auto get_simple_reactor(intmax_t wakeup_threshold,
-                                       size_t concurrent_subscriber_cap) -> std::unique_ptr<SimpleReactor>{
+        static auto get_complex_reactor(intmax_t wakeup_threshold,
+                                        size_t concurrent_subscriber_cap) -> std::unique_ptr<ComplexReactor>{
             
             const size_t MIN_CONCURRENT_SUBSCRIBER_CAP  = 1u;
             const size_t MAX_CONCURRENT_SUBSCRIBER_CAP  = size_t{1} << 25;
@@ -3562,7 +3525,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            auto rs = std::make_unique<SimpleReactor>();
+            auto rs = std::make_unique<ComplexReactor>(concurrent_subscriber_cap);
             rs->set_wakeup_threshold(wakeup_threshold);
 
             return rs;
@@ -3614,7 +3577,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_random_id_generator(factory_id_t factory_id) -> std::unique_ptr<IDGeneratorInterface>{
 
-            return std::make_unique<RandomIDGenerator>(factory_id);
+            return std::make_unique<RandomIDGenerator>(stdx::hdi_container<factory_id_t>{factory_id});
         }
 
         static auto get_randomid_request_packet_generator(factory_id_t factory_id, Address host_addr) -> std::unique_ptr<RequestPacketGeneratorInterface>{
@@ -3627,7 +3590,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<AckPacketGenerator>(get_random_id_generator(factory_id),
                                                         host_addr);
-        } 
+        }
         
         static auto get_randomid_krescue_packet_generator(factory_id_t factory_id, Address host_addr) -> std::unique_ptr<KRescuePacketGeneratorInterface>{
 
@@ -3635,12 +3598,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                             host_addr);
         }
 
+        static auto get_inbound_packet_integrity_validator(Address host_addr) -> std::unique_ptr<PacketIntegrityValidatorInterface>{
+
+            return std::make_unique<InBoundPacketIntegrityValidator>(host_addr);
+        } 
+
         static auto get_kernel_rescue_post() -> std::unique_ptr<KernelRescuePostInterface>{
 
-            std::atomic<std::chrono::time_point<std::chrono::utc_clock>> arg{};
-            arg.exchange(KernelRescuePost::NULL_TIMEPOINT, std::memory_order_seq_cst);
+            std::chrono::time_point<std::chrono::utc_clock> arg = KernelRescuePost::NULL_TIMEPOINT;
 
-            return std::make_unique<KernelRescuePost>(std::move(arg));
+            return std::make_unique<KernelRescuePost>(arg);
         } 
 
         static auto get_retransmission_controller(std::chrono::nanoseconds transmission_delay, 
@@ -3660,7 +3627,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MIN_RETRANSMISSION_QUEUE_CAP   = 1u;
             const size_t MAX_RETRANSMISSION_QUEUE_CAP   = size_t{1} << 25; 
 
-            if (std::clamp(transmission_delay, MIN_DELAY, MAX_DELAY) != delay){
+            if (std::clamp(transmission_delay, MIN_DELAY, MAX_DELAY) != transmission_delay){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3710,7 +3677,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         static auto get_randomhash_distributed_retransmission_controller(dg::vector<std::unique_ptr<RetransmissionControllerInterface>> base_vec,
                                                                          size_t keyvalue_aggregation_cap   = 2048u,
-                                                                         size_t zero_packet_retry_sz       = 8u) -> std::unique_ptr<RetransmissionControllerInterface>{ //random_hash is the best thing we have for performance + serialized access, not latency, we could improve latency later, yet that's another thing to talk about
+                                                                         size_t zero_packet_retry_sz       = 8u) -> std::unique_ptr<RetransmissionControllerInterface>{
 
             const size_t MIN_BASE_VEC_SZ                = size_t{1};
             const size_t MAX_BASE_VEC_SZ                = size_t{1} << 20;
@@ -3781,7 +3748,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<ReactingRetransmissionController>(std::move(base),
-                                                                      get_simple_reactor(reacting_threshold, concurrent_subscriber_cap),
+                                                                      get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
                                                                       wait_time);
         }
 
@@ -3848,7 +3815,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<ReactingBufferContainer>(std::move(base),
-                                                             get_simple_reactor(reacting_threshold, concurrent_subscriber_cap),
+                                                             get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
                                                              wait_time);
 
         }
@@ -4008,7 +3975,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<ReactingPacketContainer>(std::move(base),
-                                                             get_simple_reactor(reacting_threshold, concurrent_subscriber_cap),
+                                                             get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
                                                              wait_time);
         }
 
@@ -4151,7 +4118,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                   size_t global_capacity,
                                                   size_t addr_capacity,
                                                   size_t side_update_buf_capacity,
-                                                  size_t consume_factor = 4u) -> std::unique_ptr<InBoundBorderController>{ //we cant return interface, this is an implementation that leverages subcribed update to resolve internal states, not solely through the BorderControllerInterface (which is consistent interface of implementations)
+                                                  size_t consume_factor = 4u) -> std::unique_ptr<InBoundBorderController>{
 
             if (natip_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -4208,6 +4175,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<OutBoundBorderController>(std::move(natip_controller),
                                                               get_synchronous_traffic_controller(peraddr_capacity, global_capacity, addr_capacity),
                                                               std::move(outbound_ip_side_set),
+                                                              side_update_buf_capacity,
                                                               std::make_unique<std::mutex>(),
                                                               stdx::hdi_container<size_t>{consume_sz});
         }
@@ -4404,7 +4372,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
                     }
 
-                    dg::hrtimers::high_resolution_sleep(transmit_period); //we attempt to unitize the transmit_packet_sz -> 1, this might not be good if the rule is not adhered
+                    dg::hrtimers::high_resolution_sleep(transmit_period);
                 }
             };
     };
@@ -4585,7 +4553,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 auto buffer_delivery_resolutor  = InternalBufferDeliveryResolutor{};
                 buffer_delivery_resolutor.dst   = this->buffer_container.get(); 
 
-                size_t adjusted_delivery_sz     = std::min(this->container_delivery_sz, this->buffer_container->max_consume_size());
+                size_t adjusted_delivery_sz     = std::min(std::min(this->container_delivery_sz, this->buffer_accumulation_sz), this->buffer_container->max_consume_size());
                 size_t bdh_allocation_cost      = dg::network_producer_consumer::delvrsrv_allocation_cost(&buffer_delivery_resolutor, adjusted_delivery_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> bdh_buf(bdh_allocation_cost);
                 auto buffer_delivery_handle     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&buffer_delivery_resolutor, adjusted_delivery_sz, bdh_buf.get()));
@@ -4593,11 +4561,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 for (size_t i = 0u; i < this->buffer_accumulation_sz; ++i){
                     auto bstream    = dg::string(constants::MAXIMUM_MSG_SIZE, ' '); //TODOs: optimizable
                     size_t sz       = {};
-                    exception_t err = socket_service::recv_block(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE); //self-ping to rescue - triggered by an observable relaxed atomic variable (updated every 1024 reads for example) - the rescuer is going to look for the relaxed atomic variable to send rescue packets
-                                                                                                                                  //recv block to avoid queuing - kernel optimization reads directly from NIC as soon as possible - there is unfortunately no stable interface except for that for more than 20 years - so let's stick with that for the moment being
-                                                                                                                                  //recv_block is better than select, because it avoids rx_queue bouncing, kernel optimization will subscribe the mtx and release the lock as soon as possible
-                                                                                                                                  //this is not good because small_size packet wont be latencied through, yet we have to ask whether the actual large packet latency or the small packet latency is more important (we have to pad the small size packets)
-                                                                                                                                  //jumbo frame is good up to 4K packet transmissions, we are expecting to empty the packets as soon as they are on the wire, push directly to the application memory (internally managed by our best practices + virtues), so there is no CPU cost to bouncing the temporary buffers
+                    exception_t err = socket_service::recv_block(*this->socket, bstream.data(), sz, constants::MAXIMUM_MSG_SIZE);
+
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                         return false;
@@ -4638,6 +4603,23 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 }
             };
     };
+
+    //ok we
+    //its more complicated than we think, we have to think in terms of mutual exclusion, good practices of acquire release in and out of tx, and the digest size must be reasonable, 8K of packets at a time or 16K of packets
+    //we are reducing the memory ordering by a factor of 1000s this is very important because we dont want to be pollutant (we have to be considerate across the system)
+    //we are to vectorize the ack packets to avoid compute overhead, bring it to 8K packet size to fit in the jumbo frame
+
+    //the chances of retransmission is so slim (1/7000 chance if correctly configurated, calibrated), we are to prioritize the requests that have been crying for help
+    //we knock the anomaly down by using priority queue of ack_packet, fast outbound + prioritized outbound 
+    //we've been working on this problem for 3 goddamn weeks, it's hard
+    //we tried to optimize the quantifiables 
+
+    //the only thing we haven't solved is the temporal_finite_unordered_set, it's a fetish thing
+    //alright, we have extremely fast insert by using open addressing, we dont have infinite pool of memory, yet there still exists the chance of one_transmission == two_recv, we dont want this, it would break our code very BADLY 
+    //until we have found a good solution that does not involve adding time into the header (we are only decreasing the chances not zeroing the chances), we'll be back to solve the problem
+    //retransmission is very dangerous, it's safe to say that sometimes, no retransmissions and system crash are preferrable
+    //most application handles retransmissions wrong, i'm talking 99.99% of applications handle their retransmissions wrong
+    //when we are retransmitting, retry, the chances of the previous request happens post the current request is not entire impossible, we are now out of sync and the program behaviror is, then, undefined and exploitable
 
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -4891,7 +4873,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     Packet * base_data_arr = data_arr.base();
                     std::transform(base_data_arr, std::next(base_data_arr, sz), addr_arr.get(), [](const Packet& packet){return packet.fr_addr;});
-                    this->border_controller->thru(addr_arr.get(), sz, response_arr.get()); //we dont want to include packet_sz because we always assume packet as a unit, like persons, we dont say that a midget Mexican != an oversized Mexican
+                    this->border_controller->thru(addr_arr.get(), sz, response_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(response_arr[i])){
@@ -4962,7 +4944,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     Packet * base_data_arr  = data_arr.base(); 
 
                     for (size_t i = 0u; i < sz; ++i){                        
-                        //this is meaningless without triviality, alright Mom, we dont know how to do trivial copy for now, we'll come up with a way
 
                         if (packet_service::is_ack_packet(base_data_arr[i])){
                             dg::network_producer_consumer::delvrsrv_deliver(this->ack_thru_deliverer, std::move(base_data_arr[i]));
@@ -5369,15 +5350,16 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 auto ob_deliverer                               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_deliverer, trimmed_ob_delivery_sz, ob_deliverer_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<Packet, exception_t> pkt = this->packet_gen->get(static_cast<MailBoxArgument&&>(base_data_arr[i]));
+                    std::expected<RequestPacket, exception_t> pkt = this->packet_gen->get(static_cast<MailBoxArgument&&>(base_data_arr[i]));
 
                     if (!pkt.has_value()){
                         exception_arr[i] = pkt.error();
                         continue;
                     }
 
-                    exception_arr[i] = dg::network_exception::SUCCESS;
-                    dg::network_producer_consumer::delvrsrv_deliver(ob_deliverer.get(), std::move(pkt.value()));
+                    exception_arr[i]    = dg::network_exception::SUCCESS;
+                    Packet virt_pkt     = dg::network_exception_handler::nothrow_log(packet_service::virtualize_request_packet(std::move(pkt.value())));
+                    dg::network_producer_consumer::delvrsrv_deliver(ob_deliverer.get(), std::move(virt_pkt));
                 }
             }
 
@@ -5437,13 +5419,10 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
     struct ComponentFactory{
 
-        //we'll fix styles later, let's stick to the sz, cap for every var | size + capacity for methods
-        //we'll move on to std::vector<> for constructions later, we'll skim thru styles tmr, let's work on this
+        template <class ...Args, class T>
+        static auto up_vector_to_vsp_vector(std::vector<std::unique_ptr<T, Args...>> vec) -> std::vector<std::shared_ptr<T>>{
 
-        template <class ...Args, class T, class DT>
-        static auto up_vector_to_vsp_vector(std::vector<std::unique_ptr<T, DT>, Args...> vec) -> std::vector<std::shared_ptr<T>, Args...>{
-
-            std::vector<std::shared_ptr<T>, Args...> rs{};
+            std::vector<std::shared_ptr<T>> rs{};
 
             for (size_t i = 0u; i < vec.size(); ++i){
                 if (vec[i] == nullptr){
@@ -5786,7 +5765,7 @@ namespace dg::network_kernel_mailbox_impl1{
         bool retransmission_has_react_pattern;
         uint32_t retransmission_react_sz;
         uint32_t retransmission_react_queue_cap;
-        std::chrono::nanoseconds retransmission_react_time; //we almost always want this (we want latency from A -> Z within 0.05 ms, this includes getting the packet, push to the container, get by the consumers, push to processing container -> ... -> to the memregion_event_pool -> dispatch)
+        std::chrono::nanoseconds retransmission_react_time;
 
         uint32_t inbound_buffer_concurrency_sz;
         uint32_t inbound_buffer_container_cap;
@@ -5854,9 +5833,6 @@ namespace dg::network_kernel_mailbox_impl1{
         return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
     }
 
-    //I got the NZT effects 
-    //I often stuck in my mind and actually wind up at unknown places 
-
     struct ConfigMaker{
 
         private:
@@ -5909,7 +5885,6 @@ namespace dg::network_kernel_mailbox_impl1{
                     buffer_container_vec.push_back(std::move(current_buffer_container));
                 }
 
-                //alright, we are to attempt to serialize access, this has relaxed lock contention, not a problem in most use cases
                 if (config.inbound_buffer_has_react_pattern){
                     return packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec)),
                                                                                               config.inbound_buffer_react_sz,
@@ -5931,7 +5906,7 @@ namespace dg::network_kernel_mailbox_impl1{
                         if (config.inbound_packet_has_react_pattern){
                             return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
                                                                                                                                                                                       config.inbound_packet_react_sz,
-                                                                                                                                                                                      config.inbound_packet_queue_cap,
+                                                                                                                                                                                      config.inbound_packet_react_queue_cap,
                                                                                                                                                                                       config.inbound_packet_react_time),
                                                                                                                    config.retry_device,
                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
@@ -6028,7 +6003,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_kernel_rescue_packet_generator(Config config) -> std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface>{
 
-                return packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}));
+                return packet_controller::ComponentFactory::get_randomid_krescue_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}), model::Address{config.host_ip, config.host_port});
             }
 
             static auto make_retransmission_controller(Config config) -> std::unique_ptr<packet_controller::RetransmissionControllerInterface>{
@@ -6183,12 +6158,12 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_ack_packet_generator(Config config) -> std::unique_ptr<packet_controller::AckPacketGeneratorInterface>{
 
-                return packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}));
+                return packet_controller::ComponentFactory::get_randomid_ack_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}), model::Address{config.host_ip, config.host_port});
             }
 
-            static auto make_packet_integrity_validator(Config config) -> std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface>{
+            static auto make_inbound_packet_integrity_validator(Config config) -> std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface>{
 
-                return packet_controller::ComponentFactory::get_packet_integrity_validator(model::Address{config.host_ip, config.host_port});
+                return packet_controller::ComponentFactory::get_inbound_packet_integrity_validator(model::Address{config.host_ip, config.host_port}, model::Address{config.host_ip, config.host_port});
             }
 
             static auto make_socket(Config config) -> std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>>{
@@ -6220,7 +6195,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_request_packet_generator(Config config) -> std::unique_ptr<packet_controller::RequestPacketGeneratorInterface>{
 
-                return packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}));
+                return packet_controller::ComponentFactory::get_randomid_request_packet_generator(utility::to_factory_id(model::Address{config.host_ip, config.host_port}), model::Address{config.host_ip, config.host_port});
             }
 
         public:
@@ -6253,7 +6228,7 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                       config.worker_outbound_packet_busy_threshold_sz,
 
                                                                                       make_ack_packet_generator(config),
-                                                                                      make_packet_integrity_validator(config),
+                                                                                      make_inbound_packet_integrity_validator(config),
                                                                                       make_socket(config),
 
                                                                                       make_request_packet_generator(config),
@@ -6264,6 +6239,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
                                                                                       config.num_kernel_inbound_worker,
                                                                                       config.num_process_inbound_worker,
+                                                                                      config.num_outbound_worker,
                                                                                       config.num_kernel_rescue_worker,
                                                                                       config.num_retry_worker);
             }

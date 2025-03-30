@@ -46,6 +46,13 @@ namespace dg::network_producer_consumer{
         virtual auto capacity() const noexcept -> size_t = 0;
     };
 
+    template <class Key, class EventType>
+    struct KVConsumerInterface{
+
+        virtual ~KVConsumerInterface() noexcept = default;
+        virtual auto push(const Key&, std::move_iterator<EventType *>, size_t) noexcept = 0;
+    };
+
     template <class EventType, class Lambda>
     class LambdaWrappedConsumer: public virtual ConsumerInterface<EventType>{
 

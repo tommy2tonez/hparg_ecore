@@ -190,7 +190,7 @@ namespace dg::network_hash{
         static_assert(SERIALIZATION_SZ <= MAX_REFLECTIBLE_SZ);
 
         std::array<char, SERIALIZATION_SZ> buf{};
-        dg::network_trivial_serializer::serialize_into(buf.get(), obj);
+        dg::network_trivial_serializer::serialize_into(buf.data(), obj); //stack overflow
 
         return hash_bytes(buf.data(), std::integral_constant<size_t, SERIALIZATION_SZ>{});
     }
