@@ -20,6 +20,19 @@
 
 namespace stdx{
 
+    inline __attribute__((always_inline)) auto try_lock(std::atomic_flag& mtx, std::memory_order order = std::memory_order_relaxed) noexcept -> bool{
+        return mtx.test_and_set(order) == false;
+    }
+
+    inline __attribute__((always_inline)) auto try_lock(std::mutex& mtx) noexcept -> bool{
+        return mtx.try_lock();
+    }
+
+    inline __attribute__((always_inline)) void lock_yield(std::chrono::nanoseconds lapsed) noexcept{
+
+        (void) lapsed;
+    }
+
     struct polymorphic_launderer{
         virtual auto ptr() noexcept -> void *{
             return nullptr;
@@ -310,7 +323,7 @@ namespace stdx{
 
             inline __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
-                while (!this->mtx->test_and_set(std::memory_order_relaxed)){}
+                while (!try_lock(*this->mtx)){}
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -503,14 +516,6 @@ namespace stdx{
             memtransaction_guard& operator =(const memtransaction_guard&) = delete;
             memtransaction_guard& operator =(memtransaction_guard&&) = delete;
     };
-
-    inline __attribute__((always_inline)) auto try_lock(std::atomic_flag& mtx) noexcept -> bool{
-        return mtx.test_and_set();
-    }
-    
-    inline __attribute__((always_inline)) auto try_lock(std::mutex& mtx) noexcept -> bool{
-        return mtx.try_lock();
-    }
 
     inline __attribute__((always_inline)) void atomic_optional_thread_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
 

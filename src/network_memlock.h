@@ -318,13 +318,13 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try(size_t table_idx, std::memory_order success) noexcept -> bool{
 
-                return lck_table[table_idx].test_and_set(success);
+                return stdx::try_lock(lck_table[table_idx], success);
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
 
                 auto lambda = [&]() noexcept{
-                    return lck_table[table_idx].test_and_set(std::memory_order_relaxed);
+                    return stdx::try_lock(lck_table[table_idx]);
                 };
 
                 stdx::eventloop_spin_expbackoff(lambda);

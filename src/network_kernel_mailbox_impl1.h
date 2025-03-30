@@ -1185,16 +1185,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
-    //OK, this is now complex, std::timed mutex try_lock_for is UNDEFINED, we need to make this defined later, it's complicated
-    //alright this is actually very complicated, we have two dedicated workers, one is always waiting, another exits gracefully (this is due to implementation constraints, ..., we have no other options but to do this)
-    //alright Mom, when I first chose the career, you didnt tell me to deal with this shit
-
-    //we'll implement atomic_flag for now
+    //OK
     class ComplexReactor{
 
         private:
 
-            dg::vector<std::shared_ptr<std::atomic_flag>> mtx_queue;
+            dg::vector<std::shared_ptr<dg::timed_mutex>> mtx_queue;
             size_t mtx_queue_cap;
             std::mutex mtx_mtx_queue;
             stdx::hdi_container<std::atomic<intmax_t>> counter;
@@ -1215,7 +1211,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 constexpr size_t INCREMENT_RETRY_SZ                 = 4u;
                 const std::chrono::nanoseconds FAILED_LOCK_SLEEP    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds{1});
 
-                this->counter.value.fetch_add(sz, std::memory_order_relaxed);
+                this->counter.value.fetch_add(sz, std::memory_order_relaxed); //increment
                 intmax_t expected = this->wakeup_threshold.value.load(std::memory_order_relaxed);
 
                 for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
@@ -1232,7 +1228,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return;
                     }
 
-                    bool try_lock_rs    = this->mtx_mtx_queue.try_lock();
+                    bool try_lock_rs = this->mtx_mtx_queue.try_lock(); 
 
                     if (!try_lock_rs){
                         stdx::lock_yield(FAILED_LOCK_SLEEP);
@@ -1244,8 +1240,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            this->mtx_queue[i]->clear(std::memory_order_relaxed);
-			    this->mtx_queue[i]->notify_one();
+                            this->mtx_queue[i]->unlock(std::memory_order_relaxed);
                         }
 
                         this->mtx_queue.clear();
@@ -1269,9 +1264,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto set_wakeup_threshold(intmax_t arg) noexcept{
 
                 this->wakeup_threshold.value.exchange(arg, std::memory_order_relaxed);
-            }
+            } 
 
-            void subscribe(std::chrono::nanoseconds waiting_time) noexcept{
+            void subsribe(std::chrono::nanoseconds waiting_time) noexcept{
 
                 constexpr uint8_t ACTION_NO         = 0u;
                 constexpr uint8_t ACTION_ACQUIRE    = 1u;
@@ -1283,7 +1278,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                std::shared_ptr<std::atomic_flag> spinning_mtx = std::make_shared<std::atomic_flag>();
+                std::shared_ptr<std::timed_mutex> spinning_mtx = std::make_shared<std::timed_mutex>();
+                spinning_mtx->lock(std::memory_order_relaxed);
 
                 uint8_t action = [&, this]() noexcept{
                     stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);
@@ -1297,7 +1293,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     this->mtx_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
 
-                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed);
+                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); 
 
                     if (new_current >= expected){
                         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -1305,7 +1301,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         std::atomic_signal_fence(std::memory_order_seq_cst);
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            this->mtx_queue[i]->clear(std::memory_order_relaxed);
+                            this->mtx_queue[i]->unlock(std::memory_order_relaxed);
                         }
 
                         this->mtx_queue.clear();
@@ -1321,8 +1317,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                     case ACTION_ACQUIRE:
                     {
-                        spinning_mtx->wait(); //timeout
-			std::atomic_signal_fence(std::memory_order_seq_cst);
+                        spinning_mtx->try_lock_for_strong(waiting_time, std::memory_order_relaxed); //we must try_lock_for stronk, not weak, std defaults try_lock == weak
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
                         break;
                     }
                     default:
@@ -4604,23 +4600,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             };
     };
 
-    //ok we
-    //its more complicated than we think, we have to think in terms of mutual exclusion, good practices of acquire release in and out of tx, and the digest size must be reasonable, 8K of packets at a time or 16K of packets
-    //we are reducing the memory ordering by a factor of 1000s this is very important because we dont want to be pollutant (we have to be considerate across the system)
-    //we are to vectorize the ack packets to avoid compute overhead, bring it to 8K packet size to fit in the jumbo frame
-
-    //the chances of retransmission is so slim (1/7000 chance if correctly configurated, calibrated), we are to prioritize the requests that have been crying for help
-    //we knock the anomaly down by using priority queue of ack_packet, fast outbound + prioritized outbound 
-    //we've been working on this problem for 3 goddamn weeks, it's hard
-    //we tried to optimize the quantifiables 
-
-    //the only thing we haven't solved is the temporal_finite_unordered_set, it's a fetish thing
-    //alright, we have extremely fast insert by using open addressing, we dont have infinite pool of memory, yet there still exists the chance of one_transmission == two_recv, we dont want this, it would break our code very BADLY 
-    //until we have found a good solution that does not involve adding time into the header (we are only decreasing the chances not zeroing the chances), we'll be back to solve the problem
-    //retransmission is very dangerous, it's safe to say that sometimes, no retransmissions and system crash are preferrable
-    //most application handles retransmissions wrong, i'm talking 99.99% of applications handle their retransmissions wrong
-    //when we are retransmitting, retry, the chances of the previous request happens post the current request is not entire impossible, we are now out of sync and the program behaviror is, then, undefined and exploitable
-
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -5740,6 +5719,11 @@ namespace dg::network_kernel_mailbox_impl1::core{
 }
 
 namespace dg::network_kernel_mailbox_impl1{
+
+    //alright we are to offload this to testing team (which is our team)
+    //we will implement other components for now, the code is clear
+    //thank God we have completed 0.1% of our code
+    //we are way way off track
 
     struct Config{
         uint32_t num_kernel_inbound_worker;
