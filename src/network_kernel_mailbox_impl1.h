@@ -1179,11 +1179,31 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
+    //the only missing piece is the backpropagation
+    //the backpropagation would 99% determine our success, fellas
+    //if the backprop goes to waste, we go to waste
+    //if the backprop glues the training space like water, we are going to heaven
+    //im not telling yall this is easy, some people spent their lifes going in the direction
+    //im not selling yall some bullshit, this could work in probably 2-3 years or 23 years
+    //yet the idea was briefly described in multi_variate_taylor_fast.py
+    //we are using tons of electric guitars to sing to our beloved child (the core), each guitar has their own set of rights (the deviation space) 
+
+    //yeah, we've thought long and hard, forward is done correctly by using frequency, the contract of frequency needs to be horored by the current scheduler or a reimplementation of kernel scheduler
+    //now, are we the accurate accurate absolutists, or we are the statistics absolutists
+    //remember that every frequency only represents something, it is the statistics that tells us the truth
+
+    //we are to collect every bits and pieces of information of this universe and glue them like water
+    //we have something what I called collecting device, it is a very correct instrument to differentiate the surrounding space to collect the surrounding context, accurate up to 1 mile ^ 2
+
     //when we wrote this reactor, the number one use case is latency
     //such is when the queue is from empty -> event_pool_subscribed_sz
     //we are to smoothen the latency curve, not to have a perfect solution, ... there actually isnt a perfect solution, it's hard to write
     //we are to make sure that every subscribe is just, such is it might mistrip the subscribe, but never has a false positive for spikes
 
+    //alright fellas, those events are distinct events, I dont have time to do jokes, crazy, mentally ill stuffs
+    //we are to save humanity forever fellas, as last, we are to say God is rooting for us
+
+    //alright this works
     class SimpleReactor{
 
         private:
@@ -4281,26 +4301,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
     using namespace dg::network_kernel_mailbox_impl1::model; 
 
-    //alright, let's think about how our reactor could be designed
-    //we have a sleeping mutex queue, we have an atomic variable
-    //if our atomic variable reaches a certain threshold, all mutex queue is released
-    //this is a simple reactor 
-    //accessing the mutex queue is protected by a mutex exclusion
-
-    //complicated, we need to have low-latency by using reactor patterns, we'll patch this later
-    //reactor is the main cost of inter-cpu thrashing
-
-    //if we are to increase the latency -> 10ms, we could utilize full CPU power without thrashing and there is no thruput affected
-    
-    //if we are to walk the hard road and decrease the latency -> 0.01ms, there is a significant eventpool design
-    //this is a very important note, the design for reactor component must be fully atomic_relaxed in order for this to work
-    //it's not that it's impossible, it's possible yet it requires at least a week to do the subscribing + reacting component
-    //alright, we have implemented the first version of reactor, using full kernel support to wake up in time
-    //this should be the first version of our implementation, its not perfect, yet it answers most of the questions
-    //alright this gets me a little dizzy, I'll be back to finalize this component tmr
-    //we need to avoid coordinated attacks, statistical chances, overcome retransmission, aggregated acks (prioritized ack + prioritized packet_radix), kernel buffer overflow + kernel buffer underflow bouncing + latency, good manners by doing no discriminated inbound + outbound, all kind of caps, etc.
-    //avoid all kind of errors that might happen
-
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -5053,7 +5053,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                         size_t packet_consumption_cap,
                                         size_t busy_threshold_sz,
                                         size_t packet_aggtransmit_cap = constants::DEFAULT_ACCUMULATION_SIZE) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-            
 
             const size_t MIN_PACKET_CONSUMPTION_CAP = size_t{1};
             const size_t MAX_PACKET_CONSUMPTION_CAP = size_t{1} << 25;
@@ -5144,7 +5143,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                              std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_generator,
                                              std::chrono::nanoseconds rescue_threshold,
                                              size_t transmitting_rescue_packet_sz) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-            
+
             const std::chrono::nanoseconds MIN_RESCUE_THRESHOLD = std::chrono::nanoseconds{size_t{0u}};
             const std::chrono::nanoseconds MAX_RESCUE_THRESHOLD = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{size_t{1}}); 
             const size_t MIN_TRANSMITTING_RESCUE_PACKET_SZ      = size_t{1};
@@ -5300,10 +5299,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
         static auto get_update_worker(std::shared_ptr<packet_controller::UpdatableInterface> updatable,
                                       std::chrono::nanoseconds update_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-            
+
             using namespace std::chrono_literals; 
 
-            const std::chrono::nanoseconds MIN_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::nanoseconds{1u}); 
+            const std::chrono::nanoseconds MIN_UPDATE_DUR   = std::chrono::nanoseconds{1u}; 
             const std::chrono::nanoseconds MAX_UPDATE_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{1u});
 
             if (updatable == nullptr){
@@ -5855,6 +5854,9 @@ namespace dg::network_kernel_mailbox_impl1{
         return packet_controller::ComponentFactory::get_nat_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity);
     }
 
+    //I got the NZT effects 
+    //I often stuck in my mind and actually wind up at unknown places 
+
     struct ConfigMaker{
 
         private:
@@ -5867,9 +5869,25 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 if (config.inbound_buffer_concurrency_sz == 1u){
                     if (config.has_exhaustion_control){
+                        if (config.inbound_buffer_has_react_pattern){
+                            return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                                                                                                                                                                                      config.inbound_buffer_react_sz,
+                                                                                                                                                                                      config.inbound_buffer_react_queue_cap,
+                                                                                                                                                                                      config.inbound_buffer_react_time),
+                                                                                                                   config.retry_device,
+                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                        }
+
                         return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
                                                                                                                config.retry_device,
                                                                                                                packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    if (config.inbound_buffer_has_react_pattern){
+                        return packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                                                                                                  config.inbound_buffer_react_sz,
+                                                                                                  config.inbound_buffer_react_queue_cap,
+                                                                                                  config.inbound_buffer_react_time);
                     }
 
                     return packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap);
@@ -5891,6 +5909,14 @@ namespace dg::network_kernel_mailbox_impl1{
                     buffer_container_vec.push_back(std::move(current_buffer_container));
                 }
 
+                //alright, we are to attempt to serialize access, this has relaxed lock contention, not a problem in most use cases
+                if (config.inbound_buffer_has_react_pattern){
+                    return packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec)),
+                                                                                              config.inbound_buffer_react_sz,
+                                                                                              config.inbound_buffer_react_queue_cap,
+                                                                                              config.inbound_buffer_react_time);
+                }
+
                 return packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec));
             }
 
@@ -5902,9 +5928,25 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 if (config.inbound_packet_concurrency_sz == 1u){
                     if (config.has_exhaustion_control){
+                        if (config.inbound_packet_has_react_pattern){
+                            return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                                                                                                                                                                                      config.inbound_packet_react_sz,
+                                                                                                                                                                                      config.inbound_packet_queue_cap,
+                                                                                                                                                                                      config.inbound_packet_react_time),
+                                                                                                                   config.retry_device,
+                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                        }
+
                         return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
                                                                                                                config.retry_device,
                                                                                                                packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    if (config.inbound_packet_has_react_pattern){
+                        return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                                                                                                  config.inbound_packet_react_sz,
+                                                                                                  config.inbound_packet_react_queue_cap,
+                                                                                                  config.inbound_packet_react_time);
                     }
 
                     return packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap);
@@ -5924,6 +5966,13 @@ namespace dg::network_kernel_mailbox_impl1{
                     }
 
                     packet_container_vec.push_back(std::move(current_packet_container));
+                }
+
+                if (config.inbound_packet_has_react_pattern){
+                    return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec)),
+                                                                                              config.inbound_packet_react_sz,
+                                                                                              config.inbound_packet_react_queue_cap,
+                                                                                              config.inbound_packet_react_time);
                 }
 
                 return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
@@ -5990,10 +6039,25 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 if (config.retransmission_concurrency_sz == 1u){
                     if (config.has_exhaustion_control){
-                        return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
-                                                                                                                                                                                           config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                        if (config.retransmission_has_react_pattern){
+                            return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_reacting_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                                                                                                                                                                                                        config.retransmission_react_sz,
+                                                                                                                                                                                                        config.retransmission_react_queue_cap,
+                                                                                                                                                                                                        config.retransmission_react_time),
+                                                                                                                            config.retry_device,
+                                                                                                                            packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                        }
+
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
                                                                                                                                                                                            config.retry_device,
                                                                                                                                                                                            packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    if (config.retransmission_has_react_pattern){
+                        return packet_controller::ComponentFactory::get_reacting_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                                                                                                           config.retransmission_react_sz,
+                                                                                                           config.retransmission_react_queue_cap,
+                                                                                                           config.retransmission_react_time);
                     }
 
                     return packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap,
@@ -6006,16 +6070,21 @@ namespace dg::network_kernel_mailbox_impl1{
                     auto current_retransmission_controller = std::unique_ptr<packet_controller::RetransmissionControllerInterface>{}; 
                     
                     if (config.has_exhaustion_control){
-                        current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, 
-                                                                                                                                                                                                                        config.retransmission_idhashset_cap, config.retransmission_queue_cap),
+                        current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
                                                                                                                                                                                                                         config.retry_device,
                                                                                                                                                                                                                         packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
                     } else{
-                        current_retransmission_controller = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap,
-                                                                                                                               config.retransmission_idhashset_cap, config.retransmission_queue_cap);
+                        current_retransmission_controller = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap);
                     }
 
                     retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
+                }
+
+                if (config.retransmission_has_react_pattern){
+                    return packet_controller::ComponentFactory::get_reacting_retransmission_controller(packet_controller::ComponentFactory::get_randomhash_distributed_retransmission_controller(std::move(retransmission_controller_vec)),
+                                                                                                       config.retransmission_react_sz,
+                                                                                                       config.retransmission_react_queue_cap,
+                                                                                                       config.retransmission_react_time);
                 }
 
                 return packet_controller::ComponentFactory::get_randomhash_distributed_retransmission_controller(std::move(retransmission_controller_vec));
@@ -6029,10 +6098,28 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 if (config.outbound_packet_concurrency_sz == 1u){
                     if (config.has_exhaustion_control){
+                        if (config.outbound_packet_has_react_pattern){
+                            return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                                                                                                                                                             config.outbound_krescue_packet_container_cap),
+                                                                                                                                                                                      config.outbound_packet_react_sz,
+                                                                                                                                                                                      config.outbound_packet_react_queue_cap,
+                                                                                                                                                                                      config.outbound_packet_react_time),
+                                                                                                                   config.retry_device,
+                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                        }
+
                         return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
                                                                                                                                                                                       config.outbound_krescue_packet_container_cap),
                                                                                                                                                                                       config.retry_device,
                                                                                                                                                                                       packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                    }
+
+                    if (config.outbound_packet_has_react_pattern){
+                        return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
+                                                                                                                                                                         config.outbound_krescue_packet_container_cap),
+                                                                                                  config.outbound_packet_react_sz,
+                                                                                                  config.outbound_packet_react_queue_cap,
+                                                                                                  config.outbound_packet_react_time);
                     }
 
                     return packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
@@ -6055,6 +6142,13 @@ namespace dg::network_kernel_mailbox_impl1{
                     }
 
                     packet_container_vec.push_back(std::move(current_packet_container));
+                }
+
+                if (config.outbound_packet_has_react_pattern){
+                    return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec)),
+                                                                                              config.outbound_packet_react_sz,
+                                                                                              config.outbound_packet_react_queue_cap,
+                                                                                              config.outbound_packet_react_time);
                 }
 
                 return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
