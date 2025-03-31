@@ -5438,7 +5438,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                            size_t ob_packet_consumption_cap,
                                                            size_t ob_packet_busy_threshold_sz,
 
-                                                           std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator, //alright these guys should be a unique_ptr injections, we dont really care about those best practices for now
+                                                           std::unique_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_generator,
                                                            std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
                                                            std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>> socket_vec,
 

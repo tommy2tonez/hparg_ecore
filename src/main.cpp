@@ -68,3 +68,31 @@ struct bool_sfinae2<std::basic_string<T>>: std::true_type{};
 //this is the explicit specialization implementation
 
 //static_assert() within the function is used instead when there is no function routing, very encouraged in explict programming
+
+//alright people
+//these people want to see immediate result, out
+//remember fellas, we aim for quality, we'll move very slowly, we'll make sure to document our code correctly
+//we are not selling you bullshit fellas
+//we actually have thought long and hard
+//the idea of the forward code cannot be done more optimally unless you break the universal physical laws
+//we are pretty proud of our socket protocol, people did a lot of pull requests yet I think that would compromise the speed, the rawness, extensibility of the protocol
+//we are blazing fast, solved numerous problems involving 1/7000 failure rate (bring inter-transportation of 10GB -> 99.999999% success), coordinated packet id attacks, corrupted packet attacks, engineered corrupted packet attacks, retransmissions, fast+prioritized acks, throttled kernel wire spit, on-wire direct bounce (dedicated thread to do recvfrom), etc.  
+//we are not eavesdropping anyone, we are just awared of the existence of a continuity extraction device at some point in the future (advanced tech will figure this out)
+//continuity extraction device is like a 5G tower, except it is 10G, it could collect data up to <x> mile ^ 3
+
+//the implementation is also another "art", we reduced the number of memory orders by a factor of at least 256, for 256 is the average feed_size before pushing to a container
+//we reduced the no_busy -> busy latency -> 1 microsecond by using accurate timed_mutex, we'll implement this
+
+//every tree computation has at most 10 GB of inter-transportation, so we can rely on our protocol to do things correctly
+//the thing that we are not proud of is the memregion frequency, we are not using real-time operating system (is that a thing?), so we must rely solely on statistics to do calibrations (this is hard) or somewhere in between of sub-real-time + statistics ?
+//                                      the packet_id_unordered_set, we are susceptible to late-packets which will definitely corrupt the system, we dont have an immediate solution to this yet
+
+//99% success of the logit density mining is depended on the state of the art back_propagation technique, we wrote the paper (is it newton_approx?)
+//we dont really know, we just know that at some point in the future, the level of <intellect> will rise, and people (or synthetic sentients) will normalize what's considered <intellectual>
+//people will bid for logit density, for <the_smartest_guy_will_rule_the_world>
+//if everyone is smart, there is no smart (wo)man
+//if everyone is rich, there is no rich (wo)man
+
+//we dont really care
+//we do the business of 30% 3rd party fees
+//people can enjoy the funs of mining logit density
