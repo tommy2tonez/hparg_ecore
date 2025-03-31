@@ -78,7 +78,7 @@ namespace dg::memult{
 
         assert(is_pow2(alignment_sz));
 
-        uintptr_t fwd       = alignment_sz - 1;
+        uintptr_t fwd       = alignment_sz - 1u;
         uintptr_t bitmask   = ~fwd;
 
         return (buf + fwd) & bitmask;
@@ -89,7 +89,7 @@ namespace dg::memult{
 
         static_assert(is_pow2(ALIGNMENT_SZ));
 
-        constexpr uintptr_t FWD     = ALIGNMENT_SZ - 1;
+        constexpr uintptr_t FWD     = ALIGNMENT_SZ - 1u;
         constexpr uintptr_t BITMASK = ~FWD;
 
         return (buf + FWD) & BITMASK;

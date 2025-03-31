@@ -161,11 +161,15 @@ namespace dg::network_compact_serializer::types_space{
     template <class T>
     using containee_or_empty_t = typename containee_or_empty<T>::type; 
 
+    //see: https://en.cppreference.com/w/cpp/language/types
+
     template <class T>
-    static inline constexpr bool has_unique_serializable_representations_v              = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>>;
-    
+    static inline constexpr bool has_unique_serializable_representations_v              = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>, 
+                                                                                                             std::is_same<T, char>, std::is_same<T, unsigned char>, std::is_same<T, signed char>>;
+
     template <class T>
     static inline constexpr bool has_unique_serializable_sameendian_representations_v   = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>, 
+                                                                                                             std::is_same<T, char>, std::is_same<T, unsigned char>, std::is_same<T, signed char>,
                                                                                                              std::is_same<T, int16_t>, std::is_same<T, uint16_t>, 
                                                                                                              std::is_same<T, int32_t>, std::is_same<T, uint32_t>, 
                                                                                                              std::is_same<T, int64_t>, std::is_same<T, uint64_t>>;
@@ -200,7 +204,7 @@ namespace dg::network_compact_serializer::types_space{
     template <class T>
     struct base_type: std::enable_if<true, T>{};
 
-    //alright, I dont really know if this is future-proof, let's make it defined by using defined use-cases for now, we dont have time to iterate through every possible
+    //alright, I dont really know if this is future-proof, let's make it defined by using defined use-cases for now, we dont have time to iterate through every possibility
     template <class T>
     struct base_type<const T>: base_type<T>{};
 

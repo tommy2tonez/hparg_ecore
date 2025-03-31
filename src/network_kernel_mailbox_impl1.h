@@ -1266,7 +1266,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 this->wakeup_threshold.value.exchange(arg, std::memory_order_relaxed);
             } 
 
-            void subsribe(std::chrono::nanoseconds waiting_time) noexcept{
+            void subscribe(std::chrono::nanoseconds waiting_time) noexcept{
 
                 constexpr uint8_t ACTION_NO         = 0u;
                 constexpr uint8_t ACTION_ACQUIRE    = 1u;
@@ -1948,7 +1948,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 std::unique_ptr<RetransmissionControllerInterface> * dst_vec;
 
-                void push(size_t idx, std::move_iterator<InternalRetriableDeliveryArgument *> data_arr, size_t sz) noexcept{
+                void push(const size_t& idx, std::move_iterator<InternalRetriableDeliveryArgument *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<Packet[]> pkt_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -1979,7 +1979,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 std::unique_ptr<RetransmissionControllerInterface> * dst_vec;
 
-                void push(size_t idx, std::move_iterator<InternalAckDeliveryArgument *> data_arr, size_t sz) noexcept{
+                void push(const size_t& idx, std::move_iterator<InternalAckDeliveryArgument *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<global_packet_id_t[]> pkt_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -2799,7 +2799,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 std::unique_ptr<InBoundIDControllerInterface> * dst_vec;
 
-                void push(size_t idx, std::move_iterator<InternalResolutorArgument *> data_arr, size_t sz) noexcept{
+                void push(const size_t& idx, std::move_iterator<InternalResolutorArgument *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<global_packet_id_t[]> pkt_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> response_arr(sz);
@@ -4646,7 +4646,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 size_t buf_arr_sz = {};
                 this->inbound_buffer_container->pop(buf_arr.get(), buf_arr_sz, this->inbound_consumption_cap);
 
-                //
+                //setting up feeds, this is the punchline of performance 
 
                 auto ackid_delivery_resolutor                           = InternalRetransmissionAckDeliveryResolutor{};
                 ackid_delivery_resolutor.retransmission_controller      = this->retransmission_controller.get();
@@ -4747,7 +4747,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 inbound_delivery_resolutor.inbound_id_controller        = this->inbound_id_controller.get();
 
                 size_t trimmed_inbound_delivery_sz                      = std::min(std::min(this->inbound_id_controller->max_consume_size(), buf_arr_sz), constants::DEFAULT_ACCUMULATION_SIZE); //inbound_sz <= buf_arr_sz
-                size_t inbound_allocation_cost                          = dg::network_producer_consumer::delvsrv_allocation_cost(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz);
+                size_t inbound_allocation_cost                          = dg::network_producer_consumer::delvrsrv_allocation_cost(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> inbound_mem(inbound_allocation_cost);
                 auto inbound_deliverer                                  = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&inbound_delivery_resolutor, trimmed_inbound_delivery_sz, inbound_mem.get())); 
 
@@ -4825,7 +4825,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_producer_consumer::DeliveryHandle<Packet> * dst;
                 packet_controller::AckPacketGeneratorInterface * ack_packet_gen;
 
-                void push(Address fr_addr, std::move_iterator<PacketBase *> data_arr, size_t sz) noexcept{
+                void push(const Address& fr_addr, std::move_iterator<PacketBase *> data_arr, size_t sz) noexcept{
 
                     PacketBase * base_data_arr = data_arr.base();
                     std::expected<AckPacket, exception_t> ack_pkt = this->ack_packet_gen->get(fr_addr, base_data_arr, sz);
@@ -5329,7 +5329,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 auto ob_deliverer                               = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_deliverer, trimmed_ob_delivery_sz, ob_deliverer_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<RequestPacket, exception_t> pkt = this->packet_gen->get(static_cast<MailBoxArgument&&>(base_data_arr[i]));
+                    std::expected<RequestPacket, exception_t> pkt = this->packet_gen->get(static_cast<MailBoxArgument&&>(base_data_arr[i])); //std::move() is semantically different than &&, which is simply a reference 
 
                     if (!pkt.has_value()){
                         exception_arr[i] = pkt.error();
@@ -6147,7 +6147,7 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_inbound_packet_integrity_validator(Config config) -> std::unique_ptr<packet_controller::PacketIntegrityValidatorInterface>{
 
-                return packet_controller::ComponentFactory::get_inbound_packet_integrity_validator(model::Address{config.host_ip, config.host_port}, model::Address{config.host_ip, config.host_port});
+                return packet_controller::ComponentFactory::get_inbound_packet_integrity_validator(model::Address{config.host_ip, config.host_port});
             }
 
             static auto make_socket(Config config) -> std::vector<std::unique_ptr<model::SocketHandle, socket_service::socket_close_t>>{
