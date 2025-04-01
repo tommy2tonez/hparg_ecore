@@ -431,18 +431,6 @@ namespace dg::network_producer_consumer{
         KVConsumerInterface<KeyType, EventType> * consumer;
     };
 
-    //BumpAllocator has at most 2x the deliverable_cap, is it so
-    //x + x1 + x2 + ... + xn = deliverable_cap 
-    //capacity <= x * 2, due to insert only growth 
-
-    //we'll figure std::shared_ptr<> out later
-    //there are many issues
-    //first is allocation, second is shared_ptr<> (std::memory_order_release is bad)
-    //third is unordered_map not using preallocated mmeory
-    //fourth is branch pipeline + instructions arent good enough
-    //we will address these issues tmr
-
-
     //
     template <class EventType>
     auto delvrsrv_kv_bump_allocation_cost(size_t deliverable_cap) noexcept -> size_t{
@@ -565,6 +553,7 @@ namespace dg::network_producer_consumer{
         return delvrsrv_kv_bump_allocation_cost(deliverable_cap);
     }
 
+    //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_clear(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
@@ -579,14 +568,7 @@ namespace dg::network_producer_consumer{
         handle->deliverable_sz = 0u;
     }
 
-    //let's see
-    //alright fellas, a lot of people think they are smart fellas, how about we except everything and throw everything, no you will have very BAD LEAK doing things like that
-    //the idea originally is that every thing that is exceptable is thrown upon construction, and delivery (feed) must not throw for whatever reason, the things that do not adhere to the rules are not defined and pruned during the static_assert()
-    //this is not an implementation defect, because we have experienced so many std defects (insert(first, last) mid way OOM, now we have bad leaks)
-    //we are destruction noexcept, construction except, capacity, delivery noexcept people
-    //we are C people, that live in the C++ world
-    //we hope that things are simple and there aint thrown destruction + thrown move + thrown copy + etc.
-
+    //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_deliver(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
 
@@ -630,11 +612,15 @@ namespace dg::network_producer_consumer{
 
         //resolving map_ptr, return valid_map_ptr if the code path is to through the if
         if (map_ptr->second.value().sz == map_ptr->second.value().cap){
-            size_t new_sz = map_ptr->second.value().cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
-            std::expected<char *, exception_t> buf = bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_sz));
+            
+            //try to extend buf
+            size_t new_sz                           = map_ptr->second.value().cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
+            std::expected<char *, exception_t> buf  = bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_sz));
 
             if (!buf.has_value()) [[unlikely]]{
+                //extend buf request not granted
                 if (buf.error() == dg::network_exception::RESOURCE_EXHAUSTION){
+                    //clear, re-request minimum container, make container, link container 
                     delvrsrv_kv_clear(handle);
                     buf                                 = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
                     auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
@@ -642,13 +628,16 @@ namespace dg::network_producer_consumer{
                     dg::network_exception::dg_assert(emplace_status);
                     map_ptr                             = emplace_ptr;
                 } else{
+                    //unrecognized error
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
             } else{
-                auto req_container  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_sz, buf.value()));
+                //extend buf request granted, we are to initialize + transfer data
+                auto req_container          = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_sz, buf.value()));
                 std::copy(std::make_move_iterator(map_ptr->second.value().ptr), std::make_move_iterator(std::next(map_ptr->second.value().ptr, map_ptr->second.value().sz)), req_container.value().ptr);
-                map_ptr->second     = std::move(req_container);
+                req_container.value().sz    = map_ptr->second.value().sz;
+                map_ptr->second             = std::move(req_container);
             }
         }
 
