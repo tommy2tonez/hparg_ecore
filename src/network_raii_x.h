@@ -124,6 +124,40 @@ namespace dg{
                 this->responsibility_flag = false;
             }
     };
+
+    class polymorphic_deleter{
+
+        public:
+
+            virtual ~polymorphic_deleter() noexcept = default;
+    };
+
+    class fixed_size_polymorphic_deleter: public virtual polymorphic_deleter{
+
+        public:
+
+            static inline constexpr size_t MAX_POLYMORPHIC_DELETER_SIZE = 32u;
+
+        private:
+
+            std::array<char, MAX_POLYMORPHIC_DELETER_SIZE> buf;
+            polymorphic_deleter * polymorphic_deleter; //this is actually hard, how do we do move or copy
+        
+        public:
+
+            ~fixed_size_polymorphic_deleter() noexcept{
+
+                if (this->polymorphic_deleter != nullptr){
+
+
+                }
+            }
+    };
+
+    template <class ResourceType>
+    class te_unique_ptr{
+
+    };
 }
 
 #endif

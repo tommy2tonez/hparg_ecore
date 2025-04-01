@@ -153,14 +153,13 @@ namespace dg::network_producer_consumer{
         std::destroy(arr, std::next(arr, arr_sz));
     }
 
-    //we need to be very cautious of every allocation
-    //because that's the 1st cause of death + exploitation
-    //std does not guarantee sz accuracy nor fragmentation of your allocations 
-    //shared_ptr<> is very expensive because this type-erased is not your every type-erased, it costs 1 std::memory_order_release == std::memory_order_seq_cst to destruct  
+
+    //^^^
+    //fine, pass code review 
 
     template <class EventType>
     struct DeliveryHandle{
-        std::shared_ptr<EventType[]> deliverable_arr; //alright we need to type-erase the responsibility, we cant introduce another DeliveryHandle because it would mess up polymorphic dispatch
+        EventType * deliverable_arr;
         size_t deliverable_sz;
         size_t deliverable_cap;
         ConsumerInterface<EventType> * consumer;
@@ -181,12 +180,16 @@ namespace dg::network_producer_consumer{
         }
 
         try{
-            auto container              = std::make_unique<event_t[]>(deliverable_cap);
+            auto container              = std::unique_ptr<event_t[]>(new event_t[deliverable_cap]);
             size_t container_sz         = 0u;
             size_t container_cap        = deliverable_cap;
-            auto typeerased_container   = std::shared_ptr<event_t[]>(std::move(container));
+            auto delivery_handle        = std::unique_ptr<DeliveryHandle<event_t>>(new DeliveryHandle<event_t>{container.get(), container_sz, container_cap, consumer});
+            auto rs                     = delivery_handle.get();
 
-            return new DeliveryHandle<event_t>{std::move(typeerased_container), container_sz, container_cap, consumer}; //TODO: global memory exhaustion - internalize new, we have to adhere to the practices
+            container.release();
+            delivery_handle.release();
+
+            return rs;
         } catch (...){
             return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
         }
@@ -210,31 +213,30 @@ namespace dg::network_producer_consumer{
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
         }
 
-        auto destructor = [deliverable_cap](event_t * event_arr) noexcept{
-            static_assert(noexcept(network_producer_consumer::inplace_destruct_array(event_arr, deliverable_cap)));
-            network_producer_consumer::inplace_destruct_array(event_arr, deliverable_cap);
-        };
-
         try{
-            event_t * event_ptr         = network_producer_consumer::inplace_construct<event_t[]>(preallocated_buf, deliverable_cap);
-            auto container              = std::unique_ptr<event_t[], decltype(destructor)>(event_ptr, destructor);
-            size_t container_sz         = 0u;
-            size_t container_cap        = deliverable_cap;
-            auto typeerased_container   = std::shared_ptr<event_t[]>(std::move(container)); 
+            auto raii_event_ptr     = network_producer_consumer::raii_inplace_construct<event_t[]>(preallocated_buf, deliverable_cap);
+            size_t container_sz     = 0u;
+            size_t container_cap    = deliverable_cap;
+            auto raii_handle_ptr    = network_producer_consumer::raii_inplace_construct<DeliveryHandle<event_t>>(std::next(preallocated_buf, network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap)),
+                                                                                                                 DeliveryHandle<event_t>{raii_event_ptr.value(), container_sz, container_cap, consumer});
+            auto rs                 = raii_handle_ptr.value();
 
-            return new DeliveryHandle<event_t>{std::move(typeerased_container), container_sz, container_cap, consumer}; //TODO: global memory exhaustion - internalize new
+            raii_event_ptr.release();
+            raii_handle_ptr.release();
+
+            return rs;
         } catch (...){
-            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception())); //never gonna happen, C++ ABI or API whatever guarantees that new == exception
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
         }
     }
 
     template <class event_t>
     auto delvrsrv_allocation_cost(ConsumerInterface<event_t> * consumer, size_t deliverable_cap) noexcept -> size_t{
 
-        return network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap);
+        return network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap) 
+               + network_producer_consumer::inplace_construct_size<DeliveryHandle<event_t>>(DeliveryHandle<event_t>{});
     }
 
-    //this is more complex than we think, we are relying on compiler to do their job right
     template <class event_t>
     void delvrsrv_deliver(DeliveryHandle<event_t> * handle, event_t event) noexcept{
 
@@ -246,7 +248,7 @@ namespace dg::network_producer_consumer{
                 handle->consumer->push(std::make_move_iterator(&event), 1u);
                 return;
             } else [[likely]]{
-                handle->consumer->push(std::make_move_iterator(handle->deliverable_arr.get()), handle->deliverable_sz);
+                handle->consumer->push(std::make_move_iterator(handle->deliverable_arr), handle->deliverable_sz);
                 handle->deliverable_sz = 0u;
             }
         }
@@ -258,21 +260,41 @@ namespace dg::network_producer_consumer{
         delvrsrv_deliver(handle, std::move(event));
     };
 
+    void delvrsrv_clear(DeliveryHandle<event_t> * handle) noexcept{
+
+        handle = stdx::safe_ptr_access(handle);
+
+        if (handle->deliverable_sz != 0u){
+            handle->consumer->push(std::make_move_iterator(handle->deliverable_arr), handle->deliverable_sz);
+            handle->deliverable_sz = 0u;
+        }
+    } 
+
     template <class event_t>
     auto delvrsrv_close_handle(DeliveryHandle<event_t> * handle) noexcept{
 
-        handle = stdx::safe_ptr_access(handle); 
+        delvrsrv_clear(handle);
 
-        if (handle->deliverable_sz != 0u){
-            handle->consumer->push(std::make_move_iterator(handle->deliverable_arr.get()), handle->deliverable_sz);
-        }
-
+        delete[] handle->deliverable_arr;
         delete handle; //TODO: internalize delete
+    }
+
+    template <class event_t>
+    auto delvrsrv_close_preallocated_handle(DeliveryHandle<event_t> * handle) noexcept{
+
+        delvrsrv_clear(handle);
+
+        network_producer_consumer::inplace_destruct_array(handle->deliverable_arr, handle->deliverable_cap);
+        network_producer_consumer::inplace_destruct_object(handle);
     }
 
     static inline auto delvrsrv_close_handle_lambda = []<class event_t>(DeliveryHandle<event_t> * handle) noexcept{
         delvrsrv_close_handle(handle);
     };
+
+    static inline auto delvrsrv_close_preallocated_handle_lambda = []<class event_t>(DeliveryHandle<event_t> * handle) noexcept{
+        delvrsrv_close_preallocated_handle(handle);
+    }
 
     template <class event_t>
     auto delvrsrv_open_raiihandle(ConsumerInterface<event_t> * consumer, size_t deliverable_cap) noexcept -> std::expected<std::unique_ptr<DeliveryHandle<event_t>, decltype(delvrsrv_close_handle_lambda)>, exception_t>{
@@ -287,7 +309,7 @@ namespace dg::network_producer_consumer{
     }
 
     template <class event_t>
-    auto delvrsrv_open_preallocated_raiihandle(ConsumerInterface<event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<std::unique_ptr<DeliveryHandle<event_t>, decltype(delvrsrv_close_handle_lambda)>, exception_t>{
+    auto delvrsrv_open_preallocated_raiihandle(ConsumerInterface<event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<std::unique_ptr<DeliveryHandle<event_t>, decltype(delvrsrv_close_preallocated_handle_lambda)>, exception_t>{
 
         std::expected<DeliveryHandle<event_t> *, exception_t> handle = delvrsrv_open_preallocated_handle(consumer, deliverable_cap, preallocated_buf);
 
@@ -295,33 +317,89 @@ namespace dg::network_producer_consumer{
             return std::unexpected(handle.error());
         }
 
-        return std::unique_ptr<DeliveryHandle<event_t>, decltype(delvrsrv_close_handle_lambda)>(handle.value(), delvrsrv_close_handle_lambda);
+        return std::unique_ptr<DeliveryHandle<event_t>, decltype(delvrsrv_close_preallocated_handle_lambda)>(handle.value(), delvrsrv_close_preallocated_handle_lambda);
     }    
 
+    //vvv
     //-----
 
-    //how do we design this? it is std::unordered_map<key_t, std::vector<event_t>> at heart
-    //let's see how we could improve this
-    //std::unordered_fast_map_insert_only
-    
-    //std::vector<event_t> -> open_addressing growth
-    //how?
-    //we are to preallocate the event_t as a vector, and build a mini heap on top of such vector 
-    //is that the plan?
-    //is it a linked_list problem, we are to extend twice the size whenever the vector<> goes out of space, store the next linked list, <bump_allocate> the next segment of the preallocated buffer
-    //if there's no such space, we are to dump the container and the delivery repeats
-    //we are to leverage no-extra memory for as long as possible by leveraging the stack_allocation technique
-    //we have 1024 cores, only one RAM BUS, so its very important that we stack allocate everything and only heap allocate things that cannot be stack allocated, such heap cannot be fragmennted by using our strategy of cyclic page
-    //we are to implement this today + tomorrow, this is important
-
-    //alright, we are to implement a very simple version that's gonna work, a vector, a bump allocator (2x memory), and our fast_insertonly_unordered_map
-    //this is a blazing fast version, we are to leverage our std::unique_ptr_no_buf<> 
+    //^^^
+    //fine, minimum viable product
 
     struct BumpAllocatorResource{
         char * head;
         size_t sz;
         size_t cap;
     };
+
+    auto bump_allocator_initialize(size_t buf_sz) -> std::expected<BumpAllocatorResource *, exception_t>{
+
+        try{
+            size_t sz       = 0u;
+            size_t cap      = buf_sz;
+            auto safe_head  = std::unique_ptr<char[]>(new char[buf_sz]); //this is harder than expected
+            auto resource   = std::unique_ptr<BumpAllocatorResource>(new BumpAllocatorResource{safe_head.get(), sz, cap}); 
+            auto rs         = resource.get();
+            safe_head.release();
+            resource.release();
+
+            return rs;
+        } catch (...){
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        }
+    }
+
+    auto bump_allocator_preallocated_initialize(size_t buf_sz, char * buf) -> std::expected<BumpAllocatorResource *, exception_t>{
+
+        size_t sz       = 0u;
+        size_t cap      = buf_sz;        
+        auto resource   = BumpAllocatorResource{buf, sz, cap};
+
+        return network_producer_consumer::inplace_construct<BumpAllocatorResource>(std::next(buf, buf_sz), resource);
+    }
+
+    void bump_allocator_deinitialize(BumpAllocatorResource * obj) noexcept{
+
+        delete[] obj->head;
+        delete obj;
+    }
+
+    void bump_allocator_preallocated_deinitialize(BumpAllocatorResource * obj) noexcept{
+
+        network_producer_consumer::inplace_destruct_object(obj);
+    }    
+
+    auto bump_allocator_allocation_cost(size_t buf_sz) noexcept -> size_t{
+
+        return buf_sz + inplace_construct_size<BumpAllocatorResource>(BumpAllocatorResource{});
+    }
+
+    void bump_allocator_reset(BumpAllocatorResource& bump_allocator) noexcept{
+
+        bump_allocator.sz = 0u;
+    }
+
+    auto bump_allocator_allocate(BumpAllocatorResource& bump_allocator, size_t sz) noexcept -> std::expected<char *, exception_t>{
+
+        size_t nxt_sz = bump_allocator.sz + sz;
+
+        if (nxt_sz > bump_allocator.cap){
+            return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+        }
+
+        char * current      = std::next(bump_allocator.head, bump_allocator.sz);
+        bump_allocator.sz   += sz; 
+
+        return current;
+    }
+
+    //vvv
+    //-----------------------
+
+    //it is not undersaid when we say this is probably the most important performance code that we need to get right
+    //we'll focus on improving the code quality + bench tomorrow, its gonna be hard, we are to crunch 1 << 28 keyvalue feeds/ second
+    //if we can't reach the number, it is not considered a success
+    //people reached 1 << 29 keyvalue feeds/ second
 
     template <class EventType>
     struct KVEventContainer{
@@ -346,7 +424,7 @@ namespace dg::network_producer_consumer{
 
     template<class KeyType, class EventType>
     struct KVDeliveryHandle{
-        std::shared_ptr<BumpAllocatorResource> bump_allocator;
+        BumpAllocatorResource * bump_allocator;
         dg::map_variants::unordered_unstable_map<KeyType, dg::unique_resource<KVEventContainer<EventType>, decltype(destroy_kv_event_container_lambda)>> key_event_map; //alright, we dont have that destructor, constructor, whatever practices, we are C people, we are to use struct + deinitializer, because it's so convenient, unless this is undefined, because we compiler dont know what to deinitialize first
         size_t deliverable_sz;
         size_t deliverable_cap;
@@ -364,60 +442,6 @@ namespace dg::network_producer_consumer{
     //fourth is branch pipeline + instructions arent good enough
     //we will address these issues tmr
 
-    auto bump_allocator_initialize(size_t buf_sz) -> std::shared_ptr<BumpAllocatorResource>{
-
-        size_t sz                                       = 0u;
-        size_t cap                                      = buf_sz;
-        std::unique_ptr<char[]> safe_head               = std::unique_ptr<char[]>(new char[buf_sz]); //this is harder than expected
-        std::unique_ptr<BumpAllocatorResource> resource = std::unique_ptr<BumpAllocatorResource>(new BumpAllocatorResource{}); 
-
-        auto destructor = [](BumpAllocatorResource * bump_allocator_resource){
-            delete[] bump_allocator_resource->head;
-            delete bump_allocator_resource;
-        };
-
-        resource->head  = safe_head.get();
-        resource->sz    = sz;
-        resource->cap   = cap;
-        auto rs         = std::unique_ptr<BumpAllocatorResource, decltype(destructor)>(resource.get(), destructor);
-
-        safe_head.release();
-        resource.release();
-
-        return rs;
-    }
-
-    auto bump_allocator_preallocated_initialize(size_t buf_sz, char * buf) -> std::shared_ptr<BumpAllocatorResource>{
-
-        size_t sz   = 0u;
-        size_t cap  = buf_sz;
-
-        return std::make_unique<BumpAllocatorResource>(BumpAllocatorResource{buf, sz, cap});    
-    }
-    
-    auto bump_allocator_allocation_cost(size_t buf_sz) noexcept -> size_t{
-
-        return buf_sz;
-    }
-
-    void bump_allocator_reset(BumpAllocatorResource& bump_allocator) noexcept{
-
-        bump_allocator.sz = 0u;
-    }
-
-    auto bump_allocator_allocate(BumpAllocatorResource& bump_allocator, size_t sz) noexcept -> std::expected<char *, exception_t>{
-
-        size_t nxt_sz = bump_allocator.sz + sz;
-
-        if (nxt_sz > bump_allocator.cap){
-            return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
-        }
-
-        char * current      = std::next(bump_allocator.head, bump_allocator.sz);
-        bump_allocator.sz   += sz; 
-
-        return current;
-    }
 
     //
     template <class EventType>
@@ -476,6 +500,7 @@ namespace dg::network_producer_consumer{
             static_assert(FALSE_VAL<>);
         }
     }
+
     //
 
     template <class key_t, class event_t>
@@ -492,39 +517,45 @@ namespace dg::network_producer_consumer{
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
         }
 
-        try{
-            std::shared_ptr<BumpAllocatorResource> bump_allocator   = get_bump_allocator(delvrsrv_kv_bump_allocation_cost(deliverable_cap));
-            auto key_event_map                                      = dg::map_variants::unordered_unstable_map<key_t, dg::unique_resource<KVEventContainer<EventType, decltype(&free_kv_event_container<event_t>)>>(deliverable_cap);
-            size_t deliverable_sz                                   = 0u;
+        auto bump_allocator     = bump_allocator_initialize(delvrsrv_kv_bump_allocation_cost(deliverable_cap));
 
-            return new KVDeliveryHandle<key_t, event_t>{std::move(bump_allocator), key_event_map, deliverable_sz, deliverable_cap};
-        } catch (...){
-            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        if (!bump_allocator.has_value()){
+            return std::unexpected(bump_allocator.error());
         }
+
+        // try{
+        //     // std::shared_ptr<BumpAllocatorResource> bump_allocator   = get_bump_allocator(delvrsrv_kv_bump_allocation_cost(deliverable_cap));
+        //     auto key_event_map      = dg::map_variants::unordered_unstable_map<key_t, dg::unique_resource<KVEventContainer<EventType, decltype(&free_kv_event_container<event_t>)>>(deliverable_cap);
+        //     size_t deliverable_sz   = 0u;
+
+        //     return new KVDeliveryHandle<key_t, event_t>{std::move(bump_allocator), key_event_map, deliverable_sz, deliverable_cap}; //leaks
+        // } catch (...){
+        //     return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception())); //this is harder than expected
+        // }
     }
 
     template <class key_t, class event_t>
     auto delvrsrv_kv_open_preallocated_handle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
 
-        const size_t MIN_DELIVERABLE_CAP    = 0u;
-        const size_t MAX_DELIVERABLE_CAP    = size_t{1} << 30;
+        // const size_t MIN_DELIVERABLE_CAP    = 0u;
+        // const size_t MAX_DELIVERABLE_CAP    = size_t{1} << 30;
 
-        if (consumer == nullptr){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (consumer == nullptr){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        if (std::clamp(deliverable_cap, MIN_DELIVERABLE_CAP, MAX_DELIVERABLE_CAP) != deliverable_cap){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (std::clamp(deliverable_cap, MIN_DELIVERABLE_CAP, MAX_DELIVERABLE_CAP) != deliverable_cap){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        try{
-            std::shared_ptr<BumpAllocatorResource> bump_allocator   = get_preallocated_bump_allocator(delvrsrv_kv_bump_allocation_cost(deliverable_cap), preallocated_buf);
-            auto key_event_map                                      = dg::map_variants::unordered_unstable_map<key_t, dg::unique_resource<KVEventContainer<EventType, decltype(&free_kv_event_container<event_t>)>>(deliverable_cap);
-            size_t deliverable_sz                                   = 0u;
+        // try{
+        //     std::shared_ptr<BumpAllocatorResource> bump_allocator   = get_preallocated_bump_allocator(delvrsrv_kv_bump_allocation_cost(deliverable_cap), preallocated_buf);
+        //     auto key_event_map                                      = dg::map_variants::unordered_unstable_map<key_t, dg::unique_resource<KVEventContainer<EventType, decltype(&free_kv_event_container<event_t>)>>(deliverable_cap);
+        //     size_t deliverable_sz                                   = 0u;
 
-            return new KVDeliveryHandle<key_t, event_t>{std::move(bump_allocator), key_event_map, deliverable_sz, deliverable_cap};
-        } catch (...){
-            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        //     return new KVDeliveryHandle<key_t, event_t>{std::move(bump_allocator), key_event_map, deliverable_sz, deliverable_cap};
+        // } catch (...){
+        //     return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
         }     
     }
 
@@ -631,7 +662,16 @@ namespace dg::network_producer_consumer{
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
 
-        delete handle;
+        // delete handle;
+    }
+
+    template <class key_t, class event_t>
+    void delvrsrv_kv_close_preallocated_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+
+        handle = stdx::safe_ptr_access(handle);
+        delvrsrv_kv_clear(handle);
+
+        //
     }
 
     static inline auto delvrsrv_kv_close_handle_lambda = []<class key_t, class event_t>(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
