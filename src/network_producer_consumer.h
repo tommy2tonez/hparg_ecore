@@ -358,6 +358,11 @@ namespace dg::network_producer_consumer{
     //capacity <= x * 2, due to insert only growth 
 
     //we'll figure std::shared_ptr<> out later
+    //there are many issues
+    //first is allocation, second is shared_ptr<> (std::memory_order_release is bad)
+    //third is unordered_map not using preallocated mmeory
+    //fourth is branch pipeline + instructions arent good enough
+    //we will address these issues tmr
 
     auto bump_allocator_initialize(size_t buf_sz) -> std::shared_ptr<BumpAllocatorResource>{
 
