@@ -16,20 +16,21 @@
 #include "network_log.h"
 #include "network_exception.h"
 #include "assert.h"
+#include "dg_map_variants.h"
 
 namespace dg::network_producer_consumer{
 
     template <class EventType>
-    static inline constexpr bool event_precond_v    = std::is_same_v<EventType, std::decay_t<EventType>>;
+    static inline constexpr bool meets_event_precond_v  = std::is_same_v<EventType, std::decay_t<EventType>>;
 
     template <class EventType>
-    static inline constexpr bool key_precond_v      = std::is_same_v<EventType, std::decay_t<EventType>>;
+    static inline constexpr bool meets_key_precond_v    = std::is_same_v<EventType, std::decay_t<EventType>>;
 
     template <class EventType>
     struct ProducerInterface{
         using event_t = EventType;
         
-        static_assert(event_precond_v<event_t>);
+        static_assert(meets_event_precond_v<event_t>);
 
         virtual ~ProducerInterface() noexcept = default;
         virtual void get(event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept = 0;
@@ -39,7 +40,7 @@ namespace dg::network_producer_consumer{
     struct ConsumerInterface{
         using event_t = EventType;
 
-        static_assert(event_precond_v<event_t>);        
+        static_assert(meets_event_precond_v<event_t>);        
 
         virtual ~ConsumerInterface() noexcept = default;
         virtual void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept = 0;
@@ -51,8 +52,8 @@ namespace dg::network_producer_consumer{
         using key_t     = KeyType;
         using event_t   = EventType;
 
-        static_assert(key_precond_v<key_t>);
-        static_assert(event_precond_v<event_t>);
+        static_assert(meets_key_precond_v<key_t>);
+        static_assert(meets_event_precond_v<event_t>);
 
         virtual ~KVConsumerInterface() noexcept = default;
         virtual void push(const KeyType& key, std::move_iterator<EventType *> event_arr, size_t event_arr_sz) noexcept = 0;
@@ -165,13 +166,6 @@ namespace dg::network_producer_consumer{
         ConsumerInterface<EventType> * consumer;
     };
 
-    template<class KeyType, class EventType>
-    struct KVDeliveryHandle{
-        size_t deliverable_sz;
-        size_t deliverable_cap;
-        KVConsumerInterface<KeyType, EventType> * consumer;
-    };
-
     template <class event_t>
     auto delvrsrv_open_handle(ConsumerInterface<event_t> * consumer, size_t deliverable_cap) noexcept -> std::expected<DeliveryHandle<event_t> *, exception_t>{
 
@@ -242,8 +236,9 @@ namespace dg::network_producer_consumer{
 
     //this is more complex than we think, we are relying on compiler to do their job right
     template <class event_t>
-    void delvrsrv_deliver(DeliveryHandle<event_t> * handle, event_t event) noexcept(std::is_nothrow_move_assignable_v<event_t>){
+    void delvrsrv_deliver(DeliveryHandle<event_t> * handle, event_t event) noexcept{
 
+        static_assert(std::is_nothrow_move_assignable_v<event_t>);
         handle = stdx::safe_ptr_access(handle); 
 
         if (handle->deliverable_sz == handle->deliverable_cap){            
@@ -319,57 +314,339 @@ namespace dg::network_producer_consumer{
     //we have 1024 cores, only one RAM BUS, so its very important that we stack allocate everything and only heap allocate things that cannot be stack allocated, such heap cannot be fragmennted by using our strategy of cyclic page
     //we are to implement this today + tomorrow, this is important
 
-    template <class key_t, class event_t>
-    auto delvrsrv_open_kv_handle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
+    //alright, we are to implement a very simple version that's gonna work, a vector, a bump allocator (2x memory), and our fast_insertonly_unordered_map
+    //this is a blazing fast version, we are to leverage our std::unique_ptr_no_buf<> 
 
+    struct BumpAllocatorResource{
+        char * head;
+        size_t sz;
+        size_t cap;
+    };
+
+    template <class EventType>
+    struct KVEventContainer{
+        EventType * ptr;
+        size_t sz;
+        size_t cap;
+    };
+
+    template <class EventType>
+    void destroy_kv_event_container(KVEventContainer<EventType> event_container) noexcept{
+
+        static_assert(std::is_nothrow_destructible_v<EventType>); //it must be noexcept
+        dg::network_producer_consumer::inplace_destruct_array(event_container.ptr, event_container.sz);
+    }
+
+    static inline auto destroy_kv_event_container_lambda = []<class EventType>(KVEventContainer<EventType> event_container) noexcept{
+        destroy_kv_event_container(event_container);        
+    };
+
+    static inline constexpr size_t DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP      = size_t{1}; 
+    static inline constexpr size_t DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR    = size_t{2};
+
+    template<class KeyType, class EventType>
+    struct KVDeliveryHandle{
+        std::shared_ptr<BumpAllocatorResource> bump_allocator;
+        dg::map_variants::unordered_unstable_map<KeyType, dg::unique_resource<KVEventContainer<EventType>, decltype(destroy_kv_event_container_lambda)>> key_event_map; //alright, we dont have that destructor, constructor, whatever practices, we are C people, we are to use struct + deinitializer, because it's so convenient, unless this is undefined, because we compiler dont know what to deinitialize first
+        size_t deliverable_sz;
+        size_t deliverable_cap;
+        KVConsumerInterface<KeyType, EventType> * consumer;
+    };
+
+    //BumpAllocator has at most 2x the deliverable_cap, is it so
+    //x + x1 + x2 + ... + xn = deliverable_cap 
+    //capacity <= x * 2, due to insert only growth 
+
+    //we'll figure std::shared_ptr<> out later
+
+    auto bump_allocator_initialize(size_t buf_sz) -> std::shared_ptr<BumpAllocatorResource>{
+
+        size_t sz                                       = 0u;
+        size_t cap                                      = buf_sz;
+        std::unique_ptr<char[]> safe_head               = std::unique_ptr<char[]>(new char[buf_sz]); //this is harder than expected
+        std::unique_ptr<BumpAllocatorResource> resource = std::unique_ptr<BumpAllocatorResource>(new BumpAllocatorResource{}); 
+
+        auto destructor = [](BumpAllocatorResource * bump_allocator_resource){
+            delete[] bump_allocator_resource->head;
+            delete bump_allocator_resource;
+        };
+
+        resource->head  = safe_head.get();
+        resource->sz    = sz;
+        resource->cap   = cap;
+        auto rs         = std::unique_ptr<BumpAllocatorResource, decltype(destructor)>(resource.get(), destructor);
+
+        safe_head.release();
+        resource.release();
+
+        return rs;
+    }
+
+    auto bump_allocator_preallocated_initialize(size_t buf_sz, char * buf) -> std::shared_ptr<BumpAllocatorResource>{
+
+        size_t sz   = 0u;
+        size_t cap  = buf_sz;
+
+        return std::make_unique<BumpAllocatorResource>(BumpAllocatorResource{buf, sz, cap});    
+    }
+    
+    auto bump_allocator_allocation_cost(size_t buf_sz) noexcept -> size_t{
+
+        return buf_sz;
+    }
+
+    void bump_allocator_reset(BumpAllocatorResource& bump_allocator) noexcept{
+
+        bump_allocator.sz = 0u;
+    }
+
+    auto bump_allocator_allocate(BumpAllocatorResource& bump_allocator, size_t sz) noexcept -> std::expected<char *, exception_t>{
+
+        size_t nxt_sz = bump_allocator.sz + sz;
+
+        if (nxt_sz > bump_allocator.cap){
+            return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+        }
+
+        char * current      = std::next(bump_allocator.head, bump_allocator.sz);
+        bump_allocator.sz   += sz; 
+
+        return current;
+    }
+
+    //
+    template <class EventType>
+    auto delvrsrv_kv_bump_allocation_cost(size_t deliverable_cap) noexcept -> size_t{
+
+        return bump_allocator_allocation_cost(deliverable_cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR);
+    }
+
+    template <class EventType>
+    auto delvrsrv_kv_get_event_container_bsize(size_t capacity) noexcept -> size_t{
+
+        return inplace_construct_size<EventType[]>(capacity);
+    }
+
+    template <class EventType, std::enable_if_t<std::is_nothrow_constructible_v<EventType>, bool> = true>
+    auto delvrsrv_kv_get_preallocated_event_container(size_t capacity, char * buf) noexcept -> std::expected<dg::unique_resource<KVEventContainer<EventType>, decltype(destroy_kv_event_container_lambda)>, exception_t>{
+
+        EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
+        auto container          = KVEventContainer<EventType>{event_arr, 0u, capacity};
+
+        return dg::unique_resource<KVEventContainer<EventType>, decltype(destroy_kv_event_container_lambda)>(container, destroy_kv_event_container_lambda);        
+    }
+
+    template <class EventType, std::enable_if_t<!std::is_nothrow_constructible_v<EventType>, bool> = true>
+    auto delvrsrv_kv_get_preallocated_event_container(size_t capacity, char * buf) noexcept -> std::expected<dg::unique_resource<KVEventContainer<EventType>, decltype(destroy_kv_event_container_lambda)>, exception_t>{
+
+        try{
+            EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
+            auto container          = KVEventContainer<EventType>(event_arr, 0u, capacity);
+
+            return dg::unique_resource<KVEventContainer<EventType>, decltype(destroy_kv_event_container_lambda)>(container, destroy_kv_event_container_lambda);
+        } catch (...){
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        }
+    }
+
+    template <class EventLike>
+    auto delvrsrv_kv_push_event_container(KVEventContainer<EventType>& container, EventLike&& event) noexcept -> exception_t{
+
+        if constexpr(std::is_nothrow_assignable_v<EventType, EventLike&&>){
+            if (container.sz >= container.cap){
+                return dg::network_exception::RESOUCE_EXHAUSTION;
+            }
+
+            container.ptr[container.sz++] = std::forward<EventLike>(event);
+            return dg::network_exception::SUCCESS;
+        } else{
+            static_assert(FALSE_VAL<>);
+        }
+    }
+    //
+
+    template <class key_t, class event_t>
+    auto delvrsrv_kv_open_handle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
+
+        const size_t MIN_DELIVERABLE_CAP    = 0u;
+        const size_t MAX_DELIVERABLE_CAP    = size_t{1} << 30; 
+
+        if (consumer == nullptr){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        if (std::clamp(deliverable_cap, MIN_DELIVERABLE_CAP, MAX_DELIVERABLE_CAP) != deliverable_cap){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        try{
+            std::shared_ptr<BumpAllocatorResource> bump_allocator   = get_bump_allocator(delvrsrv_kv_bump_allocation_cost(deliverable_cap));
+            auto key_event_map                                      = dg::map_variants::unordered_unstable_map<key_t, dg::unique_resource<KVEventContainer<EventType, decltype(&free_kv_event_container<event_t>)>>(deliverable_cap);
+            size_t deliverable_sz                                   = 0u;
+
+            return new KVDeliveryHandle<key_t, event_t>{std::move(bump_allocator), key_event_map, deliverable_sz, deliverable_cap};
+        } catch (...){
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        }
     }
 
     template <class key_t, class event_t>
-    auto delvrsrv_open_kv_preallocated_handle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
+    auto delvrsrv_kv_open_preallocated_handle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
 
+        const size_t MIN_DELIVERABLE_CAP    = 0u;
+        const size_t MAX_DELIVERABLE_CAP    = size_t{1} << 30;
+
+        if (consumer == nullptr){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        if (std::clamp(deliverable_cap, MIN_DELIVERABLE_CAP, MAX_DELIVERABLE_CAP) != deliverable_cap){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        try{
+            std::shared_ptr<BumpAllocatorResource> bump_allocator   = get_preallocated_bump_allocator(delvrsrv_kv_bump_allocation_cost(deliverable_cap), preallocated_buf);
+            auto key_event_map                                      = dg::map_variants::unordered_unstable_map<key_t, dg::unique_resource<KVEventContainer<EventType, decltype(&free_kv_event_container<event_t>)>>(deliverable_cap);
+            size_t deliverable_sz                                   = 0u;
+
+            return new KVDeliveryHandle<key_t, event_t>{std::move(bump_allocator), key_event_map, deliverable_sz, deliverable_cap};
+        } catch (...){
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        }     
     }
 
     template <class key_t, class event_t>
     auto delvrsrv_kv_allocation_cost(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap) noexcept -> size_t{
 
+        return delvrsrv_kv_bump_allocation_cost(deliverable_cap);
     }
 
     template <class key_t, class event_t>
-    void delvrsrv_deliver(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
+    void delvrsrv_kv_clear(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
+        for (auto it = handle->key_event_map.begin(), it != handle->key_event_map.end(); ++it){
+            const auto& key     = it->first;
+            auto& value         = it->second;
+            auto copied_value   = value.value();
+            value.release();
+            handle->consumer->push(key, std::make_move_iterator(copied_value.ptr), copied_value.sz);
+        }
+
+        handle->key_event_map.clear();
+        bump_allocator_reset(*handle->bump_allocator);
+        handle->deliverable_sz = 0u;
+    }
+
+    //let's see
+    //alright fellas, a lot of people think they are smart fellas, how about we except everything and throw everything, no you will have very BAD LEAK doing things like that
+    //the idea originally is that every thing that is exceptable is thrown upon construction, and delivery (feed) must not throw for whatever reason, the things that do not adhere to the rules are not defined and pruned during the static_assert()
+    //this is not an implementation defect, because we have experienced so many std defects (insert(first, last) mid way OOM, now we have bad leaks)
+    //we are destruction noexcept, construction except, capacity, delivery noexcept people
+    //we are C people, that live in the C++ world
+    //we hope that things are simple and there aint thrown destruction + thrown move + thrown copy + etc.
+
+    template <class key_t, class event_t>
+    void delvrsrv_kv_deliver(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
+
+        static_assert(std::is_nothrow_default_constructible_v<key_t>); //...
+        static_assert(std::is_nothrow_default_constructible_v<event_t>);
+        static_assert(std::is_nothrow_destructible_v<event_t>);
+        static_assert(std::is_nothrow_move_constructible_v<event_t>);
+
+        handle = stdx::safe_ptr_access(handle);
+
+        if (handle->deliverable_sz == handle->deliverable_cap){
+            if (handle->deliverable_cap == 0u) [[unlikely]]{
+                handle->consumer->push(key, std::make_move_iterator(&event), 1u);
+                return;
+            } else [[likely]]{
+                delvrsrv_kv_clear(handle);
+            }
+        }
+
+        auto map_ptr = handle->key_event_map.find(key);  
+
+        //resolving map_ptr, return valid map_ptr if the code path is to through the if
+        if (map_ptr == handle->key_event_map.end()){
+            std::expected<char *, exception_t> buf = bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP));
+
+            if (!buf.has_value()) [[unlikely]]{
+                if (buf.error() == dg::network_exception::RESOURCE_EXHAUSTION){
+                    delvrsrv_kv_clear(handle);
+                    buf = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
+                } else{
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+            }
+
+            auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
+            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container));  
+            dg::network_exception::dg_assert(emplace_status);
+            map_ptr                             = emplace_ptr;
+        }
+
+        //resolving map_ptr, return valid_map_ptr if the code path is to through the if
+        if (map_ptr->second.value().sz == map_ptr->second.value().cap){
+            size_t new_sz = map_ptr->second.value().cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
+            std::expected<char *, exception_t> buf = bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_sz));
+
+            if (!buf.has_value()) [[unlikely]]{
+                if (buf.error() == dg::network_exception::RESOURCE_EXHAUSTION){
+                    delvrsrv_kv_clear(handle);
+                    buf                                 = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(*handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
+                    auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
+                    auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container));
+                    dg::network_exception::dg_assert(emplace_status);
+                    map_ptr                             = emplace_ptr;
+                } else{
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+            } else{
+                auto req_container  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_sz, buf.value()));
+                std::copy(std::make_move_iterator(map_ptr->second.value().ptr), std::make_move_iterator(std::next(map_ptr->second.value().ptr, map_ptr->second.value().sz)), req_container.value().ptr);
+                map_ptr->second     = std::move(req_container);
+            }
+        }
+
+        dg::network_exception_handler::nothrow_log(delvrsrv_kv_push_event_container(map_ptr->second.value(), std::move(event))); //valid map_ptr push_back
+        handle->deliverable_sz += 1;
     }
 
     template <class key_t, class event_t>
-    auto delvrsrv_close_kv_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+    auto delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
+        delvrsrv_kv_clear(handle);
+        delete handle;
     }
 
-    static inline auto delvrsrv_close_kv_handle_lambda = []<class key_t, class event_t>(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
-        delvrsrv_close_kv_handle(handle);
+    static inline auto delvrsrv_kv_close_handle_lambda = []<class key_t, class event_t>(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+        delvrsrv_kv_close_handle(handle);
     };
 
     template <class key_t, class event_t>
-    auto delvrsrv_open_kv_raiihandle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap) noexcept -> std::expected<std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_close_kv_handle_lambda)>, exception_t>{
+    auto delvrsrv_kv_open_raiihandle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap) noexcept -> std::expected<std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_kv_close_handle_lambda)>, exception_t>{
 
-        std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t> handle = delvrsrv_open_kv_handle(consumer, deliverable_cap);
+        std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t> handle = delvrsrv_kv_open_handle(consumer, deliverable_cap);
 
         if (!handle.has_value()){
             return std::unexpected(handle.error());
         }
 
-        return std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_close_kv_handle_lambda)>(handle.value(), delvrsrv_close_kv_handle_lambda);
+        return std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_kv_close_handle_lambda)>(handle.value(), delvrsrv_kv_close_handle_lambda);
     }
 
     template <class key_t, class event_t>
-    auto delvrsrv_open_kv_preallocated_raiihandle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_close_kv_handle_lambda)>, exception_t>{
+    auto delvrsrv_kv_open_preallocated_raiihandle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_kv_close_handle_lambda)>, exception_t>{
 
-        std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t> handle = delvrsrv_open_kv_preallocated_handle(consumer, deliverable_cap, preallocated_buf);
+        std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t> handle = delvrsrv_kv_open_preallocated_handle(consumer, deliverable_cap, preallocated_buf);
 
         if (!handle.has_value()){
             return std::unexpected(handle.error());
         }
 
-        return std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_close_kv_handle_lambda)>(handle.value(), delvrsrv_close_kv_handle_lambda);
+        return std::unique_ptr<KVDeliveryHandle<key_t, event_t>, decltype(delvrsrv_kv_close_handle_lambda)>(handle.value(), delvrsrv_kv_close_handle_lambda);
     }
 }
 
