@@ -418,7 +418,15 @@ namespace dg::network_producer_consumer{
     template <class EventType>
     auto delvrsrv_kv_bump_allocation_cost(size_t deliverable_cap) noexcept -> size_t{
 
-        return bump_allocator_allocation_cost(deliverable_cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR);
+        if (deliverable_cap == 0u){
+            return bump_allocator_allocation_cost(0u);
+        }
+
+        size_t worst_case_cap   = deliverable_cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
+        size_t minimum_cap      = DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP;
+        size_t bsz              = std::max(worst_case_cap, minimum_cap) * sizeof(EventType) + alignof(EventType)//this is hard, the alignof is hard to code
+
+        return bump_allocator_allocation_cost(bsz);
     }
 
     template <class EventType>
@@ -527,9 +535,7 @@ namespace dg::network_producer_consumer{
         for (auto it = handle->key_event_map.begin(), it != handle->key_event_map.end(); ++it){
             const auto& key     = it->first;
             auto& value         = it->second;
-            auto copied_value   = value.value();
-            value.release();
-            handle->consumer->push(key, std::make_move_iterator(copied_value.ptr), copied_value.sz);
+            handle->consumer->push(key, std::make_move_iterator(value.value().ptr), value.value().sz);
         }
 
         handle->key_event_map.clear();
@@ -615,9 +621,11 @@ namespace dg::network_producer_consumer{
     }
 
     template <class key_t, class event_t>
-    auto delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+    void delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
+        handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
+
         delete handle;
     }
 
