@@ -11,7 +11,6 @@
 #include <ratio>
 #include <algorithm>
 #include <functional>
-#include <iostream>
 
 namespace dg::map_variants{
 

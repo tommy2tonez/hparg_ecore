@@ -10,6 +10,7 @@
 #include <utility>
 #include <expected>
 #include <string>
+#include <optional>
 
 namespace dg::network_type_traits_x{
     

@@ -125,38 +125,101 @@ namespace dg{
             }
     };
 
-    class polymorphic_deleter{
-
-        public:
-
-            virtual ~polymorphic_deleter() noexcept = default;
-    };
-
-    class fixed_size_polymorphic_deleter: public virtual polymorphic_deleter{
-
-        public:
-
-            static inline constexpr size_t MAX_POLYMORPHIC_DELETER_SIZE = 32u;
-
+    template <class ResourceType, class ResourceDeallocator>
+    class unique_mut_resource{
+    
         private:
 
-            std::array<char, MAX_POLYMORPHIC_DELETER_SIZE> buf;
-            polymorphic_deleter * polymorphic_deleter; //this is actually hard, how do we do move or copy
-        
+            ResourceType resource;
+            ResourceDeallocator deallocator;
+            bool responsibility_flag;
+
         public:
 
-            ~fixed_size_polymorphic_deleter() noexcept{
+            static_assert(!std::is_same_v<ResourceType, bool>);
+            static_assert(std::is_trivial_v<ResourceType>);
+            static_assert(std::is_nothrow_invocable_v<ResourceDeallocator, std::add_lvalue_reference_t<ResourceType>>);
+            static_assert(std::is_nothrow_move_constructible_v<ResourceDeallocator>);
+            static_assert(dg::is_base_type_v<ResourceDeallocator>);
 
-                if (this->polymorphic_deleter != nullptr){
+            using self = unique_mut_resource;
 
+            template <class DelArg = ResourceDeallocator, std::enable_if_t<std::is_nothrow_default_constructible_v<DelArg>, bool> = true>
+            unique_mut_resource() noexcept: resource(), 
+                                            deallocator(), 
+                                            responsibility_flag(false){}
 
-                }
+            unique_mut_resource(ResourceType resource, ResourceDeallocator deallocator) noexcept: resource(resource),
+                                                                                                  deallocator(std::move(deallocator)),
+                                                                                                  responsibility_flag(true){}
+            
+            unique_mut_resource(const self&) = delete;
+            unique_mut_resource(self&& other) noexcept: resource(other.resource),
+                                                        deallocator(std::move(other.deallocator)),
+                                                        responsibility_flag(other.responsibility_flag){
+                other.responsibility_flag = false;
             }
-    };
 
-    template <class ResourceType>
-    class te_unique_ptr{
+            ~unique_mut_resource() noexcept{
 
+                if (this->responsibility_flag){
+                    this->deallocator(this->resource);
+                }            
+            }
+
+            self& operator =(const self&) = delete;
+
+            self& operator =(self&& other) noexcept{
+
+                if (this != &other){
+                    if (this->responsibility_flag){
+                        this->deallocator(this->resource);
+                    }      
+                    this->resource              = other.resource;
+                    this->deallocator           = std::move(other.deallocator);
+                    this->responsibility_flag   = other.responsibility_flag;
+                    other.responsibility_flag   = false;
+                }
+
+                return *this;
+            }
+
+            auto value() const noexcept -> const ResourceType&{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!this->responsibility_flag){
+                        std::abort();
+                    }
+                }
+
+                return this->resource;
+            }
+
+            auto value() noexcept -> ResourceType&{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!this->responsibility_flag){
+                        std::abort();
+                    }
+                }
+
+                return this->resource;
+            }
+
+            operator bool() const noexcept{
+
+                return this->responsibility_flag;
+            }
+
+            auto has_value() const noexcept -> bool{
+
+                return this->responsibility_flag;
+            }
+            
+            void release() noexcept{
+
+                this->responsibility_flag = false;
+            }
     };
 }
 
