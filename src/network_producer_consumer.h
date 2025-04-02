@@ -266,7 +266,7 @@ namespace dg::network_producer_consumer{
     auto delvrsrv_allocation_cost(ConsumerInterface<event_t> * consumer, size_t deliverable_cap) noexcept -> size_t{
 
         return network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap);
-            //    + network_producer_consumer::inplace_construct_size<DeliveryHandle<event_t>>(DeliveryHandle<event_t>{});
+               + network_producer_consumer::inplace_construct_size<DeliveryHandle<event_t>>(DeliveryHandle<event_t>{});
     }
 
     template <class event_t>
