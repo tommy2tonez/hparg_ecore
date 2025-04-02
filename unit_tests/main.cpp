@@ -11,7 +11,7 @@
 
 int main(){
 
-    keyfeed_test::run_feed_test();    
-    kvfeed_test::run_kv_feed_test();
+    keyfeed_test::run();    
+    kvfeed_test::run();
     // run_map_test();
 }

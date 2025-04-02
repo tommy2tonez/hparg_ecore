@@ -255,7 +255,7 @@ namespace kvfeed_test{
         }
     }
 
-    void run_kv_feed_test(){
+    void run(){
 
         std::cout << "<initializing_kv_feed_test>" << std::endl;
 

@@ -200,7 +200,7 @@ namespace keyfeed_test{
         }
     }
 
-    void run_feed_test(){
+    void run(){
 
         std::cout << "<initializing_feed_test>" << std::endl;
 

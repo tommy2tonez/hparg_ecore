@@ -91,14 +91,6 @@ void bar(){
 
 int main(){
 
-    //that was good enough
-    //you heard these pieces of craps never developed a thing said
-    //the only reason I haven't moved on is because I am afraid of might have happened if I apply an improved version of taylor series backpropagation
-    //it's all there fellas, in between the lines of taylor_fast
-    //its up to yall to release the beast
-    //it's gonna be a big mess
-    //sorry Dad, I rather die everyday literally than to leave yall in this situation, I have a bet to finish
-
     bar();
     foo();
 }

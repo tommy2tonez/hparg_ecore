@@ -24,6 +24,7 @@ namespace dg::network_producer_consumer{
 
     //alright, we feel lucky that we have implemented this correctly
     //this is a very hard one to implement correctly languagely, impossible without noexcepting certain functions, push(), delvrsrv_deliver(), delvrsrv_clear(), delvrsrv_close()
+    //we'll refactor the code later
 
     template <class EventType>
     static inline constexpr bool meets_event_precond_v  = std::is_same_v<EventType, std::decay_t<EventType>>;
