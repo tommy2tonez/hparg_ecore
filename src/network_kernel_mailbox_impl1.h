@@ -54,7 +54,8 @@ namespace dg::network_kernel_mailbox_impl1::types{
 
     static_assert(sizeof(size_t) >= sizeof(uint32_t));
 
-    using factory_id_t          = std::array<char, 32>;
+    using fast_addr_t           = std::array<char, 18>; //this is actually hard to achieve, we'll circle back for the addresses + unordered_set problem, it's hard
+    using factory_id_t          = std::array<char, 128>;
     using local_packet_id_t     = uint64_t;
     using packet_polymorphic_t  = uint8_t;
 }
@@ -1183,6 +1184,61 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     }
 }
 
+namespace dg::network_kernel_mailbox_impl1::semaphore_impl{
+
+    class binary_semaphore{
+
+        private:
+
+            std::binary_semaphore base;
+
+        public:
+
+            constexpr binary_semaphore(size_t state): base(state){}
+
+            auto acquire() noexcept -> exception_t{
+
+                try{
+                    this->base.acquire();
+                    return dg::network_exception::SUCCESS;
+                } catch (...){
+                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                }
+
+            }
+
+            auto release() noexcept -> exception_t{
+
+                try{
+                    this->base.release(1u);
+                    return dg::network_exception::SUCCESS;
+                } catch(...){
+                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                }
+            }
+
+            template <class Rep, class Period>
+            auto try_acquire_for(std::chrono::duration<Rep, Period> dur) noexcept -> std::expected<bool, exception_t>{
+
+                try{
+                    return base.try_acquire_for(dur);
+                } catch (...){
+                    return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+                }
+            }
+
+            template <class Clock, class Duration>
+            auto try_acquire_until(std::chrono::time_point<Clock, Duration> abs_time) noexcept -> std::expected<bool, exception_t>{
+
+                try{
+                    return base.try_acquire_until(abs_time);
+                } catch (...){
+                    return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+                }
+            }
+    };
+}
+
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     //OK
@@ -1190,7 +1246,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            dg::vector<std::shared_ptr<dg::timed_mutex>> mtx_queue;
+            dg::vector<std::shared_ptr<semaphore_impl::binary_semaphore>> mtx_queue;
             size_t mtx_queue_cap;
             std::mutex mtx_mtx_queue;
             stdx::hdi_container<std::atomic<intmax_t>> counter;
@@ -1240,7 +1296,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            this->mtx_queue[i]->unlock(std::memory_order_relaxed);
+                            dg::network_exception_handler::err_log(this->mtx_queue[i]->release());
                         }
 
                         this->mtx_queue.clear();
@@ -1278,8 +1334,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                std::shared_ptr<std::timed_mutex> spinning_mtx = std::make_shared<std::timed_mutex>();
-                spinning_mtx->lock(std::memory_order_relaxed);
+                std::shared_ptr<semaphore_impl::binary_semaphore> spinning_mtx = std::make_shared<semaphore_impl::binary_semaphore>(0u);
 
                 uint8_t action = [&, this]() noexcept{
                     stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);
@@ -1301,7 +1356,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         std::atomic_signal_fence(std::memory_order_seq_cst);
 
                         for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            this->mtx_queue[i]->unlock(std::memory_order_relaxed);
+                            dg::network_exception_handler::err_log(this->mtx_queue[i]->release());
                         }
 
                         this->mtx_queue.clear();
@@ -1317,7 +1372,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                     case ACTION_ACQUIRE:
                     {
-                        spinning_mtx->try_lock_for_strong(waiting_time, std::memory_order_relaxed); //we must try_lock_for stronk, not weak, std defaults try_lock == weak
+                        dg::network_exception_handler::err_log(spinning_mtx->try_acquire_for(waiting_time));
                         std::atomic_signal_fence(std::memory_order_seq_cst);
                         break;
                     }
@@ -1875,7 +1930,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 size_t trimmed_keyvalue_aggregation_cap     = std::min(this->keyvalue_aggregation_cap, sz);
                 size_t deliverer_allocation_cost            = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_aggregation_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> deliverer_mem(deliverer_allocation_cost);
-                auto deliverer                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get()));
+                auto deliverer                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get()));
 
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
@@ -1888,7 +1943,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     delivery_argument.fallback_pkt  = std::next(base_pkt_arr, i);
                     delivery_argument.exception_ptr = std::next(exception_arr, i);
 
-                    dg::network_producer_consumer::delvrsrv_deliver(deliverer.get(), partitioned_idx, std::move(delivery_argument));
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(deliverer.get(), partitioned_idx, std::move(delivery_argument));
                 }
             }
 
@@ -1900,7 +1955,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 size_t trimmed_keyvalue_aggregation_cap     = std::min(this->keyvalue_aggregation_cap, sz);
                 size_t deliverer_allocation_cost            = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_aggregation_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> deliverer_mem(deliverer_allocation_cost);
-                auto deliverer                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get()));
+                auto deliverer                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get()));
 
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
@@ -1911,7 +1966,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     size_t hashed                   = dg::network_hash::hash_reflectible(pkt_id_arr[i]);
                     size_t partitioned_idx          = hashed & (this->pow2_retransmission_controller_vec_sz - 1u);
 
-                    dg::network_producer_consumer::delvrsrv_deliver(deliverer.get(), partitioned_idx, delivery_argument);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(deliverer.get(), partitioned_idx, delivery_argument);
                 }
             }
 
@@ -2767,7 +2822,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 size_t trimmed_keyvalue_aggregation_cap = std::min(this->keyvalue_aggregation_cap, sz);
                 size_t deliverer_allocation_cost        = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_aggregation_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> deliverer_mem(deliverer_allocation_cost);
-                auto deliverer                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get())); 
+                auto deliverer                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get())); 
 
                 std::fill(op, std::next(op, sz), std::expected<bool, exception_t>(true));
 
@@ -2779,7 +2834,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     resolutor_arg.pkt_id    = packet_id_arr[i];
                     resolutor_arg.bad_op    = std::next(op, i);
 
-                    dg::network_producer_consumer::delvrsrv_deliver(deliverer.get(), partitioned_idx, resolutor_arg);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(deliverer.get(), partitioned_idx, resolutor_arg);
                 }
             }
 
@@ -4368,7 +4423,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
                     }
 
-                    dg::hrtimers::high_resolution_sleep(transmit_period);
+                    stdx::high_resolution_sleep(transmit_period);
                 }
             };
     };
@@ -4685,7 +4740,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 size_t trimmed_ack_vectorization_sz                     = std::min(this->ack_vectorization_sz, buf_arr_sz); //ack_vectorization_sz <= ack_pkt_sz <= buf_arr_sz
                 size_t ack_vectorizer_allocation_cost                   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ack_vectorizer_mem(ack_vectorizer_allocation_cost);
-                auto ack_vectorizer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz, ack_vectorizer_mem.get())); 
+                auto ack_vectorizer                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&ack_vectorizer_resolutor, trimmed_ack_vectorization_sz, ack_vectorizer_mem.get())); 
 
                 //
 
@@ -4907,7 +4962,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     Packet * base_data_arr  = data_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
-                        dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, base_data_arr[i].fr_addr, static_cast<const PacketBase&>(base_data_arr[i]));
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(this->ack_vectorizer, base_data_arr[i].fr_addr, static_cast<const PacketBase&>(base_data_arr[i]));
                     }
                 }
             };
@@ -4968,7 +5023,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     Packet * base_data_arr = data_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
-                        dg::network_producer_consumer::delvrsrv_deliver(this->ack_vectorizer, base_data_arr[i].fr_addr, static_cast<const PacketBase&>(base_data_arr[i]));
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(this->ack_vectorizer, base_data_arr[i].fr_addr, static_cast<const PacketBase&>(base_data_arr[i]));
                         dg::network_producer_consumer::delvrsrv_deliver(this->inbound_deliverer, std::move(base_data_arr[i]));
                     }
                 }

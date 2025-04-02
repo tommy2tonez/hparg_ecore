@@ -3,7 +3,7 @@
 
 //define HEADER_CONTROL 8
 
-// #include "network_log.h"
+#include "network_log.h"
 #include <stdlib.h>
 #include "network_exception.h" 
 
@@ -17,10 +17,10 @@ namespace dg::network_exception_handler{
 
         if (has_log_write_on_err){
             if (is_throw){
-                // dg::network_log_stackdump::error(network_exception::verbose(err_code));
+                dg::network_log_stackdump::error(network_exception::verbose(err_code));
                 network_exception::throw_exception(err_code);
             } else{
-                // dg::network_log_stackdump::critical(network_exception::verbose(err_code));
+                dg::network_log_stackdump::critical(network_exception::verbose(err_code));
                 std::abort();
             }
         } else{
@@ -30,6 +30,24 @@ namespace dg::network_exception_handler{
                 std::abort();
             }
         }
+    }
+    
+    inline void err_log(exception_t) noexcept{
+
+    }
+
+    inline void err_log_optional(exception_t) noexcept{
+
+    }
+
+    template <class T>
+    inline auto err_log(std::expected<T, exception_t>) noexcept{
+
+    }
+
+    template <class T>
+    inline auto err_log_optional(std::expected<T, exception_t>) noexcept{
+
     }
 
     inline void nothrow_nolog(exception_t err_code) noexcept{

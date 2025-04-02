@@ -196,6 +196,20 @@ namespace dg::network_exception{
         return rs;
     } 
 
+    template <class T, class ...Args>
+    inline auto cstyle_initialize(Args&& ...args) noexcept -> std::expected<T, exception_t>{
+
+        if constexpr(std::is_nothrow_constructible_v<std::expected<T, exception_t>, std::in_place_t, Args&&...> && std::is_nothrow_move_constructible_v<std::expected<T, exception_t>>){
+            return std::expected<T, exception_t>(std::in_place_t{}, std::forward<Args>(args)...);
+        } else{
+            try{
+                return std::expected<T, exception_t>(std::in_place_t{}, std::forward<Args>(args)...);
+            } catch (...){
+                return std::unexpected(wrap_std_exception(std::current_exception()));
+            }
+        }
+    }
+
     template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same_v<Args, exception_t>...>, bool> = true>
     inline auto disjunction(Args... args) noexcept -> exception_t{
         

@@ -183,7 +183,7 @@ namespace dg::network_hash{
     template <class T>
     constexpr auto hash_reflectible(const T& obj) noexcept -> uint64_t{
 
-        constexpr size_t MAX_REFLECTIBLE_SZ = size_t{1} << 5;
+        constexpr size_t MAX_REFLECTIBLE_SZ = size_t{1} << 8; //
         static_assert(std::has_unique_object_representations_v<T>);
         
         constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(T{});
