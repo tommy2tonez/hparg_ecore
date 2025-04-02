@@ -684,8 +684,8 @@ namespace dg::network_producer_consumer{
         //resolving map_ptr, return valid_map_ptr if the code path is to through the if
         if (map_ptr->second.value().sz == map_ptr->second.value().cap){
             //try to extend buf
-            size_t new_sz                           = map_ptr->second.value().cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
-            std::expected<char *, exception_t> buf  = bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_sz));
+            size_t new_cap                          = map_ptr->second.value().cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
+            std::expected<char *, exception_t> buf  = bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_cap));
 
             if (!buf.has_value()) [[unlikely]]{
                 //extend buf request not granted
@@ -710,7 +710,7 @@ namespace dg::network_producer_consumer{
                 }
             } else [[likely]]{
                 //extend buf request granted, we are to initialize + transfer data
-                auto req_container          = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_sz, buf.value()));
+                auto req_container          = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_cap, buf.value()));
                 std::copy(std::make_move_iterator(map_ptr->second.value().ptr), std::make_move_iterator(std::next(map_ptr->second.value().ptr, map_ptr->second.value().sz)), req_container.value().ptr);
                 req_container.value().sz    = map_ptr->second.value().sz;
                 map_ptr->second             = std::move(req_container);
