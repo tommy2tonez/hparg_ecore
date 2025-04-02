@@ -307,6 +307,8 @@ namespace dg::network_producer_consumer{
     template <class event_t>
     auto delvrsrv_close_handle(DeliveryHandle<event_t> * handle) noexcept{
 
+        static_assert(std::is_nothrow_destructible_v<event_t>);
+
         delvrsrv_clear(handle);
 
         delete[] handle->deliverable_arr;
@@ -315,6 +317,9 @@ namespace dg::network_producer_consumer{
 
     template <class event_t>
     auto delvrsrv_close_preallocated_handle(DeliveryHandle<event_t> * handle) noexcept{
+
+        static_assert(noexcept(network_producer_consumer::inplace_destruct_array(handle->deliverable_arr, handle->deliverable_cap)));
+        static_assert(noexcept(network_producer_consumer::inplace_destruct_object(handle)));
 
         delvrsrv_clear(handle);
 
@@ -620,10 +625,17 @@ namespace dg::network_producer_consumer{
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_clear(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+        
+        //preconds
+
+        // static_assert(std::is_nothrow_default_constructible_v<key_t>); //...
+        // static_assert(std::is_nothrow_default_constructible_v<event_t>);
+        // static_assert(std::is_nothrow_destructible_v<event_t>);
+        // static_assert(std::is_nothrow_move_constructible_v<event_t>);
 
         for (auto it = handle->key_event_map.begin(); it != handle->key_event_map.end(); ++it){
-            const auto& key     = it->first;
-            auto& value         = it->second;
+            const auto& key = it->first;
+            auto& value     = it->second;
             handle->consumer->push(key, std::make_move_iterator(value.value().ptr), value.value().sz);
         }
 
@@ -676,7 +688,7 @@ namespace dg::network_producer_consumer{
             }
 
             auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
-            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container));  
+            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container)); //TODOs: buggy  
             dg::network_exception_handler::dg_assert(emplace_status);
             map_ptr                             = emplace_ptr;
         }
@@ -725,6 +737,8 @@ namespace dg::network_producer_consumer{
     template <class key_t, class event_t>
     void delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
+        static_assert(std::is_nothrow_destructible_v<KVDeliveryHandle<key_t, event_t>>);
+
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
         bump_allocator_deinitialize(handle->bump_allocator);
@@ -735,6 +749,8 @@ namespace dg::network_producer_consumer{
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_close_preallocated_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+
+        static_assert(noexcept(inplace_destruct_object(handle)));
 
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
