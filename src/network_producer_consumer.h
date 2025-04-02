@@ -18,8 +18,12 @@
 #include "assert.h"
 #include "dg_map_variants.h"
 #include "network_exception_handler.h"
+#include "network_type_traits_x.h"
 
 namespace dg::network_producer_consumer{
+
+    //alright, we feel lucky that we have implemented this correctly
+    //this is a very hard one to implement correctly languagely, impossible without noexcepting certain functions, push(), delvrsrv_deliver(), delvrsrv_clear(), delvrsrv_close()
 
     template <class EventType>
     static inline constexpr bool meets_event_precond_v  = std::is_same_v<EventType, std::decay_t<EventType>>;
@@ -464,7 +468,7 @@ namespace dg::network_producer_consumer{
         size_t deliverable_sz;
         size_t deliverable_cap;
         KVConsumerInterface<KeyType, EventType> * consumer;
-        dg::map_variants::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map;
+        dg::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map;
     };
 
     //clear
@@ -517,7 +521,7 @@ namespace dg::network_producer_consumer{
     template <class EventType, class EventLike>
     auto delvrsrv_kv_push_event_container(KVEventContainer<EventType>& container, EventLike&& event) noexcept -> exception_t{
 
-        if constexpr(std::is_nothrow_assignable_v<EventType, EventLike&&>){
+        if constexpr(dg::network_type_traits_x::is_nothrow_assignable_x_v<EventType, EventLike&&>){
             if (container.sz == container.cap){
                 return dg::network_exception::RESOURCE_EXHAUSTION;
             }
@@ -553,7 +557,7 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = dg::map_variants::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            auto key_event_map      = dg::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = std::unique_ptr<KVDeliveryHandle<key_t, event_t>>(new KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
             auto rs                 = delivery_handle.get();
@@ -591,7 +595,7 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_preallocated_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = dg::map_variants::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            auto key_event_map      = dg::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = inplace_construct<KVDeliveryHandle<key_t, event_t>>(std::next(preallocated_buf, bump_allocator_allocation_cost(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap))),
                                                                                           KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
@@ -668,7 +672,7 @@ namespace dg::network_producer_consumer{
             }
 
             auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
-            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container));  
+            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container)); //TODOs: bug
             dg::network_exception_handler::dg_assert(emplace_status);
             map_ptr                             = emplace_ptr;
         }

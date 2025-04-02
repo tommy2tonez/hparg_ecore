@@ -72,6 +72,15 @@ namespace dg::network_type_traits_x{
                                                                                         mono_reduction_type_helper<tags<Second, Args...>>,
                                                                                         empty>{}; //this is not sfinae - consider std::void_t<> - this is a bad hack
 
+    template <class T, class T1, class = void>
+    struct is_nothrow_assignable_x: std::is_nothrow_assignable<T, T1>{};
+
+    template <class T, class T1>
+    struct is_nothrow_assignable_x<T, T1, std::void_t<std::enable_if_t<std::conjunction_v<std::is_fundamental<std::decay_t<T>>, std::is_fundamental<std::decay_t<T1>>>, bool> >>: std::true_type{};   
+
+    template <class T, class T1>
+    static inline constexpr bool is_nothrow_assignable_x_v = is_nothrow_assignable_x<T, T1>::value;
+
     template <class T>
     struct remove_expected{};
 
