@@ -13,9 +13,10 @@
 #include <utility>
 #include <iterator>
 #include "network_std_container.h"
-#include "network_log.h"
+// #include "network_log.h"
 #include "network_exception.h"
 #include "assert.h"
+#include "dg_map_variants.h"
 #include "network_exception_handler.h"
 
 namespace dg::network_producer_consumer{
@@ -265,7 +266,7 @@ namespace dg::network_producer_consumer{
     template <class event_t>
     auto delvrsrv_allocation_cost(ConsumerInterface<event_t> * consumer, size_t deliverable_cap) noexcept -> size_t{
 
-        return network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap);
+        return network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap) 
                + network_producer_consumer::inplace_construct_size<DeliveryHandle<event_t>>(DeliveryHandle<event_t>{});
     }
 
@@ -306,8 +307,6 @@ namespace dg::network_producer_consumer{
     template <class event_t>
     auto delvrsrv_close_handle(DeliveryHandle<event_t> * handle) noexcept{
 
-        static_assert(std::is_nothrow_destructible_v<event_t>);
-
         delvrsrv_clear(handle);
 
         delete[] handle->deliverable_arr;
@@ -316,9 +315,6 @@ namespace dg::network_producer_consumer{
 
     template <class event_t>
     auto delvrsrv_close_preallocated_handle(DeliveryHandle<event_t> * handle) noexcept{
-
-        static_assert(noexcept(network_producer_consumer::inplace_destruct_array(handle->deliverable_arr, handle->deliverable_cap)));
-        static_assert(noexcept(network_producer_consumer::inplace_destruct_object(handle)));
 
         delvrsrv_clear(handle);
 
@@ -468,7 +464,7 @@ namespace dg::network_producer_consumer{
         size_t deliverable_sz;
         size_t deliverable_cap;
         KVConsumerInterface<KeyType, EventType> * consumer;
-        dg::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map;
+        dg::map_variants::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map;
     };
 
     //clear
@@ -501,7 +497,7 @@ namespace dg::network_producer_consumer{
         EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
         auto container          = KVEventContainer<EventType>{event_arr, 0u, capacity};
 
-        return container;
+        return container;        
     }
 
     //clear
@@ -557,7 +553,7 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = dg::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            auto key_event_map      = dg::map_variants::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = std::unique_ptr<KVDeliveryHandle<key_t, event_t>>(new KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
             auto rs                 = delivery_handle.get();
@@ -595,7 +591,7 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_preallocated_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = dg::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            auto key_event_map      = dg::map_variants::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = inplace_construct<KVDeliveryHandle<key_t, event_t>>(std::next(preallocated_buf, bump_allocator_allocation_cost(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap))),
                                                                                           KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
@@ -620,16 +616,9 @@ namespace dg::network_producer_consumer{
     template <class key_t, class event_t>
     void delvrsrv_kv_clear(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
-        //preconds
-
-        // static_assert(std::is_nothrow_default_constructible_v<key_t>); //...
-        // static_assert(std::is_nothrow_default_constructible_v<event_t>);
-        // static_assert(std::is_nothrow_destructible_v<event_t>);
-        // static_assert(std::is_nothrow_move_constructible_v<event_t>);
-
         for (auto it = handle->key_event_map.begin(); it != handle->key_event_map.end(); ++it){
-            const auto& key = it->first;
-            auto& value     = it->second;
+            const auto& key     = it->first;
+            auto& value         = it->second;
             handle->consumer->push(key, std::make_move_iterator(value.ptr), value.sz);
             destroy_kv_event_container(value);
         }
@@ -670,7 +659,7 @@ namespace dg::network_producer_consumer{
                     buf = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
                 } else{
                     if constexpr(DEBUG_MODE_FLAG){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     } else{
                         std::unreachable();
@@ -679,14 +668,14 @@ namespace dg::network_producer_consumer{
             }
 
             auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
-            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container)); //TODOs: buggy  
+            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container));  
             dg::network_exception_handler::dg_assert(emplace_status);
             map_ptr                             = emplace_ptr;
         }
 
         if (map_ptr->second.sz == map_ptr->second.cap){
-            size_t new_cap                          = map_ptr->second.cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
-            std::expected<char *, exception_t> buf  = bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_cap));
+            size_t new_sz                           = map_ptr->second.cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
+            std::expected<char *, exception_t> buf  = bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(new_sz));
 
             if (!buf.has_value()) [[unlikely]]{
                 if (buf.error() == dg::network_exception::RESOURCE_EXHAUSTION){
@@ -699,14 +688,14 @@ namespace dg::network_producer_consumer{
                     map_ptr                             = emplace_ptr;
                 } else{                    
                     if constexpr(DEBUG_MODE_FLAG){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     } else{
                         std::unreachable();
                     }
                 }
             } else [[likely]]{
-                auto req_container          = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_cap, buf.value()));
+                auto req_container          = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_sz, buf.value()));
                 std::copy(std::make_move_iterator(map_ptr->second.ptr), std::make_move_iterator(std::next(map_ptr->second.ptr, map_ptr->second.sz)), req_container.ptr);
                 req_container.sz            = map_ptr->second.sz;
                 destroy_kv_event_container(map_ptr->second);
@@ -714,15 +703,13 @@ namespace dg::network_producer_consumer{
             }
         }
 
-        dg::network_exception_handler::nothrow_log(delvrsrv_kv_push_event_container(map_ptr->second, std::move(event))); //valid map_ptr push_back
+        dg::network_exception_handler::nothrow_log(delvrsrv_kv_push_event_container(map_ptr->second, std::move(event)));
         handle->deliverable_sz += 1;
     }
 
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
-
-        static_assert(std::is_nothrow_destructible_v<KVDeliveryHandle<key_t, event_t>>);
 
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
@@ -734,8 +721,6 @@ namespace dg::network_producer_consumer{
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_close_preallocated_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
-
-        static_assert(noexcept(inplace_destruct_object(handle)));
 
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
