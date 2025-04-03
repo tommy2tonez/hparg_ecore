@@ -172,8 +172,10 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
-    static inline constexpr size_t MAX_STREAM_SIZE  = size_t{1} << 25;
-    static inline constexpr size_t MAX_SEGMENT_SIZE = size_t{1} << 10;
+    static inline constexpr size_t MAX_STREAM_SIZE              = size_t{1} << 25;
+    static inline constexpr size_t MAX_SEGMENT_SIZE             = size_t{1} << 10;
+    static inline constexpr size_t DEFAULT_KEYVALUE_FEED_SIZE   = size_t{1} << 10; 
+    static inline constexpr size_t DEFAULT_KEY_FEED_SIZE        = size_t{1} << 8;
 
     struct GlobalIdentifier{
         Address addr;
@@ -197,7 +199,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
         uint64_t segment_sz;
     };
 
-    static auto serialize_packet_segment(PacketSegment segment) noexcept -> std::expected<dg::string, exception_t>{
+    static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<dg::string, exception_t>{
 
         // constexpr size_t HEADER_SZ  = dg::network_trivial_serializer::size(std::make_tuple(GlobalIdentifier{}, uint64_t{}, uint64_t{}));
         // std::array<char, HEADER_SZ> buf{};
@@ -208,7 +210,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
         // return rs;
     }
 
-    static auto deserialize_packet_segment(dg::string buf) noexcept -> std::expected<PacketSegment, exception_t>{
+    static auto deserialize_packet_segment(dg::string&& buf) noexcept -> std::expected<PacketSegment, exception_t>{
 
         // constexpr size_t HEADER_SZ  = dg::network_trivial_serializer::size(std::make_tuple(GlobalIdentifier{}, uint64_t{}, uint64_t{}));
         // auto [lhs_str, rhs_str]     = stdx::backsplit_str(std::move(buf), HEADER_SZ);
@@ -229,6 +231,28 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
         size_t total_segment_sz;
     };
 
+    static auto assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
+
+        // dg::network_exception_handler::dg_assert(assembled_packet.total_segment_sz != 0u);
+        // dg::string rs = std::move(assembled_packet.data[0].buf); 
+        // size_t extra_sz = 0u; 
+
+        // for (size_t i = 1u; i < assembled_packet.data.size(); ++i){
+        //     extra_sz += assembled_packet.data[i].buf.size();
+        // }
+
+        // size_t old_sz   = rs.size();
+        // size_t new_sz   = old_sz + extra_sz;
+        // rs.resize(new_sz);
+        // char * last     = rs.data() + old_sz;
+
+        // for (size_t i = 1u; i < assembled_packet.data.size(); ++i){
+        //     last = std::copy(assembled_packet.data[i].buf.begin(), assembled_packet.data[i].buf.end(), last);
+        // }
+
+        // return rs;
+    } 
+
     struct PacketIDGeneratorInterface{
         virtual ~PacketIDGeneratorInterface() noexcept = default;
         virtual auto get_id() noexcept -> GlobalIdentifier = 0;
@@ -248,8 +272,8 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     struct PacketAssemblerInterface{
         virtual ~PacketAssemblerInterface() noexcept = default;
-        virtual void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept = 0;        
-        virtual void destroy(GlobalIdentifier * id, size_t sz) noexcept = 0;
+        virtual void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept = 0;
+        virtual void destroy(GlobalIdentifier * id_arr, size_t sz) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -613,21 +637,30 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             dg::unordered_map<GlobalIdentifier, AssembledPacket> packet_map;
             size_t packet_map_cap;
+            size_t global_packet_segment_cap;
+            size_t global_packet_segment_counter;
+            size_t max_segment_sz_per_assembly; 
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
             PacketAssembler(dg::unordered_map<GlobalIdentifier, AssembledPacket> packet_map,
-                            size_t packet_map_cap, 
+                            size_t packet_map_cap,
+                            size_t global_packet_segment_cap,
+                            size_t global_packet_segment_counter,
+                            size_t max_segment_sz_per_assembly,
                             std::unique_ptr<std::mutex> mtx,
                             stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_map(std::move(packet_map)),
                                                                                        packet_map_cap(packet_map_cap),
+                                                                                       global_packet_segment_cap(global_packet_segment_cap),
+                                                                                       global_packet_segment_counter(global_packet_segment_counter),
+                                                                                       max_segment_sz_per_assembly(max_segment_sz_per_assembly),
                                                                                        mtx(std::move(mtx)),
                                                                                        consume_sz_per_load(std::move(consume_sz_per_load)){}
 
             void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept{
-                
+
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -647,7 +680,17 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                     auto map_ptr = this->packet_map.find(segment_arr_base[i].id);
 
                     if (map_ptr == this->packet_map.end()){
+                        if (segment_arr_base[i].segment_sz > this->max_segment_sz_per_assembly){
+                            assembled_arr[i] = std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_SEGMENT_SIZE);
+                            continue;
+                        }
+
                         if (this->packet_map.size() == this->packet_map_cap){
+                            assembled_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
+                            continue;
+                        }
+
+                        if (this->global_packet_segment_counter + segment_arr_base[i].segment_sz > this->global_packet_segment_cap){
                             assembled_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
                             continue;
                         }
@@ -657,18 +700,20 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                         if (!waiting_pkt.has_value()){
                             assembled_arr[i] = std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
                             continue;
-                        } 
+                        }
 
-                        auto [emplace_ptr, status] = this->packet_map.try_emplace(segment_arr_base[i].id, std::move(waiting_pkt.value()));
+                        auto [emplace_ptr, status]          = this->packet_map.try_emplace(segment_arr_base[i].id, std::move(waiting_pkt.value()));
                         dg::network_exception_handler::dg_assert(status);
-                        map_ptr = emplace_ptr;
+                        map_ptr                             = emplace_ptr;
+                        this->global_packet_segment_counter += segment_arr_base[i].segment_sz; 
                     }
 
                     map_ptr->second.data[segment_arr_base[i].segment_idx]   = std::move(segment_arr_base[i]);
                     map_ptr->second.collected_segment_sz                    += 1;
 
                     if (map_ptr->second.collected_segment_sz == map_ptr->second.total_segment_sz){
-                        assembled_arr[i] = std::move(map_ptr->second);
+                        this->global_packet_segment_counter -= map_ptr->second.total_segment_sz; 
+                        assembled_arr[i]                    = std::move(map_ptr->second);
                         this->packet_map.erase(map_ptr);
                     } else{
                         assembled_arr[i] = std::unexpected(dg::network_exception::SOCKET_STREAM_QUEUING);
@@ -752,8 +797,6 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feed_mem(feed_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feed_mem.get()));
 
-                std::fill(assembled_arr, std::next(assembled_arr, sz), std::expected<AssembledPacket, exception_t>(std::unexpected(dg::network_exception::SOCKET_STREAM_QUEUING)));
-
                 for (size_t i = 0u; i < sz; ++i){
                     size_t hashed_value             = dg::network_hash::hash_reflectible(base_segment_arr[i].id);
                     size_t partitioned_idx          = hashed_value & (this->pow2_base_arr_sz - 1u);
@@ -796,6 +839,57 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
                 return this->consume_sz_per_load;
             }
+        
+        private:
+
+            struct InternalAssembleFeedArgument{
+                PacketSegment segment;
+                PacketSegment * fallback_segment_ptr;
+                std::expected<AssembledPacket, exception_t> * rs;
+            };
+
+            struct InternalAssembleFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalAssembleFeedArgument>{
+                std::unique_ptr<PacketAssemblerInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<InternalAssembleFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalAssembleFeedArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<PacketSegment[]> segment_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<AssembledPacket, exception_t>[]> rs_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        segment_arr[i] = std::move(base_data_arr[i].segment);
+                    }
+
+                    this->dst[idx]->assemble(std::make_move_iterator(segment_arr.get()), sz, rs_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (rs_arr[i].has_value()){
+                            *base_data_arr[i].rs = std::move(rs_arr[i]); //thru
+                            continue;   
+                        }
+
+                        if (rs_arr[i].error() == dg::network_exception::SOCKET_STREAM_QUEUING){
+                            *base_data_arr[i].rs = std::move(rs_arr[i]); //thru
+                            continue;
+                        }
+
+                        //fallback, move semantic does not apply to failed exception_t
+                        *base_data_arr[i].rs                    = std::move(rs_arr[i]);
+                        *base_data_arr[i].fallback_segment_ptr  = std::move(segment_arr[i]);
+                    }
+                }
+            };
+
+            struct InternalDestroyFeedResolutor: dg::network_producer_consumer::KVConsuemrInterface<size_t, GlobalIdentifier>{
+                std::unique_ptr<PacketAssemblerInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<GlobalIdentifier *> data_arr, size_t sz) noexcept{
+
+                    this->dst[idx]->destroy(data_arr.base(), sz);
+                }
+            };
     };
 
     class ExhaustionControlledPacketAssembler: public virtual PacketAssemblerInterface{
@@ -804,84 +898,28 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             std::unique_ptr<PacketAssemblerInterface> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-            dg::unordered_map<GlobalIdentifier, size_t> counter_map;
-            size_t capacity;
-            size_t size;
-            std::unique_ptr<std::mutex> mtx;
+            std::shared_ptr<ExhaustionControllerInterface> exhaustion_controller;
 
         public:
 
             ExhaustionControlledPacketAssembler(std::unique_ptr<PacketAssemblerInterface> base,
                                                 std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
-                                                dg::unordered_map<GlobalIdentifier, size_t> counter_map,
-                                                size_t capacity,
-                                                size_t size,
-                                                std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
-                                                                                           executor(std::move(executor)),
-                                                                                           counter_map(std::move(counter_map)),
-                                                                                           capacity(capacity),
-                                                                                           size(size),
-                                                                                           mtx(std::move(mtx)){}
-            
-            auto assemble(PacketSegment segment) noexcept -> std::optional<AssembledPacket>{
-                
-                std::optional<AssembledPacket> rs{};
-                auto task = [&]() noexcept{
-                    return this->internal_assemble(segment, rs);
-                };
-                auto virt_task = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(task)>(task);
-                this->executor->exec(virt_task);
+                                                std::shared_ptr<ExhaustionControllerInterface> exhaustion_controller) noexcept: base(std::move(base)),
+                                                                                                                                executor(std::move(executor)),
+                                                                                                                                exhaustion_controller(std::move(exhaustion_controller)){}
 
-                return rs; 
+            auto assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept -> std::optional<AssembledPacket>{
+
             }
 
-            void destroy(const GlobalIdentifier& id) noexcept{
+            void destroy(GlobalIdentifier * id_arr, size_t sz) noexcept{
 
-                this->internal_destroy(id);
-            }
-        
-        private:
-
-            auto internal_assemble(PacketSegment& segment, std::optional<AssembledPacket>& rs) noexcept -> bool{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                
-                if (this->size == this->capacity){
-                    return false;
-                }
-
-                auto map_ptr = this->counter_map.find(segment.id);
-
-                if (map_ptr == this->counter_map.end()){
-                    auto [emplace_ptr, status] = this->counter_map.emplace(std::make_pair(segment.id, 1u));
-                    dg::network_exception_handler::dg_assert(status);
-                    map_ptr = emplace_ptr;
-                } else{
-                    map_ptr->second += 1;
-                }
-
-                this->size += 1;
-                rs = this->base->assemble(std::move(segment));
-
-                if (rs.has_value()){
-                    this->size -= map_ptr->second;
-                    this->counter_map.erase(map_ptr);
-                }
-
-                return true;
+                this->base->destroy(id_arr, sz);
             }
 
-            void internal_destroy(const GlobalIdentifier& id) noexcept{
+            auto max_consume_size() noexcept -> size_t{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                auto map_ptr    = this->counter_map.find(id);
-
-                if (map_ptr != this->counter_map.end()){
-                    this->size -= map_ptr->second;
-                    this->counter_map.erase(map_ptr);
-                }
-
-                this->base->destroy(id);
+                return this->base->max_consume_size();
             }
     };
 
@@ -889,33 +927,27 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
         private:
 
-            dg::deque<dg::string> vec;
+            dg::deque<dg::string> buffer_deque; //we need cyclic buffers
+            size_t buffer_deque_cap;
             std::unique_ptr<std::mutex> mtx;
-        
+            stdx::hdi_container<size_t> consume_sz_per_load;
+
         public:
 
             InBoundContainer(dg::deque<dg::string> vec,
                              std::unique_ptr<std::mutex> mtx) noexcept: vec(std::move(vec)),
                                                                         mtx(std::move(mtx)){}
-            
-            void push(dg::string buf) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                this->vec.push_back(std::move(buf));
+            void push(std::move_iterator<dg::string *> buf_arr, size_t sz, exception_t * exception_arr) noexcept{
+
             }
 
-            auto pop() noexcept -> std::optional<dg::string>{
+            auto pop(dg::string * output_arr, size_t& sz, size_t cap) noexcept -> std::optional<dg::string>{
                 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                
-                if (this->vec.empty()){
-                    return std::nullopt;
-                }
+            }
 
-                auto rs = std::move(this->vec.front());
-                this->vec.pop_front();
+            auto max_consume_size() noexcept -> size_t{
 
-                return rs;
             }
     };
 
@@ -925,67 +957,6 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     class ExhaustionControlledInBoundContainer: public virtual InBoundContainerInterface{
 
-        private:
-
-            std::unique_ptr<InBoundContainerInterface> base;
-            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-            size_t capacity;
-            size_t size; 
-            std::unique_ptr<std::mutex> mtx;
-
-        public:
-
-            ExhaustionControlledInBoundContainer(std::unique_ptr<InBoundContainerInterface> base,
-                                                 std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
-                                                 size_t capacity,
-                                                 size_t size,
-                                                 std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
-                                                                                            executor(std::move(executor)),
-                                                                                            capacity(capacity),
-                                                                                            size(size),
-                                                                                            mtx(std::move(mtx)){}
-
-            void push(dg::string data) noexcept{
-
-                auto task = [&]() noexcept{
-                    return this->internal_push(data);
-                };
-                auto virt_task = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(task)>(task);
-                this->executor->exec(virt_task);
-            }
-
-            auto pop() noexcept -> std::optional<dg::string>{
-
-                return this->internal_pop();
-            }
-        
-        private:
-
-            auto internal_push(dg::string& data) noexcept -> bool{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                if (this->size == this->capacity){
-                    return false;
-                }
-
-                this->base->push(std::move(data));
-                this->size += 1;
-
-                return true;
-            }
-
-            auto internal_pop() noexcept -> std::optional<dg::string>{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                std::optional<dg::string> rs = this->base->pop();
-
-                if (rs.has_value()){
-                    this->size -= 1;
-                }
-
-                return rs;
-            }
     };
 
     class ReactingInBoundContainer: public virtual InBoundContainerInterface{
@@ -1029,104 +1000,242 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             std::shared_ptr<InBoundContainerInterface> inbound_container;
             std::shared_ptr<EntranceControllerInterface> entrance_controller;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+            size_t upstream_consume_sz;
+            size_t busy_consume_sz;
 
         public:
 
             InBoundWorker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
                           std::shared_ptr<InBoundContainerInterface> inbound_container,
                           std::shared_ptr<EntranceControllerInterface> entrance_controller,
-                          std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base) noexcept: packet_assembler(std::move(packet_assembler)),
-                                                                                                                    inbound_container(std::move(inbound_container)),
-                                                                                                                    entrance_controller(std::move(entrance_controller)),
-                                                                                                                    base(std::move(base)){}
+                          std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                          size_t upstream_consume_sz,
+                          size_t busy_consume_sz) noexcept: packet_assembler(std::move(packet_assembler)),
+                                                            inbound_container(std::move(inbound_container)),
+                                                            entrance_controller(std::move(entrance_controller)),
+                                                            base(std::move(base)),
+                                                            upstream_consume_sz(upstream_consume_sz),
+                                                            busy_consume_sz(busy_consume_sz){}
 
             bool run_one_epoch() noexcept{
+                
+                size_t consuming_sz     = 0u;
+                size_t consuming_cap    = this->upstream_consume_sz;
+                dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(consuming_cap);
 
-                std::optional<dg::string> data = this->base->recv();
+                this->base->recv(buf_arr.get(), consuming_sz, consuming_cap); 
 
-                if (!data.has_value()){
-                    return false;
+                size_t trimmed_et_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->entrance_controller->max_consume_size());
+
+                auto et_feed_resolutor                      = InternalEntranceFeedResolutor{};
+                et_feed_resolutor.entrance_controller       = this->entrance_controller.get();
+                size_t et_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&et_feed_resolutor, trimmed_et_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> et_feeder_mem(et_feeder_allocation_cost);
+                auto et_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&et_feed_resolutor, trimmed_et_feed_cap, et_feeder_mem.get()));
+
+                size_t trimmed_ib_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->inbound_container->max_consume_size());
+
+                size_t ib_feed_resolutor                    = InternalInBoundFeedResolutor{};
+                ib_feed_resolutor.inbound_container         = this->inbound_container.get();
+                size_t ib_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ib_feed_resolutor, trimmed_ib_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ib_feeder_mem(ib_feeder_allocation_cost);
+                auto ib_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ib_feed_resolutor, trimmed_ib_feed_cap, ib_feeder_mem.get())); 
+
+                size_t trimmed_ps_feed_cap                  = std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz);
+
+                auto ps_feed_resolutor                      = InternalPacketSegmentFeedResolutor{};
+                ps_feed_resolutor.packet_assembler          = this->packet_assembler.get();
+                ps_feed_resolutor.entrance_feeder           = et_feeder.get();
+                ps_feed_resolutor.inbound_feeder            = ib_feeder.get();
+                size_t ps_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ps_feed_resolutor, trimmed_ps_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ps_feeder_mem(ps_feeder_allocation_cost);
+                auto ps_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ps_feed_resolutor, trimmed_ps_feed_cap, ps_feeder_mem.get()));  
+
+                for (size_t i = 0u; i < consuming_sz; ++i){
+                    std::expected<PacketSegment, exception_t> pkt = deserialize_packet_segment(std::move(buf_arr[i]));
+
+                    if (!pkt.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
+                        continue;
+                    }
+
+                    dg::network_producer_consumer::delvrsrv_deliver(ps_feeder.get(), std::move(pkt.value()));
                 }
 
-                PacketSegment pkt   = deserialize_packet_segment(std::move(data.value()));
-                GlobalIdentifier id = pkt.id;
-                std::optional<AssembledPacket> assembled_packet = this->packet_assembler->assemble(std::move(pkt));
-
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-                this->entrance_controller->tick(id); //important that tick is here - otherwise leak
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                if (assembled_packet.has_value()){
-                    this->inbound_container->push(this->to_bstream(std::move(assembled_packet.value())));
-                }
-
-                return true;
+                return consuming_sz >= this->busy_consume_sz;
             }
         
         private:
 
-            auto to_bstream(AssembledPacket assembled_packet) noexcept -> dg::string{
+            struct InternalEntranceFeedResolutor: dg::network_producer_consumer::ConsumerInterface<GlobalIdentifier>{
 
-                dg::network_exception_handler::dg_assert(assembled_packet.total_segment_sz != 0u);
-                dg::string rs = std::move(assembled_packet.data[0].buf); 
-                size_t extra_sz = 0u; 
+                EntranceControllerInterface * entrance_controller;
 
-                for (size_t i = 1u; i < assembled_packet.data.size(); ++i){
-                    extra_sz += assembled_packet.data[i].buf.size();
+                void push(std::move_iterator<GlobalIdentifier *> id_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    this->entrance_controller->tick(id_arr.base(), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::SOCKET_STREAM_LEAK));
+                        }
+                    }
                 }
+            };
 
-                size_t old_sz   = rs.size();
-                size_t new_sz   = old_sz + extra_sz;
-                rs.resize(new_sz);
-                char * last     = rs.data() + old_sz;
+            struct InternalInBoundFeedResolutor: dg::network_producer_consumer::ConsumerInterface<dg::string>{
 
-                for (size_t i = 1u; i < assembled_packet.data.size(); ++i){
-                    last = std::copy(assembled_packet.data[i].buf.begin(), assembled_packet.data[i].buf.end(), last);
+                InBoundContainerInterface * inbound_container;
+
+                void push(std::move_iterator<dg::string *> data_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    this->inbound_container->push(data_arr, sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
                 }
+            };
 
-                return rs;
-            }
+            struct InternalPacketSegmentFeedResolutor: dg::network_producer_consumer::ConsumerInterface<PacketSegment>{
+
+                PacketAssemblerInterface * packet_assembler;
+                dg::network_producer_consumer::DeliveryHandle<GlobalIdentifier> * entrance_feeder;
+                dg::network_producer_consumer::DeliveryHandle<dg::string> * inbound_feeder;
+
+                void push(std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
+                    
+                    PacketSegment * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<GlobalIdentifier[]> global_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<AssembledPacket, exception_t>[]> assembled_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        global_id_arr[i] = base_data_arr[i].id; 
+                    }
+
+                    this->packet_assembler->assemble(std::make_move_iterator(base_data_arr), sz, assembled_arr.get());
+                    
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        dg::network_producer_consumer::delvrsrv_deliver(this->entrance_feeder, global_id_arr[i]);
+                    }
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (assembled_arr[i].has_value()){
+                            std::expected<dg::string, exception_t> buf = assembled_packet_to_buffer(static_cast<AssembledPacket&&>(assembled_arr[i].value())); 
+
+                            if (!buf.has_value()){
+                                dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(buf.error()));
+                            } else{
+                                dg::network_producer_consumer::delvrsrv_deliver(this->inbound_feeder, std::move(buf.value()));
+                            }
+                        } else{
+                            if (assembled_arr[i].error() != dg::network_exception::SOCKET_STREAM_QUEUING){
+                                dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(assembled_arr[i].error()));
+                            }
+                        }
+                    }
+                }
+            };
     };
 
     class MailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailboxInterface{
 
         private:
 
-            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
+            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
             std::unique_ptr<PacketizerInterface> packetizer;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
             std::shared_ptr<InBoundContainerInterface> inbound_container;
 
         public:
 
-            MailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemons,
+            MailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
                     std::unique_ptr<PacketizerInterface> packetizer,
                     std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-                    std::shared_ptr<InBoundContainerInterface> inbound_container) noexcept: daemons(std::move(daemons)),
+                    std::shared_ptr<InBoundContainerInterface> inbound_container) noexcept: daemon_vec(std::move(daemon_vec)),
                                                                                             packetizer(std::move(packetizer)),
                                                                                             base(std::move(base)),
                                                                                             inbound_container(std::move(inbound_container)){}
 
-            void send(Address addr, dg::string arg) noexcept{
+            void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
                 
-                //this is an abortable error - because it's no_response | no_transmit deterministic - implies program errors
+                auto feed_resolutor             = InternalFeedResolutor{};
+                feed_resolutor.dst              = this->base.get(); 
 
-                if (arg.size() > MAX_STREAM_SIZE){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
-                    std::abort();
-                }
+                size_t trimmed_mailbox_feed_sz  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, sz), this->base->max_consume_size());
+                size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_sz, feed_mem.get()));
 
-                dg::vector<PacketSegment> segment_vec = this->packetizer->packetize(arg);
+                for (size_t i = 0u; i < sz; ++i){
+                    std::expected<dg::vector<PacketSegment>, exception_t> segment_vec = this->packetizer->packetize(static_cast<dg::string&&>(data_arr.content));
 
-                for (PacketSegment& segment: segment_vec){
-                    this->base->send(addr, serialize_packet_segment(std::move(segment)));
+                    if (!segment_vec.has_value()){
+                        exception_arr[i] = segment_vec.error();
+                        continue;
+                    }
+
+                    for (size_t j = 0u; j < segment_vec.value().size(); ++j){
+                        dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(segment_vec.value()[j]));
+                    }
+
+                    exception_arr[i] = dg::network_exception::SUCCESS;
                 }
             }
 
-            auto recv() noexcept -> std::optional<dg::string>{
+            void recv(dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
 
-                return this->inbound_container->pop();
+                return this->inbound_container->pop(output_arr, output_arr_sz, output_arr_cap);
             }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
+            }
+        
+        private:
+
+            struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<PacketSegment>{
+
+                dg::network_kernel_mailbox_impl1::core::MailBoxInterface * dst;
+
+                void push(std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
+
+                    PacketSegment * base_data_arr   = data_arr.base();
+                    size_t arr_cap                  = sz;
+                    size_t arr_sz                   = 0u;
+
+                    dg::network_stack_allocation::NoExceptAllocation<dg::string[]> str_arr(arr_cap);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(arr_cap);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        std::expected<dg::string, exception_t> serialized = serialize_packet_segment(static_cast<PacketSegment&&>(base_data_arr[i]));
+
+                        if (!serialized.has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(serialized.error()));
+                            continue;
+                        }
+
+                        str_arr[arr_sz++] = std::move(serialized.value());
+                    }
+
+                    this->dst->send(std::make_move_iterator(str_arr.get()), arr_sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < arr_sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
+
     };
 
     struct Factory{
