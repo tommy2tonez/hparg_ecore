@@ -455,7 +455,7 @@ namespace dg::network_producer_consumer{
 
     //clear
     template <class EventType>
-    void destroy_kv_event_container(KVEventContainer<EventType> event_container) noexcept{
+    void delvrsrv_kv_destroy_event_container(KVEventContainer<EventType> event_container) noexcept{
 
         static_assert(std::is_nothrow_destructible_v<EventType>);
         dg::network_producer_consumer::inplace_destruct_array(event_container.ptr, event_container.cap);
@@ -473,7 +473,7 @@ namespace dg::network_producer_consumer{
         size_t deliverable_sz;
         size_t deliverable_cap;
         KVConsumerInterface<KeyType, EventType> * consumer;
-        dg::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map;
+        dg::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map; //we dont want to reinvent the wheel to confuse our peers, we'll leverage advanced inplace allocator + throw, the complexity + debuggability + maintainability of the keyvalue feed are already reaching the unacceptable threshold  
     };
 
     //clear
@@ -500,8 +500,10 @@ namespace dg::network_producer_consumer{
     }
 
     //clear
-    template <class EventType, std::enable_if_t<std::is_nothrow_constructible_v<EventType>, bool> = true>
-    auto delvrsrv_kv_get_preallocated_event_container(size_t capacity, char * buf) noexcept -> std::expected<KVEventContainer<EventType>, exception_t>{
+    template <class EventType>
+    auto delvrsrv_kv_make_preallocated_event_container(size_t capacity, char * buf) noexcept -> KVEventContainer<EventType>{
+
+        static_assert(std::is_nothrow_default_constructible_v<EventType>);
 
         EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
         auto container          = KVEventContainer<EventType>{event_arr, 0u, capacity};
@@ -510,23 +512,11 @@ namespace dg::network_producer_consumer{
     }
 
     //clear
-    template <class EventType, std::enable_if_t<!std::is_nothrow_constructible_v<EventType>, bool> = true>
-    auto delvrsrv_kv_get_preallocated_event_container(size_t capacity, char * buf) noexcept -> std::expected<KVEventContainer<EventType>, exception_t>{
-
-        try{
-            EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
-            auto container          = KVEventContainer<EventType>(event_arr, 0u, capacity);
-
-            return container;
-        } catch (...){
-            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
-        }
-    }
-
+    //compiler is to see this to apply correct branching skews, nothrow log with set branching of container.sz == container_cap -> 10%
     template <class EventType, class EventLike>
-    auto delvrsrv_kv_push_event_container(KVEventContainer<EventType>& container, EventLike&& event) noexcept -> exception_t{
+    inline auto delvrsrv_kv_push_event_container(KVEventContainer<EventType>& container, EventLike&& event) noexcept -> exception_t{
 
-        if constexpr(dg::network_type_traits_x::is_nothrow_assignable_x_v<EventType, EventLike&&>){
+        if constexpr(std::is_nothrow_assignable_v<EventType&, EventLike&&>){
             if (container.sz == container.cap){
                 return dg::network_exception::RESOURCE_EXHAUSTION;
             }
@@ -629,7 +619,7 @@ namespace dg::network_producer_consumer{
             const auto& key     = it->first;
             auto& value         = it->second;
             handle->consumer->push(key, std::make_move_iterator(value.ptr), value.sz);
-            destroy_kv_event_container(value);
+            delvrsrv_kv_destroy_event_container(value);
         }
 
         handle->key_event_map.clear();
@@ -638,13 +628,21 @@ namespace dg::network_producer_consumer{
     }
 
     //clear
+    //this is not std
+    //because according to the std, open = except, actions = except, clear = noexcept, close = noexcept
+
+    //yet the complexity of handling leaks is too great if we are to except this function, imagine that we have allocated the container, we make the container, now it throws, we are to unallocate the allocated chunk, which is not feasible in the case of bump allocator (it is no longer bump allocator)
+    //or we have made the container, we are to push the container to our map, our map throws, now we have to unmake the container, unallocate the allocated chunk
+    //why dont we use finite pool of memory, decide everything at the time of initialization | construction, and make delvrsrv noexcept ?
+    //we are aiming at a very minute sub cases of delvrsrv except, yet this works
+    //this is not std-std, this is application-std, if you are to use delvrsrv_kv_deliver, you have to make sure certain things to be noexcept, because we guarantee no-leaks for you in our acceptable implementation complexity + manpower
+
+    //the keyvalue feed is probably the most important feed that we are going to use from time to time
+    //we are to limit the memory footprint because CPU has great cache, not great memory
+    //if the memory is far out in the wild, we are saturating the RAM bandwidth, which is not good
+
     template <class key_t, class event_t>
     inline void delvrsrv_kv_deliver(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
-
-        static_assert(std::is_nothrow_default_constructible_v<key_t>); //...
-        static_assert(std::is_nothrow_default_constructible_v<event_t>);
-        static_assert(std::is_nothrow_destructible_v<event_t>);
-        static_assert(std::is_nothrow_move_constructible_v<event_t>);
 
         handle = stdx::safe_ptr_access(handle);
 
@@ -657,6 +655,7 @@ namespace dg::network_producer_consumer{
             }
         }
 
+        // static_assert(noexcept(handle->key_event_map.find(key))); we need std support to make std::hash noexcept again
         auto map_ptr = handle->key_event_map.find(key);  
 
         if (map_ptr == handle->key_event_map.end()){
@@ -676,10 +675,22 @@ namespace dg::network_producer_consumer{
                 }
             }
 
-            auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
-            auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container)); //TODOs: bug
-            dg::network_exception_handler::dg_assert(emplace_status);
-            map_ptr                             = emplace_ptr;
+            //assume finite pool of memory, we are to write it like this, because there might be a hash_table attack, we never know, assume finite pool of capacity, never growing
+            auto req_container = delvrsrv_kv_make_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value());                
+
+            try{
+                auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, req_container);
+                dg::network_exception_handler::dg_assert(emplace_status);
+                map_ptr                             = emplace_ptr;
+            } catch (std::bad_alloc& e){ //bad alloc might or might not use dynamic allocations, we are to trust std to do their affinity job correctly
+                delvrsrv_kv_destroy_event_container(req_container);
+                delvrsrv_kv_clear(handle);
+                char * nofail_buf                   = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
+                req_container                       = delvrsrv_kv_make_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, nofail_buf);
+                auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, req_container);
+                dg::network_exception_handler::dg_assert(emplace_status);
+                map_ptr                             = emplace_ptr;
+            }
         }
 
         if (map_ptr->second.sz == map_ptr->second.cap){
@@ -689,9 +700,9 @@ namespace dg::network_producer_consumer{
             if (!buf.has_value()) [[unlikely]]{
                 if (buf.error() == dg::network_exception::RESOURCE_EXHAUSTION){
                     delvrsrv_kv_clear(handle);
-                    buf                                 = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
-                    auto req_container                  = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value()));
-                    auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, std::move(req_container));
+                    char * nofail_buf                   = dg::network_exception_handler::nothrow_log(bump_allocator_allocate(handle->bump_allocator, delvrsrv_kv_get_event_container_bsize<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP)));
+                    auto req_container                  = delvrsrv_kv_make_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, nofail_buf);
+                    auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, req_container);
 
                     dg::network_exception_handler::dg_assert(emplace_status);
                     map_ptr                             = emplace_ptr;
@@ -704,10 +715,13 @@ namespace dg::network_producer_consumer{
                     }
                 }
             } else [[likely]]{
-                auto req_container          = dg::network_exception_handler::nothrow_log(delvrsrv_kv_get_preallocated_event_container<event_t>(new_sz, buf.value()));
+                auto req_container          = delvrsrv_kv_make_preallocated_event_container<event_t>(new_sz, buf.value());
+
+                static_assert(std::is_nothrow_move_assignable_v<event_t>);
                 std::copy(std::make_move_iterator(map_ptr->second.ptr), std::make_move_iterator(std::next(map_ptr->second.ptr, map_ptr->second.sz)), req_container.ptr);
+
                 req_container.sz            = map_ptr->second.sz;
-                destroy_kv_event_container(map_ptr->second);
+                delvrsrv_kv_destroy_event_container(map_ptr->second);
                 map_ptr->second             = req_container;
             }
         }
