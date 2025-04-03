@@ -162,13 +162,22 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     //after a long conversation with my std-friends, they are heavily against the heap_allocation noexcept, even if it is for application purposes
     //I dont really know what precisely their plan is for defrag or extending the heap
-    //yet it is said that we can decrease the chance of no-fail allocations -> 0 by controlling the upstream allocation techniques, not here return dg::string like it is implementation-specific
+    //yet it is said that we can decrease the chance of no-fail allocations -> 0 by controlling the upstream allocation techniques, not here returning dg::string like it is implementation-specific
 
     //we have come up with two types of std_containers, the std_container that cannot fail because of allocations, and the std_container that can fail because of allocations
     //std_container that cannot fail because of allocations are for preallocated, internal usage of std::unordered_set<> std::unordered_map, std::deque, etc.
     //std_container that can fail because of allocations (we hardly found the reason to fail allocations, yet it's best practice to consider allocations as normal action operations)
-
     //we are to radix the std_containers
+
+    //alright, let's see what's going on
+    //there might be a chance of coordinated streamx attack
+    //this is also susceptible to late packets transmissions
+    //we want to establish soft_synchronization of packet destruction to avoid statistical chances or engineered chances of incoming packet recv times being evenly spreaded out in an acceptable adjecent destruction window
+    //such creates the worst case of n * <waiting_window> -> 60s - 1 hour (which is very bad)
+    //we must have an absolute window of transmission right at the moment of <packet_assemble> construction
+    //such window is fixed and reasonably fixed, configurable by users (1MB - 16MB, 10 seconds transmisison, for example)
+    //we are to not yet worry about the affinity of random_hash_distributed
+    //if the lock contention cost (queueing mutex + put thread to sleep + wake thread up == 1024 packets submission, we are to increase the packet size per tx -> 1024, because the affinity problem introduces hand-tune accurate, skewed consumption, we are to avoid that unless we are going to the last of last option for micro optimizations)
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
@@ -779,8 +788,11 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                         this->global_packet_segment_counter += segment_arr_base[i].segment_sz; 
                     }
 
-                    map_ptr->second.data[segment_arr_base[i].segment_idx]   = std::move(segment_arr_base[i]);
-                    map_ptr->second.collected_segment_sz                    += 1;
+                    //this is fine, because it is object <dig_in> operator = (object&&), there wont be issues, yet we want to make this explicit
+
+                    size_t segment_idx                      = segment_arr_base[i].segment_idx;
+                    map_ptr->second.data[segment_idx]       = std::move(segment_arr_base[i]);
+                    map_ptr->second.collected_segment_sz    += 1;
 
                     if (map_ptr->second.collected_segment_sz == map_ptr->second.total_segment_sz){
                         this->global_packet_segment_counter -= map_ptr->second.total_segment_sz; 
@@ -793,7 +805,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             }
 
             void destroy(GlobalIdentifier * id_arr, size_t sz) noexcept{
-                
+
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -804,7 +816,14 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    this->packet_map.erase(id_arr[i]);
+                    auto map_ptr = this->packet_map.find(id_arr[i]);
+
+                    if (map_ptr == this->packet_map.end()){
+                        continue;
+                    }
+
+                    this->global_packet_segment_counter -= map_ptr->second.total_segment_sz;
+                    this->packet_map.erase(map_ptr);
                 }
             }
 
@@ -826,7 +845,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 size_t collected    = 0u;
                 size_t total        = segment_sz;
 
-                return AssembledPacket{std::move(vec), collected, total};
+                return AssembledPacket{std::move(vec.value()), collected, total};
             }
     };
 
@@ -954,6 +973,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             };
 
             struct InternalDestroyFeedResolutor: dg::network_producer_consumer::KVConsuemrInterface<size_t, GlobalIdentifier>{
+
                 std::unique_ptr<PacketAssemblerInterface> * dst;
 
                 void push(const size_t& idx, std::move_iterator<GlobalIdentifier *> data_arr, size_t sz) noexcept{
@@ -1020,9 +1040,6 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 return this->base->max_consume_size();
             }
     };
-
-    //we are not the reuse guys, because of we know of the cost of header_control, we rather copy paste, dependency_internalize
-    //this is for the best of source code maintaining, future refactoring 
 
     //OK, dg::deque -> cyclic queue
     class BufferFIFOContainer: public virtual InBoundContainerInterface{
@@ -1335,28 +1352,28 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
                 this->base->recv(buf_arr.get(), consuming_sz, consuming_cap); 
 
-                size_t trimmed_et_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->entrance_controller->max_consume_size());
-
                 auto et_feed_resolutor                      = InternalEntranceFeedResolutor{};
                 et_feed_resolutor.entrance_controller       = this->entrance_controller.get();
+
+                size_t trimmed_et_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->entrance_controller->max_consume_size());
                 size_t et_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&et_feed_resolutor, trimmed_et_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> et_feeder_mem(et_feeder_allocation_cost);
                 auto et_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&et_feed_resolutor, trimmed_et_feed_cap, et_feeder_mem.get()));
 
-                size_t trimmed_ib_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->inbound_container->max_consume_size());
-
                 size_t ib_feed_resolutor                    = InternalInBoundFeedResolutor{};
                 ib_feed_resolutor.inbound_container         = this->inbound_container.get();
+
+                size_t trimmed_ib_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->inbound_container->max_consume_size());
                 size_t ib_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ib_feed_resolutor, trimmed_ib_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ib_feeder_mem(ib_feeder_allocation_cost);
                 auto ib_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ib_feed_resolutor, trimmed_ib_feed_cap, ib_feeder_mem.get())); 
-
-                size_t trimmed_ps_feed_cap                  = std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz);
 
                 auto ps_feed_resolutor                      = InternalPacketSegmentFeedResolutor{};
                 ps_feed_resolutor.packet_assembler          = this->packet_assembler.get();
                 ps_feed_resolutor.entrance_feeder           = et_feeder.get();
                 ps_feed_resolutor.inbound_feeder            = ib_feeder.get();
+
+                size_t trimmed_ps_feed_cap                  = std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz);
                 size_t ps_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ps_feed_resolutor, trimmed_ps_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ps_feeder_mem(ps_feeder_allocation_cost);
                 auto ps_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ps_feed_resolutor, trimmed_ps_feed_cap, ps_feeder_mem.get()));  
@@ -1455,6 +1472,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             };
     };
 
+    //OK
     class MailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailboxInterface{
 
         private:
@@ -1463,29 +1481,34 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             std::unique_ptr<PacketizerInterface> packetizer;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
             std::shared_ptr<InBoundContainerInterface> inbound_container;
+            size_t transmission_vectorization_sz;
 
         public:
 
             MailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
                     std::unique_ptr<PacketizerInterface> packetizer,
                     std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-                    std::shared_ptr<InBoundContainerInterface> inbound_container) noexcept: daemon_vec(std::move(daemon_vec)),
-                                                                                            packetizer(std::move(packetizer)),
-                                                                                            base(std::move(base)),
-                                                                                            inbound_container(std::move(inbound_container)){}
+                    std::shared_ptr<InBoundContainerInterface> inbound_container,
+                    size_t transmission_vectorization_sz) noexcept: daemon_vec(std::move(daemon_vec)),
+                                                                    packetizer(std::move(packetizer)),
+                                                                    base(std::move(base)),
+                                                                    inbound_container(std::move(inbound_container)),
+                                                                    transmission_vectorization_sz(transmission_vectorization_sz){}
 
             void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
                 
+                MailBoxArgument * base_data_arr = data_arr.base();
+
                 auto feed_resolutor             = InternalFeedResolutor{};
                 feed_resolutor.dst              = this->base.get(); 
 
-                size_t trimmed_mailbox_feed_sz  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, sz), this->base->max_consume_size());
-                size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_sz);
+                size_t trimmed_mailbox_feed_sz  = std::min(std::min(this->transmission_vectorization_sz, sz * MAX_SEGMENT_SIZE), this->base->max_consume_size());
+                size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_sz, feed_mem.get()));
+                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_sz, feed_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<dg::vector<PacketSegment>, exception_t> segment_vec = this->packetizer->packetize(static_cast<dg::string&&>(data_arr.content));
+                    std::expected<dg::vector<PacketSegment>, exception_t> segment_vec = this->packetizer->packetize(static_cast<dg::string&&>(base_data_arr[i].content));
 
                     if (!segment_vec.has_value()){
                         exception_arr[i] = segment_vec.error();
@@ -1493,7 +1516,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                     }
 
                     for (size_t j = 0u; j < segment_vec.value().size(); ++j){
-                        dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(segment_vec.value()[j]));
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), base_data_arr[i].to, std::move(segment_vec.value()[j])); //we are to attempt to temporally group the <to> transmission, to increase ack vectorization chances
                     }
 
                     exception_arr[i] = dg::network_exception::SUCCESS;
@@ -1509,20 +1532,20 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
                 return this->base->max_consume_size();
             }
-        
+
         private:
 
-            struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<PacketSegment>{
+            struct InternalFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<Address, PacketSegment>{
 
                 dg::network_kernel_mailbox_impl1::core::MailBoxInterface * dst;
 
-                void push(std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
+                void push(const Address& to, std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
 
                     PacketSegment * base_data_arr   = data_arr.base();
                     size_t arr_cap                  = sz;
                     size_t arr_sz                   = 0u;
 
-                    dg::network_stack_allocation::NoExceptAllocation<dg::string[]> str_arr(arr_cap);
+                    dg::network_stack_allocation::NoExceptAllocation<MailBoxArgument[]> mailbox_arg_arr(arr_cap);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(arr_cap);
 
                     for (size_t i = 0u; i < sz; ++i){
@@ -1533,10 +1556,12 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                             continue;
                         }
 
-                        str_arr[arr_sz++] = std::move(serialized.value());
+                        mailbox_arg_arr[arr_sz].content = std::move(serialized.value());
+                        mailbox_arg_arr[arr_sz].to      = to;
+                        arr_sz                          += 1;
                     }
 
-                    this->dst->send(std::make_move_iterator(str_arr.get()), arr_sz, exception_arr.get());
+                    this->dst->send(std::make_move_iterator(mailbox_arg_arr.get()), arr_sz, exception_arr.get());
 
                     for (size_t i = 0u; i < arr_sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
