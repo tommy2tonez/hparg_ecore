@@ -677,7 +677,7 @@ namespace dg::network_producer_consumer{
 
             //assume finite pool of memory, we are to write it like this, because there might be a hash_table attack, we never know, assume finite pool of capacity, never growing
             auto req_container = delvrsrv_kv_make_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value());                
-
+ 
             try{
                 auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, req_container);
                 dg::network_exception_handler::dg_assert(emplace_status);
@@ -734,6 +734,8 @@ namespace dg::network_producer_consumer{
     template <class key_t, class event_t>
     void delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
+        static_assert(std::is_nothrow_destructible_v<KVDeliveryHandle<key_t, event_t>>);
+
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
         bump_allocator_deinitialize(handle->bump_allocator);
@@ -744,6 +746,8 @@ namespace dg::network_producer_consumer{
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_close_preallocated_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{
+
+        static_assert(noexcept(inplace_destruct_object(handle)));
 
         handle = stdx::safe_ptr_access(handle);
         delvrsrv_kv_clear(handle);
