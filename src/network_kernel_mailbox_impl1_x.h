@@ -146,7 +146,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
             auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::utc_clock> dur) noexcept -> dg::string{
 
-                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(dur - std::chrono::utc_clock::now());
+                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::utc_clock::now() - dur);
                 size_t tick_sz = dur_in_seconds.count();
 
                 if (tick_sz == 0u){
@@ -159,7 +159,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
             auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::utc_clock> dur) noexcept -> dg::string{
 
-                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(dur - std::chrono::utc_clock::now());
+                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::utc_clock::now() - dur);
                 size_t tick_sz = dur_in_seconds.count();
 
                 if (tick_sz == 0u){
@@ -266,12 +266,22 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     //if we are to use jumbo frame, it is 8192 bytes/ 1 stack allocation of 32 bytes
     //I hardly think that's the issue
-    
+
     //let's get back to the absolute window problem
     //we are to leverage our current solution to solve the problem of destroy
     //this requires an inbound gate to invoke assemble
     //because if we don't invoke assemble in a timely manner or a reasonable duration, the packet is automatically self-destructed
     //this inbound gate uses an temporal_finite_unordered_map (Address -> absolute time)
+
+    //sorry babe, I dont have time for you, I have tons of codes to write, I dont even know if I can write all of these shit on time
+    //one day people would realize that they are doing synchronization for ... nothing
+    //what's about that 0.0001% of failed tree computation, mis soft-synchronization by using timepoint + plan
+    //we dont really care fellas, just like CPU, we push things so hard through (by making good frequency plans), and we check intervally to rewind the state
+    //we need to know that nano-accurate latency is irrelevant in such case (we are logit density miners)
+    //what we need is a guarantee of worst case scenerios, an absolute window of computation tree or socket transportation
+
+    //we are operating on machines that can have memory corruption at ALL TIME, we are flopping on cuda, concurrently, what do yall expect?
+    //our only true North is getting the logit data, verifying the data, or rewind the data, and retrain
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
@@ -301,6 +311,12 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
         GlobalIdentifier id;
         uint64_t segment_idx;
         uint64_t segment_sz;
+    };
+
+    struct AssembledPacket{
+        dg::vector<PacketSegment> data;
+        size_t collected_segment_sz;
+        size_t total_segment_sz;
     };
 
     static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<dg::string, exception_t>{
@@ -348,12 +364,6 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
         return rs;
     }
 
-    struct AssembledPacket{
-        dg::vector<PacketSegment> data;
-        size_t collected_segment_sz;
-        size_t total_segment_sz;
-    };
-
     static auto assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
 
         if (pkt.total_segment_sz != pkt.collected_segment_sz){
@@ -391,7 +401,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
         }
 
         return rs;
-    } 
+    }
 
     struct PacketIDGeneratorInterface{
         virtual ~PacketIDGeneratorInterface() noexcept = default;
@@ -600,7 +610,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             dg::vector<EntranceEntry> entrance_entry_pq; //no exhausted container
             const size_t entrance_entry_pq_cap; 
-            dg::unordered_map<GlobalIdentifier, size_t> key_id_map; //no exhausted container
+            dg::unordered_unstable_map<GlobalIdentifier, size_t> key_id_map; //no exhausted container
             const size_t key_id_map_cap;
             __uint128_t id_ticker;
             const std::chrono::nanoseconds expiry_period;
@@ -611,7 +621,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
             EntranceController(dg::vector<EntranceEntry> entrance_entry_pq,
                                size_t entrance_entry_pq_cap,
-                               dg::unordered_map<GlobalIdentifier, size_t> key_id_map,
+                               dg::unordered_unstable_map<GlobalIdentifier, size_t> key_id_map,
                                szie_t key_id_map_cap,
                                __uint128_t id_ticker,
                                std::chrono::nanoseconds expiry_period,
@@ -730,7 +740,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                                                                                         max_tick_per_load(max_tick_per_load){}
 
             void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
-                
+
                 auto feed_resolutor                 = InternalFeedResolutor{};
                 feed_resolutor.dst                  = this->base_arr.get(); 
 
@@ -874,27 +884,27 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
         private:
 
-            dg::unordered_map<GlobalIdentifier, AssembledPacket> packet_map;
+            dg::unordered_unstable_map<GlobalIdentifier, AssembledPacket> packet_map;
             size_t packet_map_cap;
             size_t global_packet_segment_cap;
             size_t global_packet_segment_counter;
-            size_t max_segment_sz_per_assembly; 
+            size_t max_segment_sz_per_stream; 
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
-            PacketAssembler(dg::unordered_map<GlobalIdentifier, AssembledPacket> packet_map,
+            PacketAssembler(dg::unordered_unstable_map<GlobalIdentifier, AssembledPacket> packet_map,
                             size_t packet_map_cap,
                             size_t global_packet_segment_cap,
                             size_t global_packet_segment_counter,
-                            size_t max_segment_sz_per_assembly,
+                            size_t max_segment_sz_per_stream,
                             std::unique_ptr<std::mutex> mtx,
                             stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_map(std::move(packet_map)),
                                                                                        packet_map_cap(packet_map_cap),
                                                                                        global_packet_segment_cap(global_packet_segment_cap),
                                                                                        global_packet_segment_counter(global_packet_segment_counter),
-                                                                                       max_segment_sz_per_assembly(max_segment_sz_per_assembly),
+                                                                                       max_segment_sz_per_stream(max_segment_sz_per_stream),
                                                                                        mtx(std::move(mtx)),
                                                                                        consume_sz_per_load(std::move(consume_sz_per_load)){}
 
@@ -908,18 +918,18 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 }
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                PacketSegment * segment_arr_base = segment_arr.base();
+                PacketSegment * base_segment_arr = segment_arr.base();
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (segment_arr_base[i].segment_sz == 0u){
+                    if (base_segment_arr[i].segment_sz == 0u){
                         assembled_arr[i] = this->make_empty_assembled_packet(0u);
                         continue;
                     }
 
-                    auto map_ptr = this->packet_map.find(segment_arr_base[i].id);
+                    auto map_ptr = this->packet_map.find(base_segment_arr[i].id);
 
                     if (map_ptr == this->packet_map.end()){
-                        if (segment_arr_base[i].segment_sz > this->max_segment_sz_per_assembly){
+                        if (base_segment_arr[i].segment_sz > this->max_segment_sz_per_stream){
                             assembled_arr[i] = std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_SEGMENT_SIZE);
                             continue;
                         }
@@ -929,28 +939,28 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                             continue;
                         }
 
-                        if (this->global_packet_segment_counter + segment_arr_base[i].segment_sz > this->global_packet_segment_cap){
+                        if (this->global_packet_segment_counter + base_segment_arr[i].segment_sz > this->global_packet_segment_cap){
                             assembled_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
                             continue;
                         }
 
-                        std::expected<AssembledPacket, exception_t> waiting_pkt = this->make_empty_assembled_packet(segment_arr_base[i].segment_sz);
+                        std::expected<AssembledPacket, exception_t> waiting_pkt = this->make_empty_assembled_packet(base_segment_arr[i].segment_sz);
 
                         if (!waiting_pkt.has_value()){
-                            assembled_arr[i] = std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                            assembled_arr[i] = std::unexpected(waiting_pkt.error());
                             continue;
                         }
 
-                        auto [emplace_ptr, status]          = this->packet_map.try_emplace(segment_arr_base[i].id, std::move(waiting_pkt.value()));
+                        auto [emplace_ptr, status]          = this->packet_map.try_emplace(base_segment_arr[i].id, std::move(waiting_pkt.value()));
                         dg::network_exception_handler::dg_assert(status);
                         map_ptr                             = emplace_ptr;
-                        this->global_packet_segment_counter += segment_arr_base[i].segment_sz; 
+                        this->global_packet_segment_counter += base_segment_arr[i].segment_sz; 
                     }
 
                     //this is fine, because it is object <dig_in> operator = (object&&), there wont be issues, yet we want to make this explicit
 
-                    size_t segment_idx                      = segment_arr_base[i].segment_idx;
-                    map_ptr->second.data[segment_idx]       = std::move(segment_arr_base[i]);
+                    size_t segment_idx                      = base_segment_arr[i].segment_idx;
+                    map_ptr->second.data[segment_idx]       = std::move(base_segment_arr[i]);
                     map_ptr->second.collected_segment_sz    += 1;
 
                     if (map_ptr->second.collected_segment_sz == map_ptr->second.total_segment_sz){
@@ -1053,7 +1063,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                     auto feed_arg                   = InternalAssembleFeedArgument{}:
                     feed_arg.segment                = std::move(base_segment_arr[i]);
                     feed_arg.fallback_segment_ptr   = std::next(base_segment_arr, i);
-                    feed_arg.rs                     = std::next(std::next(assembled_arr, i)); 
+                    feed_arg.rs                     = std::next(assembled_arr, i); 
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, std::move(feed_arg));
                 }
@@ -1178,7 +1188,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                     }
 
                     std::expected<AssembledPacket, exception_t> * first_retriable_ptr   = std::find(first_assembled_ptr, last_assembled_ptr, full_signal);
-                    std::expected<AssembledPacket, exception_t> * last_retriable_ptr    = std::find_if(first_retriable_ptr, last_assembled_ptr, [](const auto& err){return err != full_signal;});
+                    std::expected<AssembledPacket, exception_t> * last_retriable_ptr    = std::find_if(first_retriable_ptr, last_assembled_ptr, [&](const auto& err){return err != full_signal;});
                     sliding_window_sz                                                   = std::distance(first_retriable_ptr, last_retriable_ptr);
                     size_t relative_offset                                              = std::distance(first_assembled_ptr, first_retriable_ptr);
 
@@ -1439,7 +1449,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                                                            entrance_controller(std::move(entrance_controller)),
                                                            expired_id_consume_sz(expired_id_consume_sz),
                                                            busy_consume_sz(busy_consume_sz){}
-            
+
             bool run_one_epoch() noexcept{
 
                 size_t id_arr_cap   = this->expired_id_consume_sz;
@@ -1507,7 +1517,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                                                             busy_consume_sz(busy_consume_sz){}
 
             bool run_one_epoch() noexcept{
-                
+
                 size_t consuming_sz     = 0u;
                 size_t consuming_cap    = this->upstream_consume_sz;
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(consuming_cap);
@@ -1535,7 +1545,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 ps_feed_resolutor.entrance_feeder           = et_feeder.get();
                 ps_feed_resolutor.inbound_feeder            = ib_feeder.get();
 
-                size_t trimmed_ps_feed_cap                  = std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz);
+                size_t trimmed_ps_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->packet_assembler->max_consume_size());
                 size_t ps_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ps_feed_resolutor, trimmed_ps_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ps_feeder_mem(ps_feeder_allocation_cost);
                 auto ps_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ps_feed_resolutor, trimmed_ps_feed_cap, ps_feeder_mem.get()));  
@@ -1705,7 +1715,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 size_t trimmed_mailbox_feed_sz  = std::min(std::min(this->transmission_vectorization_sz, sz * MAX_SEGMENT_SIZE), this->base->max_consume_size());
                 size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_sz, feed_mem.get()));
+                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_sz, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<dg::vector<PacketSegment>, exception_t> segment_vec = this->packetizer->packetize(static_cast<dg::string&&>(base_data_arr[i].content));
@@ -1775,156 +1785,354 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     struct Factory{
 
-        static auto spawn_packetizer(size_t segment_byte_sz, Address factory_addr) -> std::unique_ptr<PacketizerInterface>{
-            
-            const size_t MIN_SEGMENT_SIZE = size_t{1} << 8;
-            const size_t MAX_SEGMENT_SIZE = size_t{1} << 13; 
+        static auto get_packet_id_generator(Address factory_addr) -> std::unique_ptr<PacketIDGeneratorInterface>{
 
-            if (std::clamp(segment_byte_sz, MIN_SEGMENT_SIZE, MAX_SEGMENT_SIZE) != segment_byte_sz){
+            uint64_t random_counter = dg::network_randomizer::randomize_int<uint64_t>();
+            return std::make_unique<PacketIDGenerator>(std::move(factory_addr), random_counter);
+        } 
+        
+        static auto get_temporal_absolute_timeout_inbound_gate(size_t map_capacity, 
+                                                               std::chrono::nanoseconds abs_timeout_dur,
+                                                               size_t max_consume_decay_factor = 2u){
+            
+            const size_t MIN_MAP_CAPACITY                       = size_t{1};
+            const size_t MAX_MAP_CAPACITY                       = size_t{1} << 40;
+            const std::chrono::nanoseconds MIN_ABS_TIMEOUT_DUR  = std::chrono::nanoseconds(1u);
+            const std::chrono::nanoseconds MAX_ABS_TIMEOUT_DUR  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+
+            if (std::clamp(map_capacity, MIN_MAP_CAPACITY, MAX_MAP_CAPACITY) != map_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t random_seed = dg::network_randomizer::randomize_int<size_t>(); //this is to avoid reset + id collision
-            return std::make_unique<Packetizer>(segment_byte_sz, factory_addr, random_seed);
-        }
-
-        //this needs exhaustion controlled - program-defined
-        static auto spawn_entrance_controller(std::chrono::nanoseconds expiry_period) -> std::unique_ptr<EntranceControllerInterface>{
-            
-            const std::chrono::nanoseconds MIN_EXPIRY_PERIOD = std::chrono::milliseconds(1); 
-            const std::chrono::nanoseconds MAX_EXPIRY_PERIOD = std::chrono::seconds(20);
-
-            if (std::clamp(expiry_period.count(), MIN_EXPIRY_PERIOD.count(), MAX_EXPIRY_PERIOD.count()) != expiry_period.count()){
+            if (std::clamp(abs_timeout_dur, MIN_ABS_TIMEOUT_DUR, MAX_ABS_TIMEOUT_DUR) != abs_timeout_dur){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
- 
-            auto entrance_entry_pq  = dg::vector<EntranceEntry>{};
-            auto key_id_map         = dg::unordered_map<GlobalIdentifier, size_t>{};
-            size_t random_seed      = dg::network_randomizer::randomize_int<size_t>();
-            auto mtx                = std::make_unique<std::mutex>();
 
-            return std::make_unique<EntranceController>(std::move(entrance_entry_pq), std::move(key_id_map), random_seed, expiry_period, std::move(mtx));
+            size_t tentative_max_consume_sz = map_capacity >> max_consume_decay_factor;
+            size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz); 
+
+            return std::make_unique<TemporalAbsoluteTimeoutInBoundGate>(datastructure::temporal_finite_unordered_map<>(map_capacity),
+                                                                        abs_timeout_dur,
+                                                                        std::make_unique<std::mutex>(),
+                                                                        stdx::hdi_container<size_t>{max_consume_sz});
         }
 
-        static auto spawn_packet_assembler() -> std::unique_ptr<PacketAssemblerInterface>{
+        static auto get_packetizer(Address factory_addr, size_t segment_byte_sz) -> std::unique_ptr<PacketizerInterface>{
 
-            auto packet_map = dg::unordered_map<GlobalIdentifier, AssembledPacket>{};
-            auto mtx        = std::make_unique<std::mutex>();
+            const size_t MIN_SEGMENT_BYTE_SZ    = size_t{1};
+            const size_t MAX_SEGMENT_BYTE_SZ    = size_t{1} << 30;  
 
-            return std::make_unique<PacketAssembler>(std::move(packet_map), std::move(mtx));
-        }
+            if (std::clamp(segment_byte_sz, MIN_SEGMENT_BYTE_SZ, MAX_SEGMENT_BYTE_SZ) != segment_byte_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
-        static auto spawn_exhaustion_controlled_packet_assembler(std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor, size_t capacity) -> std::unique_ptr<PacketAssemblerInterface>{
+            return std::make_unique<Packetizer>(get_packet_id_generator(factory_addr),
+                                                segment_byte_sz);
+        }  
+
+        static auto get_entrance_controller(size_t queue_cap,
+                                            size_t unique_id_cap,
+                                            std::chrono::nanoseconds expiry_period,
+                                            size_t max_consume_decay_factor = 2u) -> std::unique_ptr<EntranceControllerInterface>{
             
-            const size_t MIN_CAPACITY = size_t{1} << 8;
-            const size_t MAX_CAPACITY = size_t{1} << 20;
+            const size_t MIN_QUEUE_CAP                          = size_t{1};
+            const size_t MAX_QUEUE_CAP                          = size_t{1} << 30;
+            const size_t MIN_UNIQUE_ID_CAP                      = size_t{1};
+            const size_t MAX_UNIQUE_ID_CAP                      = size_t{1} << 30;
+
+            const std::chrono::nanoseconds MIN_EXPIRY_PERIOD    = std::chrono::nanoseconds(1);
+            const std::chrono::nanoseconds MAX_EXPIRY_PERIOD    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+
+            if (std::clamp(queue_cap, MIN_QUEUE_CAP, MAX_QUEUE_CAP) != queue_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(unique_id_cap, MIN_UNIQUE_ID_CAP, MAX_UNIQUE_ID_CAP) != unique_id_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(expiry_period, MIN_EXPIRY_PERIOD, MAX_EXPIRY_PERIOD) != expiry_period){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t tentative_max_consume_sz = std::min(queue_cap, unique_id_cap) >> max_consume_decay_factor;
+            size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
+            auto entrance_entry_pq          = dg::vector<EntranceEntry>{};
+            auto key_id_map                 = dg::unordered_unstable_map<GlobalIdentifier, size_t>{};
+
+            entrance_entry_pq.reserve(queue_cap);
+            key_id_map.reserve(unique_id_cap);
+
+            return std::make_unique<EntranceController>(std::move(entrance_entry_pq),
+                                                        queue_cap,
+                                                        std::move(key_id_map),
+                                                        unique_id_cap,
+                                                        __uint128_t{0u},
+                                                        expiry_period,
+                                                        std::make_unique<std::mutex>(),
+                                                        stdx::hdi_container<size_t>{max_consume_sz});
+        }
+
+        static auto get_random_hash_distributed_entrance_controller(std::vector<std::unique_ptr<EntranceControllerInterface>> base_vec,
+                                                                    size_t zero_bounce_sz       = 8u,
+                                                                    size_t keyvalue_feed_cap    = DEFAULT_KEYVALUE_FEED_SIZE) -> std::unique_ptr<EntranceControllerInterface>{
+            
+            const size_t MIN_ZERO_BOUNCE_SZ     = size_t{1};
+            const size_t MAX_ZERO_BOUNCE_SZ     = size_t{1} << 20;
+            const size_t MIN_KEYVALUE_FEED_CAP  = size_t{1};
+            const size_t MAX_KEYVALUE_FEED_CAP  = size_t{1} << 25;
+
+            if (!stdx::is_pow2(base_vec.size())){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(zero_bounce_sz, MIN_ZERO_BOUNCE_SZ, MAX_ZERO_BOUNCE_SZ) != zero_bounce_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(keyvalue_feed_cap, MIN_KEYVALUE_FEED_CAP, MAX_KEYVALUE_FEED_CAP) != keyvalue_feed_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            auto base_arr           = std::make_unique<std::unique_ptr<EntranceControllerInterface>[]>(base_vec.size());
+            size_t base_arr_sz      = base_vec.size();
+            size_t max_consume_sz   = std::numeric_limits<size_t>::max(); 
+
+            for (size_t i = 0u; i < base_arr_sz; ++i){
+                base_arr[i]     = std::move(base_vec[i]);
+                max_consume_sz  = std::min(base_arr[i]->max_consume_size());
+            }
+
+            size_t trimmed_feed_cap = std::min(max_consume_sz, keyvalue_feed_cap); 
+
+            return std::make_unique<RandomHashDistributedEntranceController>(std::move(base_arr),
+                                                                             trimmed_feed_cap,
+                                                                             base_arr_sz,
+                                                                             zero_bounce_sz,
+                                                                             max_consume_sz);
+        }
+
+        static auto get_exhaustion_controlled_entrance_controller(std::unique_ptr<EntranceControllerInterface> base,
+                                                                  std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
+                                                                  std::shared_ptr<ExhaustionControllerInterface> exhaustion_controller) -> std::unique_ptr<EntranceControllerInterface>{
+            
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             if (executor == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(capacity, MIN_CAPACITY, MAX_CAPACITY) != capacity){
+            if (exhaustion_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            auto base           = spawn_packet_assembler();
-            auto counter_map    = dg::unordered_map<GlobalIdentifier, size_t>{};
-            size_t size         = 0u;
-            auto mtx            = std::make_unique<std::mutex>(); 
-
-            return std::make_unique<ExhaustionControlledPacketAssembler>(std::move(base), std::move(executor), std::move(counter_map), capacity, size, std::move(mtx));
+            return std::make_unique<ExhaustionControlledEntranceController>(std::move(base),
+                                                                            std::move(executor),
+                                                                            std::move(exhaustion_controller));
         }
 
-        static auto spawn_inbound_container() -> std::unique_ptr<InBoundContainerInterface>{
+        static auto get_packet_assembler(size_t packet_map_cap,
+                                         size_t global_packet_segment_cap,
+                                         size_t max_segment_sz_per_stream,
+                                         size_t max_consume_decay_factor = 2u) -> std::unique_ptr<PacketAssemblerInterface>{
 
-            auto vec    = dg::deque<dg::string>{};
-            auto mtx    = std::make_unique<std::mutex>();
+            const size_t MIN_PACKET_MAP_CAP             = size_t{1};
+            const size_t MAX_PACKET_MAP_CAP             = size_t{1} << 30;
+            const size_t MIN_GLOBAL_PACKET_SEGMENT_CAP  = size_t{1};
+            const size_t MAX_GLOBAL_PACKET_SEGMENT_CAP  = size_t{1} << 30;
+            const size_t MIN_MAX_SEGMENT_SZ_PER_STREAM  = size_t{1};
+            const size_t MAX_MAX_SEGMENT_SZ_PER_STREAM  = size_t{1} << 30; 
 
-            return std::make_unique<InBoundContainer>(std::move(vec), std::move(mtx));
+            if (std::clamp(packet_map_cap, MIN_PACKET_MAP_CAP, MAX_PACKET_MAP_CAP) != packet_map_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(global_packet_segment_cap, MIN_GLOBAL_PACKET_SEGMENT_CAP, MAX_GLOBAL_PACKET_SEGMENT_CAP) != global_packet_segment_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(max_segment_sz_per_stream, MIN_MAX_SEGMENT_SZ_PER_STREAM, MAX_MAX_SEGMENT_SZ_PER_STREAM) != max_segment_sz_per_stream){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t tentative_max_consume_sz = packet_map_cap >> max_consume_decay_factor;
+            size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
+            
+            auto packet_map                 = dg::unordered_unstable_map<GlobalIdentifier, AssembledPacket>();
+            packet_map.reserve(packet_map_cap); 
+
+            return std::make_unique<PacketAssembler>(std::move(packet_map),
+                                                    packet_map_cap,
+                                                    global_packet_segment_cap,
+                                                    size_t{0u},
+                                                    max_segment_sz_per_stream,
+                                                    std::make_unique<std::mutex>(),
+                                                    stdx::hdi_container<size_t>{max_consume_sz});
         }
 
-        static auto spawn_exhaustion_controlled_inbound_container(std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor, size_t capacity) -> std::unique_ptr<InBoundContainerInterface>{
+        static auto get_random_hash_distributed_packet_assembler(std::vector<std::unique_ptr<PacketAssemblerInterface>> base_vec,
+                                                                 size_t keyvalue_feed_cap = DEFAULT_KEYVALUE_FEED_SIZE){
+            
+            const size_t MIN_KEYVALUE_FEED_CAP  = size_t{1};
+            const size_t MAX_KEYVALUE_FEED_CAP  = size_t{1} << 25;
 
-            const size_t MIN_CAPACITY = size_t{1} << 8;
-            const size_t MAX_CAPACITY = size_t{1} << 20;
+            if (!stdx::is_pow2(base_vec.size())){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(keyvalue_feed_cap, MIN_KEYVALUE_FEED_CAP, MAX_KEYVALUE_FEED_CAP) != keyvalue_feed_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t max_consume_sz   = std::numeric_limits<size_t>::max(); 
+            auto base_arr           = std::make_unique<std::unique_ptr<PacketAssemblerInterface>[]>(base_vec.size());
+            size_t base_arr_sz      = base_vec.size(); 
+
+            for (auto& uptr: base_vec){
+                if (uptr == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                max_consume_sz  = std::min(max_consume_sz, uptr->max_consume_size());
+                base_arr[i]     = std::move(base_vec[i]);
+            }
+
+            size_t trimmed_feed_cap = std::min(keyvalue_feed_cap, max_consume_sz);
+
+            return std::make_unique<RandomHashDistributedPacketAssembler>(std::move(base_arr),
+                                                                          trimmed_feed_cap,
+                                                                          base_arr_sz,
+                                                                          max_consume_sz);
+        }
+
+        static auto get_exhaustion_controlled_packet_assembler(std::unique_ptr<PacketAssemblerInterface> base,
+                                                               std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
+                                                               std::shared_ptr<ExhaustionControllerInterface> exhaustion_controller) -> std::unique_ptr<PacketAssemblerInterface>{
+            
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             if (executor == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(capacity, MIN_CAPACITY, MAX_CAPACITY) != capacity){
+            if (exhaustion_controller == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            auto base   = spawn_inbound_container();
-            size_t size = 0u;
-            auto mtx    = std::make_unique<std::mutex>(); 
+            return std::make_unique<ExhaustionControlledPacketAssembler>(std::move(base),
+                                                                         std::move(executor),
+                                                                         std::move(exhaustion_controller));
 
-            return std::make_unique<ExhaustionControlledInBoundContainer>(std::move(base), std::move(executor), capacity, size, std::move(mtx));
         }
 
-        static auto spawn_mailbox_streamx(std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-                                          std::unique_ptr<InBoundContainerInterface> inbound_container,
-                                          std::unique_ptr<PacketAssemblerInterface> packet_assembler,
-                                          std::unique_ptr<EntranceControllerInterface> entrance_controller,
-                                          std::unique_ptr<PacketizerInterface> packetizer,
-                                          size_t num_inbound_worker,
-                                          size_t num_expiry_worker) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+        static auto get_buffer_fifo_container(size_t buffer_capacity,
+                                              size_t consume_factor = 4u) -> std::unique_ptr<InBoundContainerInterface>{
             
-            const size_t MIN_INBOUND_WORKER     = 1u;
-            const size_t MAX_INBOUND_WORKER     = 1024u;
-            const size_t MIN_EXPIRY_WORKER      = 1u;
-            const size_t MAX_EXPIRY_WORKER      = 1024u; 
+            const size_t MIN_BUFFER_CAPACITY    = 1u;
+            const size_t MAX_BUFFER_CAPACITY    = size_t{1} << 25;
+
+            if (std::clamp(buffer_capacity, MIN_BUFFER_CAPACITY, MAX_BUFFER_CAPACITY) != buffer_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t tentative_consume_sz         = buffer_capacity >> consume_factor;
+            size_t consume_sz                   = std::max(tentative_consume_sz, size_t{1u});
+
+            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(stdx::ceil2(buffer_capacity))),
+                                                         buffer_capacity,
+                                                         std::make_unique<std::mutex>(),
+                                                         stdx::hdi_container<size_t>{consume_sz});
+        }
+
+        static auto get_exhaustion_controlled_buffer_container(std::unique_ptr<InBoundContainerInterface> base,
+                                                               std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
+                                                               std::shared_ptr<packet_controller::ExhaustionControllerInterface> exhaustion_controller) -> std::unique_ptr<InBoundContainerInterface>{
+            
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (executor == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (exhaustion_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ExhaustionControlledBufferContainer>(std::move(base),
+                                                                         std::move(executor),
+                                                                         std::move(exhaustion_controller));
+        }
+
+        static auto get_reacting_buffer_container(std::unique_ptr<InBoundContainerInterface> base,
+                                                  size_t reacting_threshold,
+                                                  size_t concurrent_subscriber_cap,
+                                                  std::chrono::nanoseconds wait_time) -> std::unique_ptr<InBoundContainerInterface>{
+
+            const size_t MIN_REACTING_THRESHOLD             = size_t{1};
+            const size_t MAX_REACTING_THRESHOLD             = size_t{1} << 30;
+            const std::chrono::nanoseconds MIN_WAIT_TIME    = std::chrono::nanoseconds{1}; 
+            const std::chrono::nanoseconds MAX_WAIT_TIME    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1});
 
             if (base == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (inbound_container == nullptr){
+            if (std::clamp(reacting_threshold, MIN_REACTING_THRESHOLD, MAX_REACTING_THRESHOLD) != reacting_threshold){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (packet_assembler == nullptr){
+            if (std::clamp(wait_time, MIN_WAIT_TIME, MAX_WAIT_TIME) != wait_time){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (entrance_controller == nullptr){
+            return std::make_unique<ReactingBufferContainer>(std::move(base),
+                                                             get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
+                                                             wait_time);
+
+        }
+
+        static auto get_randomhash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec,
+                                                                size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<InBoundContainerInterface>{
+
+            const size_t MIN_BASE_VEC_SZ            = size_t{1};
+            const size_t MAX_BASE_VEC_SZ            = size_t{1} << 20;
+            const size_t MIN_ZERO_BUFFER_RETRY_SZ   = size_t{1};
+            const size_t MAX_ZERO_BUFFER_RETRY_SZ   = size_t{1} << 20;
+
+            if (std::clamp(base_vec.size(), MIN_BASE_VEC_SZ, MAX_BASE_VEC_SZ) != base_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (packetizer == nullptr){
+            if (!stdx::is_pow2(base_vec.size())){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(num_inbound_worker, MIN_INBOUND_WORKER, MAX_INBOUND_WORKER) != num_inbound_worker){
+            auto base_vec_up        = std::make_unique<std::unique_ptr<InBoundContainerInterface>[]>(base_vec.size());
+            size_t consumption_sz   = std::numeric_limits<size_t>::max(); 
+
+            for (size_t i = 0u; i < base_vec.size(); ++i){
+                if (base_vec[i] == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                consumption_sz  = std::min(consumption_sz, base_vec[i]->max_consume_size());
+                base_vec_up[i]  = std::move(base_vec[i]);
+            }
+
+            if (std::clamp(zero_buffer_retry_sz, MIN_ZERO_BUFFER_RETRY_SZ, MAX_ZERO_BUFFER_RETRY_SZ) != zero_buffer_retry_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(num_expiry_worker, MIN_EXPIRY_WORKER, MAX_EXPIRY_WORKER) != num_expiry_worker){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base_sp   = std::move(base);
-            std::shared_ptr<InBoundContainerInterface> inbound_container_sp                     = std::move(inbound_container);
-            std::shared_ptr<PacketAssemblerInterface> packet_assembler_sp                       = std::move(packet_assembler);
-            std::shared_ptr<EntranceControllerInterface> entrance_controller_sp                 = std::move(entrance_controller);
-            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec{};
-
-            //TODOs: this is buggy - this will be DL if exception raises - not to worry about this now
-            for (size_t i = 0u; i < num_inbound_worker; ++i){
-                auto worker = std::make_unique<InBoundWorker>(packet_assembler_sp, inbound_container_sp, entrance_controller_sp, base_sp);
-                auto handle = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker)));
-                daemon_vec.push_back(std::move(handle));
-            }
-
-            //TODOs: this is buggy - this will be DL if exception raises - not to worry about this now
-            for (size_t i = 0u; i < num_expiry_worker; ++i){
-                auto worker = std::make_unique<ExpiryWorker>(packet_assembler_sp, entrance_controller_sp);
-                auto handle = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::TRANSPORTATION_DAEMON, std::move(worker)));
-                daemon_vec.push_back(std::move(handle));
-            }
-
-            return std::make_unique<MailBox>(std::move(daemon_vec), std::move(packetizer), base_sp, inbound_container_sp);
+            return std::make_unique<HashDistributedBufferContainer>(std::move(base_vec_up),
+                                                                    base_vec.size(),
+                                                                    zero_buffer_retry_sz,
+                                                                    consumption_sz);
         }
     };
 
@@ -1942,14 +2150,14 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
     auto spawn(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
 
-        std::unique_ptr<InBoundContainerInterface> inbound_container        = Factory::spawn_exhaustion_controlled_inbound_container(config.infretry_device, config.inbound_container_capacity);
-        std::unique_ptr<PacketAssemblerInterface> packet_assembler          = Factory::spawn_exhaustion_controlled_packet_assembler(config.infretry_device, config.packet_assembler_capacity);
-        std::unique_ptr<EntranceControllerInterface> entrance_controller    = Factory::spawn_entrance_controller(config.packet_expiry);
-        std::unique_ptr<PacketizerInterface> packetizer                     = Factory::spawn_packetizer(config.segment_byte_sz, config.factory_addr);
+        // std::unique_ptr<InBoundContainerInterface> inbound_container        = Factory::spawn_exhaustion_controlled_inbound_container(config.infretry_device, config.inbound_container_capacity);
+        // std::unique_ptr<PacketAssemblerInterface> packet_assembler          = Factory::spawn_exhaustion_controlled_packet_assembler(config.infretry_device, config.packet_assembler_capacity);
+        // std::unique_ptr<EntranceControllerInterface> entrance_controller    = Factory::spawn_entrance_controller(config.packet_expiry);
+        // std::unique_ptr<PacketizerInterface> packetizer                     = Factory::spawn_packetizer(config.segment_byte_sz, config.factory_addr);
         
-        return Factory::spawn_mailbox_streamx(std::move(config.base), std::move(inbound_container), std::move(packet_assembler), 
-                                              std::move(entrance_controller), std::move(packetizer), config.inbound_worker_count, 
-                                              config.expiry_worker_count);
+        // return Factory::spawn_mailbox_streamx(std::move(config.base), std::move(inbound_container), std::move(packet_assembler), 
+        //                                       std::move(entrance_controller), std::move(packetizer), config.inbound_worker_count, 
+        //                                       config.expiry_worker_count);
     }
 }
 
