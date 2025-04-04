@@ -236,6 +236,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we are "reinventing" the wheel of UDP
     //in the sense of usable packet transmission size + offloading the "other" responsibilities to our beloved frequency memregions
 
+    //we are to limit the memory orderings as many as possible, such is by a factor of size_t{1} << 10-> size_t{1} << 16
+    //because memory ordering is a very fragile thing in CPU, it thrashes cache across cores + hard_sync very badly
+    //our invention of complex reactor is precisely for this reason, such is when the complex reactor enters a busy_phase, synchronized point of all containers std::memory_order_acquire + std::memory_order_release are never gonna be called, only std::memory_order_relaxed
+    //we can't tell you what the good number is for all of this to work, after all, this is a system calibration problem
+    //we are to take the deviation space of <optimality> and <current> to steer all the configurables in the optimal direction
+    //our job is to NOT ask questions about the configurables but to provide the configurables, it's another topic to SOLVE, not to GUESS
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
@@ -708,7 +715,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             std::unique_ptr<std::unique_ptr<EntranceControllerInterface>[]> base_arr;
             const size_t keyvalue_feed_cap;
             const size_t pow2_base_arr_sz;
-            const size_t zero_get_expired_id_bounce_sz;
+            const size_t zero_bounce_sz;
             const size_t max_tick_per_load; 
 
         public:
@@ -716,11 +723,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             RandomHashDistributedEntranceController(std::unique_ptr<std::unique_ptr<EntranceControllerInterface>[]> base_arr,
                                                     size_t keyvalue_feed_cap,
                                                     size_t pow2_base_arr_sz,
-                                                    size_t zero_get_expired_id_bounce_sz,
+                                                    size_t zero_bounce_sz,
                                                     size_t max_tick_per_load) noexcept: base_arr(std::move(base_arr)),
                                                                                         keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                         pow2_base_arr_sz(pow2_base_arr_sz),
-                                                                                        zero_get_expired_id_bounce_sz(zero_get_expired_id_bounce_sz),
+                                                                                        zero_bounce_sz(zero_bounce_sz),
                                                                                         max_tick_per_load(max_tick_per_load){}
 
             void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -750,7 +757,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 sz = 0u;
 
-                for (size_t i = 0u; i < this->zero_get_expired_id_bounce_sz; ++i){
+                for (size_t i = 0u; i < this->zero_bounce_sz; ++i){
                     size_t random_value = dg::network_randomizer::randomize_int<size_t>();
                     size_t idx          = random_value & (this->pow2_base_arr_sz - 1u);
                     this->base_arr[idx]->get_expired_id(output_arr, sz, cap);
@@ -1426,6 +1433,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             std::shared_ptr<PacketAssemblerInterface> packet_assembler;
             std::shared_ptr<EntranceControllerInterface> entrance_controller;
+            size_t packet_assembler_vectorization_sz;
             size_t expired_id_consume_sz;
             size_t busy_consume_sz;
 
@@ -1433,9 +1441,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             ExpiryWorker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
                          std::shared_ptr<EntranceControllerInterface> entrance_controller,
+                         size_t packet_assembler_vectorization_sz,
                          size_t expired_id_consume_sz,
                          size_t busy_consume_sz) noexcept: packet_assembler(std::move(packet_assembler)),
                                                            entrance_controller(std::move(entrance_controller)),
+                                                           packet_assembler_vectorization_sz(packet_assembler_vectorization_sz),
                                                            expired_id_consume_sz(expired_id_consume_sz),
                                                            busy_consume_sz(busy_consume_sz){}
 
@@ -1451,7 +1461,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto pa_feed_resolutor              = InternalPacketAssemblerDestroyFeedResolutor{};
                 pa_feed_resolutor.dst               = this->packet_assembler.get(); 
 
-                size_t trimmed_pa_feed_sz           = std::min(std::min(DEFAULT_KEY_FEED_SIZE, this->packet_assembler->max_consume_size()), id_arr_sz);
+                size_t trimmed_pa_feed_sz           = std::min(std::min(this->packet_assembler_vectorization_sz, this->packet_assembler->max_consume_size()), id_arr_sz);
                 size_t pa_feeder_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&pa_feed_resolutor, trimmed_pa_feed_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> pa_feeder_mem(pa_feeder_allocation_cost);
                 auto pa_feeder                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&pa_feed_resolutor, trimmed_pa_feed_sz, pa_feeder_mem.get()));
@@ -1486,6 +1496,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             std::shared_ptr<InBoundContainerInterface> inbound_container;
             std::shared_ptr<EntranceControllerInterface> entrance_controller;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+            size_t packet_assembler_vectorization_sz;
+            size_t inbound_gate_vectorization_sz;
+            size_t entrance_controller_vectorization_sz;
+            size_t inbound_container_vectorization_sz;
             size_t upstream_consume_sz;
             size_t busy_consume_sz;
 
@@ -1496,12 +1510,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                           std::shared_ptr<InBoundContainerInterface> inbound_container,
                           std::shared_ptr<EntranceControllerInterface> entrance_controller,
                           std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                          size_t packet_assembler_vectorization_sz,
+                          size_t inbound_gate_vectorization_sz,
+                          size_t entrance_controller_vectorization_sz,
+                          size_t inbound_container_vectorization_sz,
                           size_t upstream_consume_sz,
                           size_t busy_consume_sz) noexcept: packet_assembler(std::move(packet_assembler)),
                                                             inbound_gate(std::move(inbound_gate)),
                                                             inbound_container(std::move(inbound_container)),
                                                             entrance_controller(std::move(entrance_controller)),
                                                             base(std::move(base)),
+                                                            packet_assembler_vectorization_sz(packet_assembler_vectorization_sz),
+                                                            inbound_gate_vectorization_sz(inbound_gate_vectorization_sz),
+                                                            entrance_controller_vectorization_sz(entrance_controller_vectorization_sz),
+                                                            inbound_container_vectorization_sz(inbound_container_vectorization_sz),
                                                             upstream_consume_sz(upstream_consume_sz),
                                                             busy_consume_sz(busy_consume_sz){}
 
@@ -1516,7 +1538,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto et_feed_resolutor                      = InternalEntranceFeedResolutor{};
                 et_feed_resolutor.entrance_controller       = this->entrance_controller.get();
 
-                size_t trimmed_et_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->entrance_controller->max_consume_size());
+                size_t trimmed_et_feed_cap                  = std::min(std::min(this->entrance_controller_vectorization_sz, consuming_sz), this->entrance_controller->max_consume_size());
                 size_t et_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&et_feed_resolutor, trimmed_et_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> et_feeder_mem(et_feeder_allocation_cost);
                 auto et_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&et_feed_resolutor, trimmed_et_feed_cap, et_feeder_mem.get()));
@@ -1524,7 +1546,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 size_t ib_feed_resolutor                    = InternalInBoundFeedResolutor{};
                 ib_feed_resolutor.inbound_container         = this->inbound_container.get();
 
-                size_t trimmed_ib_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->inbound_container->max_consume_size());
+                size_t trimmed_ib_feed_cap                  = std::min(std::min(this->inbound_container_vectorization_sz, consuming_sz), this->inbound_container->max_consume_size());
                 size_t ib_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ib_feed_resolutor, trimmed_ib_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ib_feeder_mem(ib_feeder_allocation_cost);
                 auto ib_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ib_feed_resolutor, trimmed_ib_feed_cap, ib_feeder_mem.get())); 
@@ -1534,7 +1556,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 ps_feed_resolutor.entrance_feeder           = et_feeder.get();
                 ps_feed_resolutor.inbound_feeder            = ib_feeder.get();
 
-                size_t trimmed_ps_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->packet_assembler->max_consume_size());
+                size_t trimmed_ps_feed_cap                  = std::min(std::min(this->packet_assembler_vectorization_sz, consuming_sz), this->packet_assembler->max_consume_size());
                 size_t ps_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&ps_feed_resolutor, trimmed_ps_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ps_feeder_mem(ps_feeder_allocation_cost);
                 auto ps_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&ps_feed_resolutor, trimmed_ps_feed_cap, ps_feeder_mem.get()));  
@@ -1542,8 +1564,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto gt_feed_resolutor                      = InternalInBoundGateFeedResolutor{};
                 gt_feed_resolutor.inbound_gate              = this->inbound_gate.get();
                 gt_feed_resolutor.ps_feeder                 = ps_feeder.get();                    
-                
-                size_t trimmed_gt_feed_cap                  = std::min(std::min(DEFAULT_KEY_FEED_SIZE, consuming_sz), this->inbound_gate->max_consume_size());
+
+                size_t trimmed_gt_feed_cap                  = std::min(std::min(this->inbound_gate_vectorization_sz, consuming_sz), this->inbound_gate->max_consume_size());
                 size_t gt_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&gt_feed_resolutor, trimmed_gt_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> gt_feeder_mem(gt_feeder_allocation_cost);
                 auto gt_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&gt_feed_resolutor, trimmed_gt_feed_cap, gt_feeder_mem.get()));
