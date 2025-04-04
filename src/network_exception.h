@@ -108,6 +108,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t SOCKET_MAX_RETRANSMISSION_REACHED   = 62u;
     static inline constexpr exception_t SOCKET_QUEUE_FULL                   = 63u;
     static inline constexpr exception_t VARIANT_VBE                         = 64u;
+    static inline constexpr exception_t QUEUE_FULL                          = 66u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 

@@ -5,11 +5,12 @@
 #include <stdlib.h>
 #include <type_traits>
 #include <utility>
-#include "network_kernel_mailbox_impl1.h"
+// #include "network_kernel_mailbox_impl1.h"
 #include <expected>
 #include <iostream>
 // #include "network_producer_consumer.h"
 #include "network_producer_consumer.h"
+#include "network_datastructure.h"
 
 static inline intmax_t foo_counter = 0u; 
 
@@ -93,4 +94,14 @@ int main(){
 
     bar();
     foo();
+
+    dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo> queue{};
+
+    for (const auto& e: static_cast<const dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo>&>(queue)){
+        
+    }
+
+    for (auto& e: queue){
+
+    }
 }

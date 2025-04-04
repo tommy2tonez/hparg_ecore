@@ -851,29 +851,29 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
 namespace dg::network_kernel_mailbox_impl1::data_structure{
 
+    struct pow2_initialization_tag{}; 
+
     template <class T>
     class temporal_finite_unordered_set{
 
         private:
 
             dg::unordered_set<T> hashset;
-            dg::deque<T> entry_deque;
+            dg::pow2_cyclic_queue<T> entry_cyclic_queue;
             size_t cap;
 
         public:
 
             static_assert(std::is_trivial_v<T>);
 
-            temporal_finite_unordered_set(size_t capacity): hashset(),
-                                                            entry_deque(),
-                                                            cap(capacity){
+            temporal_finite_unordered_set(const pow2_initialization_tag, size_t pow2_exponent): hashset(),
+                                                                                                entry_cyclic_queue(pow2_exponent),
+                                                                                                cap(size_t{1} << pow2_exponent){
 
-                if (capacity == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                this->hashset.reserve(capacity);
+                this->hashset.reserve(size_t{1} << pow2_exponent);
             }
+
+            temporal_finite_unordered_set(size_t cap): temporal_finite_unordered_set(pow2_initialization_tag{}, stdx::ulog2(stdx::ceil2(cap))){}
 
             inline void insert(T key) noexcept{
 
@@ -881,17 +881,17 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                     return;
                 }
 
-                if (this->entry_deque.size() == this->cap) [[unlikely]]{
+                if (this->entry_cyclic_queue.size() == this->cap) [[unlikely]]{
                     size_t half_cap = std::max(static_cast<size_t>(this->cap >> 1), size_t{1u});
 
                     for (size_t i = 0u; i < half_cap; ++i){
-                        this->hashset.erase(this->entry_deque.front());
-                        this->entry_deque.pop_front();
+                        this->hashset.erase(this->entry_cyclic_queue.front());
+                        this->entry_cyclic_queue.pop_front();
                     }
                 }
 
                 this->hashset.insert(key);
-                this->entry_deque.push_back(key);
+                dg::network_exception_handler::nothrow_log(this->entry_cyclic_queue.push_back(key));
             }
 
             inline auto capacity() const noexcept -> size_t{
@@ -906,27 +906,27 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 
             inline auto begin() const noexcept{
 
-                return this->entry_deque.begin();
+                return this->entry_cyclic_queue.begin();
             }
 
             inline auto begin() noexcept{
 
-                return this->entry_deque.begin();
+                return this->entry_cyclic_queue.begin();
             }
 
             inline auto end() const noexcept{
 
-                return this->entry_deque.end();
+                return this->entry_cyclic_queue.end();
             }
 
             inline auto end() noexcept{
 
-                return this->entry_deque.end();
+                return this->entry_cyclic_queue.end();
             }
 
             inline auto size() const noexcept -> size_t{
                 
-                return this->entry_deque.size();
+                return this->entry_cyclic_queue.size();
             }
     };
 }
@@ -1718,7 +1718,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            dg::deque<QueuedPacket> pkt_deque;
+            dg::pow2_cyclic_queue<QueuedPacket> pkt_deque;
             data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset;
             std::chrono::nanoseconds transmission_delay_time;
             size_t max_retransmission_sz;
@@ -1728,7 +1728,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            RetransmissionController(dg::deque<QueuedPacket> pkt_deque,
+            RetransmissionController(dg::pow2_cyclic_queue<QueuedPacket> pkt_deque,
                                      data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset,
                                      std::chrono::nanoseconds transmission_delay_time,
                                      size_t max_retransmission_sz,
@@ -1772,7 +1772,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     queued_pkt.pkt.retransmission_count += 1;
                     queued_pkt.queued_time              = now;
 
-                    this->pkt_deque.push_back(std::move(queued_pkt));
+                    dg::network_exception_handler::nothrow_log(this->pkt_deque.push_back(std::move(queued_pkt)));
                     exception_arr[i]                    = dg::network_exception::SUCCESS;
                 }
             }
@@ -1823,7 +1823,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     output_pkt_arr[sz++] = std::move(this->pkt_deque[iterated_sz].pkt);
                 }
 
-                this->pkt_deque.erase(this->pkt_deque.begin(), std::next(this->pkt_deque.begin(), iterated_sz));
+                this->pkt_deque.erase_front_range(iterated_sz);
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -2107,14 +2107,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            dg::deque<dg::string> buffer_vec;
+            dg::pow2_cyclic_queue<dg::string> buffer_vec;
             size_t buffer_vec_capacity;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
-            BufferFIFOContainer(dg::deque<dg::string> buffer_vec,
+            BufferFIFOContainer(dg::pow2_cyclic_queue<dg::string> buffer_vec,
                                 size_t buffer_vec_capacity,
                                 std::unique_ptr<std::mutex> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: buffer_vec(std::move(buffer_vec)),
@@ -2154,7 +2154,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto last   = std::next(first, sz);
 
                 std::copy(std::make_move_iterator(first), std::make_move_iterator(last), output_buffer_arr);
-                this->buffer_vec.erase(first, last);
+                this->buffer_vec.erase_front_range(sz);
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -2327,14 +2327,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
-            dg::deque<Packet> packet_deque;
+            dg::pow2_cyclic_queue<Packet> packet_deque;
             size_t packet_deque_capacity;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
         
         public:
 
-            PacketFIFOContainer(dg::deque<Packet> packet_deque,
+            PacketFIFOContainer(dg::pow2_cyclic_queue<Packet> packet_deque,
                                 size_t packet_deque_capacity,
                                 std::unique_ptr<std::mutex> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_deque(std::move(packet_deque)),
@@ -2374,7 +2374,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto last   = std::next(first, sz);
 
                 std::copy(std::make_move_iterator(first), std::make_move_iterator(last), output_pkt_arr);
-                this->packet_deque.erase(first, last);
+                this->packet_deque.erase_front_range(sz);
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -3700,7 +3700,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t tentative_idhashset_consume_sz       = idhashset_cap >> consume_factor; 
             size_t consume_sz                           = std::max(std::min(tentative_retransmission_consume_sz, tentative_idhashset_consume_sz), size_t{1u});
 
-            return std::make_unique<RetransmissionController>(dg::deque<QueuedPacket>{},
+            return std::make_unique<RetransmissionController>(dg::pow2_cyclic_queue<QueuedPacket>{stdx::ulog2(stdx::ceil2(retransmission_queue_cap))},
                                                               data_structure::temporal_finite_unordered_set<global_packet_id_t>(idhashset_cap),
                                                               transmission_delay,
                                                               max_retransmission_sz,
@@ -3818,7 +3818,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t tentative_consume_sz         = buffer_capacity >> consume_factor;
             size_t consume_sz                   = std::max(tentative_consume_sz, size_t{1u});
 
-            return std::make_unique<BufferFIFOContainer>(dg::deque<dg::string>(),
+            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(stdx::ceil2(buffer_capacity))),
                                                          buffer_capacity,
                                                          std::make_unique<std::mutex>(),
                                                          stdx::hdi_container<size_t>{consume_sz});
@@ -3944,8 +3944,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             size_t tentative_consume_sz     = packet_vec_capacity >> consume_factor;
             size_t consume_sz               = std::max(tentative_consume_sz, size_t{1u});
-            
-            return std::make_unique<PacketFIFOContainer>(dg::deque<Packet>(),
+
+            return std::make_unique<PacketFIFOContainer>(dg::pow2_cyclic_queue<Packet>(stdx::ulog2(stdx::ceil2(packet_vec_capacity))),
                                                          packet_vec_capacity,
                                                          std::make_unique<std::mutex>(),
                                                          stdx::hdi_container<size_t>{consume_sz});
