@@ -230,6 +230,12 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
 namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
+    //code is clear
+    //we can do flash streamx of up to 1MB per tile
+    //we are not doing bittorrent of gigabytes of data
+    //we are "reinventing" the wheel of UDP
+    //in the sense of usable packet transmission size + offloading the "other" responsibilities to our beloved frequency memregions
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
@@ -238,6 +244,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     static inline constexpr size_t DEFAULT_KEY_FEED_SIZE                    = size_t{1} << 8;
     static inline constexpr uint32_t PACKET_SEGMENT_SERIALIZATION_SECRET    = 30011; 
     
+    //OK
     struct GlobalIdentifier{
         Address addr;
         uint64_t local_id;
@@ -253,6 +260,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
     };
 
+    //OK
     struct PacketSegment{
         dg::string buf;
         GlobalIdentifier id;
@@ -260,19 +268,21 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint64_t segment_sz;
     };
 
+    //OK
     struct AssembledPacket{
         dg::vector<PacketSegment> data;
         size_t collected_segment_sz;
         size_t total_segment_sz;
     };
 
+    //OK
     static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<dg::string, exception_t>{
 
         using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t>;
         size_t header_sz    = dg::network_compact_serializer::integrity_size(header_t{});
         size_t old_sz       = segment.buf.size();
         size_t new_sz       = old_sz + header_sz;
-        auto header         = header_t{segment.id, segment.idx, segment.sz};
+        auto header         = header_t{segment.id, segment.segment_idx, segment.segment_sz};
 
         try{
             segment.buf.resize(new_sz);
@@ -283,6 +293,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
     }
 
+    //OK
     static auto deserialize_packet_segment(dg::string&& buf) noexcept -> std::expected<PacketSegment, exception_t>{
 
         using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t>;
@@ -302,15 +313,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
         }
-        
+
         buf.resize(hdr_off);
-        PacketSegment rs = {};
-        rs.buf = std::move(buf);
+
+        PacketSegment rs    = {};
+        rs.buf              = std::move(buf);
         std::tie(rs.id, rs.segment_idx, rs.segment_sz) = header;
 
         return rs;
     }
 
+    //OK
     static auto assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
 
         if (pkt.total_segment_sz != pkt.collected_segment_sz){
@@ -350,22 +363,26 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         return rs;
     }
 
+    //OK
     struct PacketIDGeneratorInterface{
         virtual ~PacketIDGeneratorInterface() noexcept = default;
         virtual auto get_id() noexcept -> GlobalIdentifier = 0;
     };
 
+    //OK
     struct PacketizerInterface{
         virtual ~PacketizerInterface() noexcept = default;
         virtual auto packetize(dg::string&&) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t> = 0;
     };
 
+    //OK
     struct InBoundGateInterface{
         virtual ~InBoundGateInterface() noexcept = default;
         virtual void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    //OK
     struct EntranceControllerInterface{
         virtual ~EntranceControllerInterface() noexcept = default;
         virtual void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept = 0; 
@@ -373,6 +390,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    //OK
     struct PacketAssemblerInterface{
         virtual ~PacketAssemblerInterface() noexcept = default;
         virtual void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept = 0;
@@ -380,6 +398,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    //OK
     struct InBoundContainerInterface{
         virtual ~InBoundContainerInterface() noexcept = default;
         virtual void push(std::move_iterator<dg::string *> arr, size_t sz, exception_t * exception_arr) noexcept = 0;
@@ -387,6 +406,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    //OK
     class PacketIDGenerator: public virtual PacketIDGeneratorInterface{
 
         private:
@@ -410,6 +430,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
     };
 
+    //OK
     class TemporalAbsoluteTimeoutInBoundGate: public virtual InBoundGateInterface{
 
         private:
@@ -469,6 +490,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         
     };
 
+    //OK
     class Packetizer: public virtual PacketizerInterface{
 
         private:
@@ -502,10 +524,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return std::unexpected(rs.error());
                 }
 
+                GlobalIdentifier pkt_stream_id = this->packet_id_gen->get_id();
+
                 if (segment_sz == 0u){
                     PacketSegment segment   = {};
                     segment.buf             = {};
-                    segment.id              = this->packet_id_gen->get_id();
+                    segment.id              = pkt_stream_id;
                     segment.segment_idx     = 0u; //this is logically incorrect, we are not protected by range bro anymore
                     segment.segment_sz      = 0u;
                     rs.value()[0]           = std::move(segment);
@@ -516,7 +540,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 if (segment_sz == 1u){ //premature very useful optimization, effectively skip 1 buffer iteration
                     PacketSegment segment   = {};
                     segment.buf             = std::move(buf);
-                    segment.id              = this->packet_id_gen->get_id();
+                    segment.id              = pkt_stream_id;
                     segment.segment_idx     = 0u;
                     segment.segment_sz      = 1u;
                     rs.value()[0]           = std::move(segment);
@@ -526,38 +550,43 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 for (size_t i = 0u; i < segment_sz; ++i){
                     size_t first                                    = this->segment_byte_sz * i;
-                    size_t last                                     = std::min(buf.size(), this->segment_byte_sz * (i + 1)); 
+                    size_t last                                     = std::min(this->segment_byte_sz * (i + 1), buf.size()); 
                     PacketSegment segment                           = {};
-                    segment.id                                      = this->packet_id_gen->get();
+                    segment.id                                      = pkt_stream_id;
                     segment.segment_idx                             = i;
-                    segment.segment_sz                              = segment_sz; 
-                    std::expected<dg::string, exception_t> app_buf  = dg::network_exception::cstyle_initialize<dg::string>((last - first), ' '); 
+                    segment.segment_sz                              = segment_sz;
+
+                    std::expected<dg::string, exception_t> app_buf  = dg::network_exception::cstyle_initialize<dg::string>((last - first), 0); 
 
                     if (!app_buf.has_value()){
                         return std::unexpected(app_buf.error());
                     }
 
                     std::copy(std::next(buf.begin(), first), std::next(buf.begin(), last), app_buf.value().begin());
-                    rs.value()[i] = std::move(app_buf.value());
+
+                    segment.buf                                     = std::move(app_buf.value());
+                    rs.value()[i]                                   = std::move(segment);
                 }
 
                 return rs;
             }
     };
 
+    //OK
     struct EntranceEntry{
-        std::chrono::time_point<std::chrono::steady_clock> timestamp;
+        std::chrono::time_point<std::chrono::steady_clock> timestamp; //steady clock is a clock that never goes back in time, only true if we are on the same thread of execution, to avoid exotic error or errors that chance worse than RAM, we are to make sure that our queue state is accurate
         GlobalIdentifier key;
         __uint128_t entry_id;
     };
 
+    //OK
     class EntranceController: public virtual EntranceControllerInterface{
 
         private:
 
             dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq; //no exhausted container
             const size_t entrance_entry_pq_cap; 
-            dg::unordered_unstable_map<GlobalIdentifier, size_t> key_id_map; //no exhausted container
+            dg::unordered_unstable_map<GlobalIdentifier, __uint128_t> key_id_map; //no exhausted container
             const size_t key_id_map_cap;
             __uint128_t id_ticker;
             const std::chrono::nanoseconds expiry_period;
@@ -568,7 +597,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             EntranceController(dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq,
                                size_t entrance_entry_pq_cap,
-                               dg::unordered_unstable_map<GlobalIdentifier, size_t> key_id_map,
+                               dg::unordered_unstable_map<GlobalIdentifier, __uint128_t> key_id_map,
                                szie_t key_id_map_cap,
                                __uint128_t id_ticker,
                                std::chrono::nanoseconds expiry_period,
@@ -593,10 +622,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                auto now = std::chrono::steady_clock::now();
+                auto now = this->get_now();
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (this->entrance_entry_pq.size() == this->entrace_entry_pq_cap){
+                    if (this->entrance_entry_pq.size() == this->entrance_entry_pq_cap){
                         exception_arr[i] = dg::network_exception::QUEUE_FULL;
                         continue;
                     }
@@ -628,12 +657,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 sz              = 0u;
 
                 for (size_t i = 0u; i < cap; ++i){
-                    if (this->entrace_entry_pq.empty()){
+                    if (this->entrance_entry_pq.empty()){
                         return;
                     }
 
                     if (this->entrance_entry_pq.front().timestamp > bar_time){
-                        return; 
+                        return;
                     }
 
                     EntranceEntry entry = this->entrace_entry_pq.front();
@@ -658,8 +687,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->tick_sz_per_load.value();
             }
+
+        private:
+
+            auto get_now() const noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
+
+                if (this->entrance_entry_pq.empty()){
+                    return std::chrono::steady_clock::now();
+                }
+
+                return std::max(this->entrance_entry_pq.back().timestamp, std::chrono::steady_clock::now());
+            }
     };
 
+    //OK
     class RandomHashDistributedEntranceController: public virtual EntranceControllerInterface{
 
         private:
@@ -685,7 +726,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 auto feed_resolutor                 = InternalFeedResolutor{};
-                feed_resolutor.dst                  = this->base_arr.get(); 
+                feed_resolutor.dst                  = this->base_arr.get();
 
                 size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
                 size_t feed_allocation_cost         = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
@@ -758,6 +799,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             };
     };
 
+    //OK
     class ExhaustionControlledEntranceController: public virtual EntranceControllerInterface{
 
         private:
@@ -823,6 +865,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
     };
 
+    //OK
     class PacketAssembler: public virtual PacketAssemblerInterface{
 
         private:
@@ -961,6 +1004,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
     };
 
+    //OK
     class RandomHashDistributedPacketAssembler: public virtual PacketAssemblerInterface{
 
         private:
@@ -1095,6 +1139,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             };
     };
 
+    //OK
     class ExhaustionControlledPacketAssembler: public virtual PacketAssemblerInterface{
 
         private:
@@ -1114,6 +1159,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept{
 
                 PacketSegment * base_segment_arr                                    = segment_arr.base();
+
                 PacketSegment * first_segment_ptr                                   = base_segment_arr;
                 PacketSegment * last_segment_ptr                                    = std::next(first_segment_ptr, sz);
                 std::expected<AssembledPacket, exception_t> * first_assembled_ptr   = assembled_arr;
@@ -1802,7 +1848,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t tentative_max_consume_sz = std::min(upqueue_cap, unique_id_cap) >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
             auto entrance_entry_pq          = dg::pow2_cyclic_queue<EntranceEntry>(upqueue_cap);
-            auto key_id_map                 = dg::unordered_unstable_map<GlobalIdentifier, size_t>{};
+            auto key_id_map                 = dg::unordered_unstable_map<GlobalIdentifier, __uint128_t>{};
 
             key_id_map.reserve(unique_id_cap);
 

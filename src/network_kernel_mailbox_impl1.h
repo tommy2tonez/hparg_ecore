@@ -269,7 +269,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct QueuedPacket{
         Packet pkt;
-        std::chrono::time_point<std::chrono::steady_clock> queued_time;            
+        std::chrono::time_point<std::chrono::steady_clock> queued_time; //steady clock is a clock that never goes back in time, only true if we are on the same thread of execution, to avoid exotic error or errors that chance worse than RAM, we are to make sure that our queue state is accurate
     };
 
     struct MailBoxArgument{
@@ -1753,7 +1753,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
-                auto now                = std::chrono::steady_clock::now();
+                auto now                = this->get_now();
                 Packet * base_pkt_arr   = pkt_arr.base(); 
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -1803,6 +1803,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto key            = QueuedPacket{};
                 key.queued_time     = time_bar;
 
+                //lower bound is fairly expensive, we dont worry about that now
                 auto last           = std::lower_bound(this->pkt_deque.begin(), this->pkt_deque.end(), 
                                                        key, 
                                                        [](const auto& lhs, const auto& rhs){return lhs.queued_time < rhs.queued_time;});
@@ -1829,6 +1830,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->consume_sz_per_load.value;
+            }
+
+        private:
+
+            auto get_now() const noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
+
+                if (this->pkt_deque.empty()){
+                    return std::chrono::steady_clock::now();
+                }
+
+                return std::max(this->pkt_deque.back().queued_time, std::chrono::steady_clock::now());
             }
     };
 
