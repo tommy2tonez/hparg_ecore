@@ -122,91 +122,6 @@ namespace dg::network_datastructure::cyclic_queue{
                                                      sz(0u),
                                                      cap(size_t{1} << pow2_exponent){}
 
-            template <class ValueLike>
-            constexpr auto push_back(ValueLike&& value) noexcept -> exception_t{
-
-                if (this->sz == this->cap){
-                    return dg::network_exception::QUEUE_FULL;
-                }
-
-                size_t ptr = this->to_index(this->sz);
-
-                if constexpr(std::is_nothrow_assignable_v<T&, ValueLike&&>){
-                    this->data_arr[ptr] = std::forward<ValueLike>(value);
-                    this->sz            += 1u;
-                    return dg::network_exception::SUCCESS; 
-                } else{
-                    try{
-                        this->data_arr[ptr] = std::forward<ValueLike>(value);
-                        this->sz            += 1u;
-                        return dg::network_exception::SUCCESS;
-                    } catch (...){
-                        return dg::network_exception::wrap_std_exception(std::current_exception());
-                    }
-                }
-            }
-
-            constexpr auto resize(size_t new_sz) noexcept -> exception_t{
-
-                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
-
-                if (new_sz > this->cap){
-                    return dg::network_exception::RESOURCE_EXHAUSTION;
-                }
-
-                size_t erase_first  = std::min(this->sz, new_sz);
-                size_t erase_last   = this->sz;
-                std::fill(std::next(this->begin(), erase_first), std::next(this->begin(), erase_last), T{});
-                this->sz            = new_sz;
-            }
-
-            constexpr void pop_front() noexcept{
-
-                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr          = this->to_index(0u);
-                this->data_arr[ptr] = T{};
-                this->off           += 1u;
-                this->sz            -= 1u;
-            }
- 
-            constexpr void pop_back() noexcept{
-
-                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr          = this->to_index(this->sz - 1u);
-                this->data_arr[ptr] = T{};
-                this->sz            -= 1u;
-            } 
-
-            constexpr void erase_front_range(size_t sz) noexcept{
-                
-                for (size_t i = 0u; i < sz; ++i){
-                    pop_front();
-                }
-            }
-
-            constexpr void erase_back_range(size_t sz) noexcept{
-
-                for (size_t i = 0u; i < sz; ++i){
-                    pop_back();
-                }
-            }
-
             constexpr auto front() const noexcept -> const T&{
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -259,6 +174,11 @@ namespace dg::network_datastructure::cyclic_queue{
                 return this->data_arr[ptr];
             }
 
+            constexpr auto empty() const noexcept -> bool{
+
+                return this->sz == 0u;                
+            }
+
             constexpr auto begin() const noexcept -> const_iterator{
 
                 return const_iterator(this->data_arr.begin(), 0u, this->get_index_getter_device());
@@ -307,6 +227,92 @@ namespace dg::network_datastructure::cyclic_queue{
             constexpr auto at(size_t idx) noexcept -> T&{
 
                 return (*this)[idx];
+            }
+
+
+            constexpr auto resize(size_t new_sz) noexcept -> exception_t{
+
+                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
+
+                if (new_sz > this->cap){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                size_t erase_first  = std::min(this->sz, new_sz);
+                size_t erase_last   = this->sz;
+                std::fill(std::next(this->begin(), erase_first), std::next(this->begin(), erase_last), T{});
+                this->sz            = new_sz;
+            }
+
+            template <class ValueLike>
+            constexpr auto push_back(ValueLike&& value) noexcept -> exception_t{
+
+                if (this->sz == this->cap){
+                    return dg::network_exception::QUEUE_FULL;
+                }
+
+                size_t ptr = this->to_index(this->sz);
+
+                if constexpr(std::is_nothrow_assignable_v<T&, ValueLike&&>){
+                    this->data_arr[ptr] = std::forward<ValueLike>(value);
+                    this->sz            += 1u;
+                    return dg::network_exception::SUCCESS; 
+                } else{
+                    try{
+                        this->data_arr[ptr] = std::forward<ValueLike>(value);
+                        this->sz            += 1u;
+                        return dg::network_exception::SUCCESS;
+                    } catch (...){
+                        return dg::network_exception::wrap_std_exception(std::current_exception());
+                    }
+                }
+            }
+
+            constexpr void pop_front() noexcept{
+
+                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr          = this->to_index(0u);
+                this->data_arr[ptr] = T{};
+                this->off           += 1u;
+                this->sz            -= 1u;
+            }
+ 
+            constexpr void pop_back() noexcept{
+
+                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr          = this->to_index(this->sz - 1u);
+                this->data_arr[ptr] = T{};
+                this->sz            -= 1u;
+            } 
+
+            constexpr void erase_front_range(size_t sz) noexcept{
+                
+                for (size_t i = 0u; i < sz; ++i){
+                    pop_front();
+                }
+            }
+
+            constexpr void erase_back_range(size_t sz) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    pop_back();
+                }
             }
 
             constexpr auto operator ==(const self& other) const noexcept -> bool{

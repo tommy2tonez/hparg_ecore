@@ -269,7 +269,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct QueuedPacket{
         Packet pkt;
-        std::chrono::time_point<std::chrono::utc_clock> queued_time;            
+        std::chrono::time_point<std::chrono::steady_clock> queued_time;            
     };
 
     struct MailBoxArgument{
@@ -1753,7 +1753,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
-                auto now                = std::chrono::utc_clock::now();
+                auto now                = std::chrono::steady_clock::now();
                 Packet * base_pkt_arr   = pkt_arr.base(); 
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -1798,7 +1798,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                std::chrono::time_point<std::chrono::utc_clock> time_bar = std::chrono::utc_clock::now() - this->transmission_delay_time;
+                std::chrono::time_point<std::chrono::steady_clock> time_bar = std::chrono::steady_clock::now() - this->transmission_delay_time;
 
                 auto key            = QueuedPacket{};
                 key.queued_time     = time_bar;

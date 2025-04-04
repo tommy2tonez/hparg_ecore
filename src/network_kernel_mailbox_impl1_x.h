@@ -21,7 +21,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         virtual ~MeterInterface() noexcept = default;
         virtual void tick(size_t) noexcept = 0;
         virtual auto get_count() noexcept -> size_t = 0;
-        virtual auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::utc_clock> = 0;  
+        virtual auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock> = 0;  
         virtual void reset() noexcept = 0;
     };
 
@@ -30,7 +30,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         private:
 
             std::atomic<size_t> count;
-            std::atomic<std::chrono::time_point<std::chrono::utc_clock>> since;
+            std::atomic<std::chrono::time_point<std::chrono::steady_clock>> since;
 
         public:
 
@@ -46,7 +46,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 return this->count.load(std::memory_order_relaxed);
             }
 
-            auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::utc_clock>{
+            auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
 
                 return this->since.load(std::memory_order_relaxed);
             }
@@ -56,7 +56,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 stdx::seq_cst_guard seqcst_tx;
 
                 this->count.exchange(0u, std::memory_order_relaxed);
-                this->since.exchange(std::chrono::utc_clock::now(), std::memory_order_relaxed);
+                this->since.exchange(std::chrono::steady_clock::now(), std::memory_order_relaxed);
             }
     };
 
@@ -64,7 +64,6 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
         private:
 
-            //we'll fix the polymorphic dispatch later
             std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr;
             size_t pow2_base_arr_sz;
         
@@ -93,9 +92,9 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 return total_sz;
             }
 
-            auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::utc_clock>{
+            auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
 
-                std::chrono::time_point<std::chrono::utc_clock> since = this->base_arr[0]->get_count_since();
+                std::chrono::time_point<std::chrono::steady_clock> since = this->base_arr[0]->get_count_since();
 
                 for (size_t i = 1u; i < this->pow2_base_arr_sz; ++i){
                     since = std::min(since, this->base_arr[i]->get_count_since());
@@ -144,9 +143,9 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         
         private:
 
-            auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::utc_clock> dur) noexcept -> dg::string{
+            auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> dur) noexcept -> dg::string{
 
-                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::utc_clock::now() - dur);
+                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - dur);
                 size_t tick_sz = dur_in_seconds.count();
 
                 if (tick_sz == 0u){
@@ -157,9 +156,9 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 return std::format("[METER_REPORT] {} bytes/s sent to {}", bsz_per_s, this->device_id);
             }
 
-            auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::utc_clock> dur) noexcept -> dg::string{
+            auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> dur) noexcept -> dg::string{
 
-                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::utc_clock::now() - dur);
+                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - dur);
                 size_t tick_sz = dur_in_seconds.count();
 
                 if (tick_sz == 0u){
@@ -229,59 +228,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
     };
 }
 
-namespace dg::network_kernel_mailbox_impl1_streamx{
-
-    //alright, we are to work on improving the streamx
-    //we dont have time to do transmission-controlled protocol, we assume people are well-behaved, planned people, people that know what to do with their life at a random time
-
-    //after a long conversation with my std-friends, they are heavily against the heap_allocation noexcept, even if it is for application purposes
-    //I dont really know what precisely their plan is for defrag or extending the heap
-    //yet it is said that we can decrease the chance of no-fail allocations -> 0 by controlling the upstream allocation techniques, not here returning dg::string like it is implementation-specific
-
-    //we have come up with two types of std_containers, the std_container that cannot fail because of allocations, and the std_container that can fail because of allocations
-    //std_container that cannot fail because of allocations are for preallocated, internal usage of std::unordered_set<> std::unordered_map, std::deque, etc.
-    //std_container that can fail because of allocations (we hardly found the reason to fail allocations, yet it's best practice to consider allocations as normal action operations)
-    //we are to radix the std_containers
-
-    //alright, let's see what's going on
-    //there might be a chance of coordinated streamx attack
-    //this is also susceptible to late packets transmissions
-    //we want to establish soft_synchronization of packet destruction to avoid statistical chances or engineered chances of incoming packet recv times being evenly spreaded out in an acceptable adjecent destruction window
-    //such creates the worst case of n * <waiting_window> -> 60s - 1 hour (which is very bad)
-    //we must have an absolute window of transmission right at the moment of <packet_assemble> construction
-    //such window is fixed and reasonably fixed, configurable by users (1MB - 16MB, 10 seconds transmisison, for example)
-    //we are to not yet worry about the affinity of random_hash_distributed
-    //if the lock contention cost (queueing mutex + put thread to sleep + wake thread up == 1024 packets submission, we are to increase the packet size per tx -> 1024, because the affinity problem introduces hand-tune accurate, skewed consumption, we are to avoid that unless we are going to the last of last option for micro optimizations)
-
-    //alright I got a weird dream, my game was so laggy so I got my points deducted
-    //the reason is that other dudes do subscribed mutex + waiting production like what I did with the asynchronous device
-    //I've yet to think that the problem, that would require a significant design change, and a lot of memory orderings to get that working
-
-    //imagine that we are to do subscribed mutex, what is the good quantity to release the mutex?    
-    //if we release the binary semaphore, timedout, how do we make sure our waiting container is not leaked
-    //this would require another synchronization on the container to decommission the container before we <stack>_out the consumption function 
-
-    //the design is wet
-    //we dont have the manpower + implementation virtues to implement that yet
-
-    //if we are to use jumbo frame, it is 8192 bytes/ 1 stack allocation of 32 bytes
-    //I hardly think that's the issue
-
-    //let's get back to the absolute window problem
-    //we are to leverage our current solution to solve the problem of destroy
-    //this requires an inbound gate to invoke assemble
-    //because if we don't invoke assemble in a timely manner or a reasonable duration, the packet is automatically self-destructed
-    //this inbound gate uses an temporal_finite_unordered_map (Address -> absolute time)
-
-    //sorry babe, I dont have time for you, I have tons of codes to write, I dont even know if I can write all of these shit on time
-    //one day people would realize that they are doing synchronization for ... nothing
-    //what's about that 0.0001% of failed tree computation, mis soft-synchronization by using timepoint + plan
-    //we dont really care fellas, just like CPU, we push things so hard through (by making good frequency plans), and we check intervally to rewind the state
-    //we need to know that nano-accurate latency is irrelevant in such case (we are logit density miners)
-    //what we need is a guarantee of worst case scenerios, an absolute window of computation tree or socket transportation
-
-    //we are operating on machines that can have memory corruption at ALL TIME, we are flopping on cuda, concurrently, what do yall expect?
-    //our only true North is getting the logit data, verifying the data, or rewind the data, and retrain
+namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
@@ -388,7 +335,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
             total_bsz += pkt.data[i].buf.size();
         }
 
-        std::expected<dg::string, exception_t> rs = dg::network_exception::cstyle_initialize<dg::string>(total_bsz, ' ');
+        std::expected<dg::string, exception_t> rs = dg::network_exception::cstyle_initialize<dg::string>(total_bsz, 0);
 
         if (!rs.has_value()){
             return rs;
@@ -467,7 +414,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
         private:
 
-            data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::utc_clock>> abstimeout_map;
+            data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map;
             const std::chrono::nanoseconds abs_timeout_dur;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
@@ -493,8 +440,8 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                std::chrono::time_point<std::chrono::utc_clock> now             = std::chrono::utc_clock::now();
-                std::chrono::time_point<std::chrono::utc_clock> timeout_value   = now + this->abs_timeout_dur;
+                std::chrono::time_point<std::chrono::steady_clock> now              = std::chrono::steady_clock::now();
+                std::chrono::time_point<std::chrono::steady_clock> timeout_value    = now + this->abs_timeout_dur;
 
                 for (size_t i = 0u; i < sz; ++i){
                     auto map_ptr = this->abstimeout_map.find(global_id_arr[i]);
@@ -599,7 +546,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
     };
 
     struct EntranceEntry{
-        std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds> timestamp;
+        std::chrono::time_point<std::chrono::steady_clock> timestamp;
         GlobalIdentifier key;
         __uint128_t entry_id;
     };
@@ -608,7 +555,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
         private:
 
-            dg::vector<EntranceEntry> entrance_entry_pq; //no exhausted container
+            dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq; //no exhausted container
             const size_t entrance_entry_pq_cap; 
             dg::unordered_unstable_map<GlobalIdentifier, size_t> key_id_map; //no exhausted container
             const size_t key_id_map_cap;
@@ -619,7 +566,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
         public:
 
-            EntranceController(dg::vector<EntranceEntry> entrance_entry_pq,
+            EntranceController(dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq,
                                size_t entrance_entry_pq_cap,
                                dg::unordered_unstable_map<GlobalIdentifier, size_t> key_id_map,
                                szie_t key_id_map_cap,
@@ -646,8 +593,7 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                auto now        = std::chrono::utc_clock::now();
-                auto greater    = [](const EntranceEntry& lhs, const EntranceEntry& rhs){return lhs.timestamp > rhs.timestamp || (lhs.timestamp == rhs.timestamp && lhs.entry_id > rhs.entry_id);};
+                auto now = std::chrono::steady_clock::now();
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->entrance_entry_pq.size() == this->entrace_entry_pq_cap){
@@ -660,13 +606,12 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                         continue;
                     }
 
-                    auto entry              = EntranceEntry{};
-                    entry.timestamp         = now;
-                    entry.key               = global_id_arr[i];
-                    entry.entry_id          = this->id_ticker++;
+                    auto entry      = EntranceEntry{};
+                    entry.timestamp = now;
+                    entry.key       = global_id_arr[i];
+                    entry.entry_id  = this->id_ticker++;
 
                     this->entrance_entry_pq.push_back(entry);
-                    std::push_heap(this->entrance_entry_pq.begin(), this->entrance_entry_pq.end(), greater);
                     this->key_id_map[global_id_arr[i]] = entry.entry_id;
                     exception_arr[i] = dg::network_exception::SUCCESS;
                 }
@@ -679,9 +624,8 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                auto bar_time   = std::chrono::utc_clock::now() - this->expiry_period;
+                auto bar_time   = std::chrono::steady_clock::now() - this->expiry_period;
                 sz              = 0u;
-                auto greater    = [](const EntranceEntry& lhs, const EntranceEntry& rhs){return lhs.timestamp > rhs.timestamp || (lhs.timestamp == rhs.timestamp && lhs.entry_id > rhs.entry_id);};
 
                 for (size_t i = 0u; i < cap; ++i){
                     if (this->entrace_entry_pq.empty()){
@@ -692,9 +636,8 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                         return; 
                     }
 
-                    std::pop_heap(this->entrace_entry_pq.begin(), this->entrace_entry_pq.end(), greater);
-                    EntranceEntry entry = std::move(this->entrace_entry_pq.back());
-                    this->entrace_entry_pq.pop_back();
+                    EntranceEntry entry = this->entrace_entry_pq.front();
+                    this->entrace_entry_pq.pop_front();
                     auto map_ptr        = this->key_id_map.find(entry.key); 
 
                     if constexpr(DEBUG_MODE_FLAG){
@@ -1855,16 +1798,16 @@ namespace dg::network_kernel_mailbox_impl1_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t tentative_max_consume_sz = std::min(queue_cap, unique_id_cap) >> max_consume_decay_factor;
+            size_t upqueue_cap              = stdx::ulog2(stdx::ceil2(queue_cap));
+            size_t tentative_max_consume_sz = std::min(upqueue_cap, unique_id_cap) >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
-            auto entrance_entry_pq          = dg::vector<EntranceEntry>{};
+            auto entrance_entry_pq          = dg::pow2_cyclic_queue<EntranceEntry>(upqueue_cap);
             auto key_id_map                 = dg::unordered_unstable_map<GlobalIdentifier, size_t>{};
 
-            entrance_entry_pq.reserve(queue_cap);
             key_id_map.reserve(unique_id_cap);
 
             return std::make_unique<EntranceController>(std::move(entrance_entry_pq),
-                                                        queue_cap,
+                                                        upqueue_cap,
                                                         std::move(key_id_map),
                                                         unique_id_cap,
                                                         __uint128_t{0u},
