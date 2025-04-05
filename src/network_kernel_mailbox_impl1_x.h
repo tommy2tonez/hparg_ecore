@@ -1026,7 +1026,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto bar_time   = std::chrono::steady_clock::now() - this->expiry_period;
                 sz              = 0u;
 
-                for (size_t i = 0u; i < cap; ++i){
+                while (true){
+                    if (sz == cap){
+                        return;
+                    }
+
                     if (this->entrance_entry_pq.empty()){
                         return;
                     }
@@ -2109,7 +2113,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                     transmission_vectorization_sz(transmission_vectorization_sz){}
 
             void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
-                
+ 
                 MailBoxArgument * base_data_arr = data_arr.base();
 
                 auto feed_resolutor             = InternalFeedResolutor{};
