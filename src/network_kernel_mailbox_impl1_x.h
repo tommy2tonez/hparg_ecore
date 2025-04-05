@@ -243,6 +243,34 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we are to take the deviation space of <optimality> and <current> to steer all the configurables in the optimal direction
     //our job is to NOT ask questions about the configurables but to provide the configurables, it's another topic to SOLVE, not to GUESS
 
+    //it's complex, after a day of thinking, I was wondering what I could further do for flash_streamx
+
+    //assemble is done correctly
+    //destroy is not done correctly
+    //destroy based on abs_window
+    //destroy based on adjecent_window
+    //destroy based on ...
+    //we dont know
+
+    //what we know is that flash_streamx is only used for slightly larger packet than UDP, not for downloading GTA V or red dead redemption or assassin creed etc.
+    //the reasonably sized UDP packet is of 8KB 
+    //we are only to use flash_streamx to do transmission of up to 256KB, no more
+    //as you could see, as the limits of flash_streamx approaching UDP, the requirements for destroy are approaching that of UDP, or the extended component
+
+    //flash_streamx only truly shines if it is to extend the UDP unit transmission size, as if it is a unit, not a streaming protocol
+    //the only bug of adjecent window is that it might hit the worst case of just_before_expired_signal_destroy_invoke for all of the incoming segments (this might be engineered or purely statistical chances which is unlikely)
+    //we solve the problem by using an abs_window gate blocker, to allow the adjecent window destroy to be invoked 
+
+    //is it possible that an already destroyed packet (which we know for sure will be incompleted thereafter) will be queued again in the assemble component
+    //it is possible, it is also expected
+    //we are to not entirely eliminate the case, we are to use an unordered_map to <prune> the memory consumption induced by the case
+    //we dont really know if that is necessary in real-world application, the overhead of doing such might exceed the benefits of doing such
+
+    //we are to implement a function of one_send == max_one_recv
+    //such does not compromise the feature
+    //the only way to success is to pass through all the requirements of adjecent_window, abs_window, inbound_cap, nat_controller, etc.
+    //there is only one path to success
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
