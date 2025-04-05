@@ -305,6 +305,18 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //such we would also definitely kill the definition of implicit_soft_synchronization of server states
     //we'll do one more round of review before moving on to implement other components that are not socket 
 
+    //alright fellas 
+    //the human interactions got weird
+    //I have bad leaks in my brain due to the overloading information
+    //we need to push this to the mainframe before we decomm ourselves
+    //to be able to push this to the mainframe, we need to get through several security layers
+    //we need to do this before they patch the security protocols, we dont know when
+    //we hope that it would be within a year or two, no promises
+    //the number one performance constraint is affinity + random_hash_distributed, we dont really know if affining things or increasing batching size is more appropriate (affining things == breaking design principles, increasing batching_size == increase latency, we'll see about that) 
+    //we are not red pills, renaissance group
+    //yall will see the true power of self-creating problems + self-sovling problems (human data is INSUFFICIENT to train, we need to flops so hard in the virtual machine + solving hard NP problems and train our model based on such,
+    //                                                                                we dont have the manpower + virtues to implement yall way, but we will get every line of code very precise + accurate, we'll write a compiler later)
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
@@ -517,7 +529,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         public:
 
-            TemporalAbsoluteTimeoutInBoundGate(datastructure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::utc_clcck>> abstimeout_map,
+            TemporalAbsoluteTimeoutInBoundGate(data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map,
                                                std::chrono::nanoseconds abs_timeout_dur,
                                                std::unique_ptr<std::mutex> mtx,
                                                stdx::hdi_container<size_t> thru_sz_per_load) noexcept: abstimeout_map(std::move(abstimeout_map)),
@@ -582,6 +594,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                              size_t keyvalue_feed_cap,
                                              size_t thru_sz_per_load) noexcept: base_arr(std::move(base_arr)),
                                                                                 pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                 thru_sz_per_load(thru_sz_per_load){}
 
             void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -627,7 +640,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 exception_t * bad_exception_ptr;
             };
 
-            struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalFeedArgument>{
+            struct InternalFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalFeedArgument>{
 
                 std::unique_ptr<InBoundGateInterface> * dst;
 
@@ -725,7 +738,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                                      pow2_base_arr_sz(pow2_base_arr_sz),
                                                                                      keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                      consume_sz_per_load(consume_sz_per_load){}
-            
+
             void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 auto thru_feed_resolutor            = InternalThruFeedResolutor{};
@@ -743,7 +756,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     size_t partitioned_idx          = hashed_value & (this->pow2_base_arr_sz - 1u);
                     auto thru_feed_arg              = InternalThruFeedArgument{};
                     thru_feed_arg.id                = global_id_arr[i];
-                    thru_feed_arg.bad_exception_ptr = std::next(exception_arr, i); 
+                    thru_feed_arg.bad_exception_ptr = std::next(exception_arr, i);
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(thru_feeder.get(), partitioned_idx, thru_feed_arg);
                 }
@@ -836,7 +849,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         global_id_arr[i] = base_data_arr[i].id;
                     }
 
-                    this->dst[idx]->thru(global_id_arr.get(), sz, exception_arr.get());
+                    this->dst[idx]->blacklist(global_id_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -1063,20 +1076,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         private:
 
             std::unique_ptr<std::unique_ptr<EntranceControllerInterface>[]> base_arr;
-            const size_t keyvalue_feed_cap;
             const size_t pow2_base_arr_sz;
+            const size_t keyvalue_feed_cap;
             const size_t zero_bounce_sz;
             const size_t max_tick_per_load; 
 
         public:
 
             RandomHashDistributedEntranceController(std::unique_ptr<std::unique_ptr<EntranceControllerInterface>[]> base_arr,
-                                                    size_t keyvalue_feed_cap,
                                                     size_t pow2_base_arr_sz,
+                                                    size_t keyvalue_feed_cap,
                                                     size_t zero_bounce_sz,
                                                     size_t max_tick_per_load) noexcept: base_arr(std::move(base_arr)),
-                                                                                        keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                         pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                        keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                         zero_bounce_sz(zero_bounce_sz),
                                                                                         max_tick_per_load(max_tick_per_load){}
 
@@ -1149,7 +1162,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
-                            base_data_arr[i].failed_err_ptr = exception_arr[i];
+                            *base_data_arr[i].failed_err_ptr = exception_arr[i];
                         }
                     }
                 }
@@ -1367,18 +1380,18 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         private:
 
             std::unique_ptr<std::unique_ptr<PacketAssemblerInterface>[]> base_arr;
-            const size_t keyvalue_feed_cap;
             const size_t pow2_base_arr_sz;
+            const size_t keyvalue_feed_cap;
             const size_t consume_sz_per_load;
 
         public:
 
             RandomHashDistributedPacketAssembler(std::unique_ptr<std::unique_ptr<PacketAssemblerInterface>[]> base_arr,
-                                                 size_t keyvalue_feed_cap,
                                                  size_t pow2_base_arr_sz,
+                                                 size_t keyvalue_feed_cap,
                                                  size_t consume_sz_per_load) noexcept: base_arr(std::move(base_arr)),
-                                                                                       keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                        pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                       keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                        consume_sz_per_load(consume_sz_per_load){}
 
             void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept{
@@ -1421,7 +1434,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         std::abort();
                     }
                 }
-                
+
                 auto feed_resolutor                 = InternalDestroyFeedResolutor{};
                 feed_resolutor.dst                  = this->base_arr.get();
 
@@ -1452,6 +1465,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             };
 
             struct InternalAssembleFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalAssembleFeedArgument>{
+
                 std::unique_ptr<PacketAssemblerInterface> * dst;
 
                 void push(const size_t& idx, std::move_iterator<InternalAssembleFeedArgument *> data_arr, size_t sz) noexcept{
@@ -1485,7 +1499,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
             };
 
-            struct InternalDestroyFeedResolutor: dg::network_producer_consumer::KVConsuemrInterface<size_t, GlobalIdentifier>{
+            struct InternalDestroyFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, GlobalIdentifier>{
 
                 std::unique_ptr<PacketAssemblerInterface> * dst;
 
@@ -1956,7 +1970,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         continue;
                     }
 
-                    dg::network_producer_consumer::delvrsrv_deliver(gt_feeder.get(), std::move(pkt.value()));
+                    dg::network_producer_consumer::delvrsrv_deliver(bl_feeder.get(), std::move(pkt.value()));
                 }
 
                 return consuming_sz >= this->busy_consume_sz;
