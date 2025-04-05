@@ -278,14 +278,41 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     //send a signal to gate controller to block the ids (good idea), this is the extensible way
 
+    //let's see, if are to design a true stream, we would want to have a <sliding_window_meter> (in conjunction to the <latency_meter>) with a certain uncertainty, to detect an underflow and trigger a kill signal
+    //the kill signal would then be decayed to segment kill signals to the downstream socket
+    //we are not doing that bittorrent thing, yet
+    //or we are doing that bittorrent thing by using memregion frequencies (hmm, this is debatable)
+    //memregion frequencies can be seen as reaction time, not a scheduler (we'll invent a way to make this also a reactor + scheduler, by passing from one memregion to another, cloning from high_frequency -> low_frequency, moving from air -> water)
+    //this is precisely why SSD + RAID are leveraged
+
+    //flash stream is only for UDP_X protocol
+    //we have an abs_window of things and latency_window of things
+    //these should suffice for state soft_synchronization without explicit requests to the server
+
+    //what's a good number for all of these to work so perfectly?
+    //we don't know
+    //we can't know
+    //it is the answer that ONLY statistics can give you
+    //it is a machine learning project to glue all of these moving parts together
+    //people spent 30 years working on the TCP, because it is HARD
+    //the hard part is the quantifying WHEN to trigger the kill signals, we can never get it right, it's very application specific
+
+    //alright, different p2p connections have different traits, how do we radix such if we are to <uniformize> all of those?
+    //its when we'd want to spawn multiple socket protocol to further radix the uniformity (there is a real reason for choosing FedEx or USPS or UPS, they are different companies specialized in different things, when they say 1 day guarantee delivery, they mean domestic time, not international time,
+    //                                                                                      we are dumb, clueless customer who want the packet to be from A -> B)
+
+    //its complex, because adding a variable == adding another thing we can't control or predict or compromising the interface extensibility (the variables that we think are relevant are no longer relevant in the future if we are to upgrade our tech stack)
+    //such we would also definitely kill the definition of implicit_soft_synchronization of server states
+    //we'll do one more round of review before moving on to implement other components that are not socket 
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
     static inline constexpr size_t MAX_SEGMENT_SIZE                         = size_t{1} << 10;
     static inline constexpr size_t DEFAULT_KEYVALUE_FEED_SIZE               = size_t{1} << 10; 
     static inline constexpr size_t DEFAULT_KEY_FEED_SIZE                    = size_t{1} << 8;
-    static inline constexpr uint32_t PACKET_SEGMENT_SERIALIZATION_SECRET    = 30011; 
-    
+    static inline constexpr uint32_t PACKET_SEGMENT_SERIALIZATION_SECRET    = 3036322422ULL; //we randomize the secret within the uint32_t range to make sure that we dont have internal corruptions
+
     //OK
     struct GlobalIdentifier{
         Address addr;
@@ -539,6 +566,94 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     };
 
     //OK
+    class RandomHashDistributedInBoundGate: public virtual InBoundGateInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<InBoundGateInterface>[]> base_arr;
+            size_t pow2_base_arr_sz;
+            size_t keyvalue_feed_cap;
+            size_t thru_sz_per_load;
+
+        public:
+
+            RandomHashDistributedInBoundGate(std::unique_ptr<std::unique_ptr<InBoundGateInterface>[]> base_arr,
+                                             size_t pow2_base_arr_sz,
+                                             size_t keyvalue_feed_cap,
+                                             size_t thru_sz_per_load) noexcept: base_arr(std::move(base_arr)),
+                                                                                pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                thru_sz_per_load(thru_sz_per_load){}
+
+            void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                auto feed_resolutor                 = InternalFeedResolutor{};
+                feed_resolutor.dst                  = this->base_arr.get();
+
+                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t hashed_value         = dg::network_hash::hash_reflectible(global_id_arr[i]);
+                    size_t partitioned_idx      = hashed_value & (this->pow2_base_arr_sz - 1u);
+                    auto feed_arg               = InternalFeedArgument{};
+                    feed_arg.id                 = global_id_arr[i];
+                    feed_arg.bad_exception_ptr  = std::next(exception_arr, i); 
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
+                }
+
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->thru_sz_per_load;
+            }
+        
+        private:
+
+            struct InternalFeedArgument{
+                GlobalIdentifier id;
+                exception_t * bad_exception_ptr;
+            };
+
+            struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalFeedArgument>{
+
+                std::unique_ptr<InBoundGateInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<InternalFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalFeedArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<GlobalIdentifier[]> global_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        global_id_arr[i] = base_data_arr[i].id;
+                    }
+
+                    this->dst[idx]->thru(global_id_arr.get(), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            *base_data_arr[i].bad_exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
+    };
+
+    //OK
     class TemporalBlackListGate: public virtual BlackListGateInterface{
 
         private:
@@ -589,6 +704,147 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->thru_sz_per_load.value;
             }
+    };
+
+    //OK
+    class RandomHashDistributedBlackListGate: public virtual BlackListGateInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<BlackListGateInterface>[]> base_arr;
+            size_t pow2_base_arr_sz;
+            size_t keyvalue_feed_cap;
+            size_t consume_sz_per_load;
+        
+        public:
+
+            RandomHashDistributedBlackListGate(std::unique_ptr<std::unique_ptr<BlackListGateInterface>[]> base_arr,
+                                               size_t pow2_base_arr_sz,
+                                               size_t keyvalue_feed_cap,
+                                               size_t consume_sz_per_load) noexcept: base_arr(std::move(base_arr)),
+                                                                                     pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                     keyvalue_feed_cap(keyvalue_feed_cap),
+                                                                                     consume_sz_per_load(consume_sz_per_load){}
+            
+            void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                auto thru_feed_resolutor            = InternalThruFeedResolutor{};
+                thru_feed_resolutor.dst             = this->base_arr.get();
+
+                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
+                size_t thru_feeder_allocation_cost  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&thru_feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> thru_feeder_mem(thru_feeder_allocation_cost);
+                auto thru_feeder                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&thru_feed_resolutor, trimmed_keyvalue_feed_cap, thru_feeder_mem.get()));
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t hashed_value             = dg::network_hash::hash_reflectible(global_id_arr[i]);
+                    size_t partitioned_idx          = hashed_value & (this->pow2_base_arr_sz - 1u);
+                    auto thru_feed_arg              = InternalThruFeedArgument{};
+                    thru_feed_arg.id                = global_id_arr[i];
+                    thru_feed_arg.bad_exception_ptr = std::next(exception_arr, i); 
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(thru_feeder.get(), partitioned_idx, thru_feed_arg);
+                }
+            }
+
+            void blacklist(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                auto blacklist_feed_resolutor           = InternalBlackListFeedResolutor{};
+                blacklist_feed_resolutor.dst            = this->base_arr.get();
+
+                size_t trimmed_keyvalue_feed_cap        = std::min(this->keyvalue_feed_cap, sz);
+                size_t blacklist_feeder_allocation_cost = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&blacklist_feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blacklist_feeder_mem(blacklist_feeder_allocation_cost);
+                auto blacklist_feeder                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&blacklist_feed_resolutor, trimmed_keyvalue_feed_cap, blacklist_feeder_mem.get()));
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                for (size_t i = 0u ; i < sz; ++i){
+                    size_t hashed_value                     = dg::network_hash::hash_reflectible(global_id_arr[i]);
+                    size_t partitioned_idx                  = hashed_value & (this->pow2_base_arr_sz - 1u);
+                    auto blacklist_feed_arg                 = InternalBlackListFeedArgument{};
+                    blacklist_feed_arg.id                   = global_id_arr[i];
+                    blacklist_feed_arg.bad_exception_ptr    = std::next(exception_arr, i); 
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(blacklist_feeder.get(), partitioned_idx, blacklist_feed_arg);
+                }
+            }
+
+            auto max_consume_size(){
+
+                return this->consume_sz_per_load;
+            }
+        
+        private:
+
+            struct InternalThruFeedArgument{
+                GlobalIdentifier id;
+                exception_t * bad_exception_ptr;
+            };
+
+            struct InternalThruFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalThruFeedArgument>{
+
+                std::unique_ptr<BlackListGateInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<InternalThruFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalThruFeedArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<GlobalIdentifier[]> global_id_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        global_id_arr[i] = base_data_arr[i].id;
+                    }
+
+                    this->dst[idx]->thru(global_id_arr.get(), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            *base_data_arr[i].bad_exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
+
+            struct InternalBlackListFeedArgument{
+                GlobalIdentifier id;
+                exception_t * bad_exception_ptr;
+            };
+
+            struct InternalBlackListFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalBlackListFeedArgument>{
+
+                std::unique_ptr<BlackListGateInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<InternalBlackListFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalBlackListFeedArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<GlobalIdentifier[]> global_id_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        global_id_arr[i] = base_data_arr[i].id;
+                    }
+
+                    this->dst[idx]->thru(global_id_arr.get(), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            *base_data_arr[i].bad_exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
     };
 
     //OK
@@ -1600,11 +1856,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             std::shared_ptr<PacketAssemblerInterface> packet_assembler;
             std::shared_ptr<InBoundGateInterface> inbound_gate;
+            std::shared_ptr<InBoundGateInterface> blacklist_gate;
             std::shared_ptr<InBoundContainerInterface> inbound_container;
             std::shared_ptr<EntranceControllerInterface> entrance_controller;
             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
             size_t packet_assembler_vectorization_sz;
             size_t inbound_gate_vectorization_sz;
+            size_t blacklist_gate_vectorization_sz;
             size_t entrance_controller_vectorization_sz;
             size_t inbound_container_vectorization_sz;
             size_t upstream_consume_sz;
@@ -1614,21 +1872,25 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             InBoundWorker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
                           std::shared_ptr<InBoundGateInterface> inbound_gate,
+                          std::shared_ptr<InBoundGateInterface> blacklist_gate,
                           std::shared_ptr<InBoundContainerInterface> inbound_container,
                           std::shared_ptr<EntranceControllerInterface> entrance_controller,
                           std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
                           size_t packet_assembler_vectorization_sz,
                           size_t inbound_gate_vectorization_sz,
+                          size_t blacklist_gate_vectorization_sz,
                           size_t entrance_controller_vectorization_sz,
                           size_t inbound_container_vectorization_sz,
                           size_t upstream_consume_sz,
                           size_t busy_consume_sz) noexcept: packet_assembler(std::move(packet_assembler)),
                                                             inbound_gate(std::move(inbound_gate)),
+                                                            blacklist_gate(std::move(blacklist_gate)),
                                                             inbound_container(std::move(inbound_container)),
                                                             entrance_controller(std::move(entrance_controller)),
                                                             base(std::move(base)),
                                                             packet_assembler_vectorization_sz(packet_assembler_vectorization_sz),
                                                             inbound_gate_vectorization_sz(inbound_gate_vectorization_sz),
+                                                            blacklist_gate_vectorization_sz(blacklist_gate_vectorization_sz),
                                                             entrance_controller_vectorization_sz(entrance_controller_vectorization_sz),
                                                             inbound_container_vectorization_sz(inbound_container_vectorization_sz),
                                                             upstream_consume_sz(upstream_consume_sz),
@@ -1670,12 +1932,21 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 auto gt_feed_resolutor                      = InternalInBoundGateFeedResolutor{};
                 gt_feed_resolutor.inbound_gate              = this->inbound_gate.get();
-                gt_feed_resolutor.ps_feeder                 = ps_feeder.get();                    
+                gt_feed_resolutor.downstream_feeder         = ps_feeder.get();                    
 
                 size_t trimmed_gt_feed_cap                  = std::min(std::min(this->inbound_gate_vectorization_sz, consuming_sz), this->inbound_gate->max_consume_size());
                 size_t gt_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&gt_feed_resolutor, trimmed_gt_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> gt_feeder_mem(gt_feeder_allocation_cost);
                 auto gt_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&gt_feed_resolutor, trimmed_gt_feed_cap, gt_feeder_mem.get()));
+
+                auto bl_feed_resolutor                      = InternalInBoundGateFeedResolutor{};
+                bl_feed_resolutor.inbound_gate              = this->blacklist_gate.get();
+                bl_feed_resolutor.downstream_feeder         = gt_feeder.get();
+
+                size_t trimmed_bl_feed_cap                  = std::min(std::min(this->blacklist_gate_vectorization_sz, consuming_sz), this->blacklist_gate->max_consume_size());
+                size_t bl_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&bl_feed_resolutor, trimmed_bl_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> bl_feeder_mem(bl_feeder_allocation_cost);
+                auto bl_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&bl_feed_resolutor, trimmed_bl_feed_cap, bl_feeder_mem.get()));
 
                 for (size_t i = 0u; i < consuming_sz; ++i){
                     std::expected<PacketSegment, exception_t> pkt = deserialize_packet_segment(std::move(buf_arr[i]));
@@ -1773,7 +2044,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             struct InternalInBoundGateFeedResolutor: dg::network_producer_consumer::ConsumerInterface<PacketSegment>{
 
                 InBoundGateInterface * inbound_gate;
-                dg::network_producer_consumer::DeliveryHandle<PacketSegment> * ps_feeder;
+                dg::network_producer_consumer::DeliveryHandle<PacketSegment> * downstream_feeder;
 
                 void push(std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
 
@@ -1794,7 +2065,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             continue;
                         }
 
-                        dg::network_producer_consumer::delvrsrv_deliver(this->ps_feeder, std::move(base_data_arr[i]));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->downstream_feeder, std::move(base_data_arr[i]));
                     }
                 }  
             };
@@ -2299,223 +2570,36 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
         }
     };
 
-    static auto serialize_radixmsg(RadixMessage inp) noexcept -> dg::string{
+    static auto serialize_radixmsg(RadixMessage&& inp) noexcept -> std::expected<dg::string, exception_t>{
 
-        constexpr size_t HEADER_SZ  = dg::network_trivial_serializer::size(radix_t{});
-        size_t content_sz           = inp.content.size();
-        size_t total_sz             = content_sz + HEADER_SZ;
-        auto rs                     = std::move(inp.content);
-        rs.resize(total_sz);
-        char * header_ptr           = rs.data() + content_sz;
-        dg::network_trivial_serializer::serialize_into(header_ptr, inp.radix);
-
-        return rs;
     }
 
-    static auto deserialize_radixmsg(dg::string inp) noexcept -> RadixMessage{
+    static auto deserialize_radixmsg(dg::string&& inp) noexcept -> std::expected<RadixMessage, exception_t>{
 
-        constexpr size_t HEADER_SZ  = dg::network_trivial_serializer::size(radix_t{});
-        auto [left, right]          = stdx::backsplit_str(std::move(inp), HEADER_SZ);
-        radix_t radix               = {};
-        dg::network_trivial_serializer::deserialize_into(radix, right.data());
-        
-        return RadixMessage(radix, std::move(left));
     }
 
-    struct ExhaustionControllerInterface{
-        virtual ~ExhaustionControllerInterface() noexcept = default;
-        virtual auto thru_one() noexcept -> bool = 0;
-        virtual void exit_one() noexcept = 0;
-    };
+    struct RadixMailBoxArgument{
+        Address to;
+        dg::string content;
+        radix_t radix;
+    }; 
 
     struct RadixMailboxInterface{
         virtual ~RadixMailboxInterface() noexcept = default;
-        virtual void send(Address addr, dg::string buf, radix_t radix) noexcept = 0;
-        virtual auto recv(radix_t radix) noexcept -> std::optional<dg::string> = 0;
+        virtual void send(std::move_iterator<RadixMailBoxArgument *> data_arr, size_t data_arr_sz, exception_t * exception_arr) noexcept = 0;
+        virtual void recv(dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap, radix_t radix) noexcept = 0;
     };
 
     struct InBoundContainerInterface{
         virtual ~InBoundContainerInterface() noexcept = default;
-        virtual auto pop(radix_t) noexcept -> std::optional<dg::string> = 0;
-        virtual void push(radix_t, dg::string) noexcept = 0;
+        virtual void push(std::move_iterator<dg::string *>, size_t, exception_t *) noexcept = 0;
+        virtual void pop(dg::string *, size_t&, size_t) noexcept = 0;
     };
 
-    class StdExhaustionController: public virtual ExhaustionControllerInterface{
-
-        private:
-
-            size_t cur_sz;
-            size_t capacity;
-            std::unique_ptr<std::mutex> mtx;
-
-        public:
-
-            StdExhaustionController(size_t cur_sz, 
-                                    size_t capacity,
-                                    std::unique_ptr<std::mutex> mtx) noexcept: cur_sz(cur_sz),
-                                                                               capacity(capacity),
-                                                                               mtx(std::move(mtx)){}
-            
-            auto thru_one() noexcept -> bool{
-                
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                if (this->cur_sz == this->capacity){
-                    return false;
-                }
-
-                this->cur_sz += 1;
-                return true;
-            }
-
-            void exit_one() noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                this->cur_sz -= 1;
-            }
-    };
-
-    class InBoundContainer: public virtual InBoundContainerInterface{
-
-        private:
-
-            dg::unordered_map<radix_t, dg::deque<dg::string>> map;
-            std::unique_ptr<std::mutex> mtx;
-        
-        public:
-
-            InBoundContainer(dg::unordered_map<radix_t, dg::deque<dg::string>> map,
-                             std::unique_ptr<std::mutex> mtx) noexcept: map(std::move(map)),
-                                                                        mtx(std::move(mtx)){}
-            
-            auto pop(radix_t radix) noexcept -> std::optional<dg::string>{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                auto ptr        = this->map.find(radix);
-
-                if (ptr == this->map.end()){
-                    return std::nullopt;
-                }
-
-                if (ptr->second.empty()){
-                    return std::nullopt;
-                }
-
-                dg::string rs = std::move(ptr->second.front());
-                ptr->second.pop_front();
-
-                return rs;
-            }
-
-            void push(radix_t radix, dg::string content) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                this->map[radix].push_back(std::move(content));
-            }
-    };
-
-    class ExhaustionControlledInBoundContainer: public virtual InBoundContainerInterface{
-
-        private:
-
-            std::unique_ptr<InBoundContainerInterface> base;
-            dg::unordered_map<radix_t, std::unique_ptr<ExhaustionControllerInterface>> exhaustion_controller_map;
-            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-            std::unique_ptr<std::mutex> mtx;
-
-        public:
-
-            ExhaustionControlledInBoundContainer(std::unique_ptr<InBoundContainerInterface> base, 
-                                                 dg::unordered_map<radix_t, std::unique_ptr<ExhaustionControllerInterface>> exhaustion_controller_map,
-                                                 std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor,
-                                                 std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
-                                                                                            exhaustion_controller_map(std::move(exhaustion_controller_map)),
-                                                                                            executor(std::move(executor)),
-                                                                                            mtx(std::move(mtx)){}
-            
-            auto pop(radix_t radix) noexcept -> std::optional<dg::string>{
-
-                return this->internal_pop(radix);
-            }
-            
-            void push(radix_t radix, dg::string content) noexcept{
-
-                auto lambda = [&]() noexcept{return this->internal_push(radix, content);};
-                auto exe    = dg::network_concurrency_infretry_x::ExecutableWrapper<decltype(lambda)>(std::move(lambda));
-                this->executor->exec(exe);
-            }
-        
-        private:
-
-            auto internal_push(radix_t& radix, dg::string& content) noexcept -> bool{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                auto ec_ptr     = this->exhaustion_controller_map.find(radix);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (ec_ptr == this->exhaustion_controller_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                if (!ec_ptr->second->thru_one()){
-                    return false;
-                }
-
-                this->base->push(radix, std::move(content));
-                return true;
-            }
-            
-            auto internal_pop(radix_t radix) noexcept -> std::optional<dg::string>{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                auto rs         = this->base->pop(radix);
-
-                if (!rs.has_value()){
-                    return std::nullopt;
-                } 
-
-                auto ec_ptr     = this->exhaustion_controller_map.find(radix);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (ec_ptr == this->exhaustion_controller_map.end()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                ec_ptr->second->exit_one();
-                return rs;
-            }
-    };
-
-    class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox;
-            std::shared_ptr<InBoundContainerInterface> inbound_container;
-        
-        public:
-
-            InBoundWorker(std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox,
-                          std::shared_ptr<InBoundContainerInterface> inbound_container) noexcept: mailbox(std::move(mailbox)),
-                                                                                                  inbound_container(std::move(inbound_container)){}
-            
-            bool run_one_epoch() noexcept{
-
-                std::optional<dg::string> recv_data = this->mailbox->recv();
-
-                if (!recv_data.has_value()){
-                    return false;
-                }
-                
-                RadixMessage msg = deserialize_radixmsg(std::move(recv_data.value()));
-                this->inbound_container->push(msg.radix, std::move(msg.content));
-
-                return true;
-            }
+    struct RadixInBoundContainerInterface{
+        virtual ~RadixInBoundContainerInterface() noexcept = default;
+        virtual void push(radix_t, std::move_iterator<dg::string *>, size_t, exception_t *) noexcept = 0;
+        virtual void pop(radix_t, dg::string *, size_t&, size_t) noexcept = 0;
     };
 
     class RadixMailBox: public virtual RadixMailboxInterface{
@@ -2534,17 +2618,6 @@ namespace dg::network_kernel_mailbox_impl1_radixx{
                                                                                                  base(std::move(base)),
                                                                                                  inbound_container(std::move(inbound_container)){}
             
-            void send(Address addr, dg::string buf, radix_t radix) noexcept{
-
-                RadixMessage msg{radix, std::move(buf)};
-                dg::string bstream = serialize_radixmsg(std::move(msg));
-                this->base->send(addr, std::move(bstream));
-            }
-
-            auto recv(radix_t radix) noexcept -> std::optional<dg::string>{
-
-                return this->inbound_container->pop(radix);
-            }
     };
 
     struct Factory{

@@ -95,6 +95,8 @@ int main(){
     bar();
     foo();
 
+    (void) 3036322422ULL;
+    
     dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo> queue{};
 
     for (const auto& e: static_cast<const dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo>&>(queue)){
