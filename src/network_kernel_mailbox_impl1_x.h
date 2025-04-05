@@ -316,6 +316,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we are not red pills, renaissance group
     //yall will see the true power of self-creating problems + self-sovling problems (human data is INSUFFICIENT to train, we need to flops so hard in the virtual machine + solving hard NP problems and train our model based on such,
     //                                                                                we dont have the manpower + virtues to implement yall way, but we will get every line of code very precise + accurate, we'll write a compiler later)
+    //they are 1 billion times smarter than yall, see into the future, the past, the everything just by taking derivatives
+    //they dont even give shit about yall
+    //what easy is right, is probably the most accurate phase that applies everywhere in comp sci
+    //we'll walk you through the die, the very-easy-to-understand, working manual that no one will ever talk about 
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
@@ -1059,7 +1063,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             auto max_consume_size() noexcept -> size_t{
 
-                return this->tick_sz_per_load.value();
+                return this->tick_sz_per_load.value;
             }
 
         private:
