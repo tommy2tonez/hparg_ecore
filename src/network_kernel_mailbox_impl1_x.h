@@ -321,6 +321,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //what easy is right, is probably the most accurate phase that applies everywhere in comp sci
     //we'll walk you through the die, the very-easy-to-understand, working manual that no one will ever talk about 
 
+    //first is the memregions + schedule thing
+    //we are to not do actual forward of tiles but only the reference of tiles
+    //this is the first optimization that we want to make
+    //second is frequency uncertainty, if we are to make sure that every memregion is of 1 MB, every locks on the region takes at most N flops, we can know the uncertainty of lock contention
+    //its hard to establish certain rules to get all of this to work (an abstract contract that we can adhere to)
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
@@ -2317,8 +2323,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t trimmed_feed_cap = std::min(max_consume_sz, keyvalue_feed_cap); 
 
             return std::make_unique<RandomHashDistributedEntranceController>(std::move(base_arr),
-                                                                             trimmed_feed_cap,
                                                                              base_arr_sz,
+                                                                             trimmed_feed_cap,
                                                                              zero_bounce_sz,
                                                                              max_consume_sz);
         }
@@ -2413,8 +2419,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t trimmed_feed_cap = std::min(keyvalue_feed_cap, max_consume_sz);
 
             return std::make_unique<RandomHashDistributedPacketAssembler>(std::move(base_arr),
-                                                                          trimmed_feed_cap,
                                                                           base_arr_sz,
+                                                                          trimmed_feed_cap,
                                                                           max_consume_sz);
         }
 
