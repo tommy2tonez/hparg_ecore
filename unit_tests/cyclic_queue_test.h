@@ -291,7 +291,7 @@ namespace pow2_cyclic_queue_test{
 
     void test_leak(size_t pow2_exp, size_t operation_sz){
 
-        const uint8_t TOTAL_OPS_CODE_SZ                             = 8u;
+        const uint8_t TOTAL_OPS_CODE_SZ                             = 9u;
  
         const uint8_t OPS_CODE_BACK_INSERT_IN_RANGE                 = 0u;
         const uint8_t OPS_CODE_BACK_INSERT_OUT_RANGE_EXPECT_ERROR   = 1u;
@@ -301,6 +301,7 @@ namespace pow2_cyclic_queue_test{
         const uint8_t OPS_CODE_ERASE_FRONT_RANGE                    = 5u;
         const uint8_t OPS_CODE_ERASE_BACK_RANGE                     = 6u;
         const uint8_t OPS_CODE_OPERATOR_EQUAL                       = 7u;
+        const uint8_t OPS_CODE_RESIZE_IN_RANGE                      = 8u;
 
         const size_t cap        = size_t{1} << pow2_exp;
         auto queue              = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::unique_ptr<Foo>>(pow2_exp);
@@ -332,6 +333,13 @@ namespace pow2_cyclic_queue_test{
                     for (size_t i = 0u; i < outrange_insert_sz; ++i){
                         queue.push_back(std::make_unique<Foo>());
                     }
+                    
+                    break;
+                }
+                case OPS_CODE_RESIZE_IN_RANGE:
+                {
+                    size_t resize_sz = random_device() % (queue.size() + 1u);
+                    queue.resize(resize_sz);
                     
                     break;
                 }
