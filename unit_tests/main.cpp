@@ -8,10 +8,12 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "cyclic_queue_test.h"
 
 int main(){
 
     keyfeed_test::run();    
     kvfeed_test::run();
+    pow2_cyclic_queue_test::run();
     // run_map_test();
 }

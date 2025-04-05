@@ -215,8 +215,6 @@ namespace keyfeed_test{
         auto map_feed_sz_random_device      = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_FEED_SZ - 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
 
         for (size_t i = 0u; i < GROWTH_SZ; ++i){
-            std::cout << "testing completing " << i << "/" << GROWTH_SZ << std::endl;
-
             for (size_t j = 0u; j < TEST_SZ_PER_GROWTH; ++j){
                 size_t current_key_range    = (size_t{1} << (GROWTH_FACTOR * i + INITIAL_RANGE)) - 1;
                 size_t map_sz               = map_sz_random_device();
@@ -228,6 +226,8 @@ namespace keyfeed_test{
                 test_leak_one_feed(map, map_feed_sz);
                 test_leak_one_preallocated_feed(map, map_feed_sz);
             }
+
+            std::cout << "testing completed " << i << "/" << GROWTH_SZ << std::endl;
         }
 
         std::cout << "<feed_test_completed>" << std::endl;

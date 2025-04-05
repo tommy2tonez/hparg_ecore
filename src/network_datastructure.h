@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "network_exception.h"
-#include "network_log.h"
+// #include "network_log.h"
 
 namespace dg::network_datastructure::cyclic_queue{
 
@@ -38,12 +38,14 @@ namespace dg::network_datastructure::cyclic_queue{
         private:
 
             BaseIterator iter_head;
-            size_t virtual_idx;
+            intmax_t virtual_idx;
             pow2_cyclic_queue_index_getter_device index_getter;
         
         public:
 
-            using self = pow2_cyclic_queue_iterator; 
+            using self              = pow2_cyclic_queue_iterator; 
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = typename BaseIterator::value_type; 
 
             template <class T = BaseIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
             constexpr pow2_cyclic_queue_iterator(): iter_head(), 
@@ -51,7 +53,7 @@ namespace dg::network_datastructure::cyclic_queue{
                                                     index_getter(){}
 
             constexpr pow2_cyclic_queue_iterator(BaseIterator iter_head,
-                                                 size_t virtual_idx,
+                                                 intmax_t virtual_idx,
                                                  pow2_cyclic_queue_index_getter_device index_getter) noexcept(std::is_nothrow_move_constructible_v<BaseIterator>): iter_head(std::move(iter_head)),
                                                                                                                                                                    virtual_idx(virtual_idx),
                                                                                                                                                                    index_getter(index_getter){} 
@@ -69,6 +71,50 @@ namespace dg::network_datastructure::cyclic_queue{
                 self rs = *this;
                 this->virtual_idx += 1;
                 return rs;
+            }
+
+            constexpr auto operator --() noexcept -> self&{
+
+                this->virtual_idx -= 1;
+                return *this;
+            }
+
+            constexpr auto operator --(int) noexcept -> self{
+
+                static_assert(std::is_nothrow_copy_constructible_v<self>);
+
+                self rs = *this;
+                this->virtual_idx -= 1;
+                return rs;
+            }
+
+            constexpr auto operator +(difference_type off) const noexcept -> self{
+
+                //
+                return self(this->iter_head, this->virtual_idx + off, this->index_getter);
+            }
+
+            constexpr auto operator +=(difference_type idx) noexcept -> self&{
+
+                *this = *this + idx;
+                return *this;
+            }
+
+            constexpr auto operator -(difference_type off) const noexcept -> self{
+
+                //
+                return self(this->iter_head, this->virtual_idx - off, this->index_getter);
+            }
+
+            constexpr auto operator -(const self& other) const noexcept -> difference_type{
+
+                return this->virtual_idx - other.virtual_idx;
+            }
+        
+            constexpr auto operator -=(difference_type idx) noexcept -> self&{
+
+                *this = *this - idx;
+                return *this;
             }
 
             constexpr auto operator ==(const self& other) const noexcept -> bool{
@@ -126,7 +172,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
@@ -139,7 +185,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
@@ -152,7 +198,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
@@ -165,7 +211,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
@@ -229,7 +275,6 @@ namespace dg::network_datastructure::cyclic_queue{
                 return (*this)[idx];
             }
 
-
             constexpr auto resize(size_t new_sz) noexcept -> exception_t{
 
                 static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
@@ -240,8 +285,14 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 size_t erase_first  = std::min(this->sz, new_sz);
                 size_t erase_last   = this->sz;
-                std::fill(std::next(this->begin(), erase_first), std::next(this->begin(), erase_last), T{});
+
+                for (size_t i = erase_first; i < erase_last; ++i){
+                    this->operator[](i) = T{};
+                }
+
                 this->sz            = new_sz;
+
+                return dg::network_exception::SUCCESS;
             }
 
             template <class ValueLike>
@@ -274,7 +325,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
@@ -291,7 +342,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->sz == 0u){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
                 }
