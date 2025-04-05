@@ -269,7 +269,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we are to implement a function of one_send == max_one_recv
     //such does not compromise the feature
     //the only way to success is to pass through all the requirements of adjecent_window, abs_window, inbound_cap, nat_controller, etc.
-    //there is only one path to success
+
+    //let's see what we could do
+    //add a filter -> destroy + assemble (bad idea) for various reasons
+    //  + first is that we cant implement an infinite map to remember what has been destructed, such is we are taming the entire component because of such feature
+    //  + second is we are breaking single responsibility, wet design
+    //  + third is that we are not agile-people, agile people dont change things
+
+    //send a signal to gate controller to block the ids (good idea), this is the extensible way
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
@@ -418,6 +425,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     };
 
     //OK
+    struct BlackListGateInterface: virtual InBoundGateInterface{
+        virtual ~BlackListGateInterface() noexcept = default;
+        virtual void blacklist(GlobalIdenitifer * global_id_arr, size_t sz, exception_t * exception_arr) noexcept = 0;
+    };
+
+    //OK
     struct EntranceControllerInterface{
         virtual ~EntranceControllerInterface() noexcept = default;
         virtual void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept = 0; 
@@ -523,6 +536,59 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 return this->thru_sz_per_load.value;
             }
         
+    };
+
+    //OK
+    class TemporalBlackListGate: public virtual BlackListGateInterface{
+
+        private:
+
+            data_structure::temporal_finite_unordered_set<GlobalIdentifier> black_list_set;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> thru_sz_per_load;
+        
+        public:
+
+            TemporalBlackListGate(data_structure::temporal_finite_unordered_set<GlobalIdentifier> black_list_set,
+                                  std::unique_ptr<std::mutex> mtx,
+                                  stdx::hdi_container<size_t> thru_sz_per_load) noexcept: black_list_set(std::move(black_list_set)),
+                                                                                          mtx(std::move(mtx)),
+                                                                                          thru_sz_per_load(thru_sz_per_load){}
+
+            void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                stdx::lock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (this->black_list_set.contains(global_id_arr[i])){
+                        exception_arr[i] = dg::network_exception::SOCKET_STREAM_BLACKLISTED;
+                    } else{
+                        exception_arr[i] = dg::network_exception::SUCCESS;
+                    }
+                }
+            }
+
+            void blacklist(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();        
+                    }
+                }
+
+                stdx::lock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->black_list_set.insert(global_id_arr[i]);
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->thru_sz_per_load.value;
+            }
     };
 
     //OK
@@ -1461,6 +1527,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             std::shared_ptr<PacketAssemblerInterface> packet_assembler;
             std::shared_ptr<EntranceControllerInterface> entrance_controller;
+            std::shared_ptr<BlackListGateInterface> blacklist_gate;
             size_t packet_assembler_vectorization_sz;
             size_t expired_id_consume_sz;
             size_t busy_consume_sz;
@@ -1469,10 +1536,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             ExpiryWorker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
                          std::shared_ptr<EntranceControllerInterface> entrance_controller,
+                         std::shared_ptr<BlackListGateInterface> blacklist_gate,
                          size_t packet_assembler_vectorization_sz,
                          size_t expired_id_consume_sz,
                          size_t busy_consume_sz) noexcept: packet_assembler(std::move(packet_assembler)),
                                                            entrance_controller(std::move(entrance_controller)),
+                                                           blacklist_gate(std::move(blacklist_gate)),
                                                            packet_assembler_vectorization_sz(packet_assembler_vectorization_sz),
                                                            expired_id_consume_sz(expired_id_consume_sz),
                                                            busy_consume_sz(busy_consume_sz){}
@@ -1484,12 +1553,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_stack_allocation::NoExceptAllocation<GlobalIdentifier[]> id_arr(id_arr_cap);
                 this->entrance_controller->get_expired_id(id_arr.get(), id_arr_sz, id_arr_cap);
 
-                //I admit things could be done more optimally, don't even think about that, because we would definitely change things in the future, at which point we will circle back to feed
-
                 auto pa_feed_resolutor              = InternalPacketAssemblerDestroyFeedResolutor{};
                 pa_feed_resolutor.dst               = this->packet_assembler.get(); 
+                pa_feed_resolutor.blacklist_gate    = this->blacklist_gate.get();
 
-                size_t trimmed_pa_feed_sz           = std::min(std::min(this->packet_assembler_vectorization_sz, this->packet_assembler->max_consume_size()), id_arr_sz);
+                size_t trimmed_pa_feed_sz           = std::min(std::min(std::min(this->packet_assembler_vectorization_sz, this->packet_assembler->max_consume_size()), id_arr_sz), this->blacklist_gate->max_consume_size());
                 size_t pa_feeder_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&pa_feed_resolutor, trimmed_pa_feed_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> pa_feeder_mem(pa_feeder_allocation_cost);
                 auto pa_feeder                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&pa_feed_resolutor, trimmed_pa_feed_sz, pa_feeder_mem.get()));
@@ -1503,13 +1571,24 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            struct InternalPacketAssemblerDestroyFeedResolutor{
+            struct InternalPacketAssemblerDestroyFeedResolutor: dg::network_producer_consumer::ConsumerInterface<GlobalIdentifier>{
 
                 PacketAssemblerInterface * dst;
+                BlackListGateInterface * blacklist_gate;
 
                 void push(std::move_iterator<GlobalIdentifier *> id_arr, size_t id_arr_sz) noexcept{
 
-                    this->dst->destroy(id_arr.base(), id_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(id_arr_sz);
+
+                    GlobalIdentifier * base_id_arr = id_arr.base();
+                    this->dst->destroy(base_id_arr, id_arr_sz);
+                    this->blacklist_gate->blacklist(base_id_arr, id_arr_sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < id_arr_sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
                 }
             };     
     };
