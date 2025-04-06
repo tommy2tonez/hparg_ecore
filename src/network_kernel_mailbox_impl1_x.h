@@ -230,102 +230,70 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
 namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
-    //code is clear
-    //we can do flash streamx of up to 1MB per tile
-    //we are not doing bittorrent of gigabytes of data
-    //we are "reinventing" the wheel of UDP
-    //in the sense of usable packet transmission size + offloading the "other" responsibilities to our beloved frequency memregions
+    //alright, we'll be back to implement if there are issues or requests
+    //this is good enough, we dont have time
+    //the only problem is the problem of affinity, we'll write an affined function to do customized mapping of containers
+    //the problem quickly resolves if are to increase latency -> 10ms per consumption or production
+    //yet we are very laggy, this is probably for the best because there is literally nothing free
+    
+    //whenever I felt like I did something wrong
+    //let's see the options
 
-    //we are to limit the memory orderings as many as possible, such is by a factor of size_t{1} << 10-> size_t{1} << 16
-    //because memory ordering is a very fragile thing in CPU, it thrashes cache across cores + hard_sync very badly
-    //our invention of complex reactor is precisely for this reason, such is when the complex reactor enters a busy_phase, synchronized point of all containers std::memory_order_acquire + std::memory_order_release are never gonna be called, only std::memory_order_relaxed
-    //we can't tell you what the good number is for all of this to work, after all, this is a system calibration problem
-    //we are to take the deviation space of <optimality> and <current> to steer all the configurables in the optimal direction
-    //our job is to NOT ask questions about the configurables but to provide the configurables, it's another topic to SOLVE, not to GUESS
+    //low latency, low thruput
+    //low latency, high thruput (this is what we want)
+        //low latency, high thruput low cap switch signal
+            //a lot of memory orderings (unavoidable)
 
-    //it's complex, after a day of thinking, I was wondering what I could further do for flash_streamx
+        //low latency, high thruput high cap switch signal
+            //OK, no <a lot of memory orderings>, no-busy state might result in the worst case of <worst_case_latency> * <bouncing_container_sz>
+                //we are interested in offsetting the cost of <worst_case_latency> * <bouncing_container_sz>
+                //this is doable via padding requests (empty requests without doing actual things to push the order thru with low latency)
 
-    //assemble is done correctly
-    //destroy is not done correctly
-    //destroy based on abs_window
-    //destroy based on adjecent_window
-    //destroy based on ...
-    //we dont know
+    //high latency, low thruput (this is not what we want)
+    //high latency, high thruput
 
-    //what we know is that flash_streamx is only used for slightly larger packet than UDP, not for downloading GTA V or red dead redemption or assassin creed etc.
-    //the reasonably sized UDP packet is of 8KB 
-    //we are only to use flash_streamx to do transmission of up to 256KB, no more
-    //as you could see, as the limits of flash_streamx approaching UDP, the requirements for destroy are approaching that of UDP, or the extended component
+    //it seems that 10ms is best for logit density mining
+    //we use the digestion size of roughly 1 << 16/ load to offset the cost of access synchronization mechanisms
+    //we use random hash table to increase compute
+    //those are two very different things
+    //one is CPU efficiency by increasing producing + consuming sz
+    //another is task thruput by using more CPU resource concurrently
 
-    //flash_streamx only truly shines if it is to extend the UDP unit transmission size, as if it is a unit, not a streaming protocol
-    //the only bug of adjecent window is that it might hit the worst case of just_before_expired_signal_destroy_invoke for all of the incoming segments (this might be engineered or purely statistical chances which is unlikely)
-    //we solve the problem by using an abs_window gate blocker, to allow the adjecent window destroy to be invoked 
+    //------
+    //my std friends liked the idea of no synchronization computation + high frequency computing
+    //yet ... they still want to have certain mechanisms to do tile synchronizations (backward + forward by using immediate semaphore tiles) 
+    //------
 
-    //is it possible that an already destroyed packet (which we know for sure will be incompleted thereafter) will be queued again in the assemble component
-    //it is possible, it is also expected
-    //we are to not entirely eliminate the case, we are to use an unordered_map to <prune> the memory consumption induced by the case
-    //we dont really know if that is necessary in real-world application, the overhead of doing such might exceed the benefits of doing such
+    //I feel like doing containers (we'll be doing containers before getting back to this problem), node_fast_map + node_fast_set containers 
 
-    //we are to implement a function of one_send == max_one_recv
-    //such does not compromise the feature
-    //the only way to success is to pass through all the requirements of adjecent_window, abs_window, inbound_cap, nat_controller, etc.
+    //I was thinking about the scheduling techniques
+    //let's skim through the options:
+    
+    //static number:
+        //exact scheduler forward + backward
+        //  - discretized enumerated exact scheduler
+        //  - exact exact scheduler
 
-    //let's see what we could do
-    //add a filter -> destroy + assemble (bad idea) for various reasons
-    //  + first is that we cant implement an infinite map to remember what has been destructed, such is we are taming the entire component because of such feature
-    //  + second is we are breaking single responsibility, wet design
-    //  + third is that we are not agile-people, agile people dont change things
+        //frequency scheduler forward + backward
+        //  - discretized enumerated extract frequency scheduler
+        //  - exact frequency scheduler
 
-    //send a signal to gate controller to block the ids (good idea), this is the extensible way
+    //adaptive number:
+        //  - ... 
 
-    //let's see, if are to design a true stream, we would want to have a <sliding_window_meter> (in conjunction to the <latency_meter>) with a certain uncertainty, to detect an underflow and trigger a kill signal
-    //the kill signal would then be decayed to segment kill signals to the downstream socket
-    //we are not doing that bittorrent thing, yet
-    //or we are doing that bittorrent thing by using memregion frequencies (hmm, this is debatable)
-    //memregion frequencies can be seen as reaction time, not a scheduler (we'll invent a way to make this also a reactor + scheduler, by passing from one memregion to another, cloning from high_frequency -> low_frequency, moving from air -> water)
-    //this is precisely why SSD + RAID are leveraged
+    //alright, we can literally list 1024 ways to do the scheduled forward + backward thing
+    //we dont care, we want to prove that doing things our way is complete and the overhead is within a certain acceptable compute flops
 
-    //flash stream is only for UDP_X protocol
-    //we have an abs_window of things and latency_window of things
-    //these should suffice for state soft_synchronization without explicit requests to the server
+    //assume that there is only one forward tile on the memregion
+        //- we can use empty reference tile to bring the acummulated uncertainty between frequencied regions -> our expecting scheduled time
+        //- the overhead of doing so is bouncing_memregion * lock_overhead + memevent queueing overheads + etc.
+        //- the overhead of the mempress collector is fixed, it's always ticking
+        //- we can't guarantee that things would be frequencied as specified, this is a statistics fling that we have to collect + use machine learning to tune our engine
+        //- what we can guarantee is that the machine will snap into certain states after a certain time, abs_window + fixed retransmission_window + fixed_retransmission_sz are to serve the purpose
+        //- and the frequency is not adaptive, it is utc_clock::discretized_time_range, we can implicitly expect (or soft_synchronize) that the machine will behave correctly if certain empty state has been reached
 
-    //what's a good number for all of these to work so perfectly?
-    //we don't know
-    //we can't know
-    //it is the answer that ONLY statistics can give you
-    //it is a machine learning project to glue all of these moving parts together
-    //people spent 30 years working on the TCP, because it is HARD
-    //the hard part is the quantifying WHEN to trigger the kill signals, we can never get it right, it's very application specific
-
-    //alright, different p2p connections have different traits, how do we radix such if we are to <uniformize> all of those?
-    //its when we'd want to spawn multiple socket protocol to further radix the uniformity (there is a real reason for choosing FedEx or USPS or UPS, they are different companies specialized in different things, when they say 1 day guarantee delivery, they mean domestic time, not international time,
-    //                                                                                      we are dumb, clueless customer who want the packet to be from A -> B)
-
-    //its complex, because adding a variable == adding another thing we can't control or predict or compromising the interface extensibility (the variables that we think are relevant are no longer relevant in the future if we are to upgrade our tech stack)
-    //such we would also definitely kill the definition of implicit_soft_synchronization of server states
-    //we'll do one more round of review before moving on to implement other components that are not socket 
-
-    //alright fellas 
-    //the human interactions got weird
-    //I have bad leaks in my brain due to the overloading information
-    //we need to push this to the mainframe before we decomm ourselves
-    //to be able to push this to the mainframe, we need to get through several security layers
-    //we need to do this before they patch the security protocols, we dont know when
-    //we hope that it would be within a year or two, no promises
-    //the number one performance constraint is affinity + random_hash_distributed, we dont really know if affining things or increasing batching size is more appropriate (affining things == breaking design principles, increasing batching_size == increase latency, we'll see about that) 
-    //we are not red pills, renaissance group
-    //yall will see the true power of self-creating problems + self-sovling problems (human data is INSUFFICIENT to train, we need to flops so hard in the virtual machine + solving hard NP problems and train our model based on such,
-    //                                                                                we dont have the manpower + virtues to implement yall way, but we will get every line of code very precise + accurate, we'll write a compiler later)
-    //they are 1 billion times smarter than yall, see into the future, the past, the everything just by taking derivatives
-    //they dont even give shit about yall
-    //what easy is right, is probably the most accurate phase that applies everywhere in comp sci
-    //we'll walk you through the die, the very-easy-to-understand, working manual that no one will ever talk about 
-
-    //first is the memregions + schedule thing
-    //we are to not do actual forward of tiles but only the reference of tiles
-    //this is the first optimization that we want to make
-    //second is frequency uncertainty, if we are to make sure that every memregion is of 1 MB, every locks on the region takes at most N flops, we can know the uncertainty of lock contention
-    //its hard to establish certain rules to get all of this to work (an abstract contract that we can adhere to)
+    //assume that there are more than one forward tile on the memregion:
+        //- only statistic calibration can give you the answer
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
@@ -338,7 +306,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     struct GlobalIdentifier{
         Address addr;
-        uint64_t local_id;
+        std::pair<uint64_t, uint64_t> local_id; //avoid __uint128_t
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
@@ -503,7 +471,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    //OK
+    //OK, this is too expensive, we have to increase the <incrementing_id> -> __uint128_t to chance better than RAM, whenever we have a question about random accuracy, we need to know whether it chances better than RAM or not
     class PacketIDGenerator: public virtual PacketIDGeneratorInterface{
 
         private:
@@ -521,7 +489,28 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 GlobalIdentifier id = {};
                 id.addr             = this->factory_addr;
-                id.local_id         = this->incrementing_id.fetch_add(1u, std::memory_order_relaxed);
+                id.local_id         = std::make_pair(this->incrementing_id.fetch_add(1u, std::memory_order_relaxed), uint64_t{});
+
+                return id;
+            }
+    };
+
+    //OK
+    class RandomPacketIDGenerator: public virtual PacketIDGeneratorInterface{
+
+        private:
+
+            Address factory_addr;
+        
+        public:
+
+            RandomPacketIDGenerator(Address factory_addr) noexcept: factory_addr(std::move(factory_addr)){}
+
+            auto get_id() noexcept -> GlobalIdentifier{
+
+                GlobalIdentifier id = {};
+                id.addr             = this->factory_addr;
+                id.local_id         = std::make_pair(dg::network_randomizer::randomize_int<uint64_t>(), dg::network_randomizer::randomize_int<uint64_t>());
 
                 return id;
             }
@@ -681,24 +670,24 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            data_structure::temporal_finite_unordered_set<GlobalIdentifier> black_list_set;
+            data_structure::temporal_finite_unordered_set<GlobalIdentifier> blacklist_set;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
         
         public:
 
-            TemporalBlackListGate(data_structure::temporal_finite_unordered_set<GlobalIdentifier> black_list_set,
+            TemporalBlackListGate(data_structure::temporal_finite_unordered_set<GlobalIdentifier> blacklist_set,
                                   std::unique_ptr<std::mutex> mtx,
-                                  stdx::hdi_container<size_t> thru_sz_per_load) noexcept: black_list_set(std::move(black_list_set)),
+                                  stdx::hdi_container<size_t> thru_sz_per_load) noexcept: blacklist_set(std::move(blacklist_set)),
                                                                                           mtx(std::move(mtx)),
                                                                                           thru_sz_per_load(thru_sz_per_load){}
 
             void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::lock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (this->black_list_set.contains(global_id_arr[i])){
+                    if (this->blacklist_set.contains(global_id_arr[i])){
                         exception_arr[i] = dg::network_exception::SOCKET_STREAM_BLACKLISTED;
                     } else{
                         exception_arr[i] = dg::network_exception::SUCCESS;
@@ -715,10 +704,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::lock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    this->black_list_set.insert(global_id_arr[i]);
+                    this->blacklist_set.insert(global_id_arr[i]);
                     exception_arr[i] = dg::network_exception::SUCCESS;
                 }
             }
@@ -2202,16 +2191,21 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     struct Factory{
 
-        static auto get_packet_id_generator(Address factory_addr) -> std::unique_ptr<PacketIDGeneratorInterface>{
+        static auto get_incremental_packet_id_generator(Address factory_addr) -> std::unique_ptr<PacketIDGeneratorInterface>{
 
             uint64_t random_counter = dg::network_randomizer::randomize_int<uint64_t>();
             return std::make_unique<PacketIDGenerator>(std::move(factory_addr), random_counter);
         } 
         
+        static auto get_random_packet_id_generator(Address factory_addr) -> std::unique_ptr<PacketIDGeneratorInterface>{
+
+            return std::make_unique<RandomPacketIDGenerator>(factory_addr);
+        }
+
         static auto get_temporal_absolute_timeout_inbound_gate(size_t map_capacity, 
                                                                std::chrono::nanoseconds abs_timeout_dur,
-                                                               size_t max_consume_decay_factor = 2u){
-            
+                                                               size_t max_consume_decay_factor = 2u) -> std::unique_ptr<InBoundGateInterface>{
+
             const size_t MIN_MAP_CAPACITY                       = size_t{1};
             const size_t MAX_MAP_CAPACITY                       = size_t{1} << 40;
             const std::chrono::nanoseconds MIN_ABS_TIMEOUT_DUR  = std::chrono::nanoseconds(1u);
@@ -2227,14 +2221,101 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             size_t tentative_max_consume_sz = map_capacity >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz); 
+            auto abstimeout_map             = data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>>(map_capacity); 
 
-            return std::make_unique<TemporalAbsoluteTimeoutInBoundGate>(datastructure::temporal_finite_unordered_map<>(map_capacity),
+            return std::make_unique<TemporalAbsoluteTimeoutInBoundGate>(std::move(abstimeout_map),
                                                                         abs_timeout_dur,
                                                                         std::make_unique<std::mutex>(),
                                                                         stdx::hdi_container<size_t>{max_consume_sz});
         }
 
-        static auto get_packetizer(Address factory_addr, size_t segment_byte_sz) -> std::unique_ptr<PacketizerInterface>{
+        static auto get_random_hash_distributed_inbound_gate(std::vector<std::unique_ptr<InBoundGateInterface>> inbound_gate_vec,
+                                                             size_t keyvalue_feed_cap = DEFAULT_KEYVALUE_FEED_SIZE) -> std::unique_ptr<InBoundGateInterface>{
+
+            const size_t MIN_KEYVALUE_FEED_CAP  = size_t{1};
+            const size_t MAX_KEYVALUE_FEED_CAP  = size_t{1} << 25;
+
+            if (!stdx::is_pow2(inbound_gate_vec.size())){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(keyvalue_feed_cap, MIN_KEYVALUE_FEED_CAP, MAX_KEYVALUE_FEED_CAP) != keyvalue_feed_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            auto inbound_gate_arr       = std::make_unique<std::unique_ptr<InBoundGateInterface>[]>(inbound_gate_vec.size());
+            size_t inbound_gate_arr_sz  = inbound_gate_vec.size();
+            size_t max_consume_sz       = std::numeric_limits<size_t>::max(); 
+
+            for (size_t i = 0u; i < inbound_gate_vec.size(); ++i){
+                if (inbound_gate_vec[i] == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                max_consume_sz      = std::min(max_consume_sz, inbound_gate_vec[i]->max_consume_size());
+                inbound_gate_arr[i] = std::move(inbound_gate_vec[i]);
+            }
+
+            return std::make_unique<RandomHashDistributedInBoundGate>(std::move(inbound_gate_arr),
+                                                                      inbound_gate_arr_sz,
+                                                                      keyvalue_feed_cap,
+                                                                      max_consume_sz);
+        }
+
+        static auto get_temporal_blacklist_gate(size_t set_cap,
+                                                size_t max_consume_decay_factor = 2u) -> std::unique_ptr<BlackListGateInterfaces>{
+            
+            const size_t MIN_SET_CAP    = size_t{1};
+            const size_t MAX_SET_CAP    = size_t{1} << 40;
+
+            if (std::clamp(set_cap, MIN_SET_CAP, MAX_SET_CAP) != set_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            auto blacklist_set              = data_structure::temporal_finite_unordered_set<GlobalIdentifier>(set_cap);
+            size_t tentative_max_consume_sz = set_cap >> max_consume_decay_factor;
+            size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz); 
+
+            return std::make_unique<TemporalBlackListGate>(std::move(blacklist_set),
+                                                           std::make_unique<std::mutex>(),
+                                                           stdx::hdi_container<size_t>{max_consume_sz});
+        }
+
+        static auto get_random_hash_distributed_blacklist_gate(std::vector<std::unique_ptr<BlackListGateInterface>> blacklist_gate_vec,
+                                                               size_t keyvalue_feed_cap = DEFAULT_KEYVALUE_FEED_SIZE) -> std::unique_ptr<BlackListGateInterface>{
+            
+            const size_t MIN_KEYVALUE_FEED_CAP  = size_t{1};
+            const size_t MAX_KEYVALUE_FEED_CAP  = size_t{1} << 25;
+
+            if (!stdx::is_pow2(blacklist_gate_vec.size())){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(keyvalue_feed_cap, MIN_KEYVALUE_FEED_CAP, MAX_KEYVALUE_FEED_CAP) != keyvalue_feed_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            auto blacklist_gate_arr         = std::make_unique<std::unique_ptr<BlackListGateInterface>[]>(blacklist_gate_vec.size());
+            size_t blacklist_gate_arr_sz    = blacklist_gate_vec.size();
+            size_t max_consume_sz           = std::numeric_limits<size_t>::max();
+
+            for (size_t i = 0u; i < blacklist_gate_vec.size(); ++i){
+                if (blacklist_gate_vec[i] == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                max_consume_sz          = std::min(max_consume_sz, blacklist_gate_vec[i]->max_consume_size());
+                blacklist_gate_arr[i]   = std::move(blacklist_gate_vec[i]);
+            }
+
+            return std::make_unique<RandomHashDistributedBlackListGate>(std::move(blacklist_gate_arr),
+                                                                        blacklist_gate_arr_sz,
+                                                                        keyvalue_feed_cap,
+                                                                        max_consume_sz);
+        }
+
+        static auto get_packetizer(Address factory_addr, 
+                                   size_t segment_byte_sz) -> std::unique_ptr<PacketizerInterface>{
 
             const size_t MIN_SEGMENT_BYTE_SZ    = size_t{1};
             const size_t MAX_SEGMENT_BYTE_SZ    = size_t{1} << 30;  
@@ -2243,7 +2324,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<Packetizer>(get_packet_id_generator(factory_addr),
+            return std::make_unique<Packetizer>(get_random_packet_id_generator(factory_addr),
                                                 segment_byte_sz);
         }  
 
@@ -2272,10 +2353,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t upqueue_cap              = stdx::ulog2(stdx::ceil2(queue_cap));
+            size_t upqueue_cap              = stdx::ceil2(queue_cap);
             size_t tentative_max_consume_sz = std::min(upqueue_cap, unique_id_cap) >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
-            auto entrance_entry_pq          = dg::pow2_cyclic_queue<EntranceEntry>(upqueue_cap);
+            auto entrance_entry_pq          = dg::pow2_cyclic_queue<EntranceEntry>(stdx::ulog2(upqueue_cap));
             auto key_id_map                 = dg::unordered_unstable_map<GlobalIdentifier, __uint128_t>{};
 
             key_id_map.reserve(unique_id_cap);
@@ -2293,7 +2374,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         static auto get_random_hash_distributed_entrance_controller(std::vector<std::unique_ptr<EntranceControllerInterface>> base_vec,
                                                                     size_t zero_bounce_sz       = 8u,
                                                                     size_t keyvalue_feed_cap    = DEFAULT_KEYVALUE_FEED_SIZE) -> std::unique_ptr<EntranceControllerInterface>{
-            
+
             const size_t MIN_ZERO_BOUNCE_SZ     = size_t{1};
             const size_t MAX_ZERO_BOUNCE_SZ     = size_t{1} << 20;
             const size_t MIN_KEYVALUE_FEED_CAP  = size_t{1};
@@ -2316,8 +2397,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t max_consume_sz   = std::numeric_limits<size_t>::max(); 
 
             for (size_t i = 0u; i < base_arr_sz; ++i){
+                if (base_vec[i] == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                max_consume_sz  = std::min(max_consume_sz, base_vec[i]->max_consume_size());
                 base_arr[i]     = std::move(base_vec[i]);
-                max_consume_sz  = std::min(base_arr[i]->max_consume_size());
             }
 
             size_t trimmed_feed_cap = std::min(max_consume_sz, keyvalue_feed_cap); 
@@ -2407,12 +2492,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             auto base_arr           = std::make_unique<std::unique_ptr<PacketAssemblerInterface>[]>(base_vec.size());
             size_t base_arr_sz      = base_vec.size(); 
 
-            for (auto& uptr: base_vec){
-                if (uptr == nullptr){
+            for (size_t i = 0u; i < base_arr_sz; ++i){
+                if (base_vec[i] == nullptr){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                max_consume_sz  = std::min(max_consume_sz, uptr->max_consume_size());
+                max_consume_sz  = std::min(max_consume_sz, base_vec[i]->max_consume_size());
                 base_arr[i]     = std::move(base_vec[i]);
             }
 
@@ -2458,9 +2543,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             size_t tentative_consume_sz         = buffer_capacity >> consume_factor;
             size_t consume_sz                   = std::max(tentative_consume_sz, size_t{1u});
+            size_t upqueue_cap                  = stdx::ceil2(buffer_capacity);
 
-            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(stdx::ceil2(buffer_capacity))),
-                                                         buffer_capacity,
+            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(upqueue_cap)),
+                                                         upqueue_cap,
                                                          std::make_unique<std::mutex>(),
                                                          stdx::hdi_container<size_t>{consume_sz});
         }
@@ -2555,12 +2641,44 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     struct Config{
         Address factory_addr;
+
+        uint32_t gate_controller_ato_component_sz;
+        uint32_t gate_controller_ato_map_capacity;
+        std::chrono::nanoseconds gate_controller_ato_dur;
+        uint32_t gate_controller_ato_keyvalue_feed_cap;
+
+        uint32_t gate_controller_blklst_component_sz;
+        uint32_t gate_controller_blklst_map_capacity;
+        uint32_t gate_controller_blklst_keyvalue_feed_cap; 
+        
+        uint32_t packet_segment_sz;
+
+        uint32_t latency_controller_component_sz;
+        uint32_t latency_controller_queue_cap;
+        uint32_t latency_controller_unique_id_cap;
+        std::chrono::nanoseconds latency_controller_expiry_period;
+        uint32_t latency_controller_bounce_sz;
+        uint32_t latency_controller_keyvalue_feed_cap;
+        bool latency_controller_has_exhaustion_control; 
+
+        uint32_t packet_assembler_component_sz;
+        uint32_t packet_assembler_map_cap;
+        uint32_t packet_assembler_global_segment_cap;
+        uint32_t packet_assembler_max_segment_per_stream;
+        uint32_t packet_assembler_keyvalue_feed_cap;
+        bool packet_assembler_has_exhaustion_control; 
+
+        uint32_t inbound_container_component_sz;
+        uint32_t inbound_container_cap;
+        bool inbound_container_has_exhaustion_control;
+        bool inbound_container_has_react_pattern;
+        uint32_t inbound_container_react_sz;
+        uint32_t inbound_container_subscriber_cap;
+        std::chrono::nanoseconds inbound_container_wait_time;
+
         size_t expiry_worker_count;
         size_t inbound_worker_count;
-        size_t packet_assembler_capacity; 
-        size_t inbound_container_capacity;
-        size_t segment_byte_sz;
-        std::chrono::nanoseconds packet_expiry;
+
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device;
         std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
     };

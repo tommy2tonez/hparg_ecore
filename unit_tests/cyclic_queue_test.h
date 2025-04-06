@@ -333,7 +333,7 @@ namespace pow2_cyclic_queue_test{
                     for (size_t i = 0u; i < outrange_insert_sz; ++i){
                         queue.push_back(std::make_unique<Foo>());
                     }
-                    
+
                     break;
                 }
                 case OPS_CODE_RESIZE_IN_RANGE:

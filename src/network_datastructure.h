@@ -14,6 +14,9 @@ namespace dg::network_datastructure::cyclic_queue{
     //because it is not constructed by using new[] contiguous memory operation
     //we are not doing that yet
 
+    template <class = void>
+    static inline constexpr bool FALSE_VAL = false;
+ 
     class pow2_cyclic_queue_index_getter_device{
 
         private:
@@ -90,19 +93,17 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto operator +(difference_type off) const noexcept -> self{
 
-                //
                 return self(this->iter_head, this->virtual_idx + off, this->index_getter);
             }
 
-            constexpr auto operator +=(difference_type idx) noexcept -> self&{
+            constexpr auto operator +=(difference_type off) noexcept -> self&{
 
-                *this = *this + idx;
+                this->virtual_idx += off;
                 return *this;
             }
 
             constexpr auto operator -(difference_type off) const noexcept -> self{
 
-                //
                 return self(this->iter_head, this->virtual_idx - off, this->index_getter);
             }
 
@@ -111,9 +112,9 @@ namespace dg::network_datastructure::cyclic_queue{
                 return this->virtual_idx - other.virtual_idx;
             }
         
-            constexpr auto operator -=(difference_type idx) noexcept -> self&{
+            constexpr auto operator -=(difference_type off) noexcept -> self&{
 
-                *this = *this - idx;
+                this->virtual_idx -= off;
                 return *this;
             }
 
@@ -277,20 +278,17 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto resize(size_t new_sz) noexcept -> exception_t{
 
-                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
-
                 if (new_sz > this->cap){
                     return dg::network_exception::RESOURCE_EXHAUSTION;
                 }
 
-                size_t erase_first  = std::min(this->sz, new_sz);
-                size_t erase_last   = this->sz;
-
-                for (size_t i = erase_first; i < erase_last; ++i){
-                    this->operator[](i) = T{};
+                if (new_sz >= this->sz){
+                    this->sz = new_sz;
+                    return dg::network_exception::SUCCESS;
                 }
 
-                this->sz            = new_sz;
+                this->defaultize_range(new_sz, this->sz - new_sz);
+                this->sz = new_sz;
 
                 return dg::network_exception::SUCCESS;
             }
@@ -381,6 +379,55 @@ namespace dg::network_datastructure::cyclic_queue{
             constexpr auto get_index_getter_device() const noexcept -> pow2_cyclic_queue_index_getter_device{
 
                 return pow2_cyclic_queue_index_getter_device(this->off, this->cap);
+            }
+
+            constexpr void defaultize_range(size_t virtual_idx, size_t sz) noexcept{
+
+                static_assert(std::is_nothrow_default_constructible_v<T>);
+
+                auto fill_task = [&, this]<class T1>(T1) noexcept{
+                    size_t first                        = this->to_index(virtual_idx);
+                    size_t last                         = first + sz;
+                    size_t eoq_last                     = std::min(this->cap, last); 
+                    const size_t wrapped_around_first   = 0u;
+                    size_t wrapped_around_last          = last - eoq_last;
+
+                    std::fill(std::next(this->data_arr.begin(), first), std::next(this->data_arr.begin(), eoq_last), T{});
+                    std::fill(std::next(this->data_arr.begin(), wrapped_around_first), std::next(this->data_arr.begin(), wrapped_around_last), T{});
+                };
+
+                if constexpr(std::is_trivial_v<T>){
+                    fill_task(int{});
+                } else{
+                    if constexpr(std::is_assignable_v<T&, const T&>){
+                        if constexpr(std::is_nothrow_assignable_v<T&, const T&>){
+                            fill_task(int{});
+                        } else{
+                            if constexpr(std::is_assignable_v<T&, T&&>){
+                                if constexpr(std::is_nothrow_assignable_v<T&, T&&>){
+                                    for (size_t i = 0u; i < sz; ++i){
+                                        this->operator[](virtual_idx + i) = T{};
+                                    }
+                                } else{
+                                    static_assert(FALSE_VAL<>);
+                                }
+                            } else{
+                                static_assert(FALSE_VAL<>);
+                            }
+                        }
+                    } else if constexpr(std::is_assignable_v<T&, T&&>){
+                        if constexpr(std::is_nothrow_assignable_v<T&, T&&>){
+                            for (size_t i = 0u; i < sz; ++i){
+                                this->operator[](virtual_idx + i) = T{};
+                            }      
+                        } else{
+                            static_assert(FALSE_VAL<>);
+                        }                  
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                }
+
             }
     };
 }
