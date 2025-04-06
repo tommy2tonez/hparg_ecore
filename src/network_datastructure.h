@@ -553,13 +553,13 @@ namespace dg::network_datastructure::fast_node_hash_map{
                                          const Allocator& allocator): unordered_node_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
             template <class ValueLike = std::pair<const Key, Value>>
-            constexpr unordered_node_map(std::initializer_list<value_type> init_list,
+            constexpr unordered_node_map(std::initializer_list<ValueLike> init_list,
                                          size_type bucket_count,
                                          const Hasher& _hasher,
                                          const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, _hasher, Pred(), allocator){}
 
             template <class ValueLike = std::pair<const Key, Value>>
-            constexpr unordered_node_map(std::initializer_list<value_type> init_list,
+            constexpr unordered_node_map(std::initializer_list<ValueLike> init_list,
                                          size_type bucket_count,
                                          const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
 
