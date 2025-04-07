@@ -464,14 +464,14 @@ namespace dg::network_datastructure::unordered_map_variants{
 
     template <class T, class U>
     struct DGForwardLikeHelper<T&, U>{
-        using type = std::remove_reference_t<U>&;
+        using type = std::add_lvalue_reference_t<std::remove_reference_t<U>>;
     };
 
     template <class T, class U>
     using dg_forward_like_t = typename DGForwardLikeHelper<T, U>::type; 
 
     template <class T, class U>
-    constexpr auto dg_forward_like(U&& value) noexcept -> dg_forward_like_t<T, U>&&{ //alright, the C++ compiler was not as advanced as I think
+    constexpr auto dg_forward_like(U&& value) noexcept -> dg_forward_like_t<T, U>&&{
 
         return static_cast<dg_forward_like_t<T, U>&&>(value);
     }
@@ -527,6 +527,8 @@ namespace dg::network_datastructure::unordered_map_variants{
 
     //this should be usable for now
     //I dont see problems
+    //the nxt_addr is never there if the user is to not read to program, they can actually use this component like every normal other map with type-erased pair
+    //we have special applications for these guys, not for std-std or adoptabilities
 
     template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<3, 4>>
     class unordered_node_map{
@@ -541,6 +543,12 @@ namespace dg::network_datastructure::unordered_map_variants{
             Allocator allocator;
 
         public:
+
+            //we cant implement a hasher noexcept or predicate noexcept static_assert yet
+            //I dont know what took std so long or they simply just dont want to implement the feature
+            //it's hard, yet the practice is that lookups + erase + clear must be noexcept
+            //the program is hardly useful otherwise (according to my friend)
+            //
 
             using key_type                  = Key;
             using mapped_type               = Mapped;
@@ -665,7 +673,11 @@ namespace dg::network_datastructure::unordered_map_variants{
                     return;
                 }
 
-                this->rehash(self::size_to_capacity(new_sz));
+                this->rehash(self::size_to_capacity(new_sz)); //proof:
+                                                              //assume that self::size_to_capacity is the perfect inverse operation of capacity_to_size, and capacity_to_size is reasonably set (or the load_factor is fixed at 3/4)
+                                                              //then the self::size_to_capacity(this->virtual_storage_vec.capacity()) should not flip the switch
+                                                              //how about self::size_to_capacity(... + 1)? because the load factor guarantees that 1 size > 1 capacity
+                                                              //so self::size_to_capacity(... + 1) must float to another number that would flip the switch
             }
 
             template <class KeyLike, class ...Args>
@@ -688,6 +700,10 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             template <class Iterator>
             constexpr void insert(Iterator first, Iterator last){
+
+                //give the user a chance to not have leak by using proper std::move() + friends
+
+                this->reserve(this->size() + std::distance(first, last));
 
                 while (first != last){
                     this->insert(*first);
@@ -712,15 +728,21 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return std::get<0>(this->insert_or_assign(std::forward<KeyLike>(key), mapped_type{}))->second;
             }
 
-            constexpr void clear() noexcept(true){ //this has to be noexcept(auto) we are waiting for the feature
+            constexpr void clear() noexcept(true){
 
-                static_assert(noexcept(this->virtual_storage_vec.clear()));
+                // static_assert(noexcept(this->virtual_storage_vec.clear())); TODOs: compile_time validation
 
                 this->virtual_storage_vec.clear();
                 std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), self::NULL_VIRTUAL_ADDR);
             }
 
             constexpr void swap(self& other) noexcept(true){
+
+                // static_assert(noexcept(std::swap(this->virtual_storage_vec, other.virtual_storage_vec))); TODOs: compile_time validation
+                // static_assert(noexcept(std::swap(this->bucket_vec, other.bucket_vec))); TODOs: compile_time validation
+                // static_assert(noexcept(std::swap(this->_hasher, other._hasher))); TODOs: compile_time validation
+                // static_assert(noexcept(std::swap(this->pred, other.pred))); TODOs: compile_time validation
+                // static_assert(noexcept(std::swap(this->allocator, other.allocator))); TODOs: compile_time validation
 
                 std::swap(this->virtual_storage_vec, other.virtual_storage_vec);
                 std::swap(this->bucket_vec, other.bucket_vec);
@@ -740,18 +762,6 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto contains(const KeyLike& key) const noexcept(true) -> bool{ 
-
-                return this->find(key) != this->end();
-            }
-
-            template <class KeyLike>
-            constexpr auto count(const KeyLike& key) const noexcept(true) -> size_t{
-
-                return static_cast<size_t>(this->contains(key));
-            }
-
-            template <class KeyLike>
             constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
                 return this->internal_find(key);
@@ -761,6 +771,18 @@ namespace dg::network_datastructure::unordered_map_variants{
             constexpr auto find(const KeyLike& key) noexcept(true) -> iterator{
 
                 return std::next(this->virtual_storage_vec.begin(), std::distance(this->virtual_storage_vec.cbegin(), this->internal_find(key)));
+            }
+
+            template <class KeyLike>
+            constexpr auto contains(const KeyLike& key) const noexcept(true) -> bool{ 
+
+                return this->find(key) != this->end();
+            }
+
+            template <class KeyLike>
+            constexpr auto count(const KeyLike& key) const noexcept(true) -> size_t{
+
+                return static_cast<size_t>(this->contains(key));
             }
 
             template <class KeyLike>
@@ -882,6 +904,9 @@ namespace dg::network_datastructure::unordered_map_variants{
             //this is one of the C++ myths, we rather copy paste than to do the remove const, it's undefined
             template <class KeyLike>
             constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
+                
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
 
                 size_t hashed_value             = this->_hasher(key);
                 size_t bucket_idx               = this->to_bucket_index(hashed_value);
@@ -903,6 +928,9 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
 
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
+
                 size_t hashed_value         = this->_hasher(key);
                 size_t bucket_idx           = this->to_bucket_index(hashed_value);
                 virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
@@ -922,6 +950,9 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             template <class KeyLike>
             constexpr auto internal_exist_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
+
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
 
                 size_t hashed_value             = this->_hasher(key);
                 size_t bucket_idx               = this->to_bucket_index(hashed_value);
@@ -945,6 +976,9 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto internal_exist_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
 
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
+
                 size_t hashed_value         = this->_hasher(key);
                 size_t bucket_idx           = this->to_bucket_index(hashed_value);
                 virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
@@ -967,6 +1001,9 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
+
                 size_t hashed_value                 = this->_hasher(key);
                 size_t bucket_idx                   = this->to_bucket_index(hashed_value);
                 virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
@@ -987,15 +1024,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto internal_exist_find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
-                //alright let's back to the set problem of <finding_set_sz> / <total_set_sz>
-                //assume that our load is 80%, we are to find the probability that it passes the first node and hit 
-                //assume that the node is hit twice, such is the bucket chain has the length of 2
-                //then the probability of that to happen is:
-
-                //total_set_sz == n ** operation_sz
-                //we are to permute the two <finding key>, take that multiply with (n - 1) ** (operation_sz - 2)
-                //then we take the ratio, then we'll have our probability                
-                //the formula is: (n - 1) ** (operation_sz - 2) * (operation_sz - 1) * operation_sz / n ** operation_sz, I think
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
 
                 size_t hashed_value                 = this->_hasher(key);
                 size_t bucket_idx                   = this->to_bucket_index(hashed_value);
@@ -1052,6 +1082,9 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr void internal_erase(const KeyLike& key) noexcept(true){
 
+                // static_assert(noexcept(std::swap(std::declval<node_t&>, std::declval<node_t&>)));
+                // static_assert(noexcept(this->virtual_storage_vec.pop_back()));
+
                 virtual_addr_t * key_reference = this->internal_find_bucket_reference(key);
 
                 if (*key_reference == NULL_VIRTUAL_ADDR){
@@ -1076,7 +1109,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> iterator{
 
-                internal_erase(key);
+                this->internal_erase(key);
                 return this->begin();
             }
 
@@ -1086,7 +1119,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     return this->begin();
                 }
 
-                return internal_erase_key(iter->first);
+                return this->internal_erase_key(iter->first);
             }
     };
 }

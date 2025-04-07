@@ -234,7 +234,6 @@ namespace map_test{
         test_map<tmp_fast_map, uint16_t, uint16_t>();
         std::cout << "testing dg::map_variants::unordered_unstable_fastinsert_map" << std::endl;
         test_map<tmp_fastinsert_map, uint16_t, uint16_t>();
-        std::cout << "__MAP_TEST_END__" << std::endl;
         std::cout << "testing dg::map_variants::unordered_node_map" << std::endl;
         test_map<dg::network_datastructure::unordered_map_variants::unordered_node_map, uint16_t, uint16_t>();
         std::cout << "__MAP_TEST_END__" << std::endl;
