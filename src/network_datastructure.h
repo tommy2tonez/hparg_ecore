@@ -6,6 +6,8 @@
 #include "network_exception.h"
 #include <ratio>
 #include <memory>
+#include <bit>
+#include <type_traits>
 
 // #include "network_log.h"
 
@@ -441,6 +443,26 @@ namespace dg::network_datastructure::fast_node_hash_map{
     //this is not std-compatible, yet it answers pretty much ALL the performance questions that we've been longing for without bending the rules
     //we'll be specific for now
 
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto ulog2(T val) noexcept -> size_t{
+
+        return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    static constexpr auto ceil2(T val) noexcept -> size_t{
+
+        if (val == 0u){ [[unlikely]]
+            return 1u;
+        }
+
+        size_t max_log2     = stdx::ulog2(val);
+        size_t min_log2     = std::countr_zero(val);
+        size_t cand_log2    = max_log2 + ((max_log2 ^ min_log2) != 0u);
+
+        return T{1u} << cand_log2;
+    }
+
     template <class T, class = void>
     struct null_addr{};
 
@@ -462,17 +484,6 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
     template <class T>
     using get_virtual_addr_t = typename get_virtual_addr<T>::type;
-
-    //this is a fake Node
-    //padding is important, whether this is a full word load or half word load
-    //we are to not worry about that now
-    //this is complicated
-
-    //std::vector<> trivial copy only works if we are using raw std::vector<>::begin() + std::vector<>::end() and the pointing data type is trivial, period
-    //we can't hack this further, this is for specialized applications, not for std-usage of things, refer to dg_map_variants to get std compatible map
-    //std::memset is very fast if std::fill() is to see the filling pattern of vector
-    //I was just kidding Dad
-    //we all die eventually, if I can't overload this bluepill, it's probable that this iteration will repeat again
 
     template <class key_t, class value_t, class virtual_addr_t>
     struct Node{
@@ -515,6 +526,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
             static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
             static inline constexpr size_t POW2_GROWTH_FACTOR           = 1u;
+            static inline constexpr size_t MIN_CAP                      = 8u;
 
             template <class HasherArg = Hasher, class PredArg = Pred, class AllocatorArg = Allocator>
             constexpr explicit unordered_node_map(size_type bucket_count,
@@ -526,7 +538,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
                                                                                            pred(std::forward<PredArg>(pred)),
                                                                                            allocator(std::forward<AllocatorArg>(allocator)){
 
-                this->virtual_storage_vec.reserve(estimate_size(capacity()));
+                this->virtual_storage_vec.reserve(self::capacity_to_size(this->capacity()));
             }
 
             template <class HasherArg = Hasher, class AllocatorArg = Allocator>
@@ -577,8 +589,8 @@ namespace dg::network_datastructure::fast_node_hash_map{
                     return;
                 }
 
-                size_t new_bucket_cap               = ceil2(tentative_new_cap);
-                size_t new_virtual_storage_vec_cap  = estimate_size(new_bucket_cap);
+                size_t new_bucket_cap               = std::max(self::min_capacity(), ceil2(tentative_new_cap));
+                size_t new_virtual_storage_vec_cap  = self::capacity_to_size(new_bucket_cap);
 
                 decltype(bucket_vec) new_bucket_vec(new_bucket_cap, NULL_VIRTUAL_ADDR, this->allocator);
                 this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap);
@@ -607,7 +619,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
                     return;
                 }
 
-                this->rehash(estimate_capacity(new_sz));
+                this->rehash(self::size_to_capacity(new_sz));
             }
 
             template <class KeyLike, class ...Args>
@@ -708,15 +720,27 @@ namespace dg::network_datastructure::fast_node_hash_map{
             }
 
             template <class KeyLike>
-            constexpr auto at(const KeyLike& key) const noexcept(true) -> const_reference{
+            constexpr auto at(const KeyLike& key) const -> const mapped_type&{
 
-                return *this->internal_exist_find(key);
+                auto ptr = this->internal_find(key);
+
+                if (ptr == this->end()){
+                    throw std::out_of_range();
+                }
+
+                return ptr->second;
             }
 
             template <class KeyLike>
-            constexpr auto at(const KeyLike& key) noexcept(true) -> reference{
+            constexpr auto at(const KeyLike& key) -> mapped_type&{
 
-                return *this->internal_exist_find(key);
+                auto ptr = this->internal_find(key);
+
+                if (ptr == this->end()){
+                    throw std::out_of_range();
+                }
+
+                return ptr->second;            
             }
 
             constexpr auto empty() const noexcept -> bool{
@@ -754,11 +778,6 @@ namespace dg::network_datastructure::fast_node_hash_map{
                 return static_cast<Pred&&>(this->pred);
             }
  
-            constexpr auto load_factor() const noexcept -> float{
-
-                return static_cast<float>(load_factor_ratio::num) / load_factor_ratio::den;
-            }
-
             constexpr auto begin() noexcept -> iterator{
 
                 return this->virtual_storage_vec.begin();   
@@ -788,114 +807,32 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
                 return this->virtual_storage_vec.cend();
             }
+
+            static consteval auto load_factor() noexcept -> double{
+
+                return static_cast<double>(load_factor_ratio::num) / load_factor_ratio::den;
+            }
+
+            static constexpr auto capacity_to_size(size_t cap) noexcept -> size_t{
+
+                return cap * load_factor(); 
+            }
+
+            static constexpr auto size_to_capacity(size_t sz) noexcept -> size_t{
+
+                return sz / load_factor();
+            }
+
+            static consteval auto min_capacity() noexcept -> size_t{
+
+                return MIN_CAP;
+            }
         
         private:
 
             constexpr auto to_bucket_index(size_t hashed_value) const noexcept -> size_t{
 
                 return hashed_value & (this->bucket_vec.size() - 1u);
-            }
-
-            template <class ValueLike>
-            constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
-
-                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){
-                    this->rehash(this->bucket_vec.size() << POW2_GROWTH_FACTOR);
-                }
-
-                size_t hashed_value                 = this->_hasher(value.first);
-                size_t bucket_idx                   = this->to_bucket_index(hashed_value);
-                virtual_addr_t * insert_reference   = &this->bucket_vec[bucket_idx]; 
-
-                while (true){
-                    if (*insert_reference == NULL_VIRTUAL_ADDR){
-                        break;
-                    }
-
-                    if (this->pred(this->virtual_storage_vec[*insert_reference].first, value.first)){
-                        break;
-                    }
-
-                    insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
-                }
-
-                //insert reference referencing an empty bucket, not found
-
-                if (*insert_reference == NULL_VIRTUAL_ADDR){
-                    value.nxt_addr                  = NULL_VIRTUAL_ADDR;
-                    virtual_addr_t appending_addr   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
-                    this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
-                    *insert_reference               = appending_addr;
-
-                    return std::make_pair(std::next(this->virtual_storage_vec.begin(), appending_addr), true);
-                }
-
-                //insert reference referecing an existing bucket, no action
-                return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
-            }
-
-            template <class ValueLike>
-            constexpr auto internal_insert_or_assign(ValueLike&& value) -> std::pair<iterator, bool>{
-
-                auto [iter, status] = this->internal_insert(std::forward<ValueLike>(value));
-
-                if (!status){
-                    iter->second = std::forward_like<ValueLike>(value.second);
-                }
-
-                return std::make_pair(iter, status);
-            }
-
-            template <class KeyLike>
-            constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
-
-                size_t hashed_value                 = this->_hasher(key);
-                size_t bucket_idx                   = this->to_bucket_index(hashed_value);
-                virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
-
-                while (true){
-                    if (node_virtual_addr == NULL_VIRTUAL_ADDR){
-                        return this->end();
-                    }
-
-                    if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)){
-                        return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
-                    }
-
-                    node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
-                }
-            }
-
-            template <class KeyLike>
-            constexpr auto internal_exist_find(const KeyLike& key) const noexcept(true) -> const_iterator{
-
-                //alright let's back to the set problem of <finding_set_sz> / <total_set_sz>
-                //assume that our load is 80%, we are to find the probability that it passes the first node and hit 
-                //assume that the node is hit twice, such is the bucket chain has the length of 2
-                //then the probability of that to happen is:
-
-                //total_set_sz == n ** operation_sz
-                //we are to permute the two <finding key>, take that multiply with (n - 1) ** (operation_sz - 2)
-                //then we take the ratio, then we'll have our probability                
-                //the formula is: (n - 1) ** (operation_sz - 2) * (operation_sz - 1) * operation_sz / n ** operation_sz, I think
-
-                size_t hashed_value                 = this->_hasher(key);
-                size_t bucket_idx                   = this->to_bucket_index(hashed_value);
-                virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
-
-                if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)){
-                    return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
-                }
-
-                node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
-
-                while (true){
-                    if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)) [[likely]]{
-                        return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
-                    }
-
-                    node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
-                }
             }
 
             //this is one of the C++ myths, we rather copy paste than to do the remove const, it's undefined
@@ -908,7 +845,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
                 while (true){
                     if (*current == NULL_VIRTUAL_ADDR){
-                        return nullptr;
+                        return current;
                     }
 
                     if (this->pred(this->virtual_storage_vec[*current].first, key)){
@@ -928,7 +865,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
                 while (true){
                     if (*current == NULL_VIRTUAL_ADDR){
-                        return nullptr;
+                        return current;
                     }
 
                     if (this->pred(this->virtual_storage_vec[*current].first, key)){
@@ -984,11 +921,96 @@ namespace dg::network_datastructure::fast_node_hash_map{
             }
 
             template <class KeyLike>
+            constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
+
+                size_t hashed_value                 = this->_hasher(key);
+                size_t bucket_idx                   = this->to_bucket_index(hashed_value);
+                virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
+
+                while (true){
+                    if (node_virtual_addr == NULL_VIRTUAL_ADDR){
+                        return this->end();
+                    }
+
+                    if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)){
+                        return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
+                    }
+
+                    node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
+                }
+            }
+
+            template <class KeyLike>
+            constexpr auto internal_exist_find(const KeyLike& key) const noexcept(true) -> const_iterator{
+
+                //alright let's back to the set problem of <finding_set_sz> / <total_set_sz>
+                //assume that our load is 80%, we are to find the probability that it passes the first node and hit 
+                //assume that the node is hit twice, such is the bucket chain has the length of 2
+                //then the probability of that to happen is:
+
+                //total_set_sz == n ** operation_sz
+                //we are to permute the two <finding key>, take that multiply with (n - 1) ** (operation_sz - 2)
+                //then we take the ratio, then we'll have our probability                
+                //the formula is: (n - 1) ** (operation_sz - 2) * (operation_sz - 1) * operation_sz / n ** operation_sz, I think
+
+                size_t hashed_value                 = this->_hasher(key);
+                size_t bucket_idx                   = this->to_bucket_index(hashed_value);
+                virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
+
+                if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)){
+                    return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
+                }
+
+                node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
+
+                while (true){
+                    if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)) [[likely]]{
+                        return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
+                    }
+
+                    node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
+                }
+            }
+        
+            template <class ValueLike>
+            constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
+
+                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){
+                    this->rehash(this->bucket_vec.size() << POW2_GROWTH_FACTOR);
+                }
+
+                virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
+
+                if (*insert_reference == NULL_VIRTUAL_ADDR){
+                    value.nxt_addr                  = NULL_VIRTUAL_ADDR;
+                    virtual_addr_t appending_addr   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
+                    *insert_reference               = appending_addr;
+
+                    return std::make_pair(std::next(this->virtual_storage_vec.begin(), appending_addr), true);
+                }
+
+                return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
+            }
+
+            template <class ValueLike>
+            constexpr auto internal_insert_or_assign(ValueLike&& value) -> std::pair<iterator, bool>{
+
+                auto [iter, status] = this->internal_insert(std::forward<ValueLike>(value));
+
+                if (!status){
+                    iter->second = std::forward_like<ValueLike>(value.second);
+                }
+
+                return std::make_pair(iter, status);
+            }
+
+            template <class KeyLike>
             constexpr void internal_erase(const KeyLike& key) noexcept(true){
 
                 virtual_addr_t * key_reference = this->internal_find_bucket_reference(key);
 
-                if (key_reference == nullptr){
+                if (*key_reference == NULL_VIRTUAL_ADDR){
                     return;
                 } 
 
@@ -1001,21 +1023,10 @@ namespace dg::network_datastructure::fast_node_hash_map{
                     return;
                 }
 
-                //we are advanced people, we want to confuse new comer
-
-                virtual_addr_t removing_addr    = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr); 
-
-                // virtual_addr_t removing_addr = *key_reference;
-                // *key_reference               = this->virtual_storage_vec[removing_addr].nxt_addr;
-                //we are to swap the removing_addr with the last guy for disposal
-
+                virtual_addr_t removing_addr = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr); 
                 std::swap(this->virtual_storage_vec[removing_addr], this->virtual_storage_vec.back());
                 this->virtual_storage_vec.pop_back();
-
-                //swapping_reference is now pointing to the wrong guy, swapping_reference is only wrong when swapping_reference == key_reference, which we made sure is not the case
-                *swapping_reference             = removing_addr;
-
-                //ok, we are done
+                *swapping_reference = removing_addr;
             }
 
             template <class KeyLike>
