@@ -8,6 +8,10 @@
 #include <memory>
 #include <bit>
 #include <type_traits>
+#include <vector>
+#include <utility>
+#include <memory>
+#include <stdexcept>
 
 // #include "network_log.h"
 
@@ -437,11 +441,40 @@ namespace dg::network_datastructure::cyclic_queue{
     };
 }
 
-namespace dg::network_datastructure::fast_node_hash_map{
+namespace dg::network_datastructure::unordered_map_variants{
 
     //this is complex, first is the trivially_constructible of std::pair, second is constness of things
     //this is not std-compatible, yet it answers pretty much ALL the performance questions that we've been longing for without bending the rules
     //we'll be specific for now
+
+    //alright, this is officially the fastest implementation of std::unordered_map if we are to use insert + clear only
+    //memory-footprint-wise talking, this is most efficient, this is also the only thing that we care in a massive parallel system, the RAM BUS across cores
+    //clear-wise talking, it is trivially clearable, by implementing a fake Node
+    //copy-wise talking, it is memcpyable
+    //iterator wise talking, it's optimized to a raw pointer optimization by the compiler (std::vector<>::iterator guarantees such), which is raw performance of copying
+    //we only use this for our keyvalue feed, of size 512
+    //this code is clear
+
+    //this is me, myself and I + him and I
+
+    template <class T, class U>
+    struct DGForwardLikeHelper{
+        using type = std::remove_reference_t<U>;
+    };
+
+    template <class T, class U>
+    struct DGForwardLikeHelper<T&, U>{
+        using type = std::remove_reference_t<U>&;
+    };
+
+    template <class T, class U>
+    using dg_forward_like_t = typename DGForwardLikeHelper<T, U>::type; 
+
+    template <class T, class U>
+    constexpr auto dg_forward_like(U&& value) noexcept -> dg_forward_like_t<T, U>&&{ //alright, the C++ compiler was not as advanced as I think
+
+        return static_cast<dg_forward_like_t<T, U>&&>(value);
+    }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto ulog2(T val) noexcept -> size_t{
@@ -456,7 +489,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
             return 1u;
         }
 
-        size_t max_log2     = stdx::ulog2(val);
+        size_t max_log2     = unordered_map_variants::ulog2(val);
         size_t min_log2     = std::countr_zero(val);
         size_t cand_log2    = max_log2 + ((max_log2 ^ min_log2) != 0u);
 
@@ -492,12 +525,19 @@ namespace dg::network_datastructure::fast_node_hash_map{
         virtual_addr_t nxt_addr;
     };
 
+    //alright fellas, I got severe brain leaks, I must wrap this project up as soon as possible
+    //we'll be working directly on the enumerated taylor series infinite compression technique
+    //sqrt() for example is not computable infinite
+    //sin() is computable infinite
+    //cos() is computable infinite
+
     template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<3, 4>>
     class unordered_node_map{
 
         private:
 
-            std::vector<Node, typename std::allocator_traits<Allocator>::template rebind_alloc<Node>> virtual_storage_vec;
+
+            std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>> virtual_storage_vec;
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
             Hasher _hasher;
             Pred pred;
@@ -507,7 +547,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
             using key_type                  = Key;
             using mapped_type               = Mapped;
-            using value_type                = Node;
+            using value_type                = Node<Key, Mapped, VirtualAddrType>;
             using hasher                    = Hasher;
             using key_equal                 = Pred;
             using allocator_type            = Allocator;
@@ -515,73 +555,69 @@ namespace dg::network_datastructure::fast_node_hash_map{
             using const_reference           = const value_type&;
             using pointer                   = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                  = typename std::vector<Node, typename std::allocator_traits<Allocator>::typename rebind_alloc<Node>>::iterator;
-            using const_iterator            = typename std::vector<Node, typename std::allocator_traits<Allocator>::typename rebind_alloc<Node>>::const_iterator;
+            using iterator                  = typename std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>>::iterator;
+            using const_iterator            = typename std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>>::const_iterator;
             using size_type                 = SizeType;
             using difference_type           = std::intmax_t;
             using self                      = unordered_node_map;
             using load_factor_ratio         = typename LoadFactor::type;
             using virtual_addr_t            = get_virtual_addr_t<VirtualAddrType>;
-            using node_t                    = Node<key_t, value_t, virtual_addr_t>;
+            using node_t                    = Node<Key, Mapped, VirtualAddrType>;
 
             static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
             static inline constexpr size_t POW2_GROWTH_FACTOR           = 1u;
             static inline constexpr size_t MIN_CAP                      = 8u;
 
-            template <class HasherArg = Hasher, class PredArg = Pred, class AllocatorArg = Allocator>
             constexpr explicit unordered_node_map(size_type bucket_count,
-                                                  HasherArg&& _hasher = Hasher(),
-                                                  PredArg&& pred = Pred(),
-                                                  AllocatorArg&& allocator = Allocator()): virtual_storage_vec(allocator),
-                                                                                           bucket_vec(std::max(self::min_capacity(), ceil2(bucket_count)), NULL_VIRTUAL_ADDR, allocator),
-                                                                                           _hasher(std::forward<HasherArg>(_hasher)),
-                                                                                           pred(std::forward<PredArg>(pred)),
-                                                                                           allocator(std::forward<AllocatorArg>(allocator)){
+                                                  const Hasher _hasher = Hasher(),
+                                                  const Pred& pred = Pred(),
+                                                  const Allocator& allocator = Allocator()): virtual_storage_vec(allocator),
+                                                                                             bucket_vec(std::max(self::min_capacity(), ceil2(bucket_count)), NULL_VIRTUAL_ADDR, allocator),
+                                                                                             _hasher(_hasher),
+                                                                                             pred(pred),
+                                                                                             allocator(allocator){
 
                 this->virtual_storage_vec.reserve(self::capacity_to_size(this->capacity()));
             }
 
-            template <class HasherArg = Hasher, class AllocatorArg = Allocator>
             constexpr unordered_node_map(size_type bucket_count,
-                                         HasherArg&& _hasher,
-                                         AllocatorArg&& allocator): unordered_node_map(bucket_count, std::forward<HasherArg>(_hasher), Pred(), std::forward<AllocatorArg>(allocator)){}
+                                         const Hasher& _hasher,
+                                         const Allocator& allocator): unordered_node_map(bucket_count, _hasher, Pred(), allocator){}
 
-            template <class AllocatorArg = const Allocator&>
             constexpr unordered_node_map(size_type bucket_count,
-                                         AllocatorArg&& allocator): unordered_node_map(bucket_count, Hasher(), std::forward<AllocatorArg>(allocator)){}
+                                         const Allocator& allocator): unordered_node_map(bucket_count, Hasher(), allocator){}
 
             constexpr explicit unordered_node_map(const Allocator& allocator): unordered_node_map(self::min_capacity(), allocator){}
 
-            template <class AllocatorArg = Allocator>
-            constexpr unordered_node_map(): unordered_node_map(AllocatorArg()){}
+            constexpr unordered_node_map(): unordered_node_map(Allocator()){}
 
-            template <class InputIt, class HasherArg = Hasher, class PredArg = Pred, class AllocatorArg = Allocator>
+            template <class InputIt>
             constexpr unordered_node_map(InputIt first,
                                          InputIt last,
                                          size_type bucket_count,
-                                         HasherArg&& _hasher = Hasher(),
-                                         PredArg&& pred = Pred(),
-                                         AllocatorArg&& allocator = Allocator()): unordered_node_map(bucket_count, std::forward<HasherArg>(_hasher), std::forward<PredArg>(pred), std::forward<AllocatorArg>(allocator)){
+                                         const Hasher& _hasher = Hasher(),
+                                         const Pred& pred = Pred(),
+                                         const Allocator& allocator = Allocator()): unordered_node_map(bucket_count, _hasher, pred, allocator){
 
                 this->insert(first, last); //bad, leak
             }
 
-            template <class InputIt, class AllocatorArg = Allocator>
+            template <class InputIt>
             constexpr unordered_node_map(InputIt first,
                                          InputIt last,
                                          size_type bucket_count,
-                                         AllocatorArg&& allocator): unordered_node_map(first, last, bucket_count, Hasher(), Pred(), std::forward<AllocatorArg>(allocator)){}
+                                         const Allocator& allocator): unordered_node_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
-            template <class ValueLike = std::pair<const Key, Value>, class HasherArg = Hasher, class AllocatorArg = Allocator>
+            template <class ValueLike = std::pair<const Key, Mapped>>
             constexpr unordered_node_map(std::initializer_list<ValueLike> init_list,
                                          size_type bucket_count,
-                                         HasherArg&& _hasher,
-                                         AllocatorArg&& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, std::forward<HasherArg>(_hasher), Pred(), std::forward<AllocatorArg>(allocator)){}
+                                         const Hasher& _hasher,
+                                         const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, _hasher, Pred(), allocator){}
 
-            template <class ValueLike = std::pair<const Key, Value>, class AllocatorArg = Allocator>
+            template <class ValueLike = std::pair<const Key, Mapped>>
             constexpr unordered_node_map(std::initializer_list<ValueLike> init_list,
                                          size_type bucket_count,
-                                         AllocatorArg&& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), std::forward<AllocatorArg>(allocator)){}
+                                         const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
 
             constexpr void rehash(size_type tentative_new_cap, bool force_rehash = false){
 
@@ -591,25 +627,32 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
                 size_t new_bucket_cap               = std::max(self::min_capacity(), ceil2(tentative_new_cap));
                 size_t new_virtual_storage_vec_cap  = self::capacity_to_size(new_bucket_cap);
+                auto new_bucket_vec                 = decltype(bucket_vec)(new_bucket_cap, NULL_VIRTUAL_ADDR, this->allocator);
 
-                decltype(bucket_vec) new_bucket_vec(new_bucket_cap, NULL_VIRTUAL_ADDR, this->allocator);
                 this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap);
 
-                for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
-                    size_t hashed_value                 = this->_hasher(this->virtual_storage_vec[i].first);
-                    size_t bucket_idx                   = hashed_value & (new_bucket_cap - 1u);
-                    virtual_addr_t * insert_reference   = &new_bucket_vec[bucket_idx];
+                try{
+                    for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
+                        size_t hashed_value                 = this->_hasher(this->virtual_storage_vec[i].first);
+                        size_t bucket_idx                   = hashed_value & (new_bucket_cap - 1u);
+                        virtual_addr_t * insert_reference   = &new_bucket_vec[bucket_idx];
 
-                    while (true){
-                        if (*insert_reference == NULL_VIRTUAL_ADDR){
-                            break;
+                        while (true){
+                            if (*insert_reference == NULL_VIRTUAL_ADDR){
+                                break;
+                            }
+
+                            insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
                         }
 
-                        insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
+                        *insert_reference                       = static_cast<virtual_addr_t>(i);
+                        this->virtual_storage_vec[i].nxt_addr   = NULL_VIRTUAL_ADDR;
                     }
 
-                    *insert_reference                       = static_cast<virtual_addr_t>(i);
-                    this->virtual_storage_vec[i].nxt_addr   = NULL_VIRTUAL_ADDR;
+                    this->bucket_vec = std::move(new_bucket_vec);
+                } catch (...){
+                    //bad leak, we are not expecting the hasher to throw
+                    std::abort();
                 }
             }
 
@@ -625,7 +668,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(node_t{key_t(std::forward<KeyLike>(key)), value_t(std::forward<Args>(args)...), virtual_addr_t{}});
+                return this->internal_insert(node_t{key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<Args>(args)...), virtual_addr_t{}});
             }
 
             template <class ...Args>
@@ -634,10 +677,10 @@ namespace dg::network_datastructure::fast_node_hash_map{
                 return this->try_emplace(std::forward<Args>(args)...);
             }
 
-            template <class ValueLike = value_type>
+            template <class ValueLike = std::pair<const Key, Mapped>>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(node_t{key_t(std::forward_like<ValueLike>(value.first)), value_t(std::forward_like<ValueLike>(value.second)), virtual_addr_t{}});
+                return this->internal_insert(node_t{key_type(dg_forward_like<ValueLike>(value.first)), mapped_type(dg_forward_like<ValueLike>(value.second)), virtual_addr_t{}});
             }
 
             template <class Iterator>
@@ -649,23 +692,26 @@ namespace dg::network_datastructure::fast_node_hash_map{
                 }
             }
 
-            template <class ValueLike = std::pair<const Key, Value>>
-            constexpr void insert(std::initializer_list<ValueLike> init_list){
+            constexpr void insert(std::initializer_list<std::pair<const Key, Mapped>> init_list){
 
-                //bad leak
+                this->insert(init_list.begin(), init_list.end());
+            }
+
+            constexpr void insert(std::initializer_list<value_type> init_list){
+
                 this->insert(init_list.begin(), init_list.end());
             }
 
             template <class KeyLike, class MappedLike>
             constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
-                return this->internal_insert_or_assign(node_t{key_t(std::forward<KeyLike>(key)), mapped_type(std::forward<MappedLike>(mapped)), virtual_addr_t{}});
+                return this->internal_insert_or_assign(node_t{key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<MappedLike>(mapped)), virtual_addr_t{}});
             }
 
             template <class KeyLike>
             constexpr auto operator[](KeyLike&& key) -> mapped_type&{
 
-                return *std::get<0>(this->insert_or_assign(std::forward<KeyLike>(key), mapped_type{}));
+                return std::get<0>(this->insert_or_assign(std::forward<KeyLike>(key), mapped_type{}))->second;
             }
 
             constexpr void clear() noexcept(true){ //this has to be noexcept
@@ -673,7 +719,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
                 static_assert(noexcept(this->virtual_storage_vec.clear()));
 
                 this->virtual_storage_vec.clear();
-                std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), self::NULL_VIRTUAL_ADDR);
+                std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), self::NULL_VIRTUAL_ADDR); //
             }
 
             constexpr void swap(self& other) noexcept(true){
@@ -722,10 +768,10 @@ namespace dg::network_datastructure::fast_node_hash_map{
             template <class KeyLike>
             constexpr auto at(const KeyLike& key) const -> const mapped_type&{
 
-                auto ptr = this->internal_find(key);
+                auto ptr = this->find(key);
 
                 if (ptr == this->end()){
-                    throw std::out_of_range();
+                    throw std::out_of_range("unordered_node_map bad access");
                 }
 
                 return ptr->second;
@@ -734,13 +780,13 @@ namespace dg::network_datastructure::fast_node_hash_map{
             template <class KeyLike>
             constexpr auto at(const KeyLike& key) -> mapped_type&{
 
-                auto ptr = this->internal_find(key);
+                auto ptr = this->find(key);
 
                 if (ptr == this->end()){
-                    throw std::out_of_range();
+                    throw std::out_of_range("unordered_node_map bad access");
                 }
 
-                return ptr->second;            
+                return ptr->second;
             }
 
             constexpr auto empty() const noexcept -> bool{
@@ -827,7 +873,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
 
                 return MIN_CAP;
             }
-        
+
         private:
 
             constexpr auto to_bucket_index(size_t hashed_value) const noexcept -> size_t{
@@ -999,7 +1045,7 @@ namespace dg::network_datastructure::fast_node_hash_map{
                 auto [iter, status] = this->internal_insert(std::forward<ValueLike>(value));
 
                 if (!status){
-                    iter->second = std::forward_like<ValueLike>(value.second);
+                    iter->second = dg_forward_like<ValueLike>(value.second);
                 }
 
                 return std::make_pair(iter, status);

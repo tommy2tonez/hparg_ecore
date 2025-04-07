@@ -92,18 +92,21 @@ void bar(){
 
 int main(){
 
-    bar();
-    foo();
+    auto map = dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, size_t>{};
+    map.insert({1, 1});
 
-    (void) 3036322422ULL;
+    // bar();
+    // foo();
+
+    // (void) 3036322422ULL;
     
-    dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo> queue{};
+    // dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo> queue{};
 
-    for (const auto& e: static_cast<const dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo>&>(queue)){
+    // for (const auto& e: static_cast<const dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Foo>&>(queue)){
         
-    }
+    // }
 
-    for (auto& e: queue){
+    // for (auto& e: queue){
 
-    }
+    // }
 }

@@ -1,7 +1,7 @@
 #define DEBUG_MODE_FLAG true
 #define STRONG_MEMORY_ORDERING_FLAG true
 
-// #include "map_test.h"
+#include "map_test.h"
 #include "kvfeed_test.h"
 #include "keyfeed_test.h"
 #include <type_traits>
@@ -15,5 +15,5 @@ int main(){
     keyfeed_test::run();    
     kvfeed_test::run();
     pow2_cyclic_queue_test::run();
-    // run_map_test();
+    map_test::run();
 }
