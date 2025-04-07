@@ -28,7 +28,7 @@ namespace map_test{
     template <template <class...> class Map, class Key, class Value>
     void test_map(){
 
-        const size_t TEST_SZ = size_t{1} << 15;
+        const size_t TEST_SZ = size_t{1} << 20;
 
         std::unordered_map<Key, Value> std_map{};
         Map<Key, Value> cmp_map{};

@@ -525,11 +525,8 @@ namespace dg::network_datastructure::unordered_map_variants{
         virtual_addr_t nxt_addr;
     };
 
-    //alright fellas, I got severe brain leaks, I must wrap this project up as soon as possible
-    //we'll be working directly on the enumerated taylor series infinite compression technique
-    //sqrt() for example is not computable infinite
-    //sin() is computable infinite
-    //cos() is computable infinite
+    //this should be usable for now
+    //I dont see problems
 
     template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<3, 4>>
     class unordered_node_map{
@@ -572,7 +569,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                   const Hasher _hasher = Hasher(),
                                                   const Pred& pred = Pred(),
                                                   const Allocator& allocator = Allocator()): virtual_storage_vec(allocator),
-                                                                                             bucket_vec(std::max(self::min_capacity(), ceil2(bucket_count)), NULL_VIRTUAL_ADDR, allocator),
+                                                                                             bucket_vec(std::max(self::min_capacity(), unordered_map_variants::ceil2(bucket_count)), NULL_VIRTUAL_ADDR, allocator),
                                                                                              _hasher(_hasher),
                                                                                              pred(pred),
                                                                                              allocator(allocator){
@@ -608,28 +605,34 @@ namespace dg::network_datastructure::unordered_map_variants{
                                          size_type bucket_count,
                                          const Allocator& allocator): unordered_node_map(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
-            template <class ValueLike = std::pair<const Key, Mapped>>
-            constexpr unordered_node_map(std::initializer_list<ValueLike> init_list,
+            constexpr unordered_node_map(std::initializer_list<std::pair<const Key, Mapped>> init_list,
                                          size_type bucket_count,
                                          const Hasher& _hasher,
                                          const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, _hasher, Pred(), allocator){}
 
-            template <class ValueLike = std::pair<const Key, Mapped>>
-            constexpr unordered_node_map(std::initializer_list<ValueLike> init_list,
+            constexpr unordered_node_map(std::initializer_list<std::pair<const Key, Mapped>> init_list,
                                          size_type bucket_count,
                                          const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
 
-            constexpr void rehash(size_type tentative_new_cap, bool force_rehash = false){
+            //code path analysis
+            //rehash is triggered externally
+            //assume state is correct
+            //we are to uphash, the ratio is maintained, reserve from low -> high snaps to high
 
-                if (!force_rehash && tentative_new_cap <= this->capacity()){
+            //rehash is triggered internally, solely by insert() function
+            //insert() makes sure that the state of vector::capacity() is maintained (strong guarantee by std) before invoking the function to snap it into another correct state
+
+            constexpr void rehash(size_type tentative_new_cap){
+
+                if (tentative_new_cap <= this->capacity()){
                     return;
                 }
 
-                size_t new_bucket_cap               = std::max(self::min_capacity(), ceil2(tentative_new_cap));
+                size_t new_bucket_cap               = std::max(self::min_capacity(), unordered_map_variants::ceil2(tentative_new_cap));
                 size_t new_virtual_storage_vec_cap  = self::capacity_to_size(new_bucket_cap);
                 auto new_bucket_vec                 = decltype(bucket_vec)(new_bucket_cap, NULL_VIRTUAL_ADDR, this->allocator);
 
-                this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap);
+                this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap); 
 
                 try{
                     for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
@@ -697,11 +700,6 @@ namespace dg::network_datastructure::unordered_map_variants{
                 this->insert(init_list.begin(), init_list.end());
             }
 
-            constexpr void insert(std::initializer_list<value_type> init_list){
-
-                this->insert(init_list.begin(), init_list.end());
-            }
-
             template <class KeyLike, class MappedLike>
             constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
@@ -714,12 +712,12 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return std::get<0>(this->insert_or_assign(std::forward<KeyLike>(key), mapped_type{}))->second;
             }
 
-            constexpr void clear() noexcept(true){ //this has to be noexcept
+            constexpr void clear() noexcept(true){ //this has to be noexcept(auto) we are waiting for the feature
 
                 static_assert(noexcept(this->virtual_storage_vec.clear()));
 
                 this->virtual_storage_vec.clear();
-                std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), self::NULL_VIRTUAL_ADDR); //
+                std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), self::NULL_VIRTUAL_ADDR);
             }
 
             constexpr void swap(self& other) noexcept(true){
@@ -732,7 +730,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class EraseArg>
-            constexpr auto erase(EraseArg&& erase_arg) noexcept(true) -> iterator{ //const noexcept
+            constexpr auto erase(EraseArg&& erase_arg) noexcept(true) -> iterator{
 
                 if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
                     return this->internal_erase_iter(std::forward<EraseArg>(erase_arg));
@@ -1021,7 +1019,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ValueLike>
             constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){
+                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
                     this->rehash(this->bucket_vec.size() << POW2_GROWTH_FACTOR);
                 }
 
