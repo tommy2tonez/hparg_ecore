@@ -28,7 +28,7 @@ namespace map_test{
     template <template <class...> class Map, class Key, class Value>
     void test_map(){
 
-        const size_t TEST_SZ = size_t{1} << 20;
+        const size_t TEST_SZ = size_t{1} << 25;
 
         std::unordered_map<Key, Value> std_map{};
         Map<Key, Value> cmp_map{};
@@ -167,6 +167,33 @@ namespace map_test{
                 }
             }
 
+            if (clear == 2u){
+                std_map.clear();
+                auto it = cmp_map.begin();
+
+                while (it != cmp_map.end()){
+                    it = cmp_map.erase(it);
+                }
+            }
+
+            if (clear == 3u){
+
+                for (const auto& kv_pair: std_map){
+                    auto key = kv_pair.first;
+                    if (cmp_map.erase(key) != 1u){
+                        std::cout << "mayday" << std::endl;
+                        std::abort();
+                    }
+
+                    if (cmp_map.erase(key) != 0u){
+                        std::cout << "mayday" << std::endl;
+                        std::abort();
+                    }
+                }
+
+                std_map.clear();
+            }
+
             if (do_clear == 0u){
                 std_map.clear();
                 cmp_map.clear();
@@ -228,14 +255,14 @@ namespace map_test{
     void run(){
 
         std::cout << "__MAP_TEST_BEGIN__" << std::endl;
+        std::cout << "testing dg::map_variants::unordered_node_map" << std::endl;
+        test_map<dg::network_datastructure::unordered_map_variants::unordered_node_map, uint16_t, uint16_t>();
         std::cout << "testing dg::map_variants::unordered_unstable_map" << std::endl;
         test_map<dg::map_variants::unordered_unstable_map, uint16_t, uint16_t>();
         std::cout << "testing dg::map_variants::unordered_unstable_fast_map" << std::endl;
         test_map<tmp_fast_map, uint16_t, uint16_t>();
         std::cout << "testing dg::map_variants::unordered_unstable_fastinsert_map" << std::endl;
         test_map<tmp_fastinsert_map, uint16_t, uint16_t>();
-        std::cout << "testing dg::map_variants::unordered_node_map" << std::endl;
-        test_map<dg::network_datastructure::unordered_map_variants::unordered_node_map, uint16_t, uint16_t>();
         std::cout << "__MAP_TEST_END__" << std::endl;
 
     }

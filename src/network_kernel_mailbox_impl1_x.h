@@ -458,7 +458,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     struct PacketAssemblerInterface{
         virtual ~PacketAssemblerInterface() noexcept = default;
-        virtual void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept = 0;
+        virtual void assemble(std::move_iterator<PacketSegment *> segment_arr, size_t sz, std::expected<AssembledPacket, exception_t> * assembled_arr) noexcept = 0; //it seems like this breaks the rule of unexpected == no_consume, we have to alter the semantic, exception_t is only for exceptions, we dont really know if std::optional<> is worth it
         virtual void destroy(GlobalIdentifier * id_arr, size_t sz) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -501,7 +501,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         private:
 
             Address factory_addr;
-        
+
         public:
 
             RandomPacketIDGenerator(Address factory_addr) noexcept: factory_addr(std::move(factory_addr)){}
@@ -573,7 +573,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->thru_sz_per_load.value;
             }
-        
     };
 
     //OK
@@ -2638,6 +2637,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                     consumption_sz);
         }
     };
+
+    //alright, we'll work on this and the radix msg today
 
     struct Config{
         Address factory_addr;

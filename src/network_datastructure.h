@@ -517,6 +517,9 @@ namespace dg::network_datastructure::unordered_map_variants{
     //phew, that was NOT EASY
     //we'll move on
 
+    //alright fellas, the std is literally driving me nuts, their API is incomprehensible
+    //my bad for not reading the API, I've just updated that
+
     template <class Key, class Mapped, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
@@ -742,7 +745,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class EraseArg>
-            constexpr auto erase(EraseArg&& erase_arg) noexcept(true) -> iterator{
+            constexpr auto erase(EraseArg&& erase_arg) noexcept(true){
 
                 if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
                     if constexpr(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>){
@@ -751,7 +754,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                         static_assert(FALSE_VAL<>);
                     }
                 } else{
-                    return this->internal_erase_key(std::forward<EraseArg>(erase_arg));
+                    return static_cast<size_type>(this->internal_erase_key(std::forward<EraseArg>(erase_arg)) != self::NULL_VIRTUAL_ADDR);
                 }
             }
 
@@ -905,7 +908,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return hashed_value & (this->bucket_vec.size() - 1u);
             }
 
-=            //this is one of the C++ myths, we rather copy paste than to do the remove const, it's undefined
+            //this is one of the C++ myths, we rather copy paste than to do the remove const, it's undefined
             template <class KeyLike>
             constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
 
@@ -1076,19 +1079,20 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class KeyLike>
-            constexpr void internal_erase(const KeyLike& key) noexcept(true){
+            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> virtual_addr_t{
 
                 // static_assert(noexcept(std::swap(std::declval<node_t&>, std::declval<node_t&>)));
                 // static_assert(noexcept(this->virtual_storage_vec.pop_back()));
 
-                virtual_addr_t * key_reference = this->internal_find_bucket_reference(key);
+                virtual_addr_t * key_reference  = this->internal_find_bucket_reference(key);
+                virtual_addr_t returning_addr   = *key_reference; 
 
-                if (*key_reference == self::NULL_VIRTUAL_ADDR){
-                    return;
-                } 
+                if (returning_addr == self::NULL_VIRTUAL_ADDR){
+                    return returning_addr;
+                }
 
-                virtual_addr_t * swapping_reference = this->internal_exist_find_bucket_reference(this->virtual_storage_vec.back().first);
-
+                virtual_addr_t * swapping_reference = this->internal_exist_find_bucket_reference(this->virtual_storage_vec.back().first); 
+    
                 if (swapping_reference == key_reference) [[unlikely]]{
                     *key_reference = this->virtual_storage_vec[*key_reference].nxt_addr;
                     this->virtual_storage_vec.pop_back();
@@ -1097,13 +1101,8 @@ namespace dg::network_datastructure::unordered_map_variants{
                     std::swap(this->virtual_storage_vec[*swapping_reference], this->virtual_storage_vec.back());
                     this->virtual_storage_vec.pop_back();
                 }
-            }
 
-            template <class KeyLike>
-            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> iterator{
-
-                this->internal_erase(key);
-                return this->begin();
+                return returning_addr;
             }
 
             constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
@@ -1111,7 +1110,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (iter == this->cend())[[unlikely]]{
                     return this->begin();
                 } else [[likely]]{
-                    return this->internal_erase_key(iter->first);
+                    return std::next(this->virtual_storage_vec.begin(), this->internal_erase_key(iter->first));
                 }
             }
     };
@@ -1158,7 +1157,9 @@ namespace std{
     constexpr void erase_if(dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& umap,
                             Pred pred){
 
-        auto it = umap.begin(); 
+        //a reverse erase_if is better cache_wise speaking
+
+        auto it = umap.begin();
 
         while (it != umap.end()){
             if (pred(*it)){
