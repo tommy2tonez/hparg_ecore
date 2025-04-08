@@ -39,7 +39,7 @@ int main(){
     const size_t SZ = size_t{1} << 28;
     size_t total = 0u;
 
-    dg::network_datastructure::unordered_map_variants::unordered_node_map<uint32_t, uint32_t, uint32_t> map{};
+    dg::network_datastructure::unordered_map_variants::unordered_node_map<uint32_t, uint32_t, uint64_t> map{};
 
     for (size_t i = 0u; i < SZ; ++i){
         map[i] = i;

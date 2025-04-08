@@ -691,12 +691,16 @@ namespace dg::network_datastructure::unordered_map_variants{
 
     template <bool Flag, class key_t, class mapped_t, class virtual_addr_t>
     struct NodeChooser{
-        using type = Node_1<key_t, mapped_t, virtual_addr_t>;
+        using type = Node_2<key_t, mapped_t, virtual_addr_t>;
     };
 
     template <class key_t, class mapped_t, class virtual_addr_t>
     struct NodeChooser<true, key_t, mapped_t, virtual_addr_t>{
-        using type = ReorderedNode<key_t, mapped_t, virtual_addr_t>;
+        using type = std::conditional_t<sizeof(Node_2<key_t, mapped_t, virtual_addr_t>) <= sizeof(ReorderedNode<key_t, mapped_t, virtual_addr_t>),
+                                        Node_2<key_t, mapped_t, virtual_addr_t>,
+                                        std::conditional_t<sizeof(Node_5<key_t, mapped_t, virtual_addr_t>) <= sizeof(ReorderedNode<key_t, mapped_t, virtual_addr_t>),
+                                                           Node_5<key_t, mapped_t, virtual_addr_t>,
+                                                           ReorderedNode<key_t, mapped_t, virtual_addr_t>>>;
     };
 
     template <bool Flag, class key_t, class mapped_t, class virtual_addr_t>
