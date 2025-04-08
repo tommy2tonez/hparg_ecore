@@ -13,6 +13,7 @@
 #include <memory>
 #include <stdexcept>
 #include <limits>
+#include "stdx.h"
 
 // #include "network_log.h"
 
@@ -140,13 +141,13 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto operator *() const noexcept -> decltype(auto){
 
-                size_t actual_idx = this->index_getter(this->virtual_idx);
+                size_t actual_idx = this->index_getter(stdx::wrap_safe_integer_cast(this->virtual_idx));
                 return std::next(this->iter_head, actual_idx).operator *();
             }
 
             constexpr auto operator ->() const noexcept -> decltype(auto){
 
-                size_t actual_idx = this->index_getter(this->virtual_idx);
+                size_t actual_idx = this->index_getter(stdx::wrap_safe_integer_cast(this->virtual_idx));
                 return std::next(this->iter_head, actual_idx).operator ->();
             }
     };
@@ -463,25 +464,37 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class T, class U>
     constexpr auto dg_forward_like(U&& value) noexcept -> dg_forward_like_t<T, U>&&{
 
-        return static_cast<dg_forward_like_t<T, U>&&>(value);
-    }
+        //https://en.cppreference.com/w/cpp/utility/forward
 
-    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    constexpr auto ulog2(T val) noexcept -> size_t{
-
-        return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
-    }
-
-    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    static constexpr auto ceil2(T val) noexcept -> size_t{
-
-        if (val <= 1u){
-            return 1u;
+        if constexpr(std::is_same_v<U, std::remove_reference_t<U>>){
+            static_assert(FALSE_VAL<>); //this is not defined, for our usage, I dont know how people define their usage of perfect forwarding, it alters the semantic of forward, this is the most confusing technical decision in our career, forward scope of usage only supposes to forward the arguments, not their class members
+                                        //if the containees are to be forwarded as their container, it is forward_like<T, U>
+                                        //I know the std took another step of making the invoking container to have && and & for static_cast<object&&>().whatever()
+                                        //this is precisely why it is very confusing
+        } else{
+            return static_cast<dg_forward_like_t<T, U>&&>(value);
         }
+    }
 
-        size_t uplog_value = unordered_map_variants::ulog2(static_cast<T>(val - 1)) + 1;
+    //I just feel like size_t out of nowhere makes no sense
+    //and we should stay in the unsigned territory to avoid thinking about signness and friends
+    //this should be good
 
-        return T{1u} << uplog_value;
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto ulog2(T val) noexcept -> T{
+
+        return static_cast<T>(sizeof(T) * CHAR_BIT - 1u) - static_cast<T>(std::countl_zero(val));
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    static constexpr auto ceil2(T val) noexcept -> T{
+
+        if (val < 2u) [[unlikely]]{
+            return 1u;
+        } else [[likely]]{
+            T uplog_value = ulog2(static_cast<T>(val - 1u)) + 1u;
+            return T{1u} << uplog_value;
+        }
     }
 
     template <class T, class = void>
@@ -576,7 +589,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                   const Hasher _hasher = Hasher(),
                                                   const Pred& pred = Pred(),
                                                   const Allocator& allocator = Allocator()): virtual_storage_vec(allocator),
-                                                                                             bucket_vec(std::max(self::min_capacity(), unordered_map_variants::ceil2(bucket_count)), self::NULL_VIRTUAL_ADDR, allocator),
+                                                                                             bucket_vec(std::max(self::min_capacity(), static_cast<size_type>(unordered_map_variants::ceil2(bucket_count))), self::NULL_VIRTUAL_ADDR, allocator),
                                                                                              _hasher(_hasher),
                                                                                              pred(pred),
                                                                                              allocator(allocator){
@@ -631,7 +644,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     return;
                 }
 
-                size_t new_bucket_cap               = std::max(self::min_capacity(), unordered_map_variants::ceil2(tentative_new_cap));
+                size_t new_bucket_cap               = std::max(self::min_capacity(), static_cast<size_type>(unordered_map_variants::ceil2(tentative_new_cap)));
 
                 if (new_bucket_cap > self::max_capacity()){
                     throw std::length_error("bad unordered_node_map capacity");
