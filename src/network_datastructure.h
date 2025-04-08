@@ -506,6 +506,10 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class T>
     using get_virtual_addr_t = typename get_virtual_addr<T>::type;
 
+    //there is an existing evidence that the ordering of these guys + the padding + half word load + full word load will heavily affect the performance by a factor of 2x - 3x
+    //it's very implementation + platform specific of how to use this map
+    //we are not going down the rabbit hole for now
+
     template <class key_t, class mapped_t, class virtual_addr_t>
     struct Node{
         key_t first;
@@ -641,9 +645,10 @@ namespace dg::network_datastructure::unordered_map_variants{
                 //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
 
                 for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
-                    size_t hashed_value                 = this->_hasher(this->virtual_storage_vec[i].first);
-                    size_t bucket_idx                   = hashed_value & (new_bucket_cap - 1u);
-                    virtual_addr_t * insert_reference   = &new_bucket_vec[bucket_idx];
+                    this->virtual_storage_vec[i].nxt_addr   = self::NULL_VIRTUAL_ADDR;
+                    size_t hashed_value                     = this->_hasher(this->virtual_storage_vec[i].first);
+                    size_t bucket_idx                       = hashed_value & (new_bucket_cap - 1u);
+                    virtual_addr_t * insert_reference       = &new_bucket_vec[bucket_idx];
 
                     while (true){
                         if (*insert_reference == self::NULL_VIRTUAL_ADDR){
@@ -653,8 +658,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                         insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
                     }
 
-                    *insert_reference                       = static_cast<virtual_addr_t>(i);
-                    this->virtual_storage_vec[i].nxt_addr   = self::NULL_VIRTUAL_ADDR;
+                    *insert_reference = static_cast<virtual_addr_t>(i);
                 }
 
                 this->bucket_vec = std::move(new_bucket_vec);
@@ -1069,13 +1073,25 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ValueLike>
             constexpr auto internal_insert_or_assign(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                auto [iter, status] = this->internal_insert(std::forward<ValueLike>(value));
-
-                if (!status){
-                    iter->second = dg_forward_like<ValueLike>(value.second);
+                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()) [[unlikely]]{ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
+                    this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
                 }
 
-                return std::make_pair(iter, status);
+                virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
+
+                if (*insert_reference == self::NULL_VIRTUAL_ADDR){
+                    value.nxt_addr                  = self::NULL_VIRTUAL_ADDR;
+                    virtual_addr_t appending_addr   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
+                    *insert_reference               = appending_addr;
+
+                    return std::make_pair(std::next(this->virtual_storage_vec.begin(), appending_addr), true);
+                }
+
+                auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
+                rs.first->second    = dg_forward_like<ValueLike>(value.second);
+
+                return rs;
             }
 
             template <class KeyLike>
@@ -1108,7 +1124,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
 
                 if (iter == this->cend())[[unlikely]]{
-                    return this->begin();
+                    return this->end();
                 } else [[likely]]{
                     return std::next(this->virtual_storage_vec.begin(), this->internal_erase_key(iter->first));
                 }

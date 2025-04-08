@@ -20,7 +20,7 @@ int main(){
 
     const size_t SZ = size_t{1} << 25;
 
-    dg::network_datastructure::unordered_map_variants::unordered_node_map<uint32_t, uint32_t, uint32_t> map{};
+    dg::network_datastructure::unordered_map_variants::unordered_node_map<uint32_t, uint32_t> map{};
 
     auto then = std::chrono::high_resolution_clock::now();
 
@@ -28,11 +28,11 @@ int main(){
         map[i] = i;
     }
 
-    // map.clear();
+    map.clear();
 
-    for (size_t i = 0u; i < SZ; ++i){
-        map.erase(i);
-    }
+    // for (size_t i = 0u; i < SZ; ++i){
+    //     map.erase(i);
+    // }
 
     for (size_t i = 0u; i < SZ; ++i){
         map[i] = i;
