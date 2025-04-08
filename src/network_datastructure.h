@@ -444,19 +444,8 @@ namespace dg::network_datastructure::cyclic_queue{
 
 namespace dg::network_datastructure::unordered_map_variants{
 
-    //this is complex, first is the trivially_constructible of std::pair, second is constness of things
-    //this is not std-compatible, yet it answers pretty much ALL the performance questions that we've been longing for without bending the rules
-    //we'll be specific for now
-
-    //alright, this is officially the fastest implementation of std::unordered_map if we are to use insert + clear only
-    //memory-footprint-wise talking, this is most efficient, this is also the only thing that we care in a massive parallel system, the RAM BUS across cores
-    //clear-wise talking, it is trivially clearable, by implementing a fake Node
-    //copy-wise talking, it is memcpyable
-    //iterator wise talking, it's optimized to a raw pointer optimization by the compiler (std::vector<>::iterator guarantees such), which is raw performance of copying
-    //we only use this for our keyvalue feed, of size 512
-    //this code is clear
-
-    //this is me, myself and I + him and I
+    template <class = void>
+    static inline constexpr bool FALSE_VAL = false;
 
     template <class T, class U>
     struct DGForwardLikeHelper{
@@ -486,13 +475,11 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr auto ceil2(T val) noexcept -> size_t{
 
-        if (val <= 1u){ [[unlikely]]
+        if (val <= 1u){
             return 1u;
         }
 
-        //alright people complained about this code
-
-        size_t uplog_value = unordered_map_variants::ulog2(static_cast<T>(val - 1)) + 1; //the problem of unsigned and signed arithmetic arises when ... sizeof(signed) == sizeof(unsigned) and we are casting from signed to unsigned, -1 + 1 should guarantee the always in unsigned counterpart range, so we dont have issues  
+        size_t uplog_value = unordered_map_variants::ulog2(static_cast<T>(val - 1)) + 1;
 
         return T{1u} << uplog_value;
     }
@@ -519,7 +506,6 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class T>
     using get_virtual_addr_t = typename get_virtual_addr<T>::type;
 
-    //to not confuse our foos
     template <class key_t, class mapped_t, class virtual_addr_t>
     struct Node{
         key_t first;
@@ -527,24 +513,11 @@ namespace dg::network_datastructure::unordered_map_variants{
         virtual_addr_t nxt_addr;
     };
 
-    //this should be usable for now
-    //I dont see problems
-    //the nxt_addr is never there if the user is to not read to program, they can actually use this component like every normal other map with type-erased pair
-    //we have special applications for these guys, not for std-std or adoptabilities
-    //alright I had bad feedback about the Node being incompatible (senior developers)
-    //we dont see problems, because this is application, not std
-    //alright we are clear
-
-    //if we are for the try-except route, we are susceptible to move leak
-    //such is a thrown exception would invalidate the content of the moved argument
-    //this is in the std way of doing things
-    //there is a virtue for each different way of error-handlings, I'm pro explicit exception instead of try-catch, because try-catch would distinct the try block and the catch block, which is not very convenient in cases of handling leaks
-    //we'll move on for now
-    //this map looks like a scam but it is not a scam, it is a type-erased value_type unordered_map, the only interface to access the data is ->first + ->second with the only downside of first-immutability being not protected by compile-time measurements
-    //with the increasing popularity of auto& + const auto& + auto&&, type-erased value_type is actually preferred in the 2025 new std
     //OK, this should pass my code review
+    //phew, that was NOT EASY
+    //we'll move on
 
-    template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    template <class Key, class Mapped, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
         private:
@@ -556,12 +529,6 @@ namespace dg::network_datastructure::unordered_map_variants{
             Allocator allocator;
 
         public:
-
-            //we cant implement a hasher noexcept or predicate noexcept static_assert yet
-            //I dont know what took std so long or they simply just dont want to implement the feature
-            //it's hard, yet the practice is that lookups + erase + clear must be noexcept
-            //the program is hardly useful otherwise (according to my friend)
-            //
 
             using key_type                  = Key;
             using mapped_type               = Mapped;
@@ -575,7 +542,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer;
             using iterator                  = typename std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>>::iterator;
             using const_iterator            = typename std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>>::const_iterator;
-            using size_type                 = SizeType;
+            using size_type                 = std::size_t;
             using difference_type           = std::intmax_t;
             using self                      = unordered_node_map;
             using load_factor_ratio         = typename LoadFactor::type;
@@ -587,7 +554,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             static inline constexpr uint64_t MIN_CAP                    = 8u;
             static inline constexpr uint64_t MAX_CAP                    = uint64_t{1} << 50;
 
-            static_assert((std::numeric_limits<SizeType>::max() >= MAX_CAP));
+            static_assert((std::numeric_limits<size_type>::max() >= MAX_CAP));
 
             static_assert(std::disjunction_v<std::is_same<typename std::ratio<1, 8>::type, load_factor_ratio>, 
                                              std::is_same<typename std::ratio<2, 8>::type, load_factor_ratio>, 
@@ -602,7 +569,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                   const Hasher _hasher = Hasher(),
                                                   const Pred& pred = Pred(),
                                                   const Allocator& allocator = Allocator()): virtual_storage_vec(allocator),
-                                                                                             bucket_vec(std::max(self::min_capacity(), unordered_map_variants::ceil2(bucket_count)), NULL_VIRTUAL_ADDR, allocator),
+                                                                                             bucket_vec(std::max(self::min_capacity(), unordered_map_variants::ceil2(bucket_count)), self::NULL_VIRTUAL_ADDR, allocator),
                                                                                              _hasher(_hasher),
                                                                                              pred(pred),
                                                                                              allocator(allocator){
@@ -664,7 +631,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 }
 
                 size_t new_virtual_storage_vec_cap  = self::capacity_to_size(new_bucket_cap);
-                auto new_bucket_vec                 = decltype(bucket_vec)(new_bucket_cap, NULL_VIRTUAL_ADDR, this->allocator);
+                auto new_bucket_vec                 = decltype(bucket_vec)(new_bucket_cap, self::NULL_VIRTUAL_ADDR, this->allocator);
 
                 this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap); 
 
@@ -676,7 +643,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     virtual_addr_t * insert_reference   = &new_bucket_vec[bucket_idx];
 
                     while (true){
-                        if (*insert_reference == NULL_VIRTUAL_ADDR){
+                        if (*insert_reference == self::NULL_VIRTUAL_ADDR){
                             break;
                         }
 
@@ -684,7 +651,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     }
 
                     *insert_reference                       = static_cast<virtual_addr_t>(i);
-                    this->virtual_storage_vec[i].nxt_addr   = NULL_VIRTUAL_ADDR;
+                    this->virtual_storage_vec[i].nxt_addr   = self::NULL_VIRTUAL_ADDR;
                 }
 
                 this->bucket_vec = std::move(new_bucket_vec);
@@ -778,7 +745,11 @@ namespace dg::network_datastructure::unordered_map_variants{
             constexpr auto erase(EraseArg&& erase_arg) noexcept(true) -> iterator{
 
                 if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
-                    return this->internal_erase_iter(std::forward<EraseArg>(erase_arg));
+                    if constexpr(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>){
+                        return this->internal_erase_iter(std::forward<EraseArg>(erase_arg));
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
                 } else{
                     return this->internal_erase_key(std::forward<EraseArg>(erase_arg));
                 }
@@ -844,12 +815,12 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             static consteval auto min_capacity() noexcept -> size_t{
 
-                return MIN_CAP;
+                return self::MIN_CAP;
             }
 
             static consteval auto max_capacity() noexcept -> size_type{
 
-                return MAX_CAP;
+                return self::MAX_CAP;
             }
 
             constexpr auto size() const noexcept -> size_type{
@@ -934,10 +905,10 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return hashed_value & (this->bucket_vec.size() - 1u);
             }
 
-            //this is one of the C++ myths, we rather copy paste than to do the remove const, it's undefined
+=            //this is one of the C++ myths, we rather copy paste than to do the remove const, it's undefined
             template <class KeyLike>
             constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
-                
+
                 //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
                 //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
 
@@ -946,11 +917,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 const virtual_addr_t * current  = &this->bucket_vec[bucket_idx];
 
                 while (true){
-                    if (*current == NULL_VIRTUAL_ADDR){
-                        return current;
-                    }
-
-                    if (this->pred(this->virtual_storage_vec[*current].first, key)){
+                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[*current].first, key)){
                         return current;
                     }
 
@@ -969,11 +936,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
 
                 while (true){
-                    if (*current == NULL_VIRTUAL_ADDR){
-                        return current;
-                    }
-
-                    if (this->pred(this->virtual_storage_vec[*current].first, key)){
+                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[*current].first, key)){
                         return current;
                     }
 
@@ -1042,8 +1005,8 @@ namespace dg::network_datastructure::unordered_map_variants{
                 virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
 
                 while (true){
-                    if (node_virtual_addr == NULL_VIRTUAL_ADDR){
-                        return this->end();
+                    if (node_virtual_addr == self::NULL_VIRTUAL_ADDR){
+                        return this->virtual_storage_vec.end();
                     }
 
                     if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)){
@@ -1083,13 +1046,13 @@ namespace dg::network_datastructure::unordered_map_variants{
             constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
                 if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()) [[unlikely]]{ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
-                    this->rehash(this->bucket_vec.size() << POW2_GROWTH_FACTOR);
+                    this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
                 }
 
                 virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
 
-                if (*insert_reference == NULL_VIRTUAL_ADDR){
-                    value.nxt_addr                  = NULL_VIRTUAL_ADDR;
+                if (*insert_reference == self::NULL_VIRTUAL_ADDR){
+                    value.nxt_addr                  = self::NULL_VIRTUAL_ADDR;
                     virtual_addr_t appending_addr   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
                     this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
                     *insert_reference               = appending_addr;
@@ -1120,7 +1083,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 virtual_addr_t * key_reference = this->internal_find_bucket_reference(key);
 
-                if (*key_reference == NULL_VIRTUAL_ADDR){
+                if (*key_reference == self::NULL_VIRTUAL_ADDR){
                     return;
                 } 
 
@@ -1129,14 +1092,11 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (swapping_reference == key_reference) [[unlikely]]{
                     *key_reference = this->virtual_storage_vec[*key_reference].nxt_addr;
                     this->virtual_storage_vec.pop_back();
-
-                    return;
+                } else [[likely]]{
+                    *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr); 
+                    std::swap(this->virtual_storage_vec[*swapping_reference], this->virtual_storage_vec.back());
+                    this->virtual_storage_vec.pop_back();
                 }
-
-                virtual_addr_t removing_addr = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr); 
-                std::swap(this->virtual_storage_vec[removing_addr], this->virtual_storage_vec.back());
-                this->virtual_storage_vec.pop_back();
-                *swapping_reference = removing_addr;
             }
 
             template <class KeyLike>
@@ -1148,11 +1108,11 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
 
-                if (iter == this->cend()){
+                if (iter == this->cend())[[unlikely]]{
                     return this->begin();
+                } else [[likely]]{
+                    return this->internal_erase_key(iter->first);
                 }
-
-                return this->internal_erase_key(iter->first);
             }
     };
 
@@ -1210,8 +1170,32 @@ namespace std{
     }
 }
 
-namespace dg::network_datastructure::node_hash_set{
+namespace dg::network_datastructure::unordered_set_variants{
 
+    //alright let's write this
+    //its complex to write unordered_set
+    //this is an entire different radix of things, yet I think unordered_set would be a lot better if we are to do flat_hash_set + virtual_storage, because it has always been the way to do things
+    //if the set reaches a half-cap, we are to construct a new container to move things over
+    //we'll halt the implementation for now, because there is not a performance guide
+
+    // template <class key_t, class virtual_addr_t>
+    // struct Node{
+    //     key_t first;
+    //     virtual_addr_t nxt_addr;
+    // };
+
+    // template <class Key, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class KeyEqual = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    // class unordered_node_set{
+
+    //     private:
+
+    //         std::vector<Node<Key, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, VirtualAddrType>>> virtual_storage_vec;
+    //         std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::typename rebind_alloc<Node<Key, VirtualAddrType>>> bucket_vec;
+
+    //     public:
+
+
+    // };
 }
 
 #endif
