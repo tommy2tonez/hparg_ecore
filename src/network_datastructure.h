@@ -531,12 +531,18 @@ namespace dg::network_datastructure::unordered_map_variants{
     //we have special applications for these guys, not for std-std or adoptabilities
     //alright I had bad feedback about the Node being incompatible (senior developers)
     //we dont see problems, because this is application, not std
+    //alright we are clear
+
+    //if we are for the try-except route, we are susceptible to move leak
+    //such is a thrown exception would invalidate the content of the moved argument
+    //this is in the std way of doing things
+    //there is a virtue for each different way of error-handlings, I'm pro explicit exception instead of try-catch, because try-catch would distinct the try block and the catch block, which is not very convenient in cases of handling leaks
+    //we'll move on for now
 
     template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
         private:
-
 
             std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>> virtual_storage_vec;
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
@@ -688,7 +694,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
-                return this->try_emplace(std::forward<Args>(args)...);
+                return this->insert(std::pair<const Key, Mapped>(std::forward<Args>(args)...));
             }
 
             template <class ValueLike = std::pair<const Key, Mapped>>
