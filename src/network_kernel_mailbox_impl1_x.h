@@ -15,6 +15,10 @@
 
 namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
+    //alright this should be good
+    //we have agreed to the 1ms - 10ms latency + batching of 1 MB/ tx to avoid memory ordering cmpexch instruction even if it is a relaxed operation, it's expensive
+    //we will have the first version of logit density miner in a month, stay tuned
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     struct MeterInterface{
@@ -25,42 +29,49 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         virtual void reset() noexcept = 0;
     };
 
-    class MtxMeter: public virtual MeterInterface{
+    struct MessageStreamerInterface{
+        virtual ~MessageStreamerInterface() noexcept = default;
+        virtual void stream(std::string_view) noexcept = 0;
+    };
+
+    class AtomicMeter: public virtual MeterInterface{
 
         private:
 
-            std::atomic<size_t> count;
-            std::atomic<std::chrono::time_point<std::chrono::steady_clock>> since;
+            //alright, people would argue that this is hardware_destructive_interference_sz, for best practices, I agree
+
+            stdx::hdi_container<std::atomic<size_t>> count;
+            stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> since;
 
         public:
 
-            MtxMeter() = default;
+            AtomicMeter() = default;
 
             void tick(size_t incoming_sz) noexcept{
-                
-                this->count.fetch_add(incoming_sz, std::memory_order_relaxed);
+
+                this->count.value.fetch_add(incoming_sz, std::memory_order_relaxed);
             }
 
             auto get_count() noexcept -> size_t{
 
-                return this->count.load(std::memory_order_relaxed);
+                return this->count.value.load(std::memory_order_relaxed);
             }
 
             auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
 
-                return this->since.load(std::memory_order_relaxed);
+                return this->since.value.load(std::memory_order_relaxed);
             }
 
             void reset() noexcept{
 
                 stdx::seq_cst_guard seqcst_tx;
 
-                this->count.exchange(0u, std::memory_order_relaxed);
-                this->since.exchange(std::chrono::steady_clock::now(), std::memory_order_relaxed);
+                this->count.value.exchange(0u, std::memory_order_relaxed);
+                this->since.value.exchange(std::chrono::steady_clock::now(), std::memory_order_relaxed);
             }
     };
 
-    class RandomDistributedMtxMeter: public virtual MeterInterface{
+    class RandomDistributedMeter: public virtual MeterInterface{
 
         private:
 
@@ -69,9 +80,9 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         
         public:
 
-            RandomDistributedMtxMeter(std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr,
-                                      size_t pow2_base_arr_sz) noexcept: base_arr(std::move(base_arr)),
-                                                                         pow2_base_arr_sz(pow2_base_arr_sz){}
+            RandomDistributedMeter(std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr,
+                                   size_t pow2_base_arr_sz) noexcept: base_arr(std::move(base_arr)),
+                                                                      pow2_base_arr_sz(pow2_base_arr_sz){}
 
             void tick(size_t incoming_sz) noexcept{
 
@@ -118,55 +129,78 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
             dg::string device_id;
             std::shared_ptr<MeterInterface> send_meter;
             std::shared_ptr<MeterInterface> recv_meter;
+            std::shared_ptr<MessageStreamerInterface> msg_streamer;
+            std::chrono::nanoseconds meter_dur;
 
         public:
 
             MeterLogWorker(dg::string device_id,
                            std::shared_ptr<MeterInterface> send_meter, 
-                           std::shared_ptr<MeterInterface> recv_meter) noexcept: device_id(std::move(device_id)),
-                                                                                 send_meter(std::move(send_meter)),
-                                                                                 recv_meter(std::move(recv_meter)){}
-            
+                           std::shared_ptr<MeterInterface> recv_meter,
+                           std::shared_ptr<MessageStreamerInterface> msg_streamer,
+                           std::chrono::nanoseconds meter_dur) noexcept: device_id(std::move(device_id)),
+                                                                         send_meter(std::move(send_meter)),
+                                                                         recv_meter(std::move(recv_meter)),
+                                                                         msg_streamer(std::move(msg_streamer)),
+                                                                         meter_dur(meter_dur){}
+
             bool run_one_epoch() noexcept{
  
-                dg::string send_msg = this->make_send_meter_msg(this->send_meter->get_count(), this->send_meter->get_count_since());
-                dg::string recv_msg = this->make_recv_meter_msg(this->recv_meter->get_count(), this->recv_meter->get_count_since());
+                std::expected<dg::string, exception_t> send_msg = this->make_send_meter_msg(this->send_meter->get_count(), this->send_meter->get_count_since());
+                std::expected<dg::string, exception_t> recv_msg = this->make_recv_meter_msg(this->recv_meter->get_count(), this->recv_meter->get_count_since());
 
-                dg::network_log::journal_fast(send_msg.c_str());
-                dg::network_log::journal_fast(recv_msg.c_str());
+                if (!send_msg.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(send_msg.error()));
+                    return false;
+                }
+
+                if (!recv_msg.has_value()){
+                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(recv_msg.error()));
+                    return false;
+                }
+
+                this->msg_streamer->stream(send_msg.value());
+                this->msg_streamer->stream(recv_msg.value());
 
                 this->send_meter->reset();
                 this->recv_meter->reset();
+                std::this_thread::sleep_for(this->meter_dur);
 
                 return true;
             }
         
         private:
 
-            auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> dur) noexcept -> dg::string{
+            auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> since) noexcept -> std::expected<dg::string, exception_t>{
 
-                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - dur);
-                size_t tick_sz = dur_in_seconds.count();
+                auto now        = std::chrono::steady_clock::now();
+                auto dur_in_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - since);
+                size_t tick_sz  = dur_in_ms.count();
 
                 if (tick_sz == 0u){
-                    return std::format("[METER_REPORT] low meter precision resolution (device_id: {}, part: send_meter)", this->device_id);
+                    return stdx::expected_format("[METER_REPORT] low meter precision resolution (device_id: {}, part: send_meter)", this->device_id);
                 } 
 
-                size_t bsz_per_s = bsz / tick_sz;
-                return std::format("[METER_REPORT] {} bytes/s sent to {}", bsz_per_s, this->device_id);
+                size_t bsz_per_ms   = bsz / tick_sz;
+                size_t bsz_per_s    = bsz_per_ms * 1000u;
+
+                return stdx::expected_format("[METER_REPORT] {} bytes/s sent to {}", bsz_per_s, this->device_id);
             }
 
-            auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> dur) noexcept -> dg::string{
+            auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> since) noexcept -> std::expected<dg::string, exception_t>{
 
-                std::chrono::seconds dur_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - dur);
-                size_t tick_sz = dur_in_seconds.count();
+                auto now        = std::chrono::steady_clock::now();
+                auto dur_in_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - since);
+                size_t tick_sz  = dur_in_ms.count();
 
                 if (tick_sz == 0u){
-                    return std::format("[METER_REPORT] low meter precision resolution (device_id: {}, part: recv_meter)", this->device_id);
+                    return stdx::expected_format("[METER_REPORT] low meter precision resolution (device_id: {}, part: recv_meter)", this->device_id);
                 }
 
-                size_t bsz_per_s = bsz / tick_sz;
-                return std::format("[METER_REPORT] {} bytes/s recv from {}", bsz_per_s, this->device_id);
+                size_t bsz_per_ms   = bsz / tick_sz;
+                size_t bsz_per_s    = bsz_per_ms * 1000u;
+
+                return stdx::expected_format("[METER_REPORT] {} bytes/s recv from {}", bsz_per_s, this->device_id);
             }
     };
 
@@ -226,6 +260,189 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 return this->base->max_consume_size();
             }
     };
+
+    struct ComponentFactory{
+
+        template <class T, class ...Args>
+        static auto to_dg_vector(std::vector<T, Args...> vec) -> dg::vector<T>{
+
+            dg::vector<T> rs{};
+
+            for (size_t i = 0u; i < vec.size(); ++i){
+                rs.emplace_back(std::move(vec[i]));
+            }
+
+            return rs;
+        }
+
+        static auto to_dg_string(std::string_view inp) -> dg::string{
+
+            dg::string rs{};
+            std::copy(inp.begin(), inp.end(), std::back_inserter(rs));
+
+            return rs;
+        }
+
+        static auto get_meter() -> std::unique_ptr<MeterInterface>{
+
+            return std::make_unique<AtomicMeter>();
+        }
+
+        static auto get_distributed_meter(size_t tentative_concurrent_meter_sz) -> std::unique_ptr<MeterInterface>{
+
+            const size_t MIN_CONCURRENT_METER_SZ    = size_t{1};
+            const size_t MAX_CONCURRENT_METER_SZ    = size_t{1} << 20; 
+
+            if (std::clamp(tentative_concurrent_meter_sz, MIN_CONCURRENT_METER_SZ, MAX_CONCURRENT_METER_SZ) != tentative_concurrent_meter_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t meter_arr_sz = stdx::ceil2(tentative_concurrent_meter_sz);
+            auto meter_arr      = std::make_unique<std::unique_ptr<MeterInterface>[]>(meter_arr_sz);
+
+            for (size_t i = 0u; i < meter_arr_sz; ++i){
+                meter_arr[i] = ComponentFactory::get_meter();
+            }
+
+            return std::make_unique<RandomDistributedMeter>(std::move(meter_arr), meter_arr_sz);
+        }
+
+        static auto get_meter_log_worker(std::string device_id,
+                                         std::shared_ptr<MeterInterface> send_meter,
+                                         std::shared_ptr<MeterInterface> recv_meter,
+                                         std::shared_ptr<MessageStreamerInterface> msg_stream,
+                                         std::chrono::nanoseconds meter_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+            
+            const size_t MIN_DEVICE_ID_SZ                   = size_t{0u};
+            const size_t MAX_DEVICE_ID_SZ                   = size_t{1} << 10;
+            const std::chrono::nanoseconds MIN_METER_DUR    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(1));
+            const std::chrono::nanoseconds MAX_METER_DUR    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+
+            if (std::clamp(static_cast<size_t>(device_id.size()), MIN_DEVICE_ID_SZ, MAX_DEVICE_ID_SZ) != device_id.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (send_meter == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (recv_meter == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (msg_stream == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (std::clamp(meter_dur, MIN_METER_DUR, MAX_METER_DUR) != meter_dur){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            return std::make_unique<MeterLogWorker>(ComponentFactory::to_dg_string(device_id), 
+                                                    std::move(send_meter), 
+                                                    std::move(recv_meter),
+                                                    std::move(msg_stream),
+                                                    meter_dur);
+        }
+
+        static auto get_metered_mailbox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
+                                        std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                                        std::shared_ptr<MeterInterface> send_meter,
+                                        std::shared_ptr<MeterInterface> recv_meter) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface>{
+
+            if (daemon_vec.empty()){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (send_meter == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            if (recv_meter == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+            }
+
+            return std::make_unique<MeteredMailBox>(ComponentFactory::to_dg_vector(std::move(daemon_vec)),
+                                                    std::move(base),
+                                                    std::move(send_meter),
+                                                    std::move(recv_meter));
+        }
+    };
+
+    struct Config{
+        std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+        size_t concurrent_recv_meter_sz;
+        size_t concurrent_send_meter_sz;
+        std::string device_id;
+        std::shared_ptr<MessageStreamerInterface> msg_streamer;
+        std::chrono::nanoseconds meter_dur;
+    };
+
+    struct ConfigMaker{
+        
+        private:
+
+            static auto make_recv_meter(Config& config) -> std::unique_ptr<MeterInterface>{
+                
+                if (config.concurrent_recv_meter_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.concurrent_recv_meter_sz == 1u){
+                    return ComponentFactory::get_meter();
+                }
+
+                return ComponentFactory::get_distributed_meter(config.concurrent_recv_meter_sz);
+            }
+
+            static auto make_send_meter(Config& config) -> std::unique_ptr<MeterInterface>{
+
+                if (config.concurrent_send_meter_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.concurrent_send_meter_sz == 1u){
+                    return ComponentFactory::get_meter();
+                }
+
+                return ComponentFactory::get_distributed_meter(config.concurrent_send_meter_sz);
+            }
+
+            static auto make_workers(Config& config, 
+                                     std::shared_ptr<MeterInterface> send_meter, 
+                                     std::shared_ptr<MeterInterface> recv_meter) -> std::vector<dg::network_concurrency::daemon_raii_handle_t>{
+
+                std::unique_ptr<dg::network_concurrency::WorkerInterface> worker = ComponentFactory::get_meter_log_worker(config.device_id, send_mter, recv_meter, config.msg_streamer, config.meter_dur);
+
+                auto daemon_vec     = std::vector<dg::network_concurrency::daemon_raii_handle_t>();
+                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(worker)));
+                daemon_vec.emplace_back(std::move(daemon_handle));
+
+                return daemon_vec;
+            }
+
+        public:
+
+            static auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+
+                std::shared_ptr<MeterInterface> send_meter  = ConfigMaker::make_send_meter(config);
+                std::shared_ptr<MeterInterface> recv_meter  = ConfigMaker::make_recv_meter(config);
+
+                return ComponentFactory::get_metered_mailbox(ConfigMaker::make_workers(config, send_meter, recv_meter),
+                                                             std::move(config.base),
+                                                             send_meter,
+                                                             recv_meter);
+            }
+    };
+
+    extern auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+
+        return ConfigMaker::make(std::move(config));
+    }
 }
 
 namespace dg::network_kernel_mailbox_impl1_flash_streamx{
@@ -501,7 +718,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         private:
 
             Address factory_addr;
-
+        
         public:
 
             RandomPacketIDGenerator(Address factory_addr) noexcept: factory_addr(std::move(factory_addr)){}
@@ -573,6 +790,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->thru_sz_per_load.value;
             }
+        
     };
 
     //OK

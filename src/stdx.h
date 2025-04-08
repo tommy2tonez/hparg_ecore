@@ -932,10 +932,8 @@ namespace stdx{
 
     template <class T>
     struct hdi_container{
-        alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value
-        ;
+        alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value;
     };
-
 
     void high_resolution_sleep(std::chrono::nanoseconds) noexcept{
 

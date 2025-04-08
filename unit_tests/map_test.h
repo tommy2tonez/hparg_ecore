@@ -177,7 +177,6 @@ namespace map_test{
             }
 
             if (clear == 3u){
-
                 for (const auto& kv_pair: std_map){
                     auto key = kv_pair.first;
                     if (cmp_map.erase(key) != 1u){
