@@ -481,9 +481,9 @@ namespace dg::network_datastructure::unordered_map_variants{
     //this should be good
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    constexpr auto ulog2(T val) noexcept -> T{
+    constexpr auto ulog2(T val) noexcept -> size_t{
 
-        return static_cast<T>(sizeof(T) * CHAR_BIT - 1u) - static_cast<T>(std::countl_zero(val));
+        return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1u) - static_cast<size_t>(std::countl_zero(val));
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
@@ -492,9 +492,15 @@ namespace dg::network_datastructure::unordered_map_variants{
         if (val < 2u) [[unlikely]]{
             return 1u;
         } else [[likely]]{
-            T uplog_value = ulog2(static_cast<T>(val - 1u)) + 1u;
+            T uplog_value = unordered_map_variants::ulog2(static_cast<T>(val - 1u)) + 1u;
             return T{1u} << uplog_value;
         }
+    }
+
+    template <class T>
+    static __attribute__((always_inline)) constexpr auto dg_restrict_swap(T * __restrict__ lhs, T * __restrict__ rhs) noexcept(noexcept(std::swap(std::declval<T&>(), std::declval<T&>()))){
+
+        std::swap(*lhs, *rhs);
     }
 
     template <class T, class = void>
@@ -523,26 +529,185 @@ namespace dg::network_datastructure::unordered_map_variants{
     //it's very implementation + platform specific of how to use this map
     //we are not going down the rabbit hole for now
 
+    //the only optimization we could further make is actually compile-time deterministic class member layout by using sfinae
+    //we dont have anything to do, so let's choose the least byte of these guys
+    //alright, yall can argue that the alignment + half word + full word whatever load
+    //the most important thing that we care about is the memory footprint, the worst case memory footprint
+
+    //assume that our container footprint is 64KB, we expect to fit the entire container in the cache to retrieve all the records
+    //how precisely do we do this?
+    //by builiding a radix tree, or delvrsrv of hash_table
+    //as long as 64KB hash_table maps to a 16KB worth of random key findings, we are in a good place   
+
     template <class key_t, class mapped_t, class virtual_addr_t>
-    struct Node{
+    struct Node_1{
         key_t first;
         mapped_t second;
         virtual_addr_t nxt_addr;
     };
 
-    //OK, this should pass my code review
-    //phew, that was NOT EASY
-    //we'll move on
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    struct Node_2{
+        key_t first;
+        virtual_addr_t nxt_addr;
+        mapped_t second;
+    };
 
-    //alright fellas, the std is literally driving me nuts, their API is incomprehensible
-    //my bad for not reading the API, I've just updated that
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    struct Node_3{
+        mapped_t second;
+        key_t first;
+        virtual_addr_t nxt_addr;
+    };
 
-    template <class Key, class Mapped, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    struct Node_4{
+        mapped_t second;
+        virtual_addr_t nxt_addr;
+        key_t first;  
+    };
+
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    struct Node_5{
+        virtual_addr_t nxt_addr;
+        key_t first;
+        mapped_t second;
+    };
+
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    struct Node_6{
+        virtual_addr_t nxt_addr;
+        mapped_t second;
+        key_t first;
+    };
+    
+    template <class T>
+    struct is_node1: std::false_type{};
+
+    template <class ...Args>
+    struct is_node1<Node_1<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_node1_v = is_node1<T>::value;
+
+    template <class T>
+    struct is_node2: std::false_type{};
+
+    template <class ...Args>
+    struct is_node2<Node_2<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_node2_v = is_node2<T>::value;
+
+    template <class T>
+    struct is_node3: std::false_type{};
+
+    template <class ...Args>
+    struct is_node3<Node_3<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_node3_v = is_node3<T>::value;
+
+    template <class T>
+    struct is_node4: std::false_type{};
+
+    template <class ...Args>
+    struct is_node4<Node_4<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_node4_v = is_node4<T>::value;
+
+    template <class T>
+    struct is_node5: std::false_type{};
+
+    template <class ...Args>
+    struct is_node5<Node_5<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_node5_v = is_node5<T>::value;
+
+    template <class T>
+    struct is_node6: std::false_type{};
+
+    template <class ...Args>
+    struct is_node6<Node_6<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_node6_v = is_node6<T>::value;
+
+    template <class ...Args>
+    constexpr auto is_least(Args ...args) noexcept -> bool{
+
+        std::array<size_t, sizeof...(Args)> sz_arr{args...};
+        static_assert(sz_arr.size() != 0u);
+
+        if (sz_arr.size() == 1u){
+            return true;
+        }
+
+        size_t cmp_arg = sz_arr[0u];
+
+        for (size_t i = 1u; i < sz_arr.size(); ++i){
+            if (cmp_arg > sz_arr[i]){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    using ReorderedNode = std::conditional_t<is_least(sizeof(Node_1<key_t, mapped_t, virtual_addr_t>), sizeof(Node_2<key_t, mapped_t, virtual_addr_t>), sizeof(Node_3<key_t, mapped_t, virtual_addr_t>), sizeof(Node_4<key_t, mapped_t, virtual_addr_t>), sizeof(Node_5<key_t, mapped_t, virtual_addr_t>), sizeof(Node_6<key_t, mapped_t, virtual_addr_t>)),
+                                             Node_1<key_t, mapped_t, virtual_addr_t>,
+                                             std::conditional_t<is_least(sizeof(Node_2<key_t, mapped_t, virtual_addr_t>), sizeof(Node_3<key_t, mapped_t, virtual_addr_t>), sizeof(Node_4<key_t, mapped_t, virtual_addr_t>), sizeof(Node_5<key_t, mapped_t, virtual_addr_t>), sizeof(Node_6<key_t, mapped_t, virtual_addr_t>)),
+                                                                Node_2<key_t, mapped_t, virtual_addr_t>,
+                                                                std::conditional_t<is_least(sizeof(Node_3<key_t, mapped_t, virtual_addr_t>), sizeof(Node_4<key_t, mapped_t, virtual_addr_t>), sizeof(Node_5<key_t, mapped_t, virtual_addr_t>), sizeof(Node_6<key_t, mapped_t, virtual_addr_t>)),
+                                                                                   Node_3<key_t, mapped_t, virtual_addr_t>,
+                                                                                   std::conditional_t<is_least(sizeof(Node_4<key_t, mapped_t, virtual_addr_t>), sizeof(Node_5<key_t, mapped_t, virtual_addr_t>), sizeof(Node_6<key_t, mapped_t, virtual_addr_t>)),
+                                                                                                      Node_4<key_t, mapped_t, virtual_addr_t>,
+                                                                                                      std::conditional_t<is_least(sizeof(Node_5<key_t, mapped_t, virtual_addr_t>), sizeof(Node_6<key_t, mapped_t, virtual_addr_t>)),
+                                                                                                                         Node_5<key_t, mapped_t, virtual_addr_t>,
+                                                                                                                         Node_6<key_t, mapped_t, virtual_addr_t>>>>>>;
+
+    template <class node_t, class key_t, class mapped_t, class virtual_addr_t>
+    static auto node_initialize(key_t&& key, mapped_t&& mapped, virtual_addr_t&& va_addr) -> node_t{
+
+        if constexpr(is_node1_v<node_t>){
+            return node_t{std::forward<key_t>(key), std::forward<mapped_t>(mapped), std::forward<virtual_addr_t>(va_addr)};
+        } else if constexpr(is_node2_v<node_t>){
+            return node_t{std::forward<key_t>(key), std::forward<virtual_addr_t>(va_addr), std::forward<mapped_t>(mapped)};
+        } else if constexpr(is_node3_v<node_t>){
+            return node_t{std::forward<mapped_t>(mapped), std::forward<key_t>(key), std::forward<virtual_addr_t>(va_addr)};
+        } else if constexpr(is_node4_v<node_t>){
+            return node_t{std::forward<mapped_t>(mapped), std::forward<virtual_addr_t>(va_addr), std::forward<key_t>(key)};
+        } else if constexpr(is_node5_v<node_t>){
+            return node_t{std::forward<virtual_addr_t>(va_addr), std::forward<key_t>(key), std::forward<mapped_t>(mapped)};
+        } else if constexpr(is_node6_v<node_t>){
+            return node_t{std::forward<virtual_addr_t>(va_addr), std::forward<mapped_t>(mapped), std::forward<key_t>(key)};
+        } else{
+            static_assert(FALSE_VAL<>);
+        }
+    }
+
+    template <bool Flag, class key_t, class mapped_t, class virtual_addr_t>
+    struct NodeChooser{
+        using type = Node_1<key_t, mapped_t, virtual_addr_t>;
+    };
+
+    template <class key_t, class mapped_t, class virtual_addr_t>
+    struct NodeChooser<true, key_t, mapped_t, virtual_addr_t>{
+        using type = ReorderedNode<key_t, mapped_t, virtual_addr_t>;
+    };
+
+    template <bool Flag, class key_t, class mapped_t, class virtual_addr_t>
+    using Node = typename NodeChooser<Flag, key_t, mapped_t, virtual_addr_t>::type;
+
+    template <class Key, class Mapped, class VirtualAddrType = std::size_t, bool HasStructureReordering = true, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
         private:
 
-            std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>> virtual_storage_vec;
+            std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>> virtual_storage_vec;
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
             Hasher _hasher;
             Pred pred;
@@ -552,7 +717,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             using key_type                  = Key;
             using mapped_type               = Mapped;
-            using value_type                = Node<Key, Mapped, VirtualAddrType>;
+            using value_type                = Node<HasStructureReordering, Key, Mapped, VirtualAddrType>;
             using hasher                    = Hasher;
             using key_equal                 = Pred;
             using allocator_type            = Allocator;
@@ -560,14 +725,14 @@ namespace dg::network_datastructure::unordered_map_variants{
             using const_reference           = const value_type&;
             using pointer                   = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                  = typename std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>>::iterator;
-            using const_iterator            = typename std::vector<Node<Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, Mapped, VirtualAddrType>>>::const_iterator;
+            using iterator                  = typename std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>>::iterator;
+            using const_iterator            = typename std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>>::const_iterator;
             using size_type                 = std::size_t;
             using difference_type           = std::intmax_t;
             using self                      = unordered_node_map;
             using load_factor_ratio         = typename LoadFactor::type;
             using virtual_addr_t            = get_virtual_addr_t<VirtualAddrType>;
-            using node_t                    = Node<Key, Mapped, VirtualAddrType>;
+            using node_t                    = Node<HasStructureReordering, Key, Mapped, VirtualAddrType>;
 
             static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
             static inline constexpr size_t POW2_GROWTH_FACTOR           = 1u;
@@ -693,7 +858,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(node_t{key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<Args>(args)...), virtual_addr_t{}});
+                return this->internal_insert(unordered_map_variants::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<Args>(args)...), NULL_VIRTUAL_ADDR));
             }
 
             template <class ...Args>
@@ -705,7 +870,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ValueLike = std::pair<const Key, Mapped>>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(node_t{key_type(dg_forward_like<ValueLike>(value.first)), mapped_type(dg_forward_like<ValueLike>(value.second)), virtual_addr_t{}});
+                return this->internal_insert(unordered_map_variants::node_initialize<node_t>(key_type(dg_forward_like<ValueLike>(value.first)), mapped_type(dg_forward_like<ValueLike>(value.second)), NULL_VIRTUAL_ADDR));
             }
 
             template <class Iterator>
@@ -729,7 +894,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike, class MappedLike>
             constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
-                return this->internal_insert_or_assign(node_t{key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<MappedLike>(mapped)), virtual_addr_t{}});
+                return this->internal_insert_or_assign(unordered_map_variants::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<MappedLike>(mapped)), NULL_VIRTUAL_ADDR));
             }
 
             template <class KeyLike>
@@ -771,7 +936,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                         static_assert(FALSE_VAL<>);
                     }
                 } else{
-                    return static_cast<size_type>(this->internal_erase_key(std::forward<EraseArg>(erase_arg)) != self::NULL_VIRTUAL_ADDR);
+                    return static_cast<size_type>(this->internal_erase_key(std::forward<EraseArg>(erase_arg)));
                 }
             }
 
@@ -1072,12 +1237,11 @@ namespace dg::network_datastructure::unordered_map_variants{
                 virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
-                    value.nxt_addr                  = self::NULL_VIRTUAL_ADDR;
-                    virtual_addr_t appending_addr   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    *insert_reference   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), true);
                     this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
-                    *insert_reference               = appending_addr;
 
-                    return std::make_pair(std::next(this->virtual_storage_vec.begin(), appending_addr), true);
+                    return rs;
                 }
 
                 return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
@@ -1093,12 +1257,11 @@ namespace dg::network_datastructure::unordered_map_variants{
                 virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
-                    value.nxt_addr                  = self::NULL_VIRTUAL_ADDR;
-                    virtual_addr_t appending_addr   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    *insert_reference   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), true);
                     this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
-                    *insert_reference               = appending_addr;
 
-                    return std::make_pair(std::next(this->virtual_storage_vec.begin(), appending_addr), true);
+                    return rs;
                 }
 
                 auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
@@ -1108,16 +1271,15 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> virtual_addr_t{
+            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> bool{
 
                 // static_assert(noexcept(std::swap(std::declval<node_t&>, std::declval<node_t&>)));
                 // static_assert(noexcept(this->virtual_storage_vec.pop_back()));
 
                 virtual_addr_t * key_reference  = this->internal_find_bucket_reference(key);
-                virtual_addr_t returning_addr   = *key_reference; 
 
-                if (returning_addr == self::NULL_VIRTUAL_ADDR){
-                    return returning_addr;
+                if (*key_reference == self::NULL_VIRTUAL_ADDR){
+                    return false;
                 }
 
                 virtual_addr_t * swapping_reference = this->internal_exist_find_bucket_reference(this->virtual_storage_vec.back().first); 
@@ -1127,11 +1289,11 @@ namespace dg::network_datastructure::unordered_map_variants{
                     this->virtual_storage_vec.pop_back();
                 } else [[likely]]{
                     *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr); 
-                    std::swap(this->virtual_storage_vec[*swapping_reference], this->virtual_storage_vec.back());
+                    dg_restrict_swap(&this->virtual_storage_vec[*swapping_reference], &this->virtual_storage_vec.back());
                     this->virtual_storage_vec.pop_back();
                 }
 
-                return returning_addr;
+                return true;
             }
 
             constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
@@ -1139,7 +1301,9 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (iter == this->cend())[[unlikely]]{
                     return this->end();
                 } else [[likely]]{
-                    return std::next(this->virtual_storage_vec.begin(), this->internal_erase_key(iter->first));
+                    size_t off = std::distance(this->virtual_storage_vec.cbegin(), iter); 
+                    this->internal_erase_key(iter->first);
+                    return std::next(this->virtual_storage_vec.begin(), off);
                 }
             }
     };

@@ -36,17 +36,35 @@ static constexpr auto ceil2(T val) noexcept -> T{
 
 int main(){
 
-    const size_t SZ = size_t{1} << 30;
+    const size_t SZ = size_t{1} << 28;
     size_t total = 0u;
 
-    dg::network_datastructure::unordered_map_variants::unordered_node_map<uint32_t, uint32_t> map{};
+    dg::network_datastructure::unordered_map_variants::unordered_node_map<uint32_t, uint32_t, uint32_t> map{};
+
+    for (size_t i = 0u; i < SZ; ++i){
+        map[i] = i;
+    }
 
     auto then = std::chrono::high_resolution_clock::now();
 
     for (size_t i = 0u; i < SZ; ++i){
-        total += ceil2(static_cast<uint32_t>(i));
-        // std::cout << i << "<>" << ceil2(i) << std::endl;
+        total += map.find(i)->second;
     }
+
+    // for (size_t i = 0u; i < SZ; ++i){
+    //     map.erase(i);
+    // }
+
+    // // map.clear();
+
+    // for (size_t i = 0u; i < SZ; ++i){
+    //     map[i] = i;
+    // }
+
+    // for (size_t i = 0u; i < SZ; ++i){
+    //     total += ceil2(static_cast<uint32_t>(i));
+    //     // std::cout << i << "<>" << ceil2(i) << std::endl;
+    // }
 
     auto now = std::chrono::high_resolution_clock::now();
     auto lapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - then).count();
