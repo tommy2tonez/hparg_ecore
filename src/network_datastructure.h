@@ -12,6 +12,7 @@
 #include <utility>
 #include <memory>
 #include <stdexcept>
+#include <limits>
 
 // #include "network_log.h"
 
@@ -485,15 +486,15 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     static constexpr auto ceil2(T val) noexcept -> size_t{
 
-        if (val == 0u){ [[unlikely]]
+        if (val <= 1u){ [[unlikely]]
             return 1u;
         }
 
-        size_t max_log2     = unordered_map_variants::ulog2(val);
-        size_t min_log2     = std::countr_zero(val);
-        size_t cand_log2    = max_log2 + ((max_log2 ^ min_log2) != 0u);
+        //alright people complained about this code
 
-        return T{1u} << cand_log2;
+        size_t uplog_value = unordered_map_variants::ulog2(static_cast<T>(val - 1)) + 1; //the problem of unsigned and signed arithmetic arises when ... sizeof(signed) == sizeof(unsigned) and we are casting from signed to unsigned, -1 + 1 should guarantee the always in unsigned counterpart range, so we dont have issues  
+
+        return T{1u} << uplog_value;
     }
 
     template <class T, class = void>
@@ -518,10 +519,11 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class T>
     using get_virtual_addr_t = typename get_virtual_addr<T>::type;
 
-    template <class key_t, class value_t, class virtual_addr_t>
+    //to not confuse our foos
+    template <class key_t, class mapped_t, class virtual_addr_t>
     struct Node{
         key_t first;
-        value_t second;
+        mapped_t second;
         virtual_addr_t nxt_addr;
     };
 
@@ -538,6 +540,9 @@ namespace dg::network_datastructure::unordered_map_variants{
     //this is in the std way of doing things
     //there is a virtue for each different way of error-handlings, I'm pro explicit exception instead of try-catch, because try-catch would distinct the try block and the catch block, which is not very convenient in cases of handling leaks
     //we'll move on for now
+    //this map looks like a scam but it is not a scam, it is a type-erased value_type unordered_map, the only interface to access the data is ->first + ->second with the only downside of first-immutability being not protected by compile-time measurements
+    //with the increasing popularity of auto& + const auto& + auto&&, type-erased value_type is actually preferred in the 2025 new std
+    //OK, this should pass my code review
 
     template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
@@ -579,7 +584,10 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
             static inline constexpr size_t POW2_GROWTH_FACTOR           = 1u;
-            static inline constexpr size_t MIN_CAP                      = 8u;
+            static inline constexpr uint64_t MIN_CAP                    = 8u;
+            static inline constexpr uint64_t MAX_CAP                    = uint64_t{1} << 50;
+
+            static_assert((std::numeric_limits<SizeType>::max() >= MAX_CAP));
 
             static_assert(std::disjunction_v<std::is_same<typename std::ratio<1, 8>::type, load_factor_ratio>, 
                                              std::is_same<typename std::ratio<2, 8>::type, load_factor_ratio>, 
@@ -598,6 +606,10 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                                                              _hasher(_hasher),
                                                                                              pred(pred),
                                                                                              allocator(allocator){
+
+                if (this->capacity() > self::max_capacity()){
+                    throw std::length_error("bad unordered_node_map capacity");
+                }
 
                 this->virtual_storage_vec.reserve(self::capacity_to_size(this->capacity()));
             }
@@ -646,40 +658,46 @@ namespace dg::network_datastructure::unordered_map_variants{
                 }
 
                 size_t new_bucket_cap               = std::max(self::min_capacity(), unordered_map_variants::ceil2(tentative_new_cap));
+
+                if (new_bucket_cap > self::max_capacity()){
+                    throw std::length_error("bad unordered_node_map capacity");
+                }
+
                 size_t new_virtual_storage_vec_cap  = self::capacity_to_size(new_bucket_cap);
                 auto new_bucket_vec                 = decltype(bucket_vec)(new_bucket_cap, NULL_VIRTUAL_ADDR, this->allocator);
 
                 this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap); 
 
-                try{
-                    for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
-                        size_t hashed_value                 = this->_hasher(this->virtual_storage_vec[i].first);
-                        size_t bucket_idx                   = hashed_value & (new_bucket_cap - 1u);
-                        virtual_addr_t * insert_reference   = &new_bucket_vec[bucket_idx];
+                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
 
-                        while (true){
-                            if (*insert_reference == NULL_VIRTUAL_ADDR){
-                                break;
-                            }
+                for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
+                    size_t hashed_value                 = this->_hasher(this->virtual_storage_vec[i].first);
+                    size_t bucket_idx                   = hashed_value & (new_bucket_cap - 1u);
+                    virtual_addr_t * insert_reference   = &new_bucket_vec[bucket_idx];
 
-                            insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
+                    while (true){
+                        if (*insert_reference == NULL_VIRTUAL_ADDR){
+                            break;
                         }
 
-                        *insert_reference                       = static_cast<virtual_addr_t>(i);
-                        this->virtual_storage_vec[i].nxt_addr   = NULL_VIRTUAL_ADDR;
+                        insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
                     }
 
-                    this->bucket_vec = std::move(new_bucket_vec);
-                } catch (...){
-                    //bad leak, we are not expecting the hasher to throw
-                    std::abort();
+                    *insert_reference                       = static_cast<virtual_addr_t>(i);
+                    this->virtual_storage_vec[i].nxt_addr   = NULL_VIRTUAL_ADDR;
                 }
+
+                this->bucket_vec = std::move(new_bucket_vec);
             }
 
             constexpr void reserve(size_type new_sz){
 
                 if (new_sz <= this->size()){
                     return;
+                }
+
+                if (new_sz > self::max_size()){
+                    throw std::length_error("bad unordered_node_map size");
                 }
 
                 this->rehash(self::size_to_capacity(new_sz));
@@ -824,9 +842,24 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return this->bucket_vec.size();
             }
 
+            static consteval auto min_capacity() noexcept -> size_t{
+
+                return MIN_CAP;
+            }
+
+            static consteval auto max_capacity() noexcept -> size_type{
+
+                return MAX_CAP;
+            }
+
             constexpr auto size() const noexcept -> size_type{
 
                 return this->virtual_storage_vec.size();
+            }
+
+            static consteval auto max_size() noexcept -> size_type{
+
+                return self::capacity_to_size(self::max_capacity()); 
             }
 
             constexpr auto hash_function() const & noexcept -> const Hasher&{
@@ -886,17 +919,12 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             static constexpr auto capacity_to_size(size_t cap) noexcept -> size_t{
 
-                return cap * load_factor(); 
+                return cap * load_factor();
             }
 
             static constexpr auto size_to_capacity(size_t sz) noexcept -> size_t{
 
                 return sz / load_factor();
-            }
-
-            static consteval auto min_capacity() noexcept -> size_t{
-
-                return MIN_CAP;
             }
 
         private:
@@ -1054,7 +1082,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ValueLike>
             constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
+                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()) [[unlikely]]{ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
                     this->rehash(this->bucket_vec.size() << POW2_GROWTH_FACTOR);
                 }
 
@@ -1127,6 +1155,59 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return this->internal_erase_key(iter->first);
             }
     };
+
+    template <class ...Args>
+    constexpr auto operator ==(const unordered_node_map<Args...>& lhs, const unordered_node_map<Args...>& rhs) noexcept(true) -> bool{
+
+        if (lhs.size() != rhs.size()){
+            return false;
+        }
+
+        for (const auto& kv_pair: lhs){
+            auto rhs_ptr = rhs.find(kv_pair.first);
+
+            if (rhs_ptr == rhs.end()){
+                return false;
+            }
+
+            if (rhs_ptr->second != kv_pair.second){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    template <class ...Args>
+    constexpr auto operator !=(const unordered_node_map<Args...>& lhs, const unordered_node_map<Args...>& rhs) noexcept(true) -> bool{
+        
+        return !(lhs == rhs);
+    }
+}
+
+namespace std{
+
+    template <class ...Args>
+    constexpr void swap(dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& lhs,
+                        dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& rhs) noexcept(noexcept(std::declval<dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>&>().swap(std::declval<dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>&>()))){
+
+        lhs.swap(rhs);
+    }
+
+    template <class ...Args, class Pred>
+    constexpr void erase_if(dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& umap,
+                            Pred pred){
+
+        auto it = umap.begin(); 
+
+        while (it != umap.end()){
+            if (pred(*it)){
+                it = umap.erase(it);
+            } else{
+                std::advance(it, 1u);
+            }
+        }
+    }
 }
 
 namespace dg::network_datastructure::node_hash_set{
