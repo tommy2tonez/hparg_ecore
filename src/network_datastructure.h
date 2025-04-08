@@ -529,8 +529,10 @@ namespace dg::network_datastructure::unordered_map_variants{
     //I dont see problems
     //the nxt_addr is never there if the user is to not read to program, they can actually use this component like every normal other map with type-erased pair
     //we have special applications for these guys, not for std-std or adoptabilities
+    //alright I had bad feedback about the Node being incompatible (senior developers)
+    //we dont see problems, because this is application, not std
 
-    template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<3, 4>>
+    template <class Key, class Mapped, class SizeType = std::size_t, class VirtualAddrType = std::uint32_t, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
         private:
@@ -572,6 +574,15 @@ namespace dg::network_datastructure::unordered_map_variants{
             static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
             static inline constexpr size_t POW2_GROWTH_FACTOR           = 1u;
             static inline constexpr size_t MIN_CAP                      = 8u;
+
+            static_assert(std::disjunction_v<std::is_same<typename std::ratio<1, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<2, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<3, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<4, 8>::type, load_factor_ratio>,
+                                             std::is_same<typename std::ratio<5, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<6, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<7, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<8, 8>::type, load_factor_ratio>>);
 
             constexpr explicit unordered_node_map(size_type bucket_count,
                                                   const Hasher _hasher = Hasher(),
@@ -622,14 +633,6 @@ namespace dg::network_datastructure::unordered_map_variants{
                                          size_type bucket_count,
                                          const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
 
-            //code path analysis
-            //rehash is triggered externally
-            //assume state is correct
-            //we are to uphash, the ratio is maintained, reserve from low -> high snaps to high
-
-            //rehash is triggered internally, solely by insert() function
-            //insert() makes sure that the state of vector::capacity() is maintained (strong guarantee by std) before invoking the function to snap it into another correct state
-
             constexpr void rehash(size_type tentative_new_cap){
 
                 if (tentative_new_cap <= this->capacity()){
@@ -673,11 +676,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     return;
                 }
 
-                this->rehash(self::size_to_capacity(new_sz)); //proof:
-                                                              //assume that self::size_to_capacity is the perfect inverse operation of capacity_to_size, and capacity_to_size is reasonably set (or the load_factor is fixed at 3/4)
-                                                              //then the self::size_to_capacity(this->virtual_storage_vec.capacity()) should not flip the switch
-                                                              //how about self::size_to_capacity(... + 1)? because the load factor guarantees that 1 size > 1 capacity
-                                                              //so self::size_to_capacity(... + 1) must float to another number that would flip the switch
+                this->rehash(self::size_to_capacity(new_sz));
             }
 
             template <class KeyLike, class ...Args>
