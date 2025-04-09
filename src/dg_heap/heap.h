@@ -9,7 +9,9 @@
 #include <tuple>
 #include <limits>
 #include <vector>
-#include "dense_hash_map/dense_hash_map.hpp"
+// #include "dense_hash_map/dense_hash_map.hpp"
+#include <functional>
+#include "dg_dense_hash_map.h"
 #include <optional>
 #include <exception>
 #include <numeric>
@@ -31,8 +33,8 @@
 
 namespace dg::heap::limits{
 
-    static inline const auto MIN_HEAP_HEIGHT         = uint8_t{19};
-    static inline const auto MAX_HEAP_HEIGHT         = uint8_t{19};
+    static inline const auto MIN_HEAP_HEIGHT         = uint8_t{12};
+    static inline const auto MAX_HEAP_HEIGHT         = uint8_t{12};
     static inline const auto EXCL_MAX_HEAP_HEIGHT    = uint8_t{MAX_HEAP_HEIGHT + 1};
 }
 
@@ -3557,7 +3559,7 @@ namespace dg::heap::market{
 namespace dg::heap::cache{
     
     class StdCacheController: public CacheControllable<StdCacheController>,
-                              private jg::dense_hash_map<size_t, types::cache_type>{
+                              private dg::dense_hash_map::unordered_node_map<size_t, types::cache_type, uint16_t>{
         
         private:
             
@@ -3568,30 +3570,38 @@ namespace dg::heap::cache{
 
         public:
 
-            using _CacheObject      = jg::dense_hash_map<size_t, cache_type>;
+            using _CacheObject      = dg::dense_hash_map::unordered_node_map<size_t, types::cache_type, uint16_t>;
             using _ValConstUtility  = utility::ValConstUtility;
             
             StdCacheController(size_t capacity): _CacheObject(), 
                                                  NULL_ADDR(_ValConstUtility::null<cache_type>()),
                                                  capacity(capacity){
-                
-                assert(capacity != 0);
+
+                if (capacity > std::numeric_limits<uint16_t>::max()){
+                    throw std::invalid_argument("bad cache size");
+                }
+
+                if (capacity == 0u){
+                    throw std::invalid_argument("bad cache size");
+                }
+
+                // assert(capacity != 0);
                 _CacheObject::reserve(capacity);
             }
 
-            const cache_type& get(size_t key) const noexcept{
+            inline const cache_type& get(size_t key) const noexcept{
 
                 if (auto iter = _CacheObject::find(key); iter != _CacheObject::end()){
                     return iter->second;
                 }
-                
+
                 return NULL_ADDR; 
             }
 
-            void set(size_t key, const cache_type& val) noexcept{
+            inline void set(size_t key, const cache_type& val) noexcept{
                 
                 if (_CacheObject::size() == this->capacity){
-                    clear();
+                    _CacheObject::clear();
                 }
 
                 _CacheObject::insert_or_assign(key, val);
@@ -5025,7 +5035,7 @@ namespace dg::heap::resource{
                                 const std::integral_constant<size_t, BACKTRACK_HEIGHT> b_height,
                                 const ID id){
             
-            const uint16_t CACHE_CAPACITY = 1024u; 
+            const uint16_t CACHE_CAPACITY = 512u;
             
             types::Node * node_arr  = data.node_arr.first;
             datastructure::boolvector::StdVectorOperator bvec_arr(data.traceback_arr.first, data.traceback_arr.second); 

@@ -1,9 +1,31 @@
-#ifndef __DG_NETWORK_DATASTRUCTURE_H__
-#define __DG_NETWORK_DATASTRUCTURE_H__
+
+// Licensed under the MIT License <http://opensource.org/licenses/MIT>.
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2018-2021 Martin Ankerl <http://martin.ankerl.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#ifndef __DG_DENSE_HASH_MAP_H__
+#define __DG_DENSE_HASH_MAP_H__
 
 #include <stdint.h>
 #include <stdlib.h>
-#include "network_exception.h"
 #include <ratio>
 #include <memory>
 #include <bit>
@@ -13,437 +35,8 @@
 #include <memory>
 #include <stdexcept>
 #include <limits>
-#include "stdx.h"
 
-// #include "network_log.h"
-
-namespace dg::network_datastructure::cyclic_queue{
-
-    //this only works if the default state of T does not hold extra semantic meaning rather than a truely empty, meaningless representation
-    //std::vector<> actually uses inplace construction to make sure that is not the case
-    //this is precisely the reason std::vector<> is not qualified for raw pointer arithmetic operation
-    //because it is not constructed by using new[] contiguous memory operation
-    //we are not doing that yet
-
-    template <class = void>
-    static inline constexpr bool FALSE_VAL = false;
- 
-    class pow2_cyclic_queue_index_getter_device{
-
-        private:
-
-            size_t off;
-            size_t cap;
-        
-        public:
-
-            constexpr pow2_cyclic_queue_index_getter_device() = default;
-            constexpr pow2_cyclic_queue_index_getter_device(size_t off, size_t cap) noexcept: off(off), cap(cap){}
-
-            constexpr auto operator()(size_t virtual_idx) const noexcept -> size_t{
-
-                return (this->off + virtual_idx) & (this->cap - 1u);
-            }
-    };
-
-    template <class BaseIterator>
-    class pow2_cyclic_queue_iterator{
-
-        private:
-
-            BaseIterator iter_head;
-            intmax_t virtual_idx;
-            pow2_cyclic_queue_index_getter_device index_getter;
-        
-        public:
-
-            using self              = pow2_cyclic_queue_iterator; 
-            using difference_type   = std::ptrdiff_t;
-            using value_type        = typename BaseIterator::value_type; 
-
-            template <class T = BaseIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
-            constexpr pow2_cyclic_queue_iterator(): iter_head(), 
-                                                    virtual_idx(), 
-                                                    index_getter(){}
-
-            constexpr pow2_cyclic_queue_iterator(BaseIterator iter_head,
-                                                 intmax_t virtual_idx,
-                                                 pow2_cyclic_queue_index_getter_device index_getter) noexcept(std::is_nothrow_move_constructible_v<BaseIterator>): iter_head(std::move(iter_head)),
-                                                                                                                                                                   virtual_idx(virtual_idx),
-                                                                                                                                                                   index_getter(index_getter){} 
-
-            constexpr auto operator ++() noexcept -> self&{
-
-                this->virtual_idx += 1;
-                return *this;
-            }
-
-            constexpr auto operator ++(int) noexcept -> self{
-
-                static_assert(std::is_nothrow_copy_constructible_v<self>);
-
-                self rs = *this;
-                this->virtual_idx += 1;
-                return rs;
-            }
-
-            constexpr auto operator --() noexcept -> self&{
-
-                this->virtual_idx -= 1;
-                return *this;
-            }
-
-            constexpr auto operator --(int) noexcept -> self{
-
-                static_assert(std::is_nothrow_copy_constructible_v<self>);
-
-                self rs = *this;
-                this->virtual_idx -= 1;
-                return rs;
-            }
-
-            constexpr auto operator +(difference_type off) const noexcept -> self{
-
-                return self(this->iter_head, this->virtual_idx + off, this->index_getter);
-            }
-
-            constexpr auto operator +=(difference_type off) noexcept -> self&{
-
-                this->virtual_idx += off;
-                return *this;
-            }
-
-            constexpr auto operator -(difference_type off) const noexcept -> self{
-
-                return self(this->iter_head, this->virtual_idx - off, this->index_getter);
-            }
-
-            constexpr auto operator -(const self& other) const noexcept -> difference_type{
-
-                return this->virtual_idx - other.virtual_idx;
-            }
-        
-            constexpr auto operator -=(difference_type off) noexcept -> self&{
-
-                this->virtual_idx -= off;
-                return *this;
-            }
-
-            constexpr auto operator ==(const self& other) const noexcept -> bool{
-
-                return (this->iter_head == other.iter_head) && (this->virtual_idx == other.virtual_idx);
-            }
-
-            constexpr auto operator !=(const self& other) const noexcept -> bool{
-
-                return (this->iter_head != other.iter_head) || (this->virtual_idx != other.virtual_idx);
-            }
-
-            constexpr auto operator *() const noexcept -> decltype(auto){
-
-                size_t actual_idx = this->index_getter(stdx::wrap_safe_integer_cast(this->virtual_idx));
-                return std::next(this->iter_head, actual_idx).operator *();
-            }
-
-            constexpr auto operator ->() const noexcept -> decltype(auto){
-
-                size_t actual_idx = this->index_getter(stdx::wrap_safe_integer_cast(this->virtual_idx));
-                return std::next(this->iter_head, actual_idx).operator ->();
-            }
-    };
-
-    template <class T, class Allocator = std::allocator<T>>
-    class pow2_cyclic_queue{
-
-        private:
-
-            std::vector<T, Allocator> data_arr;
-            size_t off;
-            size_t sz;
-            size_t cap;
-
-            using self              = pow2_cyclic_queue;
-
-        public:
-
-            using value_type        = T;
-            using iterator          = pow2_cyclic_queue_iterator<typename std::vector<T, Allocator>::iterator>;
-            using const_iterator    = pow2_cyclic_queue_iterator<typename std::vector<T, Allocator>::const_iterator>;
-            using size_type         = std::size_t;
-
-            static inline constexpr size_t DEFAULT_POW2_EXPONENT = 10u; 
-
-            pow2_cyclic_queue(): pow2_cyclic_queue(DEFAULT_POW2_EXPONENT){}
-
-            pow2_cyclic_queue(size_t pow2_exponent): data_arr(size_t{1} << pow2_exponent),
-                                                     off(0u),
-                                                     sz(0u),
-                                                     cap(size_t{1} << pow2_exponent){}
-
-            constexpr auto front() const noexcept -> const T&{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr = this->to_index(0u);
-                return this->data_arr[ptr];
-            }
-
-            constexpr auto front() noexcept -> T&{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr = this->to_index(0u);
-                return this->data_arr[ptr];
-            }
-
-            constexpr auto back() const noexcept -> const T&{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr = this->to_index(this->sz - 1u);
-                return this->data_arr[ptr];
-            }
-
-            constexpr auto back() noexcept -> T&{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr = this->to_index(this->sz - 1u);
-                return this->data_arr[ptr];
-            }
-
-            constexpr auto empty() const noexcept -> bool{
-
-                return this->sz == 0u;                
-            }
-
-            constexpr auto begin() const noexcept -> const_iterator{
-
-                return const_iterator(this->data_arr.begin(), 0u, this->get_index_getter_device());
-            }
-
-            constexpr auto end() const noexcept -> const_iterator{
-
-                return const_iterator(this->data_arr.begin(), this->sz, this->get_index_getter_device());
-            }
-
-            constexpr auto begin() noexcept -> iterator{
-                
-                return iterator(this->data_arr.begin(), 0u, this->get_index_getter_device());
-            }
-
-            constexpr auto end() noexcept -> iterator{
-
-                return iterator(this->data_arr.begin(), this->sz, this->get_index_getter_device());
-            }
-
-            constexpr auto size() const noexcept -> size_t{
-
-                return this->sz;
-            }
-
-            constexpr auto capacity() const noexcept -> size_t{
-
-                return this->cap;
-            }
-
-            constexpr auto operator[](size_t idx) const noexcept -> const T&{
-
-                return this->data_arr[this->to_index(idx)];
-            }
-
-            constexpr auto operator[](size_t idx) noexcept -> T&{
-
-                return this->data_arr[this->to_index(idx)];
-            }
-
-            constexpr auto at(size_t idx) const noexcept -> const T&{
-
-                return (*this)[idx];
-            }
-
-            constexpr auto at(size_t idx) noexcept -> T&{
-
-                return (*this)[idx];
-            }
-
-            constexpr auto resize(size_t new_sz) noexcept -> exception_t{
-
-                if (new_sz > this->cap){
-                    return dg::network_exception::RESOURCE_EXHAUSTION;
-                }
-
-                if (new_sz >= this->sz){
-                    this->sz = new_sz;
-                    return dg::network_exception::SUCCESS;
-                }
-
-                this->defaultize_range(new_sz, this->sz - new_sz);
-                this->sz = new_sz;
-
-                return dg::network_exception::SUCCESS;
-            }
-
-            template <class ValueLike>
-            constexpr auto push_back(ValueLike&& value) noexcept -> exception_t{
-
-                if (this->sz == this->cap){
-                    return dg::network_exception::QUEUE_FULL;
-                }
-
-                size_t ptr = this->to_index(this->sz);
-
-                if constexpr(std::is_nothrow_assignable_v<T&, ValueLike&&>){
-                    this->data_arr[ptr] = std::forward<ValueLike>(value);
-                    this->sz            += 1u;
-                    return dg::network_exception::SUCCESS; 
-                } else{
-                    try{
-                        this->data_arr[ptr] = std::forward<ValueLike>(value);
-                        this->sz            += 1u;
-                        return dg::network_exception::SUCCESS;
-                    } catch (...){
-                        return dg::network_exception::wrap_std_exception(std::current_exception());
-                    }
-                }
-            }
-
-            constexpr void pop_front() noexcept{
-
-                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr          = this->to_index(0u);
-                this->data_arr[ptr] = T{};
-                this->off           += 1u;
-                this->sz            -= 1u;
-            }
- 
-            constexpr void pop_back() noexcept{
-
-                static_assert(std::is_nothrow_default_constructible_v<T> && std::is_nothrow_assignable_v<T&, T&&>);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (this->sz == 0u){
-                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t ptr          = this->to_index(this->sz - 1u);
-                this->data_arr[ptr] = T{};
-                this->sz            -= 1u;
-            } 
-
-            constexpr void erase_front_range(size_t sz) noexcept{
-                
-                for (size_t i = 0u; i < sz; ++i){
-                    pop_front();
-                }
-            }
-
-            constexpr void erase_back_range(size_t sz) noexcept{
-
-                for (size_t i = 0u; i < sz; ++i){
-                    pop_back();
-                }
-            }
-
-            constexpr auto operator ==(const self& other) const noexcept -> bool{
-
-                return std::equal(this->begin(), this->end(), other.begin(), other.end());
-            }
-
-        private:
-
-            constexpr auto to_index(size_t virtual_offset) const noexcept -> size_t{
-
-                return (this->off + virtual_offset) & (this->cap - 1u);
-            }
-
-            constexpr auto get_index_getter_device() const noexcept -> pow2_cyclic_queue_index_getter_device{
-
-                return pow2_cyclic_queue_index_getter_device(this->off, this->cap);
-            }
-
-            constexpr void defaultize_range(size_t virtual_idx, size_t sz) noexcept{
-
-                static_assert(std::is_nothrow_default_constructible_v<T>);
-
-                auto fill_task = [&, this]<class T1>(T1) noexcept{
-                    size_t first                        = this->to_index(virtual_idx);
-                    size_t last                         = first + sz;
-                    size_t eoq_last                     = std::min(this->cap, last); 
-                    const size_t wrapped_around_first   = 0u;
-                    size_t wrapped_around_last          = last - eoq_last;
-
-                    std::fill(std::next(this->data_arr.begin(), first), std::next(this->data_arr.begin(), eoq_last), T{});
-                    std::fill(std::next(this->data_arr.begin(), wrapped_around_first), std::next(this->data_arr.begin(), wrapped_around_last), T{});
-                };
-
-                if constexpr(std::is_trivial_v<T>){
-                    fill_task(int{});
-                } else{
-                    if constexpr(std::is_assignable_v<T&, const T&>){
-                        if constexpr(std::is_nothrow_assignable_v<T&, const T&>){
-                            fill_task(int{});
-                        } else{
-                            if constexpr(std::is_assignable_v<T&, T&&>){
-                                if constexpr(std::is_nothrow_assignable_v<T&, T&&>){
-                                    for (size_t i = 0u; i < sz; ++i){
-                                        this->operator[](virtual_idx + i) = T{};
-                                    }
-                                } else{
-                                    static_assert(FALSE_VAL<>);
-                                }
-                            } else{
-                                static_assert(FALSE_VAL<>);
-                            }
-                        }
-                    } else if constexpr(std::is_assignable_v<T&, T&&>){
-                        if constexpr(std::is_nothrow_assignable_v<T&, T&&>){
-                            for (size_t i = 0u; i < sz; ++i){
-                                this->operator[](virtual_idx + i) = T{};
-                            }      
-                        } else{
-                            static_assert(FALSE_VAL<>);
-                        }                  
-                    } else{
-                        static_assert(FALSE_VAL<>);
-                    }
-                }
-
-            }
-    };
-}
-
-namespace dg::network_datastructure::unordered_map_variants{
+namespace dg::dense_hash_map{
 
     template <class = void>
     static inline constexpr bool FALSE_VAL = false;
@@ -492,7 +85,7 @@ namespace dg::network_datastructure::unordered_map_variants{
         if (val < 2u) [[unlikely]]{
             return 1u;
         } else [[likely]]{
-            T uplog_value = unordered_map_variants::ulog2(static_cast<T>(val - 1u)) + 1u;
+            T uplog_value = dg::dense_hash_map::ulog2(static_cast<T>(val - 1u)) + 1u;
             return T{1u} << uplog_value;
         }
     }
@@ -762,7 +355,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                   const Hasher _hasher = Hasher(),
                                                   const Pred& pred = Pred(),
                                                   const Allocator& allocator = Allocator()): virtual_storage_vec(allocator),
-                                                                                             bucket_vec(std::max(self::min_capacity(), static_cast<size_type>(unordered_map_variants::ceil2(bucket_count))), self::NULL_VIRTUAL_ADDR, allocator),
+                                                                                             bucket_vec(std::max(self::min_capacity(), static_cast<size_type>(dg::dense_hash_map::ceil2(bucket_count))), self::NULL_VIRTUAL_ADDR, allocator),
                                                                                              _hasher(_hasher),
                                                                                              pred(pred),
                                                                                              allocator(allocator){
@@ -817,7 +410,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     return;
                 }
 
-                size_t new_bucket_cap               = std::max(self::min_capacity(), static_cast<size_type>(unordered_map_variants::ceil2(tentative_new_cap)));
+                size_t new_bucket_cap               = std::max(self::min_capacity(), static_cast<size_type>(dg::dense_hash_map::ceil2(tentative_new_cap)));
 
                 if (new_bucket_cap > self::max_capacity()){
                     throw std::length_error("bad unordered_node_map capacity");
@@ -866,7 +459,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(unordered_map_variants::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<Args>(args)...), NULL_VIRTUAL_ADDR));
+                return this->internal_insert(dg::dense_hash_map::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<Args>(args)...), NULL_VIRTUAL_ADDR));
             }
 
             template <class ...Args>
@@ -878,7 +471,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ValueLike = std::pair<const Key, Mapped>>
             constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                return this->internal_insert(unordered_map_variants::node_initialize<node_t>(key_type(dg_forward_like<ValueLike>(value.first)), mapped_type(dg_forward_like<ValueLike>(value.second)), NULL_VIRTUAL_ADDR));
+                return this->internal_insert(dg::dense_hash_map::node_initialize<node_t>(key_type(dg_forward_like<ValueLike>(value.first)), mapped_type(dg_forward_like<ValueLike>(value.second)), NULL_VIRTUAL_ADDR));
             }
 
             template <class Iterator>
@@ -902,7 +495,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike, class MappedLike>
             constexpr auto insert_or_assign(KeyLike&& key, MappedLike&& mapped) -> std::pair<iterator, bool>{
 
-                return this->internal_insert_or_assign(unordered_map_variants::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<MappedLike>(mapped)), NULL_VIRTUAL_ADDR));
+                return this->internal_insert_or_assign(dg::dense_hash_map::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<MappedLike>(mapped)), NULL_VIRTUAL_ADDR));
             }
 
             template <class KeyLike>
@@ -1283,14 +876,14 @@ namespace dg::network_datastructure::unordered_map_variants{
 namespace std{
 
     template <class ...Args>
-    constexpr void swap(dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& lhs,
-                        dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& rhs) noexcept(noexcept(std::declval<dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>&>().swap(std::declval<dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>&>()))){
+    constexpr void swap(dg::dense_hash_map::unordered_node_map<Args...>& lhs,
+                        dg::dense_hash_map::unordered_node_map<Args...>& rhs) noexcept(noexcept(std::declval<dg::dense_hash_map::unordered_node_map<Args...>&>().swap(std::declval<dg::dense_hash_map::unordered_node_map<Args...>&>()))){
 
         lhs.swap(rhs);
     }
 
     template <class ...Args, class Pred>
-    constexpr void erase_if(dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& umap,
+    constexpr void erase_if(dg::dense_hash_map::unordered_node_map<Args...>& umap,
                             Pred pred){
 
         //a reverse erase_if is better cache_wise speaking
@@ -1305,34 +898,6 @@ namespace std{
             }
         }
     }
-}
-
-namespace dg::network_datastructure::unordered_set_variants{
-
-    //alright let's write this
-    //its complex to write unordered_set
-    //this is an entire different radix of things, yet I think unordered_set would be a lot better if we are to do flat_hash_set + virtual_storage, because it has always been the way to do things
-    //if the set reaches a half-cap, we are to construct a new container to move things over
-    //we'll halt the implementation for now, because there is not a performance guide
-
-    // template <class key_t, class virtual_addr_t>
-    // struct Node{
-    //     key_t first;
-    //     virtual_addr_t nxt_addr;
-    // };
-
-    // template <class Key, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class KeyEqual = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
-    // class unordered_node_set{
-
-    //     private:
-
-    //         std::vector<Node<Key, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, VirtualAddrType>>> virtual_storage_vec;
-    //         std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::typename rebind_alloc<Node<Key, VirtualAddrType>>> bucket_vec;
-
-    //     public:
-
-
-    // };
 }
 
 #endif
