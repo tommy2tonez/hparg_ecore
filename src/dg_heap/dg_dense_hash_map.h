@@ -136,6 +136,9 @@ namespace dg::dense_hash_map{
     //by builiding a radix tree, or delvrsrv of hash_table
     //as long as 64KB hash_table maps to a 16KB worth of random key findings, we are in a good place   
 
+    //I know brother, we'll build a quant computing trading platform later
+    //I just want to linger writing these 
+
     template <class key_t, class mapped_t, class virtual_addr_t>
     struct Node_1{
         key_t first;

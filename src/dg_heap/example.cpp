@@ -199,6 +199,9 @@ int main(){
 
     using namespace std::chrono;
 
+    //I feel lazy today
+    //I'll be back to implement this allocator correctly
+
     constexpr size_t HEIGHT         = 12;
     constexpr size_t BASE_LENGTH    = size_t{1} << (HEIGHT - 1);
 

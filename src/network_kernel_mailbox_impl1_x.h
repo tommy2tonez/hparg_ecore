@@ -512,6 +512,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //assume that there are more than one forward tile on the memregion:
         //- only statistic calibration can give you the answer
 
+    //alright, I was thinking about delvrsrv + hash_table injection
+    //it's a radix of radix sort + distributed hash_table invoke
+    //we want to fit the hash table -> 64KB of cache memory before we load/ read the table(s) in batches
+
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
 
     static inline constexpr size_t MAX_STREAM_SIZE                          = size_t{1} << 25;
@@ -688,6 +692,250 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    //we dont have time to do compile-time measurements for move throw copy throw etc, it's implementation defined, this is why this component is internalized for internal usages
+    //alright, these temporal finite unordered_map + switching_foot_bloom_filter dont have to be accurate, because we guarantee NO LEAK in the worst case scenerios of things falling thru 
+
+    template <class Key, class Value>
+    class temporal_finite_unordered_map{
+
+        private:
+
+            dg::unordered_unstable_map<Key, Value> map_container;
+            dg::pow2_cyclic_queue<std::pair<Key, Value>> cyclic_queue;
+
+        public:
+
+            temporal_finite_unordered_map(size_t tentative_cap){
+
+                size_t upcap            = stdx::ceil2(tentative_cap);
+                size_t pow2_exponent    = stdx::ulog2(upcap);
+                this->map_container.reserve(upcap);
+                this->cyclic_queue      = dg::pow2_cyclic_queue<std::pair<Key, Value>>(pow2_exponent);
+            }
+
+            template <class KeyLike>
+            constexpr auto find(const KeyLike& keylike) noexcept{
+
+                return this->map_container.find(keylike);
+            }
+
+            template <class KeyLike>
+            constexpr auto find(const KeyLike& keylike) const noexcept{
+
+                return this->map_container.find(keylike);
+            }
+
+            constexpr auto begin() noexcept{
+
+                return this->map_container.begin();
+            }
+
+            constexpr auto begin() const noexcept{
+
+                return this->map_container.begin();
+            }
+
+            constexpr auto end() noexcept{
+                
+                return this->map_container.end();
+            }
+
+            constexpr auto end() const noexcept{
+
+                return this->map_container.end();
+            }
+
+            template <class ...Args>
+            constexpr auto emplace(Args&& ...args) noexcept{
+
+                if (this->cyclic_queue.size() == this->cyclic_queue.capacity()) [[unlikely]]{
+                    this->cut_half();
+                }
+
+                std::pair<const Key, Value> kv_pair(std::forward<Args>(args)...);
+
+                auto rs = this->map_container.insert(kv_pair);
+                dg::network_exception_handler::nothrow_log(this->cyclic_queue.push_back(std::move(kv_pair)));
+
+                return rs;
+            }
+
+            template <class KeyArg, class ...Args>
+            constexpr auto try_emplace(KeyArg&& key, Args&&... value_args) noexcept{
+
+                if (this->cyclic_queue.size() == this->cyclic_queue.capacity()) [[unlikely]]{
+                    this->cut_half();
+                }
+
+                std::pair<const Key, Value> kv_pair(std::piecewise_construct,
+                                                    std::forward<KeyArg>(key),
+                                                    std::forward<Args>(value_args)...);
+
+                auto rs = this->map_container.insert(kv_pair);
+                dg::network_exception_handler::nothrow_log(this->cyclic_queue.push_back(std::move(kv_pair)));
+
+                return rs;
+            }
+
+        private:
+
+            void cut_half() noexcept{
+
+                size_t half_sz      = this->cyclic_queue.size() >> 1;
+                size_t removable_sz = std::min(static_cast<size_t>(this->cyclic_queue.size()), half_sz);
+
+                this->cyclic_queue.remove_front_range(removable_sz);
+                this->map_container.clear();
+
+                for (size_t i = 0u; i < this->cyclic_queue.size(); ++i){
+                    this->map_container.insert(this->cyclic_queue[i]);
+                } 
+            }
+    };
+
+    //we need to research our way through this
+    //distributed_hash_set by using radix tree
+    //done
+    //simd membership cmp
+    //done
+    //population extraction
+    //done
+    //we are not awared of other options
+
+    template <class Key>
+    class bloom_filter{
+
+        private:
+
+            dg::vector<bool> bloom_table;
+            dg::vector<uint32_t> murmur_hash_secret_vec;
+            size_t sz;
+
+        public:
+
+            bloom_filter(size_t bloom_table_tentative_cap, size_t rehash_sz){
+
+                if (rehash_sz == 0u){
+                    throw std::invalid_argument("bad bloom_filter constructor's arguments");
+                }
+
+                size_t upcap    = stdx::ceil2(bloom_table_tentative_cap);
+                auto rand_gen   = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+                this->sz        = 0u; 
+
+                this->bloom_table.resize(upcap, false);
+                this->murmur_hash_secret_vec.resize(rehash_sz);
+
+                std::generate(this->murmur_hash_secret_vec.begin(), this->murmur_hash_secret_vec.end(), rand_gen);
+            }
+
+            auto not_contains(const Key& key) const noexcept -> bool{ //bloom filter only works for not_contains, true negative, so the interface should be built on such, not not contains does not equal to contains, logically speaking it is, yet we are returning false if we cant determine the result
+
+                for (uint32_t secret: this->murmur_hash_secret_vec){
+                    size_t hashed_value = dg::network_hash::hash_reflectible(key, secret);
+
+                    if (!this->internal_numerical_key_search(hashed_value)){
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            void insert(const Key& key) noexcept{
+
+                for (uint32_t secret: this->murmur_hash_secret_vec){
+                    size_t hashed_value = dg::network_hash::hash_reflectible(key, secret);
+                    this->internal_numerical_key_insert(hashed_value);
+                }
+
+                this->sz += 1;
+            }
+
+            void clear() noexcept{
+
+                std::fill(this->bloom_table.begin(), this->bloom_table.end(), false);
+                this->sz = 0u;
+            }
+
+            auto size() const noexcept{
+
+                return this->sz;
+            }
+
+            auto capacity() const noexcept{
+
+                return this->bloom_table.size();
+            }
+        
+        private:
+
+            auto internal_numerical_key_search(size_t key) const noexcept -> bool{
+
+                size_t idx = key & (this->bloom_table.size() - 1u); 
+                return this->bloom_table[idx];
+            }
+
+            void internal_numerical_key_insert(size_t key) noexcept{
+
+                size_t idx = key & (this->bloom_table.size() - 1u);
+                this->bloom_table[idx] = true;
+            }
+    };
+
+    template <class Key>
+    class temporal_switching_bloom_filter{
+
+        private:
+
+            bloom_filter<Key> bloom_filter1;
+            bloom_filter<Key> bloom_filter2;
+            size_t switchfoot_sz;
+            size_t clearfoot_sz;
+            size_t footstep_sz;
+            bool foot;
+
+        public:
+
+            temporal_switching_bloom_filter(size_t cap, size_t rehash_sz, size_t reliability_decay): bloom_filter1(std::max(size_t{2}, cap), rehash_sz),
+                                                                                                     bloom_filter2(std::max(size_t{2}, cap), rehash_sz){
+
+                this->switchfoot_sz     = std::max(size_t{1}, this->bloom_filter1.capacity() >> reliability_decay);
+                this->clearfoot_sz      = switchfoot_sz  * 2u;
+                this->footstep_sz       = 0u;
+                this->foot              = true;
+            }
+
+            auto not_contains(const Key& key) const noexcept -> bool{
+
+                return this->bloom_filter1.not_contains(key) && this->bloom_filter2.not_contains(key);
+            }
+
+            void insert(const Key& key) noexcept{
+
+                if (this->bloom_filter1.size() + this->bloom_filter2.size() == this->clearfoot_sz){
+                    if (this->foot){
+                        this->bloom_filter2.clear();
+                    } else{
+                        this->bloom_filter1.clear();
+                    }
+                }
+
+                if (this->footstep_sz == this->switchfoot_sz){
+                    this->foot          = !this->foot;
+                    this->footstep_sz   = 0u;
+                }
+
+                if (this->foot){
+                    this->bloom_filter1.insert(key);
+                } else{
+                    this->bloom_filter2.insert(key);
+                }
+
+                this->footstep_sz += 1;
+            }
+    };
+
     //OK, this is too expensive, we have to increase the <incrementing_id> -> __uint128_t to chance better than RAM, whenever we have a question about random accuracy, we need to know whether it chances better than RAM or not
     class PacketIDGenerator: public virtual PacketIDGeneratorInterface{
 
@@ -738,14 +986,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map;
+            temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map;
             const std::chrono::nanoseconds abs_timeout_dur;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
 
         public:
 
-            TemporalAbsoluteTimeoutInBoundGate(data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map,
+            TemporalAbsoluteTimeoutInBoundGate(temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map,
                                                std::chrono::nanoseconds abs_timeout_dur,
                                                std::unique_ptr<std::mutex> mtx,
                                                stdx::hdi_container<size_t> thru_sz_per_load) noexcept: abstimeout_map(std::move(abstimeout_map)),
@@ -887,13 +1135,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            data_structure::temporal_finite_unordered_set<GlobalIdentifier> blacklist_set;
+            temporal_switching_bloom_filter<GlobalIdentifier> blacklist_set;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
-        
+
         public:
 
-            TemporalBlackListGate(data_structure::temporal_finite_unordered_set<GlobalIdentifier> blacklist_set,
+            TemporalBlackListGate(temporal_switching_bloom_filter<GlobalIdentifier> blacklist_set,
                                   std::unique_ptr<std::mutex> mtx,
                                   stdx::hdi_container<size_t> thru_sz_per_load) noexcept: blacklist_set(std::move(blacklist_set)),
                                                                                           mtx(std::move(mtx)),
@@ -904,10 +1152,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (this->blacklist_set.contains(global_id_arr[i])){
-                        exception_arr[i] = dg::network_exception::SOCKET_STREAM_BLACKLISTED;
-                    } else{
+                    if (this->blacklist_set.not_contains(global_id_arr[i])){
                         exception_arr[i] = dg::network_exception::SUCCESS;
+                    } else{
+                        exception_arr[i] = dg::network_exception::SOCKET_STREAM_MIGHT_BE_BLACKLISTED;
                     }
                 }
             }
@@ -1093,7 +1341,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             auto packetize(dg::string&& buf) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t>{
 
                 if (buf.size() > MAX_STREAM_SIZE){
-                    return std::unexpected(dg::network_exception::SOCKET_BAD_BUFFER_LENGTH);
+                    return std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_BUFFER_LENGTH);
                 }
 
                 size_t segment_even_sz  = buf.size() / this->segment_byte_sz;
@@ -1101,7 +1349,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 size_t segment_sz       = segment_even_sz + segment_odd_sz;
 
                 if (segment_sz > MAX_SEGMENT_SIZE){
-                    return std::unexpected(dg::network_exception::SOCKET_BAD_BUFFER_LENGTH);
+                    return std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_BUFFER_LENGTH);
                 }
 
                 std::expected<dg::vector<PacketSegment>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<PacketSegment>>(std::max(size_t{1}, segment_sz));
@@ -1830,7 +2078,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 std::copy(buffer_arr, std::next(buffer_arr, app_sz), std::next(this->buffer_vec.begin(), old_sz));
                 std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::SOCKET_QUEUE_FULL);
+                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
             }
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
@@ -1880,15 +2128,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto task = [&, this]() noexcept{
                     this->base->push(std::make_move_iterator(buffer_arr_first), sliding_window_sz, exception_arr_first);
 
-                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
+                    size_t waiting_sz                   = std::count(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
                     exception_t err                     = this->exhaustion_controller->update_waiting_size(waiting_sz);
 
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     }
 
-                    exception_t * retriable_arr_first   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::SOCKET_QUEUE_FULL);
-                    exception_t * retriable_arr_last    = std::find_if(retriable_arr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::SOCKET_QUEUE_FULL;});
+                    exception_t * retriable_arr_first   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    exception_t * retriable_arr_last    = std::find_if(retriable_arr_first, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
 
                     size_t relative_offset              = std::distance(exception_arr_first, retriable_arr_first);
                     sliding_window_sz                   = std::distance(retriable_arr_first, retriable_arr_last);
@@ -2438,7 +2686,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             size_t tentative_max_consume_sz = map_capacity >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz); 
-            auto abstimeout_map             = data_structure::temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>>(map_capacity); 
+            auto abstimeout_map             = temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>>(map_capacity); 
 
             return std::make_unique<TemporalAbsoluteTimeoutInBoundGate>(std::move(abstimeout_map),
                                                                         abs_timeout_dur,
@@ -2480,6 +2728,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         static auto get_temporal_blacklist_gate(size_t set_cap,
+                                                size_t rehash_sz,
+                                                size_t reliability_decay_factor,
                                                 size_t max_consume_decay_factor = 2u) -> std::unique_ptr<BlackListGateInterfaces>{
             
             const size_t MIN_SET_CAP    = size_t{1};
@@ -2489,7 +2739,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            auto blacklist_set              = data_structure::temporal_finite_unordered_set<GlobalIdentifier>(set_cap);
+            auto blacklist_set              = temporal_switching_bloom_filter<GlobalIdentifier>(set_cap, rehash_sz, reliability_decay_factor);
             size_t tentative_max_consume_sz = set_cap >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz); 
 
@@ -2867,7 +3117,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t gate_controller_ato_keyvalue_feed_cap;
 
         uint32_t gate_controller_blklst_component_sz;
-        uint32_t gate_controller_blklst_map_capacity;
+        uint32_t gate_controller_blklst_bloomfilter_cap;
+        uint32_t gate_controller_blklst_bloomfilter_rehash_sz;
+        uint32_t gate_controller_blklst_bloomfilter_reliability_decay_factor;
         uint32_t gate_controller_blklst_keyvalue_feed_cap; 
         
         uint32_t packet_segment_sz;
@@ -2902,16 +3154,36 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
     };
 
-    auto spawn(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+    struct ConfigMaker{
 
-        // std::unique_ptr<InBoundContainerInterface> inbound_container        = Factory::spawn_exhaustion_controlled_inbound_container(config.infretry_device, config.inbound_container_capacity);
-        // std::unique_ptr<PacketAssemblerInterface> packet_assembler          = Factory::spawn_exhaustion_controlled_packet_assembler(config.infretry_device, config.packet_assembler_capacity);
-        // std::unique_ptr<EntranceControllerInterface> entrance_controller    = Factory::spawn_entrance_controller(config.packet_expiry);
-        // std::unique_ptr<PacketizerInterface> packetizer                     = Factory::spawn_packetizer(config.segment_byte_sz, config.factory_addr);
-        
-        // return Factory::spawn_mailbox_streamx(std::move(config.base), std::move(inbound_container), std::move(packet_assembler), 
-        //                                       std::move(entrance_controller), std::move(packetizer), config.inbound_worker_count, 
-        //                                       config.expiry_worker_count);
+        static auto make_ato_gate_controller(){
+
+        }
+
+        static auto make_blklst_gate_controller(){
+
+        }
+
+        static auto make_packet_assembler(){
+
+        }
+
+        static auto make_inbound_container(){
+
+        }
+
+        static auto make_latency_controller(){
+
+        }
+
+        static auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+
+        }
+    };
+
+    extern auto spawn(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+
+        return ConfigMaker::spawn(config);
     }
 }
 
