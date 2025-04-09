@@ -209,14 +209,14 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         private:
 
             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
-            std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
             std::shared_ptr<MeterInterface> send_meter;
             std::shared_ptr<MeterInterface> recv_meter;
         
         public:
 
             MeteredMailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec, 
-                           std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                           std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
                            std::shared_ptr<MeterInterface> send_meter,
                            std::shared_ptr<MeterInterface> recv_meter): daemon_vec(std::move(daemon_vec)),
                                                                         base(std::move(base)),
@@ -346,7 +346,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         }
 
         static auto get_metered_mailbox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
-                                        std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                                        std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
                                         std::shared_ptr<MeterInterface> send_meter,
                                         std::shared_ptr<MeterInterface> recv_meter) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface>{
 
@@ -374,7 +374,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
     };
 
     struct Config{
-        std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+        std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
         size_t concurrent_recv_meter_sz;
         size_t concurrent_send_meter_sz;
         std::string device_id;
@@ -386,7 +386,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
         
         private:
 
-            static auto make_recv_meter(Config& config) -> std::unique_ptr<MeterInterface>{
+            static auto make_recv_meter(Config config) -> std::unique_ptr<MeterInterface>{
                 
                 if (config.concurrent_recv_meter_sz == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -399,7 +399,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 return ComponentFactory::get_distributed_meter(config.concurrent_recv_meter_sz);
             }
 
-            static auto make_send_meter(Config& config) -> std::unique_ptr<MeterInterface>{
+            static auto make_send_meter(Config config) -> std::unique_ptr<MeterInterface>{
 
                 if (config.concurrent_send_meter_sz == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -412,7 +412,7 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
                 return ComponentFactory::get_distributed_meter(config.concurrent_send_meter_sz);
             }
 
-            static auto make_workers(Config& config, 
+            static auto make_workers(Config config, 
                                      std::shared_ptr<MeterInterface> send_meter, 
                                      std::shared_ptr<MeterInterface> recv_meter) -> std::vector<dg::network_concurrency::daemon_raii_handle_t>{
 
@@ -975,7 +975,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 GlobalIdentifier id = {};
                 id.addr             = this->factory_addr;
-                id.local_id         = std::make_pair(dg::network_randomizer::randomize_int<uint64_t>(), dg::network_randomizer::randomize_int<uint64_t>());
+                id.local_id         = std::make_pair(dg::network_randomizer::randomize_int<uint64_t>(), dg::network_randomizer::randomize_int<uint64_t>()); //increase locality of packet_id to help with the memory pattern (maybe or maybe not)
 
                 return id;
             }
@@ -2618,7 +2618,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             struct InternalFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<Address, PacketSegment>{
 
-                dg::network_kernel_mailbox_impl1::core::MailBoxInterface * dst;
+                dg::network_kernel_mailbox_impl1::core::MailboxInterface * dst;
 
                 void push(const Address& to, std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
 
@@ -2654,7 +2654,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     };
 
-    struct Factory{
+    struct ComponentFactory{
 
         static auto get_incremental_packet_id_generator(Address factory_addr) -> std::unique_ptr<PacketIDGeneratorInterface>{
 
@@ -3110,6 +3110,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     struct Config{
         Address factory_addr;
+        uint32_t packet_segment_sz;
 
         uint32_t gate_controller_ato_component_sz;
         uint32_t gate_controller_ato_map_capacity;
@@ -3122,8 +3123,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t gate_controller_blklst_bloomfilter_reliability_decay_factor;
         uint32_t gate_controller_blklst_keyvalue_feed_cap; 
         
-        uint32_t packet_segment_sz;
-
         uint32_t latency_controller_component_sz;
         uint32_t latency_controller_queue_cap;
         uint32_t latency_controller_unique_id_cap;
@@ -3151,34 +3150,194 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         size_t inbound_worker_count;
 
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device;
-        std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+        std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base; //alright people might not like std::unique_ptr<> for throwing reasons, yet it is practice of extensibility to make this std::unique<>, we have to break practice for now
     };
+
+    //building component bridges were deemed impossible in the 1990s and 2000s 
+    //even now, practices of building bridges have been lost
+    //alright, yall can argue that why dont you static the component, make it global and reference it to avoid bridges (like std::malloc or std::free), its under-the-hood is shared_ptr injection
+    //this is probably one of the major things in comp sci
+    //we are very proud of our flash_streamx protocol
+    //there's still cross-the-t-dot-the-i issues like latency + kernel rescue + low consumption issues, we'll attempt to pad empty requests (because that's the maintainable way) 
 
     struct ConfigMaker{
 
-        static auto make_ato_gate_controller(){
+        private:
 
-        }
+            static auto make_packetizer(Config config) -> std::unique_ptr<PacketizerInterface>{
 
-        static auto make_blklst_gate_controller(){
+                return ComponentFactory::get_packetizer(config.factory_addr, config.packet_segment_sz);
+            }
 
-        }
+            static auto make_ato_gate_controller(Config config) -> std::unique_ptr<InBoundGateInterface>{
+                
+                if (config.gate_controller_ato_component_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
 
-        static auto make_packet_assembler(){
+                if (config.gate_controller_ato_component_sz == 1u){
+                    return ComponentFactory::get_temporal_absolute_timeout_inbound_gate(config.gate_controller_ato_map_capacity, 
+                                                                                        config.gate_controller_ato_dur);
+                }
 
-        }
+                std::vector<std::unique_ptr<InBoundGateInterface>> inbound_gate_vec{};
 
-        static auto make_inbound_container(){
+                for (size_t i = 0u; i < config.gate_controller_ato_component_sz; ++i){
+                    inbound_gate_vec.push_back(ComponentFactory::get_temporal_absolute_timeout_inbound_gate(config.gate_controller_ato_map_capacity,
+                                                                                                            config.gate_controller_ato_dur));
+                }
 
-        }
+                return ComponentFactory::get_random_hash_distributed_inbound_gate(std::move(inbound_gate_vec), config.gate_controller_ato_keyvalue_feed_cap);
+            }
 
-        static auto make_latency_controller(){
+            static auto make_blklst_gate_controller(Config config) -> std::unique_ptr<BlackListGateInterface>{
 
-        }
+                if (config.gate_controller_blklst_component_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
 
-        static auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+                if (config.gate_controller_blklst_component_sz == 1u){
+                    return ComponentFactory::get_temporal_blacklist_gate(config.gate_controller_blklst_bloomfilter_cap,
+                                                                         config.gate_controller_blklst_bloomfilter_rehash_sz,
+                                                                         config.gate_controller_blklst_bloomfilter_reliability_decay_factor);
+                }
 
-        }
+                std::vector<std::unique_ptr<BlackListGateInterface>> blklst_gate_vec{};
+
+                for (size_t i = 0u; i < config.gate_controller_blklst_component_sz; ++i){
+                    blklst_gate_vec.push_back(ComponentFactory::get_temporal_blacklist_gate(config.gate_controller_blklst_bloomfilter_cap,
+                                                                                            config.gate_controller_blklst_bloomfilter_rehash_sz,
+                                                                                            config.gate_controller_blklst_bloomfilter_reliability_decay_factor));
+                }
+
+                return ComponentFactory::get_random_hash_distributed_blacklist_gate(std::move(blklst_gate_vec), config.gate_controller_blklst_keyvalue_feed_cap);
+            }
+
+            static auto make_packet_assembler(Config config) -> std::unique_ptr<PacketAssemblerInterface>{
+
+                if (config.packet_assembler_component_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.packet_assembler_component_sz == 1u){
+                    return ComponentFactory::get_packet_assembler(config.packet_assembler_map_cap,
+                                                                  config.packet_assembler_global_segment_cap,
+                                                                  config.packet_assembler_max_segment_per_stream);   
+                }
+
+                std::vector<std::unique_ptr<PacketAssemblerInterface>> pktasmblr_vec{};
+
+                for (size_t i = 0u; i < config.packet_assembler_component_sz; ++i){
+                    pktasmblr_vec.push_back(ComponentFactory::get_packet_assembler(config.packet_assembler_map_cap,
+                                                                                   config.packet_assembler_global_segment_cap,
+                                                                                   config.packet_assembler_max_segment_per_stream));
+                }
+
+                return ComponentFactory::get_random_hash_distributed_packet_assembler(std::move(pktasmblr_vec), config.packet_assembler_keyvalue_feed_cap);
+            }
+
+            static auto make_inbound_container(Config config) -> std::unique_ptr<InBoundContainerInterface>{
+
+                if (config.inbound_container_component_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.inbound_container_has_exhaustion_control){
+                    if (config.inbound_container_has_react_pattern){
+                        if (config.inbound_container_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    } else{
+                        if (config.inbound_container_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    }
+                } else{
+                    if (config.inbound_container.has_react_pattern){
+                        if (config.inbound_container_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    } else{
+                        if (config.inbound_container_component_sz == 1u){
+
+                        } else{
+                            
+                        }
+                    }
+                }
+            }
+
+            static auto make_latency_controller(Config config) -> std::unique_ptr<EntranceControllerInterface>{
+
+                if (config.latency_controller_component_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (config.latency_controller_has_exhaustion_control){
+                    if (config.latency_controller_has_react_pattern){
+                        if (config.latency_controller_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    } else{
+                        if (config.latency_controller_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    }
+                } else{
+                    if (config.latency_controller_has_react_pattern){
+                        if (config.latency_controller_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    } else{
+                        if (config.latency_controller_component_sz == 1u){
+
+                        } else{
+
+                        }
+                    }
+                }
+            }
+
+            static auto make_mailbox_x(std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                                       std::unique_ptr<PacketInterface> packetizer,
+                                       std::unique_ptr<InBoundGateInterface> inbound_gate,
+                                       std::unique_ptr<BlackListGateInterface> blacklist_gate,
+                                       std::unique_ptr<PacketAssemblerInterface> packet_assembler,
+                                       std::unique_ptr<InBoundContainerInterface> inbound_container,
+                                       std::unique_ptr<EntranceControllerInterface> entrance_controller,
+                                       size_t expiry_worker_count,
+                                       size_t inbound_worker_count,
+                                       std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) -> std::unique_ptr<MailboxInterface>{
+
+            }
+
+        public:
+
+            static auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+
+                return make_mailbox_x(config.base,
+                                      make_packetizer(config),
+                                      make_ato_gate_controller(config),
+                                      make_blklst_gate_controller(config),
+                                      make_packet_assembler(config),
+                                      make_inbound_container(config),
+                                      make_latency_controller(config),
+                                      config.expiry_worker_count,
+                                      config.inbound_worker_count,
+                                      config.infretry_device);
+            }
     };
 
     extern auto spawn(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
