@@ -1,6 +1,8 @@
 #ifndef __DG_NETWORK_DATASTRUCTURE_H__
 #define __DG_NETWORK_DATASTRUCTURE_H__
 
+//define HEADER_CONTROL 1
+
 #include <stdint.h>
 #include <stdlib.h>
 #include "network_exception.h"
@@ -710,7 +712,7 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class Flag, class key_t, class mapped_t, class virtual_addr_t>
     using Node = typename NodeChooser<Flag, key_t, mapped_t, virtual_addr_t>::type;
 
-    template <class Key, class Mapped, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class HasStructureReordering = std::integral_constant<bool, true>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    template <class Key, class Mapped, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
         private:

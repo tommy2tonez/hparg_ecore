@@ -637,9 +637,20 @@ namespace stdx{
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    constexpr auto ulog2(T val) noexcept -> size_t{
+    constexpr auto ulog2(T val) noexcept -> T{
 
-        return static_cast<size_t>(sizeof(T) * CHAR_BIT - 1) - static_cast<size_t>(std::countl_zero(val));
+        return static_cast<T>(sizeof(T) * CHAR_BIT - 1u) - static_cast<T>(std::countl_zero(val));
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    static constexpr auto ceil2(T val) noexcept -> T{
+
+        if (val < 2u) [[unlikely]]{
+            return 1u;
+        } else [[likely]]{
+            T uplog_value = ulog2(static_cast<T>(val - 1u)) + 1u;
+            return T{1u} << uplog_value;
+        }
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
@@ -651,15 +662,7 @@ namespace stdx{
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto least_pow2_greater_equal_than(T val) noexcept -> T{
 
-        if (val == 0u){ [[unlikely]]
-            return 1u;
-        }
-
-        size_t max_log2     = stdx::ulog2(val);
-        size_t min_log2     = std::countr_zero(val);
-        size_t cand_log2    = max_log2 + ((max_log2 ^ min_log2) != 0u);
-
-        return T{1u} << cand_log2; 
+        return stdx::ceil2(val);
     } 
 
     template <class T1, class T>

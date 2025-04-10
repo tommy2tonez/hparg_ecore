@@ -107,8 +107,17 @@ namespace dg::network_exception{
     static inline constexpr exception_t SOCKET_BAD_BUFFER_LENGTH            = 61u;
     static inline constexpr exception_t SOCKET_MAX_RETRANSMISSION_REACHED   = 62u;
     static inline constexpr exception_t SOCKET_QUEUE_FULL                   = 63u;
-    static inline constexpr exception_t VARIANT_VBE                         = 64u;
-    static inline constexpr exception_t QUEUE_FULL                          = 66u;
+    static inline constexpr exception_t SOCKET_STREAM_BAD_SEGMENT           = 64u; 
+    static inline constexpr exception_t SOCKET_STREAM_TIMEOUT               = 65u;
+    static inline constexpr exception_t SOCKET_STREAM_MIGHT_BE_BLACKLISTED  = 66u;
+    static inline constexpr exception_t SOCKET_STREAM_BAD_BUFFER_LENGTH     = 67u;
+    static inline constexpr exception_t SOCKET_STREAM_BAD_SEGMENT_SIZE      = 68u;
+    static inline constexpr exception_t SOCKET_STREAM_SEGMENT_FILLING       = 69u;
+    static inline constexpr exception_t SOCKET_STREAM_LEAK                  = 70u;
+    static inline constexpr exception_t SOCKET_STREAM_BAD_OUTBOUND_RULE     = 71u;
+
+    static inline constexpr exception_t VARIANT_VBE                         = 00u;
+    static inline constexpr exception_t QUEUE_FULL                          = 00u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 

@@ -11,7 +11,8 @@
 #include <string>
 #include "network_allocation.h"
 #include "network_hash.h"
-#include "dense_hash_map/dense_hash_map.hpp"
+// #include "dense_hash_map/dense_hash_map.hpp"
+#include "network_datastructure.h"
 #include "robin_set/robin_set.h"
 
 namespace dg::network_std_container{
@@ -123,13 +124,16 @@ namespace dg::network_std_container{
     using unordered_map             = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class Key, class Value>
-    using unordered_unstable_map    = jg::dense_hash_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>, jg::details::power_of_two_growth_policy>;
+    using unordered_unstable_map    = dg::network_datastructure::unordered_map_variants::unordered_node_map<Key, Value, std::size_t, std::integral_constant<bool, true>, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
     template <class T>
     using vector                    = std::vector<T, dg::network_allocation::NoExceptAllocator<T>>;
 
     template <class T>
     using deque                     = std::deque<T, dg::network_allocation::NoExceptAllocator<T>>;
+
+    template <class T>
+    using pow2_cyclic_queue         = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<T, dg::network_allocation::NoExceptAllocator<T>>; 
 
     using string                    = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
 }
@@ -155,6 +159,9 @@ namespace dg{
     using deque                     = dg::network_std_container::deque<T>;
 
     using string                    = dg::network_std_container::string;
+
+    template <class T>
+    using pow2_cyclic_queue         = dg::network_std_container::pow2_cyclic_queue<T>;
 }
 
 #endif

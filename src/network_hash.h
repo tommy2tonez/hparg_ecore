@@ -184,7 +184,6 @@ namespace dg::network_hash{
     constexpr auto hash_reflectible(const T& obj) noexcept -> uint64_t{
 
         constexpr size_t MAX_REFLECTIBLE_SZ = size_t{1} << 8; //
-        static_assert(std::has_unique_object_representations_v<T>);
         
         constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(T{});
         static_assert(SERIALIZATION_SZ <= MAX_REFLECTIBLE_SZ);
@@ -193,6 +192,19 @@ namespace dg::network_hash{
         dg::network_trivial_serializer::serialize_into(buf.data(), obj); //stack overflow
 
         return hash_bytes(buf.data(), std::integral_constant<size_t, SERIALIZATION_SZ>{});
+    }
+
+    template <class T>
+    constexpr auto hash_reflectible(const T& obj, uint32_t secret){
+
+        constexpr size_t MAX_REFLECTIBLE_SZ = size_t{1} << 8; //        
+        constexpr size_t SERIALIZATION_SZ = dg::network_trivial_serializer::size(T{});
+        static_assert(SERIALIZATION_SZ <= MAX_REFLECTIBLE_SZ);
+
+        std::array<char, SERIALIZATION_SZ> buf{};
+        dg::network_trivial_serializer::serialize_into(buf.data(), obj); //stack overflow
+
+        return hash_bytes(buf.data(), SERIALIZATION_SZ, secret);
     }
 } 
 
