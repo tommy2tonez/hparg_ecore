@@ -532,6 +532,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //our client is very stingent on the time and the usability of this
     //so we have tons of work to do
 
+    //alright, I have gotten three specific feedbacks
+    //first is to drain the swamp periodically for distributed container
+    //second is to think about the requirements of destroy
+    //let's see the variables that we could collect for our priority queue
+    //- user-specified index
+    //- stream start_time
+    //- stream absolute timeout
+    //- stream collected latency array
+    //- stream progress
+    //- system current state
+    //- from IP
+    //- # of current concurrent IPs
+    //third is to be considerate about the temporal unordered_map + temporal unordered set memory access pattern, is there something we could do on the sender side to offset this cost, we also dont want to be predictable for the reason being predictable == exploitable 
+
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
     
