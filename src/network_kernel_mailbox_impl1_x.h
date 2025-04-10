@@ -546,9 +546,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //- # of current concurrent IPs
     //third is to be considerate about the temporal unordered_map + temporal unordered set memory access pattern, is there something we could do on the sender side to offset this cost, we also dont want to be predictable for the reason being predictable == exploitable 
 
+    //we implemented (1)
+    //we are thinking about implementing (3) without actually overstepping into the-micro-optimization-and-enables-exploitation territory
+    //it's a hashing problem, we can clue the region of frequent accesses by using IP, and their packet id should be incremental
+
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
-    
+
     static inline constexpr size_t DEFAULT_KEYVALUE_FEED_SIZE               = size_t{1} << 10; 
     static inline constexpr size_t DEFAULT_KEY_FEED_SIZE                    = size_t{1} << 8;
     static inline constexpr uint32_t PACKET_SEGMENT_SERIALIZATION_SECRET    = 3036322422ULL; //we randomize the secret within the uint32_t range to make sure that we dont have internal corruptions
@@ -686,6 +690,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     };
 
     //OK
+    struct ProducerDrainerPredicateInterface{
+        virtual ~ProducerDrainerPredicateInterface() noexcept = default;
+        virtual auto is_should_drain() noexcept -> bool = 0;
+        virtual void reset() noexcept = 0;
+    };
+
+    //OK
     struct PacketizerInterface{
         virtual ~PacketizerInterface() noexcept = default;
         virtual auto packetize(dg::string&&) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t> = 0;
@@ -760,6 +771,35 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             auto thru(const Address&) noexcept -> std::expected<bool, exception_t>{
 
                 return true;
+            }
+    };
+
+    class TimingDrainerPredicate: public virtual ProducerDrainerPredicateInterface{
+
+        private:
+
+            stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> since;
+            std::chrono::nanoseconds timeout;
+
+        public:
+
+            TimingDrainerPredicate(std::chrono::nanoseconds timeout){
+
+                this->since.value.exchange(std::chrono::steady_clock::now(), std::memory_order_seq_cst);
+                this->timeout = timeout;
+            }
+
+            auto is_should_drain() noexcept -> bool{
+
+                std::chrono::time_point<std::chrono::steady_clock> now = std::chrono::steady_clock::now(); //bad
+                std::chrono::nanoseconds lapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(now - this->since.value.load(std::memory_order_relaxed));
+
+                return lapsed > this->timeout;
+            }
+
+            void reset() noexcept{
+
+                this->since.value.exchange(std::chrono::steady_clock::now(), std::memory_order_relaxed); //bad
             }
     };
 
@@ -1831,6 +1871,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             const size_t pow2_base_arr_sz;
             const size_t keyvalue_feed_cap;
             const size_t zero_bounce_sz;
+            std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred;
             const size_t max_tick_per_load; 
 
         public:
@@ -1839,10 +1880,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                     size_t pow2_base_arr_sz,
                                                     size_t keyvalue_feed_cap,
                                                     size_t zero_bounce_sz,
+                                                    std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred,
                                                     size_t max_tick_per_load) noexcept: base_arr(std::move(base_arr)),
                                                                                         pow2_base_arr_sz(pow2_base_arr_sz),
                                                                                         keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                         zero_bounce_sz(zero_bounce_sz),
+                                                                                        drainer_pred(std::move(drainer_pred)),
                                                                                         max_tick_per_load(max_tick_per_load){}
 
             void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -1870,16 +1913,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void get_expired_id(GlobalIdentifier * output_arr, size_t& sz, size_t cap) noexcept{
 
-                sz = 0u;
-
-                for (size_t i = 0u; i < this->zero_bounce_sz; ++i){
-                    size_t random_value = dg::network_randomizer::randomize_int<size_t>();
-                    size_t idx          = random_value & (this->pow2_base_arr_sz - 1u);
-                    this->base_arr[idx]->get_expired_id(output_arr, sz, cap);
-                    
-                    if (sz != 0u){
-                        return;
-                    }
+                if (this->drainer_pred->is_should_drain()){
+                    this->internal_drain(output_arr, sz, cap);
+                    this->drainer_pred->reset();
+                } else{
+                    this->internal_curious_pop(output_arr, sz, cap);
                 }
             }
 
@@ -1919,6 +1957,46 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
             };
+
+            void internal_curious_pop(GlobalIdentifier * output_arr, size_t& sz, size_t cap) noexcept{
+
+                sz = 0u;
+
+                for (size_t i = 0u; i < this->zero_bounce_sz; ++i){ //we are bouncing to keep the total expired id under the reactor's threshold
+                    size_t random_value = dg::network_randomizer::randomize_int<size_t>();
+                    size_t idx          = random_value & (this->pow2_base_arr_sz - 1u);
+                    this->base_arr[idx]->get_expired_id(output_arr, sz, cap);
+                    
+                    if (sz != 0u){
+                        return;
+                    }
+                }
+            }
+
+            void internal_drain(GlobalIdentifier * output_arr, size_t& sz, size_t cap) noexcept{
+
+                //we are draining the leftover under the reactor's threshold
+                //we are increasing fairness of probing by using random start
+
+                sz = 0u;
+                GlobalIdentifier * current_output_arr = output_arr;
+                size_t current_cap  = cap;
+                size_t start_seek   = dg::network_randomizer::randomize_int<size_t>() >> 1; //alright this is one of the myths, ceause the array is already pow2, wraparound should work, because its aligned at 0 
+
+                for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
+                    if (current_cap == 0u){
+                        return;
+                    }
+                    
+                    size_t adjusted_idx = (start_seek + i) & (this->pow2_base_arr_sz - 1u);
+                    size_t current_sz   = {};
+                    this->base_arr[adjusted_idx]->get_expired_id(current_output_arr, current_sz, current_cap);
+                    current_cap         -= current_sz;
+                    sz                  += current_sz;
+                    std::advance(current_output_arr, current_sz);
+                }
+            }
+
     };
 
     //OK
@@ -2458,6 +2536,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             std::unique_ptr<std::unique_ptr<InBoundContainerInterface>[]> buffer_container_vec;
             size_t pow2_buffer_container_vec_sz;
             size_t zero_buffer_retry_sz;
+            std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred;
             size_t consume_sz_per_load; 
 
         public:
@@ -2465,9 +2544,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             HashDistributedBufferContainer(std::unique_ptr<std::unique_ptr<InBoundContainerInterface>[]> buffer_container_vec,
                                            size_t pow2_buffer_container_vec_sz,
                                            size_t zero_buffer_retry_sz,
+                                           std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred,
                                            size_t consume_sz_per_load) noexcept: buffer_container_vec(std::move(buffer_container_vec)),
                                                                                  pow2_buffer_container_vec_sz(pow2_buffer_container_vec_sz),
                                                                                  zero_buffer_retry_sz(zero_buffer_retry_sz),
+                                                                                 drainer_pred(std::move(drainer_pred)),
                                                                                  consume_sz_per_load(consume_sz_per_load){}
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -2487,6 +2568,23 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
+                if (this->drainer_pred->is_should_drain()){
+                    this->internal_drain(output_buffer_arr, sz, output_buffer_arr_cap);
+                    this->drainer_pred->reset();
+                } else{
+                    this->internal_curious_pop(output_buffer_arr, sz, output_buffer_arr_cap);
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->consume_sz_per_load;
+            }
+        
+        private:
+
+            void internal_curious_pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+
                 sz = 0u;
 
                 for (size_t i = 0u; i < this->zero_buffer_retry_sz; ++i){
@@ -2501,9 +2599,25 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
             }
 
-            auto max_consume_size() noexcept -> size_t{
+            void internal_drain(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                return this->consume_sz_per_load;
+                sz = 0u;
+                dg::string * current_output_arr = output_buffer_arr;
+                size_t current_cap  = output_buffer_arr_cap;
+                size_t start_seek   = dg::network_randomizer::randomize_int<size_t>() >> 1; //alright this is one of the myths, because container_vec_sz is already pow2 
+
+                for (size_t i = 0u; i < this->pow2_buffer_container_vec_sz; ++i){
+                    if (current_cap == 0u){
+                        return;
+                    }
+
+                    size_t adjusted_idx = (start_seek + i) & (this->pow2_buffer_container_vec_sz - 1u);
+                    size_t current_sz   = {};
+                    this->buffer_container_vec[adjusted_idx]->pop(current_output_arr, current_sz, current_cap);
+                    current_cap         -= current_sz;
+                    sz                  += current_sz;
+                    std::advance(current_output_arr, current_sz);
+                }
             }
     };
 
@@ -2971,6 +3085,18 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             return rs;
         }
 
+        static auto get_timing_drainer(std::chrono::nanoseconds drain_period) -> std::unique_ptr<ProducerDrainerPredicateInterface>{
+
+            const std::chrono::nanoseconds MIN_DRAIN_PERIOD = std::chrono::nanoseconds(1);
+            const std::chrono::nanoseconds MAX_DRAIN_PERIOD = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+
+            if (std::clamp(drain_period, MIN_DRAIN_PERIOD, MAX_DRAIN_PERIOD) != drain_period){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<TimingDrainerPredicate>(drain_period);
+        }
+
         static auto get_complex_reactor(intmax_t wakeup_threshold,
                                         size_t concurrent_subscriber_cap) -> std::unique_ptr<ComplexReactor>{
             
@@ -3196,6 +3322,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         static auto get_random_hash_distributed_entrance_controller(std::vector<std::unique_ptr<EntranceControllerInterface>> base_vec,
+                                                                    std::chrono::nanoseconds drain_period,
                                                                     size_t keyvalue_feed_cap    = DEFAULT_KEYVALUE_FEED_SIZE,
                                                                     size_t zero_bounce_sz       = 8u) -> std::unique_ptr<EntranceControllerInterface>{
 
@@ -3235,6 +3362,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                              base_arr_sz,
                                                                              trimmed_feed_cap,
                                                                              zero_bounce_sz,
+                                                                             get_timing_drainer(drain_period),
                                                                              max_consume_sz);
         }
 
@@ -3425,6 +3553,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         static auto get_random_hash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec,
+                                                                 std::chrono::nanoseconds drain_period,
                                                                  size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<InBoundContainerInterface>{
 
             const size_t MIN_BASE_VEC_SZ            = size_t{1};
@@ -3459,6 +3588,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             return std::make_unique<HashDistributedBufferContainer>(std::move(base_vec_up),
                                                                     base_vec.size(),
                                                                     zero_buffer_retry_sz,
+                                                                    get_timing_drainer(drain_period),
                                                                     consumption_sz);
         }
 
@@ -3659,6 +3789,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         uint32_t latency_controller_component_sz;
         uint32_t latency_controller_bounce_sz;
+        std::chrono::nanoseconds latency_controller_drain_period;
         uint32_t latency_controller_queue_cap;
         uint32_t latency_controller_unique_id_cap;
         std::chrono::nanoseconds latency_controller_expiry_period;
@@ -3674,6 +3805,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         uint32_t inbound_container_component_sz;
         uint32_t inbound_container_bounce_sz;
+        std::chrono::nanoseconds inbound_container_drain_period;
         uint32_t inbound_container_cap;
         bool inbound_container_has_exhaustion_control;
         bool inbound_container_has_react_pattern;
@@ -3797,7 +3929,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
-                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), config.inbound_container_bounce_sz),
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
+                                                                                                                                                                                                               config.inbound_container_drain_period, 
+                                                                                                                                                                                                               config.inbound_container_bounce_sz),
                                                                                                                                                 config.inbound_container_react_sz,
                                                                                                                                                 config.inbound_container_subscriber_cap,
                                                                                                                                                 config.inbound_container_react_latency),
@@ -3813,7 +3947,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
-                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), config.inbound_container_bounce_sz),
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
+                                                                                                                                                               config.inbound_container_drain_period,
+                                                                                                                                                               config.inbound_container_bounce_sz),
                                                                                                 config.infretry_device,
                                                                                                 ComponentFactory::get_no_exhaustion_controller());
                         }
@@ -3829,7 +3965,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
-                            return ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), config.inbound_container_bounce_sz),
+                            return ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
+                                                                                                                                                  config.inbound_container_drain_period, 
+                                                                                                                                                  config.inbound_container_bounce_sz),
                                                                                    config.inbound_container_react_sz,
                                                                                    config.inbound_container_subscriber_cap,
                                                                                    config.inbound_container_react_latency);
@@ -3841,7 +3979,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
-                            return ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), config.inbound_container_bounce_sz);
+                            return ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
+                                                                                                  config.inbound_container_drain_period, 
+                                                                                                  config.inbound_container_bounce_sz);
                         }
                     }
                 }
@@ -3866,6 +4006,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         std::generate(entrance_controller_vec.begin(), entrance_controller_vec.end(), gen);
 
                         return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
+                                                                                                                                                                 config.latency_controller_drain_period,
                                                                                                                                                                  config.latency_controller_keyvalue_feed_cap,
                                                                                                                                                                  config.latency_controller_bounce_sz),
                                                                                                config.infretry_device,
@@ -3882,6 +4023,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         std::generate(entrance_controller_vec.begin(), entrance_controller_vec.end(), gen);
 
                         return ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
+                                                                                                 config.latency_controller_drain_period,
                                                                                                  config.latency_controller_keyvalue_feed_cap,
                                                                                                  config.latency_controller_bounce_sz);
                     }
