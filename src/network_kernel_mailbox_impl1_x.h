@@ -375,8 +375,8 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
     struct Config{
         std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
-        size_t concurrent_recv_meter_sz;
-        size_t concurrent_send_meter_sz;
+        uint32_t concurrent_recv_meter_sz;
+        uint32_t concurrent_send_meter_sz;
         std::string device_id;
         std::shared_ptr<MessageStreamerInterface> msg_streamer;
         std::chrono::nanoseconds meter_dur;
@@ -470,6 +470,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //high latency, high thruput
 
     //it seems that 10ms is best for logit density mining
+    //after consulted with my friends in the STD, they preferred we staying in the nanoseconds territory, I explained that has a lot to do with request pads
+    //because low_latency + low cap ::wait is a recipe for disaster, we are polluting the system with cmpexchg instructions
+
+    //we are awared of the std::memory_order_relaxed serialization at the subscribe function
+    //we dont have a way to work around this yet, because the anomaly dampener for the uniform distribution is important in producer + consumer pattern
+    //we are aiming for at most 1s / latency_time memory orders per second
+    //or 1MB - 10MB of digesting data/ memory order
+    //the latter would sat the RAM bandwidth faster so the memory ordering is no longer an issue
+
     //we use the digestion size of roughly 1 << 16/ load to offset the cost of access synchronization mechanisms
     //we use random hash table to increase compute
     //those are two very different things
@@ -653,6 +662,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     struct PacketizerInterface{
         virtual ~PacketizerInterface() noexcept = default;
         virtual auto packetize(dg::string&&) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t> = 0;
+        virtual auto segment_byte_size() const noexcept -> size_t = 0;
+        virtual auto max_packet_size() const noexcept -> size_t = 0;
+        virtual auto max_segment_count() const noexcept -> size_t = 0;
     };
 
     //OK
@@ -1330,27 +1342,27 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         private:
 
             std::unique_ptr<PacketIDGeneratorInterface> packet_id_gen;
-            const size_t segment_byte_sz;
+            const size_t segment_bsz_pow2_exponent;
+            const size_t pow2_max_stream_bsz;
 
         public:
 
             Packetizer(std::unique_ptr<PacketIDGeneratorInterface> packet_id_gen,
-                       size_t segment_byte_sz) noexcept: packet_id_gen(std::move(packet_id_gen)),
-                                                         segment_byte_sz(segment_byte_sz){}
+                       size_t segment_bsz_pow2_exponent,
+                       size_t pow2_max_stream_bsz) noexcept: packet_id_gen(std::move(packet_id_gen)),
+                                                             segment_bsz_pow2_exponent(segment_bsz_pow2_exponent),
+                                                             pow2_max_stream_bsz(pow2_max_stream_bsz){}
 
             auto packetize(dg::string&& buf) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t>{
 
-                if (buf.size() > MAX_STREAM_SIZE){
+                if (buf.size() > this->pow2_max_stream_bsz){
                     return std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_BUFFER_LENGTH);
                 }
 
-                size_t segment_even_sz  = buf.size() / this->segment_byte_sz;
-                size_t segment_odd_sz   = size_t{buf.size() % this->segment_byte_sz != 0u};
+                size_t segment_bsz      = size_t{1} << this->segment_bsz_pow2_exponent;
+                size_t segment_even_sz  = buf.size() >> this->segment_bsz_pow2_exponent; //alright it seems silly but we have to not use division under every circumstances, a division operation is very costly on CPU, it is equivalent to a L2 cache fetch instruction (this will bring our program -> python speed)
+                size_t segment_odd_sz   = size_t{(static_cast<size_t>(buf.size()) & (segment_bsz - 1u)) != 0u};
                 size_t segment_sz       = segment_even_sz + segment_odd_sz;
-
-                if (segment_sz > MAX_SEGMENT_SIZE){
-                    return std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_BUFFER_LENGTH);
-                }
 
                 std::expected<dg::vector<PacketSegment>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<PacketSegment>>(std::max(size_t{1}, segment_sz));
 
@@ -1383,8 +1395,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
 
                 for (size_t i = 0u; i < segment_sz; ++i){
-                    size_t first                                    = this->segment_byte_sz * i;
-                    size_t last                                     = std::min(this->segment_byte_sz * (i + 1), buf.size()); 
+                    size_t first                                    = this->segment_bsz * i;
+                    size_t last                                     = std::min(this->segment_bsz * (i + 1), buf.size()); 
                     PacketSegment segment                           = {};
                     segment.id                                      = pkt_stream_id;
                     segment.segment_idx                             = i;
@@ -1393,7 +1405,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     std::expected<dg::string, exception_t> app_buf  = dg::network_exception::cstyle_initialize<dg::string>((last - first), 0); 
 
                     if (!app_buf.has_value()){
-                        return std::unexpected(app_buf.error());
+                        return std::unexpected(app_buf.error()); //leaking ids
                     }
 
                     std::copy(std::next(buf.begin(), first), std::next(buf.begin(), last), app_buf.value().begin());
@@ -1403,6 +1415,21 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
 
                 return rs;
+            }
+
+            auto segment_byte_size() const noexcept -> size_t{
+
+                return size_t{1} << this->segment_bsz_pow2_exponent;
+            }
+
+            auto max_packet_size() const noexcept -> size_t{
+
+                return this->pow2_max_stream_bsz;
+            }
+
+            auto max_segment_count() const noexcept -> size_t{
+
+                return std::max(size_t{1}, this->pow2_max_stream_bsz >> this->segment_bsz_pow2_exponent);
             }
     };
 
@@ -2583,7 +2610,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto feed_resolutor             = InternalFeedResolutor{};
                 feed_resolutor.dst              = this->base.get(); 
 
-                size_t trimmed_mailbox_feed_sz  = std::min(std::min(this->transmission_vectorization_sz, sz * MAX_SEGMENT_SIZE), this->base->max_consume_size());
+                size_t trimmed_mailbox_feed_sz  = std::min(std::min(this->transmission_vectorization_sz, sz * this->packetizer->max_segment_count()), this->base->max_consume_size());
                 size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_sz, feeder_mem.get()));
@@ -2782,17 +2809,33 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         static auto get_packetizer(Address factory_addr, 
-                                   size_t segment_byte_sz) -> std::unique_ptr<PacketizerInterface>{
+                                   size_t segment_bsz
+                                   size_t max_packet_bsz) -> std::unique_ptr<PacketizerInterface>{
 
             const size_t MIN_SEGMENT_BYTE_SZ    = size_t{1};
             const size_t MAX_SEGMENT_BYTE_SZ    = size_t{1} << 30;  
+            const size_t MIN_MAX_PACKET_BSZ     = 0u;
+            const size_t MAX_MAX_PACKET_BSZ     = size_t{1} << 40; 
 
-            if (std::clamp(segment_byte_sz, MIN_SEGMENT_BYTE_SZ, MAX_SEGMENT_BYTE_SZ) != segment_byte_sz){
+            if (std::clamp(segment_bsz, MIN_SEGMENT_BYTE_SZ, MAX_SEGMENT_BYTE_SZ) != segment_bsz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(segment_bsz)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(max_packet_bsz, MIN_MAX_PACKET_BSZ, MAX_MAX_PACKET_BSZ) != max_packet_bsz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(max_packet_bsz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             return std::make_unique<Packetizer>(get_random_packet_id_generator(factory_addr),
-                                                segment_byte_sz);
+                                                stdx::ulog2(segment_bsz),
+                                                max_packet_bsz);
         }  
 
         static auto get_entrance_controller(size_t queue_cap,
@@ -2839,8 +2882,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         static auto get_random_hash_distributed_entrance_controller(std::vector<std::unique_ptr<EntranceControllerInterface>> base_vec,
-                                                                    size_t zero_bounce_sz       = 8u,
-                                                                    size_t keyvalue_feed_cap    = DEFAULT_KEYVALUE_FEED_SIZE) -> std::unique_ptr<EntranceControllerInterface>{
+                                                                    size_t keyvalue_feed_cap    = DEFAULT_KEYVALUE_FEED_SIZE,
+                                                                    size_t zero_bounce_sz       = 8u) -> std::unique_ptr<EntranceControllerInterface>{
 
             const size_t MIN_ZERO_BOUNCE_SZ     = size_t{1};
             const size_t MAX_ZERO_BOUNCE_SZ     = size_t{1} << 20;
@@ -3067,8 +3110,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         }
 
-        static auto get_randomhash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec,
-                                                                size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<InBoundContainerInterface>{
+        static auto get_random_hash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec,
+                                                                 size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<InBoundContainerInterface>{
 
             const size_t MIN_BASE_VEC_SZ            = size_t{1};
             const size_t MAX_BASE_VEC_SZ            = size_t{1} << 20;
@@ -3104,13 +3147,186 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                     zero_buffer_retry_sz,
                                                                     consumption_sz);
         }
+
+        static auto get_expiry_worker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
+                                      std::shared_ptr<EntranceControllerInterface> entrance_controller,
+                                      std::shared_ptr<BlackListGateInterface> blacklist_gate,
+                                      size_t packet_assembler_vectorization_sz,
+                                      size_t consumption_sz,
+                                      size_t busy_consumption_sz) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+            
+            const size_t MIN_PACKET_ASSEMBLER_VECTORIZATION_SZ  = 1u;
+            const size_t MAX_PACKET_ASSEMBLER_VECTORIZATION_SZ  = size_t{1} << 25; 
+            const size_t MIN_CONSUMPTION_SZ                     = 1u;
+            const size_t MAX_CONSUMPTION_SZ                     = size_t{1} << 25;
+            const size_t MIN_BUSY_CONSUMPTION_SZ                = 0u;
+            const size_t MAX_BUSY_CONSUMPTION_SZ                = size_t{1} << 25;
+
+            if (packet_assembler == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (entrance_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (blacklist_gate == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(packet_assembler_vectorization_sz, MIN_PACKET_ASSEMBLER_VECTORIZATION_SZ, MAX_PACKET_ASSEMBLER_VECTORIZATION_SZ) != packet_assembler_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(consumption_sz, MIN_CONSUMPTION_SZ, MAX_CONSUMPTION_SZ) != consumption_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(busy_consumption_sz, MIN_BUSY_CONSUMPTION_SZ, MAX_BUSY_CONSUMPTION_SZ) != busy_consumption_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ExpiryWorker>(std::move(packet_assembler), std::move(entrance_controller), std::move(blacklist_gate), 
+                                                  packet_assembler_vectorization_sz,
+                                                  consumption_sz,
+                                                  busy_consumption_sz);
+        }
+
+        static auto get_inbound_worker(std::shared_ptr<PacketAssemblerInterface> packet_assembler,
+                                       std::shared_ptr<InBoundGateInterface> inbound_gate,
+                                       std::shared_ptr<InBoundGateInterface> blacklist_gate,
+                                       std::shared_ptr<InBoundContainerInterface> inbound_container,
+                                       std::shared_ptr<EntranceControllerInterface> entrance_controller,
+                                       std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailBoxInterface> base,
+                                       size_t packet_assembler_vectorization_sz,
+                                       size_t inbound_gate_vectorization_sz,
+                                       size_t blacklist_gate_vectorization_sz,
+                                       size_t entrance_controller_vectorization_sz,
+                                       size_t inbound_container_vectorization_sz,
+                                       size_t consumption_sz,
+                                       size_t busy_consumption_sz) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+
+            const size_t MIN_PACKET_ASSEMBLER_VECTORIZATION_SZ      = 1u;
+            const size_t MAX_PACKET_ASSEMBLER_VECTORIZATION_SZ      = size_t{1} << 25;
+            const size_t MIN_INBOUND_GATE_VECTORIZATION_SZ          = 1u;
+            const size_t MAX_INBOUND_GATE_VECTORIZATION_SZ          = size_t{1} << 25;
+            const size_t MIN_BLACKLIST_GATE_VECTORIZATION_SZ        = 1u;
+            const size_t MAX_BLACKLIST_GATE_VECTORIZATION_SZ        = size_t{1} << 25;
+            const size_t MIN_ENTRANCE_CONTROLLER_VECTORIZATION_SZ   = 1u;
+            const size_t MAX_ENTRANCE_CONTROLLER_VECTORIZATION_SZ   = size_t{1} << 25;
+            const size_t MIN_INBOUND_CONTAINER_VECTORIZATION_SZ     = 1u;
+            const size_t MAX_INBOUND_CONTAINER_VECTORIZATION_SZ     = size_t{1} << 25;
+            const size_t MIN_CONSUMPTION_SZ                         = 1u;
+            const size_t MAX_CONSUMPTION_SZ                         = size_t{1} << 25;
+            const size_t MIN_BUSY_CONSUMPTION_SZ                    = 0u;
+            const size_t MAX_BUSY_CONSUMPTION_SZ                    = size_t{1} << 25;
+
+            if (packet_assembler == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_gate == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (blacklist_gate == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (entrance_controller == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(packet_assembler_vectorization_sz, MIN_PACKET_ASSEMBLER_VECTORIZATION_SZ, MAX_PACKET_ASSEMBLER_VECTORIZATION_SZ) != packet_assembler_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(inbound_gate_vectorization_sz, MIN_INBOUND_GATE_VECTORIZATION_SZ, MAX_INBOUND_GATE_VECTORIZATION_SZ) != inbound_gate_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(blacklist_gate_vectorization_sz, MIN_BLACKLIST_GATE_VECTORIZATION_SZ, MAX_BLACKLIST_GATE_VECTORIZATION_SZ) != blacklist_gate_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(entrance_controller_vectorization_sz, MIN_ENTRANCE_CONTROLLER_VECTORIZATION_SZ, MAX_ENTRANCE_CONTROLLER_VECTORIZATION_SZ) != entrance_controller_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(inbound_container_vectorization_sz, MIN_INBOUND_CONTAINER_VECTORIZATION_SZ, MAX_INBOUND_CONTAINER_VECTORIZATION_SZ) != inbound_container_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(consumption_sz, MIN_CONSUMPTION_SZ, MAX_CONSUMPTION_SZ) != consumption_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(busy_consumption_sz, MIN_BUSY_CONSUMPTION_SZ, MAX_BUSY_CONSUMPTION_SZ) != busy_consumption_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<InBoundWorker>(std::move(packet_assembler),
+                                                   std::move(inbound_gate),
+                                                   std::move(blacklist_gate),
+                                                   std::move(inbound_container),
+                                                   std::move(entrance_controller),
+                                                   std::move(base),
+                                                   packet_assembler_vectorization_sz,
+                                                   inbound_gate_vectorization_sz,
+                                                   blacklist_gate_vectorization_sz,
+                                                   entrance_controller_vectorization_sz,
+                                                   inbound_container_vectorization_sz,
+                                                   consumption_sz,
+                                                   busy_consumption_sz);
+        }
+
+        static auto get_flash_streamx_mailbox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
+                                              std::unique_ptr<PacketizerInterface> packetizer,
+                                              std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+                                              std::shared_ptr<InBoundContainerInterface> inbound_container,
+                                              size_t transmission_vectorization_sz) -> std::unique_ptr<MailboxInterface>{
+            
+            const size_t MIN_TRANSMISSION_VECTORIZATION_SZ  = 1u;
+            const size_t MAX_TRANSMISSION_VECTORIZATION_SZ  = size_t{1} << 25; 
+
+            if (packetizer == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (inbound_container == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(transmission_vectorization_sz, MIN_TRANSMISSION_VECTORIZATION_SZ, MAX_TRANSMISSION_VECTORIZATION_SZ) != transmission_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<MailBox>(to_dg_vector(std::move(daemon_vec)),
+                                             std::move(packetizer),
+                                             std::move(base),
+                                             std::move(inbound_container),
+                                             transmission_vectorization_sz);
+        }
     };
 
     //alright, we'll work on this and the radix msg today
 
     struct Config{
         Address factory_addr;
-        uint32_t packet_segment_sz;
+        uint32_t packetizer_segment_bsz;
+        uint32_t packetizer_max_bsz;
 
         uint32_t gate_controller_ato_component_sz;
         uint32_t gate_controller_ato_map_capacity;
@@ -3122,12 +3338,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t gate_controller_blklst_bloomfilter_rehash_sz;
         uint32_t gate_controller_blklst_bloomfilter_reliability_decay_factor;
         uint32_t gate_controller_blklst_keyvalue_feed_cap; 
-        
+
         uint32_t latency_controller_component_sz;
+        uint32_t latency_controller_bounce_sz;
         uint32_t latency_controller_queue_cap;
         uint32_t latency_controller_unique_id_cap;
         std::chrono::nanoseconds latency_controller_expiry_period;
-        uint32_t latency_controller_bounce_sz;
         uint32_t latency_controller_keyvalue_feed_cap;
         bool latency_controller_has_exhaustion_control; 
 
@@ -3139,15 +3355,27 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         bool packet_assembler_has_exhaustion_control; 
 
         uint32_t inbound_container_component_sz;
+        uint32_t inbound_container_bounce_sz;
         uint32_t inbound_container_cap;
         bool inbound_container_has_exhaustion_control;
         bool inbound_container_has_react_pattern;
         uint32_t inbound_container_react_sz;
         uint32_t inbound_container_subscriber_cap;
-        std::chrono::nanoseconds inbound_container_wait_time;
+        std::chrono::nanoseconds inbound_container_react_latency;
 
-        size_t expiry_worker_count;
-        size_t inbound_worker_count;
+        uint32_t expiry_worker_count;
+        uint32_t expiry_worker_packet_assembler_vectorization_sz;
+        uint32_t expiry_worker_consume_sz;
+        uint32_t expiry_worker_busy_consume_sz;
+
+        uint32_t inbound_worker_count;
+        uint32_t inbound_worker_packet_assembler_vectorization_sz;
+        uint32_t inbound_worker_inbound_gate_vectorization_sz;
+        uint32_t inbound_worker_blacklist_gate_vectorization_sz;
+        uint32_t inbound_worker_latency_controller_vectorization_sz;
+        uint32_t inbound_worker_inbound_container_vectorization_sz;
+        uint32_t inbound_worker_consume_sz;
+        uint32_t inbound_worker_busy_consume_sz;
 
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device;
         std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base; //alright people might not like std::unique_ptr<> for throwing reasons, yet it is practice of extensibility to make this std::unique<>, we have to break practice for now
@@ -3166,7 +3394,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             static auto make_packetizer(Config config) -> std::unique_ptr<PacketizerInterface>{
 
-                return ComponentFactory::get_packetizer(config.factory_addr, config.packet_segment_sz);
+                return ComponentFactory::get_packetizer(config.factory_addr, config.packetizer_segment_bsz, config.packetizer_max_bsz);
             }
 
             static auto make_ato_gate_controller(Config config) -> std::unique_ptr<InBoundGateInterface>{
@@ -3245,29 +3473,61 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 if (config.inbound_container_has_exhaustion_control){
                     if (config.inbound_container_has_react_pattern){
                         if (config.inbound_container_component_sz == 1u){
-
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
+                                                                                                                                                config.inbound_container_react_sz,
+                                                                                                                                                config.inbound_container_subscriber_cap,
+                                                                                                                                                config.inbound_container_react_latency),
+                                                                                                config.infretry_device,
+                                                                                                ComponentFactory::get_exhaustion_controller());
                         } else{
+                            auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
+                            std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap));
 
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), inbound_container_bounce_sz),
+                                                                                                                                                config.inbound_container_react_sz,
+                                                                                                                                                config.inbound_container_subscriber_cap,
+                                                                                                                                                config.inbound_container_react_latency),
+                                                                                                config.infretry_device,
+                                                                                                ComponentFactory::get_exhaustion_controller());
                         }
                     } else{
                         if (config.inbound_container_component_sz == 1u){
-
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
+                                                                                                config.infretry_device,
+                                                                                                ComponentFactory::get_exhaustion_controller());
                         } else{
+                            auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
+                            std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap));
 
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), inbound_container_bounce_sz),
+                                                                                                config.infretry_device,
+                                                                                                ComponentFactory::get_exhaustion_controller());
                         }
                     }
                 } else{
                     if (config.inbound_container.has_react_pattern){
                         if (config.inbound_container_component_sz == 1u){
-
+                            return ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
+                                                                                   config.inbound_container_react_sz,
+                                                                                   config.inbound_container_subscriber_cap,
+                                                                                   config.inbound_container_react_latency);
                         } else{
+                            auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
+                            std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap));
 
+                            return ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), inbound_container_bounce_sz),
+                                                                                   config.inbound_container_react_sz,
+                                                                                   config.inbound_container_subscriber_cap,
+                                                                                   config.inbound_container_react_latency);
                         }
                     } else{
                         if (config.inbound_container_component_sz == 1u){
-
+                            return ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap);
                         } else{
-                            
+                            auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
+                            std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap));
+
+                            return ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec), inbound_container_bounce_sz);
                         }
                     }
                 }
@@ -3280,32 +3540,36 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
 
                 if (config.latency_controller_has_exhaustion_control){
-                    if (config.latency_controller_has_react_pattern){
-                        if (config.latency_controller_component_sz == 1u){
-
-                        } else{
-
-                        }
+                    if (config.latency_controller_component_sz == 1u){
+                        return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_entrance_controller(config.latency_controller_queue_cap, 
+                                                                                                                                         config.latency_controller_unique_id_cap,
+                                                                                                                                         config.latency_controller_expiry_period),
+                                                                                               config.infretry_device,
+                                                                                               ComponentFactory::get_exhaustion_controller());
                     } else{
-                        if (config.latency_controller_component_sz == 1u){
+                        std::vector<std::unique_ptr<EntranceControllerInterface>> entrance_controller_vec(config.latency_controller_component_sz);
+                        auto gen = std::bind_front(ComponentFactory::get_entrance_controller, config.latency_controller_queue_cap, config.latency_controller_unique_id_cap, config.latency_controller_expiry_period);
+                        std::generate(entrance_controller_vec.begin(), entrance_controller_vec.end(), gen);
 
-                        } else{
-
-                        }
+                        return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
+                                                                                                                                                                 config.latency_controller_keyvalue_feed_cap,
+                                                                                                                                                                 config.latency_controller_bounce_sz),
+                                                                                               config.infretry_device,
+                                                                                               ComponentFactory::get_exhaustion_controller());
                     }
                 } else{
-                    if (config.latency_controller_has_react_pattern){
-                        if (config.latency_controller_component_sz == 1u){
-
-                        } else{
-
-                        }
+                    if (config.latency_controller_component_sz == 1u){
+                        return ComponentFactory::get_entrance_controller(config.latency_controller_queue_cap,
+                                                                         config.latency_controller_unique_id_cap,
+                                                                         config.latency_controller_expiry_period);
                     } else{
-                        if (config.latency_controller_component_sz == 1u){
+                        std::vector<std::unique_ptr<EntranceControllerInterface>> entrance_controller_vec(config.latency_controller_component_sz);
+                        auto gen = std::bind_front(ComponentFactory::get_entrance_controller, config.latency_controller_queue_cap, config.latency_controller_unique_id_cap, config.latency_controller_expiry_period);
+                        std::generate(entrance_controller_vec.begin(), entrance_controller_vec.end(), gen);
 
-                        } else{
-
-                        }
+                        return Componentfactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
+                                                                                                 config.latency_controller_keyvalue_feed_cap,
+                                                                                                 config.latency_controller_bounce_sz);
                     }
                 }
             }
@@ -3318,9 +3582,99 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                        std::unique_ptr<InBoundContainerInterface> inbound_container,
                                        std::unique_ptr<EntranceControllerInterface> entrance_controller,
                                        size_t expiry_worker_count,
+                                       size_t expiry_worker_packet_assembler_vectorization_sz,
+                                       size_t expiry_worker_consume_sz,
+                                       size_t expiry_worker_busy_consume_sz,
                                        size_t inbound_worker_count,
+                                       size_t inbound_worker_packet_assembler_vectorization_sz,
+                                       size_t inbound_worker_inbound_gate_vectorization_sz,
+                                       size_t inbound_worker_blacklist_gate_vectorization_sz,
+                                       size_t inbound_worker_entrance_controller_vectorization_sz,
+                                       size_t inbound_worker_inbound_container_vectorization_sz,
+                                       size_t inbound_worker_consume_sz,
+                                       size_t inbound_worker_busy_consume_sz,
                                        std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) -> std::unique_ptr<MailboxInterface>{
 
+                const size_t MIN_EXPIRY_WORKER_COUNT        = 1u;
+                const size_t MAX_EXPIRY_WORKER_COUNT        = 1024u; 
+                const size_t MIN_INBOUND_WORKER_COUNT       = 1u;
+                const size_t MAX_INBOUND_WORKER_COUNT       = 1024u;
+
+                if (base == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (packetizer == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (inbound_gate == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (blacklist_gate == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (packet_assembler == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (inbound_container == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (entrance_controller == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (std::clamp(expiry_worker_count, MIN_EXPIRY_WORKER_COUNT, MAX_EXPIRY_WORKER_COUNT) != expiry_worker_count){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (std::clamp(inbound_worker_count, MIN_INBOUND_WORKER_COUNT, MAX_INBOUND_WORKER_COUNT) != inbound_worker_count){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (infretry_device == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                std::shared_ptr<InBoundGateInterface> inbound_gate_sp                   = std::move(inbound_gate);
+                std::shared_ptr<BlackListGateInterface> blacklist_gate_sp               = std::move(blacklist_gate);
+                std::shared_ptr<PacketAssemblerInterface> packet_assembler_sp           = std::move(packet_assembler);
+                std::shared_ptr<InBoundContainerInterface> inbound_container_sp         = std::move(inbound_container);
+                std::shared_ptr<EntranceControllerInterface> entrance_controller_sp     = std::move(entrance_controller);
+                std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec   = {}:
+
+                for (size_t i = 0u; i < inbound_worker_count; ++i){
+                    auto worker = ComponentFactory::get_inbound_worker(packet_assembler_sp, inbound_gate_sp, blacklist_gate_sp, 
+                                                                       inbound_container_sp, entrance_controller_sp, base,
+                                                                       inbound_worker_packet_assembler_vectorization_sz,
+                                                                       inbound_worker_inbound_gate_vectorization_sz,
+                                                                       inbound_worker_blacklist_gate_vectorization_sz,
+                                                                       inbound_worker_entrance_controller_vectorization_sz,
+                                                                       inbound_worker_inbound_container_vectorization_sz,
+                                                                       inbound_worker_consume_sz,
+                                                                       inbound_worker_busy_consume_sz);
+                    auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker)));
+                    daemon_vec.emplace_back(std::move(daemon_handle));
+                }
+
+                for (size_t i = 0u; i < expiry_worker_count; ++i){
+                    auto worker = ComponentFactory::get_expiry_worker(packet_assembler_sp, entrance_controller_sp, blacklist_gate_sp,
+                                                                      expiry_worker_packet_assembler_vectorization_sz,
+                                                                      expiry_worker_consume_sz,
+                                                                      expiry_worker_busy_consume_sz);
+                    auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker)));
+                    daemon_vec.emplace_back(std::move(daemon_handle));
+                }
+
+                return ComponentFactory::make_flash_streamx_mailbox(std::move(daemon_vec),
+                                                                    std::move(packetizer),
+                                                                    base,
+                                                                    inbound_container_sp,
+                                                                    mailbox_transmission_vectorization_sz);
             }
 
         public:
@@ -3335,7 +3689,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                       make_inbound_container(config),
                                       make_latency_controller(config),
                                       config.expiry_worker_count,
+                                      config.expiry_worker_packet_assembler_vectorization_sz,
+                                      config.expiry_worker_consume_sz,
+                                      config.expiry_worker_busy_consume_sz,
                                       config.inbound_worker_count,
+                                      config.inbound_worker_packet_assembler_vectorization_sz,
+                                      config.inbound_worker_inbound_gate_vectorization_sz,
+                                      config.inbound_worker_blacklist_gate_vectorization_sz,
+                                      config.inbound_worker_latency_controller_vectorization_sz,
+                                      config.inbound_worker_inbound_container_vectorization_sz,
+                                      config.inbound_worker_consume_sz,
+                                      config.inbound_worker_busy_consume_sz,
                                       config.infretry_device);
             }
     };
@@ -3347,6 +3711,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 }
 
 namespace dg::network_kernel_mailbox_impl1_radixx{
+
+    //this is hard to write
 
     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
     using radix_t = uint32_t; 
