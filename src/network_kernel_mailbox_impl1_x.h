@@ -522,6 +522,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //alright, I was thinking about delvrsrv + hash_table injection
     //it's a radix of radix sort + distributed hash_table invoke
     //we want to fit the hash table -> 64KB of cache memory before we load/ read the table(s) in batches
+    //alright fellas, I literally dont have time to argue with yall
+
+    //I have a timeline to push this to the mainframe, by using fully detached infrastructure + fixed window transmission (we have seeked advices, it's the best route for this kind of forever detached tree training computation, there is literally not a single explicit synchronization instruction, we just peek the tree to test for integrity)
+    //flash_streamx is only for 64KB transmission packet, with the event trigger size of 1MB/consumption
+    //the hashtable is the best for temporal cache retrieval, with the sole operations are insert and clear 
+    //the hashtable is also best for delvrsrv_kv hash_table, with the sole operations are insert, iteration and clear
+    //the hashtable cannot be further optimized, can be used concurrently on multicore with no SIMD instructions available, it's the best memory footprint wise speaking, we are literally considering uint8_t as virtual_addr_t for kv_feeder
+    //our client is very stingent on the time and the usability of this
+    //so we have tons of work to do
 
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
