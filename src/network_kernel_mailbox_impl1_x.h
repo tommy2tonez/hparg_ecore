@@ -13,6 +13,7 @@
 #include "network_concurrency_x.h"
 #include "stdx.h"
 #include "network_exception_handler.h"
+#include <chrono>
 
 namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
@@ -554,6 +555,112 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we can assume the guys below the threshold to be not in the nanoseconds range. We must specify that N to be the peeking size for each of the subcontainer because thats the worst latency scenerio, and the consumer must have the consume size of subcontainer_sz * N
     //we have seeked advices that the reactor threshold must be of 10 MB, and the worst draining latency must be of 10ms. We want the water pipe to run all the time to push data through, to achieve the best performance scenerio of 1GB/(100*k memory orderings)
     //we will work on improving the memory footprint of maps and sets. its super very complicated
+
+    //we are only worried about the force WAIT (both send and recv, external interface), not the select feature of reaching a certain threshold, implementing that is super hard to be efficient
+    //so we'll implement a global static affined injection of timeout
+    //that's good enough for MVP, we'll move on for now, we'll circle back to do profile guided optimizations
+    //this is not a good answer, this seems more like a patch
+    //because it really is
+
+    template <class ID>
+    class AffinedTimeoutController{
+
+        private:
+
+            using self = AffinedTimeoutController;
+
+            static inline std::vector<stdx::hdi_container<std::optional<std::chrono::nanoseconds>>> timeout_container = []{
+
+                size_t container_sz = dg::network_concurrency::THREAD_COUNT;
+                auto rs = std::vector<stdx::hdi_container<std::optional<std::chrono::nanoseconds>>>(container_sz);
+
+                for (size_t i = 0u; i < container_sz; ++i){
+                    rs.value = std::nullopt;
+                }
+
+                return rs;
+            }();
+
+        public:
+
+            static consteval auto get_min_timeout() noexcept -> std::chrono::nanoseconds{
+
+                return std::chrono::nanoseconds::min();
+            }
+
+            static consteval auto get_max_timeout() noexcept -> std::chrono::nanoseconds{
+
+                return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes(1));
+            }
+
+            static void abs_set(std::optional<std::chrono::nanoseconds> timeout_period) noexcept{
+
+                self::timeout_container[dg::network_concurrency::this_thread_idx()].value = timeout_period;
+            } 
+
+            static void set(std::chrono::nanoseconds timeout_period) noexcept{
+
+                self::timeout_container[dg::network_concurrency::this_thread_idx()].value = std::clamp(timeout_period, self::get_min_timeout(), self::get_max_timeout());                
+            }
+
+            static void clear() noexcept{
+
+                self::timeout_container[dg::network_concurrency::this_thread_idx()].value = std::nullopt;
+            }
+
+            static auto get() noexcept -> std::optional<std::chrono::nanoseconds>{
+
+                return self::timeout_container[dg::network_concurrency::this_thread_idx()].value;
+            }
+    };
+
+    struct ClientRecvSignature{};
+    using client_affined_timeout_controller = AffinedTimeoutController<ClientRecvSignature>;  
+
+    template <class ID>
+    struct AffinedBlockOnExhaustionController{
+
+        private:
+
+            using self = AffinedBlockOnExhaustionController;
+
+            static inline std::vector<stdx::hdi_container<std::optional<bool>>> flag_container = []{
+
+                size_t container_sz = dg::network_concurrency::THREAD_COUNT;
+                auto rs = std::vector<stdx::hdi_container<std::optional<bool>>>(container_sz);
+
+                for (size_t i = 0u; i < container_sz; ++i){
+                    rs[i].value = std::nullopt;
+                }
+
+                return rs;
+            }();
+
+        public:
+
+            static void abs_set(std::optional<bool> state) noexcept{
+
+                self::flag_container[dg::network_concurrency::this_thread_idx()] = state;
+            }
+
+            static void set(bool flag) noexcept{
+
+                self::flag_container[dg::network_concurrency::this_thread_idx()] = flag; 
+            }
+
+            static void clear() noexcept{
+
+                self::flag_container[dg::network_concurrency::this_thread_idx()] = std::nullopt;
+            }
+
+            static auto get() noexcept -> std::optional<bool>{
+
+                return self::flag_container[dg::network_concurrency::this_thread_idx()].value;
+            }
+    };
+
+    struct ClientSendSignature{};
+    using client_affined_blocksend_controller = AffinedBlockOnExhaustionController<ClientSendSignature>; 
 
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
@@ -1877,6 +1984,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             const size_t keyvalue_feed_cap;
             const size_t zero_bounce_sz;
             std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred;
+            const size_t drain_peek_cap_per_container;
             const size_t max_tick_per_load; 
 
         public:
@@ -1886,11 +1994,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                     size_t keyvalue_feed_cap,
                                                     size_t zero_bounce_sz,
                                                     std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred,
+                                                    size_t drain_peek_cap_per_container,
                                                     size_t max_tick_per_load) noexcept: base_arr(std::move(base_arr)),
                                                                                         pow2_base_arr_sz(pow2_base_arr_sz),
                                                                                         keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                         zero_bounce_sz(zero_bounce_sz),
                                                                                         drainer_pred(std::move(drainer_pred)),
+                                                                                        drain_peek_cap_per_container(drain_peek_cap_per_container),
                                                                                         max_tick_per_load(max_tick_per_load){}
 
             void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -1992,10 +2102,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     if (current_cap == 0u){
                         return;
                     }
-                    
+
+                    size_t peeking_cap  = std::min(current_cap, this->drain_peek_cap_per_container);
                     size_t adjusted_idx = (start_seek + i) & (this->pow2_base_arr_sz - 1u);
                     size_t current_sz   = {};
-                    this->base_arr[adjusted_idx]->get_expired_id(current_output_arr, current_sz, current_cap);
+                    this->base_arr[adjusted_idx]->get_expired_id(current_output_arr, current_sz, peeking_cap);
                     current_cap         -= current_sz;
                     sz                  += current_sz;
                     std::advance(current_output_arr, current_sz);
@@ -2542,6 +2653,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t pow2_buffer_container_vec_sz;
             size_t zero_buffer_retry_sz;
             std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred;
+            size_t drain_peek_cap_per_container;
             size_t consume_sz_per_load; 
 
         public:
@@ -2550,10 +2662,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                            size_t pow2_buffer_container_vec_sz,
                                            size_t zero_buffer_retry_sz,
                                            std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred,
+                                           size_t drain_peek_cap_per_container,
                                            size_t consume_sz_per_load) noexcept: buffer_container_vec(std::move(buffer_container_vec)),
                                                                                  pow2_buffer_container_vec_sz(pow2_buffer_container_vec_sz),
                                                                                  zero_buffer_retry_sz(zero_buffer_retry_sz),
                                                                                  drainer_pred(std::move(drainer_pred)),
+                                                                                 drain_peek_cap_per_container(drain_peek_cap_per_container),
                                                                                  consume_sz_per_load(consume_sz_per_load){}
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -2616,6 +2730,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         return;
                     }
 
+                    size_t peeking_cap  = std::min(current_cap, this->drain_peek_cap_per_container);
                     size_t adjusted_idx = (start_seek + i) & (this->pow2_buffer_container_vec_sz - 1u);
                     size_t current_sz   = {};
                     this->buffer_container_vec[adjusted_idx]->pop(current_output_arr, current_sz, current_cap);
@@ -2627,7 +2742,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     };
 
     //OK
-    class ReactingBufferContainer: public virtual InBoundContainerInterface{
+
+    template <class T>
+    class ReactingBufferContainer{};
+
+    template <class ID>
+    class ReactingBufferContainer<AffinedTimeoutController<ID>>: public virtual InBoundContainerInterface{
 
         private:
 
@@ -2636,6 +2756,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             std::chrono::nanoseconds max_wait_time;
 
         public:
+
+            using timeout_controller = AffinedTimeoutController<ID>; //its incredibly hard to not use dep injection, if we are to go down the route of including this as part of the interface, it's not gonna last 
 
             ReactingBufferContainer(std::unique_ptr<InBoundContainerInterface> base,
                                     std::unique_ptr<ComplexReactor> reactor,
@@ -2653,8 +2775,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                this->reactor->subscribe(this->max_wait_time);
+                std::optional<std::chrono::nanoseconds> user_specified_timeout = timeout_controller::get();
+
+                if (user_specified_timeout.has_value()){
+                    if (user_specified_timeout.value() == std::chrono::nanoseconds::min()){
+                        (void) user_specified_timeout;
+                    } else{
+                        this->reactor->subscribe(user_specified_timeout.value());
+                    }
+                } else{
+                    this->reactor->subscribe(this->max_wait_time);
+                }
+
                 std::atomic_signal_fence(std::memory_order_seq_cst);
+
                 this->base->pop(output_buffer_arr, sz, output_buffer_arr_cap);
                 this->reactor->decrement(sz);
             }
@@ -3328,6 +3462,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         static auto get_random_hash_distributed_entrance_controller(std::vector<std::unique_ptr<EntranceControllerInterface>> base_vec,
                                                                     std::chrono::nanoseconds drain_period,
+                                                                    size_t drain_peek_cap,
                                                                     size_t keyvalue_feed_cap    = DEFAULT_KEYVALUE_FEED_SIZE,
                                                                     size_t zero_bounce_sz       = 8u) -> std::unique_ptr<EntranceControllerInterface>{
 
@@ -3335,6 +3470,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             const size_t MAX_ZERO_BOUNCE_SZ     = size_t{1} << 20;
             const size_t MIN_KEYVALUE_FEED_CAP  = size_t{1};
             const size_t MAX_KEYVALUE_FEED_CAP  = size_t{1} << 25;
+            const size_t MIN_DRAIN_PEEK_CAP     = size_t{1};
+            const size_t MAX_DRAIN_PEEK_CAP     = size_t{1} << 30;
 
             if (!stdx::is_pow2(base_vec.size())){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -3345,6 +3482,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
 
             if (std::clamp(keyvalue_feed_cap, MIN_KEYVALUE_FEED_CAP, MAX_KEYVALUE_FEED_CAP) != keyvalue_feed_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(drain_peek_cap, MIN_DRAIN_PEEK_CAP, MAX_DRAIN_PEEK_CAP) != drain_peek_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3368,6 +3509,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                              trimmed_feed_cap,
                                                                              zero_bounce_sz,
                                                                              get_timing_drainer(drain_period),
+                                                                             drain_peek_cap,
                                                                              max_consume_sz);
         }
 
@@ -3529,6 +3671,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                          std::move(exhaustion_controller));
         }
 
+        template <class Controller>
         static auto get_reacting_buffer_container(std::unique_ptr<InBoundContainerInterface> base,
                                                   size_t reacting_threshold,
                                                   size_t concurrent_subscriber_cap,
@@ -3551,26 +3694,32 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<ReactingBufferContainer>(std::move(base),
-                                                             get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
-                                                             wait_time);
-
+            return std::make_unique<ReactingBufferContainer<Controller>>(std::move(base),
+                                                                         get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
+                                                                         wait_time);
         }
 
         static auto get_random_hash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec,
                                                                  std::chrono::nanoseconds drain_period,
+                                                                 size_t drain_peek_cap,
                                                                  size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<InBoundContainerInterface>{
 
             const size_t MIN_BASE_VEC_SZ            = size_t{1};
             const size_t MAX_BASE_VEC_SZ            = size_t{1} << 20;
             const size_t MIN_ZERO_BUFFER_RETRY_SZ   = size_t{1};
             const size_t MAX_ZERO_BUFFER_RETRY_SZ   = size_t{1} << 20;
+            const size_t MIN_DRAIN_PEEK_CAP         = size_t{1};
+            const size_t MAX_DRAIN_PEEK_CAP         = size_t{1} << 30;
 
             if (std::clamp(base_vec.size(), MIN_BASE_VEC_SZ, MAX_BASE_VEC_SZ) != base_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             if (!stdx::is_pow2(base_vec.size())){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(drain_peek_cap, MIN_DRAIN_PEEK_CAP, MAX_DRAIN_PEEK_CAP) != drain_peek_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3594,6 +3743,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                     base_vec.size(),
                                                                     zero_buffer_retry_sz,
                                                                     get_timing_drainer(drain_period),
+                                                                    drain_peek_cap,
                                                                     consumption_sz);
         }
 
@@ -3795,6 +3945,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t latency_controller_component_sz;
         uint32_t latency_controller_bounce_sz;
         std::chrono::nanoseconds latency_controller_drain_period;
+        uint32_t latency_controller_drain_probe_peek_cap;
         uint32_t latency_controller_queue_cap;
         uint32_t latency_controller_unique_id_cap;
         std::chrono::nanoseconds latency_controller_expiry_period;
@@ -3811,6 +3962,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t inbound_container_component_sz;
         uint32_t inbound_container_bounce_sz;
         std::chrono::nanoseconds inbound_container_drain_period;
+        uint32_t inbound_container_drain_probe_peek_cap;
         uint32_t inbound_container_cap;
         bool inbound_container_has_exhaustion_control;
         bool inbound_container_has_react_pattern;
@@ -3924,19 +4076,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 if (config.inbound_container_has_exhaustion_control){
                     if (config.inbound_container_has_react_pattern){
                         if (config.inbound_container_component_sz == 1u){
-                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
-                                                                                                                                                config.inbound_container_react_sz,
-                                                                                                                                                config.inbound_container_subscriber_cap,
-                                                                                                                                                config.inbound_container_react_latency),
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container<client_affined_timeout_controller>(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
+                                                                                                                                                                                   config.inbound_container_react_sz,
+                                                                                                                                                                                   config.inbound_container_subscriber_cap,
+                                                                                                                                                                                   config.inbound_container_react_latency),
                                                                                                 config.infretry_device,
                                                                                                 ComponentFactory::get_no_exhaustion_controller());
                         } else{
                             auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
-                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
-                                                                                                                                                                                                               config.inbound_container_drain_period, 
-                                                                                                                                                                                                               config.inbound_container_bounce_sz),
+                            return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_reacting_buffer_container<client_affined_timeout_controller>(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
+                                                                                                                                                                                                                                                  config.inbound_container_drain_period, 
+                                                                                                                                                                                                                                                  config.inbound_container_drain_probe_peek_cap,
+                                                                                                                                                                                                                                                  config.inbound_container_bounce_sz),
                                                                                                                                                 config.inbound_container_react_sz,
                                                                                                                                                 config.inbound_container_subscriber_cap,
                                                                                                                                                 config.inbound_container_react_latency),
@@ -3954,6 +4107,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                             return ComponentFactory::get_exhaustion_controlled_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
                                                                                                                                                                config.inbound_container_drain_period,
+                                                                                                                                                               config.inbound_container_drain_probe_peek_cap,
                                                                                                                                                                config.inbound_container_bounce_sz),
                                                                                                 config.infretry_device,
                                                                                                 ComponentFactory::get_no_exhaustion_controller());
@@ -3962,17 +4116,18 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 } else{
                     if (config.inbound_container_has_react_pattern){
                         if (config.inbound_container_component_sz == 1u){
-                            return ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
-                                                                                   config.inbound_container_react_sz,
-                                                                                   config.inbound_container_subscriber_cap,
-                                                                                   config.inbound_container_react_latency);
+                            return ComponentFactory::get_reacting_buffer_container<client_affined_timeout_controller>(ComponentFactory::get_buffer_fifo_container(config.inbound_container_cap),
+                                                                                                                      config.inbound_container_react_sz,
+                                                                                                                      config.inbound_container_subscriber_cap,
+                                                                                                                      config.inbound_container_react_latency);
                         } else{
                             auto inbound_container_vec = std::vector<std::unique_ptr<InBoundContainerInterface>>(config.inbound_container_component_sz);
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
-                            return ComponentFactory::get_reacting_buffer_container(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
-                                                                                                                                                  config.inbound_container_drain_period, 
-                                                                                                                                                  config.inbound_container_bounce_sz),
+                            return ComponentFactory::get_reacting_buffer_container<client_affined_timeout_controller>(ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
+                                                                                                                                                                                     config.inbound_container_drain_period,
+                                                                                                                                                                                     config.inbound_container_drain_probe_peek_cap,
+                                                                                                                                                                                     config.inbound_container_bounce_sz),
                                                                                    config.inbound_container_react_sz,
                                                                                    config.inbound_container_subscriber_cap,
                                                                                    config.inbound_container_react_latency);
@@ -3985,7 +4140,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             std::generate(inbound_container_vec.begin(), inbound_container_vec.end(), std::bind_front(ComponentFactory::get_buffer_fifo_container, config.inbound_container_cap, 4u)); //
 
                             return ComponentFactory::get_random_hash_distributed_buffer_container(std::move(inbound_container_vec),
-                                                                                                  config.inbound_container_drain_period, 
+                                                                                                  config.inbound_container_drain_period,
+                                                                                                  config.inbound_container_drain_probe_peek_cap,
                                                                                                   config.inbound_container_bounce_sz);
                         }
                     }
@@ -4012,6 +4168,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                         return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
                                                                                                                                                                  config.latency_controller_drain_period,
+                                                                                                                                                                 config.latency_controller_drain_probe_peek_cap,
                                                                                                                                                                  config.latency_controller_keyvalue_feed_cap,
                                                                                                                                                                  config.latency_controller_bounce_sz),
                                                                                                config.infretry_device,
@@ -4029,6 +4186,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                         return ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
                                                                                                  config.latency_controller_drain_period,
+                                                                                                 config.latency_controller_drain_probe_peek_cap,
                                                                                                  config.latency_controller_keyvalue_feed_cap,
                                                                                                  config.latency_controller_bounce_sz);
                     }
@@ -4180,6 +4338,40 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     extern auto spawn(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
 
         return ConfigMaker::make(config);
+    }
+
+    static auto internal_get_affined_blockonsend_permission_guard() noexcept{
+
+        auto prev_state             = client_affined_blocksend_controller::get();
+        auto resource_scope_guard   = [prev_state]() noexcept{
+            client_affined_blocksend_controller::abs_set(prev_state);
+        };
+
+        return stdx::resource_guard(resource_scope_guard);
+    } 
+
+    extern void send_2(MailBox * obj, std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr, bool is_block) noexcept{
+
+        auto permission_guard = internal_get_affined_blockonsend_permission_guard();
+        client_affined_blocksend_controller::set(is_block);
+        stdx::safe_ptr_access(obj)->send(data_arr, sz, exception_arr);        
+    }
+
+    static auto internal_get_affined_timeout_guard() noexcept{
+
+        auto prev_state             = client_affined_timeout_controller::get();
+        auto resource_scope_guard   = [prev_state]() noexcept{
+            client_affined_timeout_controller::abs_set(prev_state);
+        };
+
+        return stdx::resource_guard(resource_scope_guard);
+    }
+
+    extern void recv_2(MailBox * obj, dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap, std::chrono::nanoseconds timeout) noexcept{
+
+        auto timeout_guard = internal_get_affined_timeout_guard();
+        client_affined_timeout_controller::set(timeout);
+        stdx::safe_ptr_access(obj)->recv(output_arr, output_arr_sz, output_arr_cap);
     }
 }
 
