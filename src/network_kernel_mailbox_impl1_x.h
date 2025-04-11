@@ -549,7 +549,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we implemented (1)
     //we are thinking about implementing (3) without actually overstepping into the-micro-optimization-and-enables-exploitation territory
     //it's a hashing problem, we can clue the region of frequent accesses by using IP, and their packet id should be incremental
-
+    //alright, one last request is to implement a select-like feature of std by using encapsulated global affined variables injection. Our client does not want to be forced to wait to get data. We live in a free world fellas
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
 
