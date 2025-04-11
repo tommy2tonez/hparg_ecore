@@ -377,21 +377,33 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr void erase_front_range(size_t sz) noexcept{
 
-                for (size_t i = 0u; i < sz; ++i){
-                    pop_front();
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->sz){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                        std::abort();
+                    }
                 }
+
+                this->defaultize_range(0u, sz);
+                this->off += sz; 
+                this->sz  -= sz;
             }
 
             constexpr void erase_back_range(size_t sz) noexcept{
 
-                for (size_t i = 0u; i < sz; ++i){
-                    pop_back();
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->sz){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                        std::abort();
+                    }
                 }
+
+                this->resize(this->sz - sz);
             }
 
             constexpr void clear() noexcept{
 
-                this->erase_back_range(this->size());
+                this->resize(0u);
             }
 
             constexpr auto operator ==(const self& other) const noexcept -> bool{
@@ -603,10 +615,6 @@ namespace dg::network_datastructure::cyclic_queue{
                 }            
             }
     };
-
-    //I know what yall saying, it's ... std leeways of things
-    //alright Son, maybe just maybe, you will get erased before me
-    //if you are to fight, fight it square
 
     template <class T, class Allocator = std::allocator<T>>
     class nontrivial_pow2_cyclic_queue{
@@ -890,7 +898,7 @@ namespace dg::network_datastructure::cyclic_queue{
                 }
             }
 
-            constexpr auto clear() noexcept{
+            constexpr void clear() noexcept{
 
                 this->erase_back_range(this->size());
             }
@@ -914,6 +922,8 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr void dispatch_destroy(size_t virtual_off, size_t sz) noexcept{
 
+                //optimizables
+
                 for (size_t i = 0u; i < sz; ++i){
                     size_t abs_off = this->to_index(virtual_off + i);
                     std::destroy_at(std::launder(reinterpret_cast<T *>(&this->data_arr[abs_off])));
@@ -922,6 +932,8 @@ namespace dg::network_datastructure::cyclic_queue{
 
             template <class T1 = T, std::enable_if_t<std::is_default_constructible_v<T1>, bool> = true>
             constexpr auto dispatch_default_initialize(size_t virtual_off, size_t sz) noexcept -> exception_t{
+
+                //optimizables
 
                 if constexpr(std::is_nothrow_default_constructible_v<T>){
                     for (size_t i = 0u; i < sz; ++i){
@@ -960,7 +972,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
     template <class T, class Allocator>
     struct pow2_cyclic_queue_chooser<T, Allocator, std::void_t<std::enable_if_t<std::is_trivial_v<T>>>>{
-        using type = nontrivial_pow2_cyclic_queue<T, Allocator>;
+        using type = simple_pow2_cyclic_queue<T, Allocator>;
     };
 
     template <class T, class Allocator = std::allocator<T>>

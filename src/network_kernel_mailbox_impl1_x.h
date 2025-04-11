@@ -575,7 +575,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto rs = std::vector<stdx::hdi_container<std::optional<std::chrono::nanoseconds>>>(container_sz);
 
                 for (size_t i = 0u; i < container_sz; ++i){
-                    rs.value = std::nullopt;
+                    rs[i].value = std::nullopt;
                 }
 
                 return rs;
@@ -640,17 +640,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             static void abs_set(std::optional<bool> state) noexcept{
 
-                self::flag_container[dg::network_concurrency::this_thread_idx()] = state;
+                self::flag_container[dg::network_concurrency::this_thread_idx()].value = state;
             }
 
             static void set(bool flag) noexcept{
 
-                self::flag_container[dg::network_concurrency::this_thread_idx()] = flag; 
+                self::flag_container[dg::network_concurrency::this_thread_idx()].value = flag; 
             }
 
             static void clear() noexcept{
 
-                self::flag_container[dg::network_concurrency::this_thread_idx()] = std::nullopt;
+                self::flag_container[dg::network_concurrency::this_thread_idx()].value = std::nullopt;
             }
 
             static auto get() noexcept -> std::optional<bool>{
@@ -4350,7 +4350,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         return stdx::resource_guard(resource_scope_guard);
     } 
 
-    extern void send_2(MailBox * obj, std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr, bool is_block) noexcept{
+    extern void send_2(dg::network_kernel_mailbox_impl1::core::MailboxInterface * obj, std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr, bool is_block) noexcept{
 
         auto permission_guard = internal_get_affined_blockonsend_permission_guard();
         client_affined_blocksend_controller::set(is_block);
@@ -4367,7 +4367,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         return stdx::resource_guard(resource_scope_guard);
     }
 
-    extern void recv_2(MailBox * obj, dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap, std::chrono::nanoseconds timeout) noexcept{
+    extern void recv_2(dg::network_kernel_mailbox_impl1::core::MailboxInterface * obj, dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap, std::chrono::nanoseconds timeout) noexcept{
 
         auto timeout_guard = internal_get_affined_timeout_guard();
         client_affined_timeout_controller::set(timeout);
