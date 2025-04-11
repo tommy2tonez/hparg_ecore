@@ -2733,7 +2733,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     size_t peeking_cap  = std::min(current_cap, this->drain_peek_cap_per_container);
                     size_t adjusted_idx = (start_seek + i) & (this->pow2_buffer_container_vec_sz - 1u);
                     size_t current_sz   = {};
-                    this->buffer_container_vec[adjusted_idx]->pop(current_output_arr, current_sz, current_cap);
+                    this->buffer_container_vec[adjusted_idx]->pop(current_output_arr, current_sz, peeking_cap);
                     current_cap         -= current_sz;
                     sz                  += current_sz;
                     std::advance(current_output_arr, current_sz);
