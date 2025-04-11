@@ -27,6 +27,15 @@ namespace dg::network_datastructure::cyclic_queue{
     //because it is not constructed by using new[] contiguous memory operation
     //we are not doing that yet
 
+    //we spoke to the community about move and assign operators + friends
+    //move is to put the object into INVALID state + good for destruction + another move
+    //move is not supposed to put the object into VALID state for operations, it's nothrow_impossible a lot of time, semantically INCORRECT a lot of time also
+    //what happens after move is that we are not supposed to invoke any of the class functions, except for ... another move, this is the std way of doing things, not allocating another default constructed state
+    //the std has been malpracticed for a longest time ever
+    //even their stl container implementation of MOVE is sometimes incorrect
+    //I'm tired of implementing things that are not QUANTIFIABLE, like snapping sz off cap -> 0 after move
+    //we are in C, there are literally 1024 ways to misuse the C program
+
     template <class = void>
     static inline constexpr bool FALSE_VAL = false;
  
@@ -187,12 +196,67 @@ namespace dg::network_datastructure::cyclic_queue{
 
             static inline constexpr size_t DEFAULT_POW2_EXPONENT = 10u; 
 
-            simple_pow2_cyclic_queue(): simple_pow2_cyclic_queue(DEFAULT_POW2_EXPONENT){}
+            constexpr simple_pow2_cyclic_queue(): simple_pow2_cyclic_queue(DEFAULT_POW2_EXPONENT){}
 
-            simple_pow2_cyclic_queue(size_t pow2_exponent): data_arr(size_t{1} << pow2_exponent),
-                                                            off(0u),
-                                                            sz(0u),
-                                                            cap(size_t{1} << pow2_exponent){}
+            constexpr simple_pow2_cyclic_queue(size_t pow2_exponent): data_arr(size_t{1} << pow2_exponent),
+                                                                      off(0u),
+                                                                      sz(0u),
+                                                                      cap(size_t{1} << pow2_exponent){}
+
+            constexpr simple_pow2_cyclic_queue(const self& other): data_arr(other.data_arr),
+                                                                   off(other.off),
+                                                                   sz(other.sz),
+                                                                   cap(other.cap){}
+
+            constexpr simple_pow2_cyclic_queue(self&& other) noexcept(std::is_nothrow_move_constructible_v<std::vector<T, Allocator>>): data_arr(std::move(other.data_arr)),
+                                                                                                                                        off(other.off),
+                                                                                                                                        sz(other.sz),
+                                                                                                                                        cap(other.cap){
+
+                other.off   = 0u; //this is not quantifiable, wrong, incorrect, not protected by range bro cap
+                other.sz    = 0u;
+                other.cap   = 0u;
+            }
+
+            constexpr auto operator =(const self& other) -> self&{
+
+                if (this == std::addressof(other)){ //let's not try to be smart
+                    return *this;
+                }
+
+                this->data_arr  = other.data_arr;
+                this->off       = other.off;
+                this->sz        = other.sz;
+                this->cap       = other.cap;
+
+                return *this;
+            }
+
+            constexpr auto operator =(self&& other) noexcept(std::is_nothrow_move_assignable_v<std::vector<T, Allocator>>) -> self&{
+
+                if (this == std::addressof(other)){
+                    return *this;
+                }
+
+                this->data_arr  = std::move(other.data_arr);
+                this->off       = other.off;
+                this->sz        = other.sz;
+                this->cap       = other.cap;
+
+                other.off       = 0u;
+                other.sz        = 0u;
+                other.cap       = 0u;
+
+                return *this;
+            } 
+
+            constexpr void swap(self& other) noexcept(true){
+
+                std::swap(this->data_arr, other.data_arr);
+                std::swap(this->off, other.off);
+                std::swap(this->sz, other.sz);
+                std::swap(this->cap, other.cap);
+            }
 
             constexpr auto front() const noexcept -> const T&{
 
@@ -469,7 +533,6 @@ namespace dg::network_datastructure::cyclic_queue{
                         static_assert(FALSE_VAL<>);
                     }
                 }
-
             }
     };
     
@@ -653,14 +716,34 @@ namespace dg::network_datastructure::cyclic_queue{
                                                                           cap(size_t{1} << pow2_exponent){}
             
 
-            constexpr ~nontrivial_pow2_cyclic_queue() noexcept{
+            constexpr nontrivial_pow2_cyclic_queue(const self& other){
 
-                this->clear();
+                *this = other;
             }
 
             constexpr nontrivial_pow2_cyclic_queue(self&& other) noexcept(true){
 
                 *this = std::move(other);
+            }
+
+            constexpr ~nontrivial_pow2_cyclic_queue() noexcept{
+
+                this->clear();
+            }
+
+            constexpr auto operator =(const self& other) -> self&{
+
+                if (this == std::addressof(other)){
+                    return *this;
+                }
+
+                auto proxy = self(stdx::ulog2(other.data_arr.size()));
+
+                for (const auto& e: other){
+                    proxy.push_back(e);
+                }
+
+                return *this = std::move(proxy);
             }
 
             constexpr auto operator =(self&& other) noexcept(true) -> self&{
