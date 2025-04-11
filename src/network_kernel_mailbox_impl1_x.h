@@ -550,6 +550,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //we are thinking about implementing (3) without actually overstepping into the-micro-optimization-and-enables-exploitation territory
     //it's a hashing problem, we can clue the region of frequent accesses by using IP, and their packet id should be incremental
     //alright, one last request is to implement a select-like feature of std by using encapsulated global affined variables injection. Our client does not want to be forced to wait to get data. We live in a free world fellas
+    //assume the reactor threshold is N, we can expect that the latency of all the guys above the threshold to be in the nanoseconds range
+    //we can assume the guys below the threshold to be not in the nanoseconds range. We must specify that N to be the peeking size for each of the subcontainer because thats the worst latency scenerio, and the consumer must have the consume size of subcontainer_sz * N
+    //we have seeked advices that the reactor threshold must be of 10 MB, and the worst draining latency must be of 10ms. We want the water pipe to run all the time to push data through, to achieve the best performance scenerio of 1GB/(100*k memory orderings)
+    //we will work on improving the memory footprint of maps and sets. its super very complicated
+
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
 
