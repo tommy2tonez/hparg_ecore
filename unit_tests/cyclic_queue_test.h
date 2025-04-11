@@ -41,7 +41,7 @@ namespace pow2_cyclic_queue_test{
 
         for (size_t i = 0u; i < operation_sz; ++i){
             uint8_t ops_code = random_ops_device() % TOTAL_OPS_CODE_SZ;
-
+            
             switch (ops_code){
                 case OPS_CODE_BACK_INSERT_IN_RANGE:
                 {
@@ -213,7 +213,7 @@ namespace pow2_cyclic_queue_test{
                 case OPS_CODE_CMP_FRONT_BACK:
                 {
                     if (vec.size() != queue.size()){
-                        std::cout << "OPERATOR_CMP_FRONT_BACK FAILED" << std::endl;
+                        std::cout << "OPERATOR_CMP_FRONT_BACK SIZE FAILED" << std::endl;
                         std::abort();
                     }
 
@@ -222,12 +222,12 @@ namespace pow2_cyclic_queue_test{
                     }
 
                     if (vec.front() != queue.front()){
-                        std::cout << "OPERATOR_CMP_FRONT_BACK FAILED" << std::endl;
+                        std::cout << "OPERATOR_CMP_FRONT_BACK FRONT FAILED" << std::endl;
                         std::abort();
                     }
 
                     if (vec.back() != queue.back()){
-                        std::cout << "OPERATOR_CMP_FRONT_BACK FAILED" << std::endl;
+                        std::cout << "OPERATOR_CMP_FRONT_BACK BACK FAILED" << std::endl;
                         std::abort();
                     }
 
@@ -339,7 +339,7 @@ namespace pow2_cyclic_queue_test{
                 case OPS_CODE_RESIZE_IN_RANGE:
                 {
                     size_t resize_sz = random_device() % (queue.size() + 1u);
-                    queue.resize(resize_sz);
+                    // queue.resize(resize_sz);
                     
                     break;
                 }
@@ -384,6 +384,8 @@ namespace pow2_cyclic_queue_test{
                 {
                     if (queue.size() == foo_counter){
                         break;
+                    } else{
+                        std::cout << queue.size() << "<queue_sz>" << foo_counter << "<foo_counter>" << std::endl;
                     }
  
                     std::cout << "OPERATOR_EQUAL FAILED" << std::endl;

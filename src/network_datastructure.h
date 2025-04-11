@@ -48,6 +48,7 @@ namespace dg::network_datastructure::cyclic_queue{
             }
     };
 
+    //alright we'll be back
     template <class BaseIterator>
     class pow2_cyclic_queue_iterator{
 
@@ -133,12 +134,17 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto operator ==(const self& other) const noexcept -> bool{
 
-                return (this->iter_head == other.iter_head) && (this->virtual_idx == other.virtual_idx);
+                return this->iter_head == other.iter_head && this->virtual_idx == other.virtual_idx;
             }
 
             constexpr auto operator !=(const self& other) const noexcept -> bool{
 
-                return (this->iter_head != other.iter_head) || (this->virtual_idx != other.virtual_idx);
+                return this->iter_head != other.iter_head || this->virtual_idx != other.virtual_idx;
+            }
+
+            constexpr auto operator <=(const self& other) const noexcept -> bool{
+
+                return this->iter_head < other.iter_head || (this->iter_head == other.iter_head && this->virtual_idx <= other.virtual_idx);
             }
 
             constexpr auto operator *() const noexcept -> decltype(auto){
@@ -152,10 +158,16 @@ namespace dg::network_datastructure::cyclic_queue{
                 size_t actual_idx = this->index_getter(stdx::wrap_safe_integer_cast(this->virtual_idx));
                 return std::next(this->iter_head, actual_idx).operator ->();
             }
+
+            constexpr auto operator [](intmax_t offset) const noexcept -> decltype(auto){
+
+                size_t actual_idx = this->index_getter(stdx::wrap_safe_integer_cast(this->virtual_idx + offset));
+                return std::next(this->iter_head, actual_idx).operator *();
+            }
     };
 
     template <class T, class Allocator = std::allocator<T>>
-    class pow2_cyclic_queue{
+    class simple_pow2_cyclic_queue{
 
         private:
 
@@ -164,7 +176,7 @@ namespace dg::network_datastructure::cyclic_queue{
             size_t sz;
             size_t cap;
 
-            using self              = pow2_cyclic_queue;
+            using self              = simple_pow2_cyclic_queue;
 
         public:
 
@@ -175,12 +187,12 @@ namespace dg::network_datastructure::cyclic_queue{
 
             static inline constexpr size_t DEFAULT_POW2_EXPONENT = 10u; 
 
-            pow2_cyclic_queue(): pow2_cyclic_queue(DEFAULT_POW2_EXPONENT){}
+            simple_pow2_cyclic_queue(): simple_pow2_cyclic_queue(DEFAULT_POW2_EXPONENT){}
 
-            pow2_cyclic_queue(size_t pow2_exponent): data_arr(size_t{1} << pow2_exponent),
-                                                     off(0u),
-                                                     sz(0u),
-                                                     cap(size_t{1} << pow2_exponent){}
+            simple_pow2_cyclic_queue(size_t pow2_exponent): data_arr(size_t{1} << pow2_exponent),
+                                                            off(0u),
+                                                            sz(0u),
+                                                            cap(size_t{1} << pow2_exponent){}
 
             constexpr auto front() const noexcept -> const T&{
 
@@ -364,7 +376,7 @@ namespace dg::network_datastructure::cyclic_queue{
             } 
 
             constexpr void erase_front_range(size_t sz) noexcept{
-                
+
                 for (size_t i = 0u; i < sz; ++i){
                     pop_front();
                 }
@@ -375,6 +387,11 @@ namespace dg::network_datastructure::cyclic_queue{
                 for (size_t i = 0u; i < sz; ++i){
                     pop_back();
                 }
+            }
+
+            constexpr void clear() noexcept{
+
+                this->erase_back_range(this->size());
             }
 
             constexpr auto operator ==(const self& other) const noexcept -> bool{
@@ -443,6 +460,511 @@ namespace dg::network_datastructure::cyclic_queue{
 
             }
     };
+    
+    template <class Iter, class T, class = void>
+    struct is_const_iter: std::false_type{};
+
+    template <class Iter, class T>
+    struct is_const_iter<Iter, T, std::void_t<std::enable_if_t<std::is_same_v<decltype(*std::declval<Iter&>()), std::add_lvalue_reference_t<std::add_const_t<T>>>>>>: std::true_type{};
+
+    template <class Iter, class T>
+    static inline constexpr bool is_const_iter_v = is_const_iter<Iter, T>::value;
+    
+    template <class Iter, class T, class = void>
+    struct is_normal_iter: std::false_type{};
+
+    template <class Iter, class T>
+    struct is_normal_iter<Iter, T, std::void_t<std::enable_if_t<std::is_same_v<decltype(*std::declval<Iter&>()), std::add_lvalue_reference_t<T>>>>>: std::true_type{};
+
+    template <class Iter, class T>
+    static inline constexpr bool is_normal_iter_v = is_normal_iter<Iter, T>::value;
+
+    //this is not very fast, we hope that it is just a thin container for vector<>, we always use inheritance to avoid memory read issues
+    template <class T, class ST, class BaseIterator>
+    class aligned_storage_vector_iterator{
+
+        private:
+
+            BaseIterator iter;
+        
+        public:
+
+            using self              = aligned_storage_vector_iterator; 
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = T; 
+
+            template <class T1 = BaseIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T1>, bool> = true>
+            constexpr aligned_storage_vector_iterator(): iter(){}
+
+            constexpr aligned_storage_vector_iterator(BaseIterator iter)noexcept(std::is_nothrow_move_constructible_v<BaseIterator>): iter(std::move(iter)){} 
+
+            constexpr auto operator ++() noexcept -> self&{
+
+                std::advance(this->iter, 1u);
+                return *this;
+            }
+
+            constexpr auto operator ++(int) noexcept -> self{
+
+                static_assert(std::is_nothrow_copy_constructible_v<self>);
+
+                self rs = *this;
+                std::advance(this->iter, 1u);
+                return rs;
+            }
+
+            constexpr auto operator --() noexcept -> self&{
+
+                std::advance(this->iter, -1);
+                return *this;
+            }
+
+            constexpr auto operator --(int) noexcept -> self{
+
+                static_assert(std::is_nothrow_copy_constructible_v<self>);
+
+                self rs = *this;
+                std::advance(this->iter, -1);
+                return rs;
+            }
+
+            constexpr auto operator +(difference_type off) const noexcept -> self{
+
+                return self(std::next(this->iter, off));
+            }
+
+            constexpr auto operator +=(difference_type off) noexcept -> self&{
+
+                std::advance(this->iter, off);
+                return *this;
+            }
+
+            constexpr auto operator -(difference_type off) const noexcept -> self{
+
+                return self(std::prev(this->iter, off));
+            }
+
+            constexpr auto operator -(const self& other) const noexcept -> difference_type{
+
+                return std::distance(other.iter, this->iter);
+            }
+        
+            constexpr auto operator -=(difference_type off) noexcept -> self&{
+
+                std::advance(this->iter, -off);
+                return *this;
+            }
+
+            constexpr auto operator ==(const self& other) const noexcept -> bool{
+
+                return this->iter == other.iter;
+            }
+
+            constexpr auto operator !=(const self& other) const noexcept -> bool{
+
+                return this->iter != other.iter;
+            }
+
+            constexpr auto operator <=(const self& other) const noexcept -> bool{
+
+                return this->iter <= other.iter;
+            }
+
+            constexpr auto operator[](intmax_t idx) const noexcept -> decltype(auto){
+
+                if constexpr(is_const_iter_v<BaseIterator, ST>){
+                    return *std::launder(reinterpret_cast<const T *>(&this->iter[idx]));
+                } else if constexpr(is_normal_iter_v<BaseIterator, ST>){
+                    return *std::launder(reinterpret_cast<T *>(&this->iter[idx]));
+                } else{
+                    static_assert(FALSE_VAL<>);
+                }
+            }
+
+            constexpr auto operator *() const noexcept -> decltype(auto){
+
+                if constexpr(is_const_iter_v<BaseIterator, ST>){
+                    return *std::launder(reinterpret_cast<const T *>(&(*this->iter)));
+                } else if constexpr(is_normal_iter_v<BaseIterator, ST>){
+                    return *std::launder(reinterpret_cast<T *>(&(*this->iter)));
+                } else{
+                    static_assert(FALSE_VAL<>);
+                }
+            }
+
+            constexpr auto operator ->() const noexcept -> decltype(auto){
+
+                if constexpr(is_const_iter_v<BaseIterator, ST>){
+                    return std::launder(reinterpret_cast<const T *>(&(*this->iter)));
+                } else if constexpr(is_normal_iter_v<BaseIterator, ST>){
+                    return std::launder(reinterpret_cast<T *>(&(*this->iter)));
+                } else{
+                    static_assert(FALSE_VAL<>);
+                }            
+            }
+    };
+
+    //I know what yall saying, it's ... std leeways of things
+    //alright Son, maybe just maybe, you will get erased before me
+    //if you are to fight, fight it square
+
+    template <class T, class Allocator = std::allocator<T>>
+    class nontrivial_pow2_cyclic_queue{
+
+        private:
+
+            //alright, we arent being greedy, we might step into the undefined territory
+
+            using rebinded_allocator = typename std::allocator_traits<Allocator>::rebind_alloc<std::aligned_storage_t<sizeof(T), alignof(T)>>;
+
+            std::vector<std::aligned_storage_t<sizeof(T), alignof(T)>, rebinded_allocator> data_arr;
+            size_t off;
+            size_t sz;
+            size_t cap;
+
+        public:
+
+            static_assert(std::is_nothrow_destructible_v<T>);
+
+            using self                                      = nontrivial_pow2_cyclic_queue;
+            using value_type                                = T;
+
+            using _internal_vector_semantic_iterator        = aligned_storage_vector_iterator<T, std::aligned_storage_t<sizeof(T), alignof(T)>, typename std::vector<std::aligned_storage_t<sizeof(T), alignof(T)>, rebinded_allocator>::iterator>;
+            using _internal_vector_semantic_const_iterator  = aligned_storage_vector_iterator<T, std::aligned_storage_t<sizeof(T), alignof(T)>, typename std::vector<std::aligned_storage_t<sizeof(T), alignof(T)>, rebinded_allocator>::const_iterator>;
+
+            using iterator                                  = pow2_cyclic_queue_iterator<_internal_vector_semantic_iterator>;
+            using const_iterator                            = pow2_cyclic_queue_iterator<_internal_vector_semantic_const_iterator>;
+
+            static inline constexpr size_t DEFAULT_POW2_EXPONENT = 10u;
+
+            constexpr nontrivial_pow2_cyclic_queue(): nontrivial_pow2_cyclic_queue(DEFAULT_POW2_EXPONENT){}
+
+            constexpr nontrivial_pow2_cyclic_queue(size_t pow2_exponent): data_arr(size_t{1} << pow2_exponent),
+                                                                          off(0u),
+                                                                          sz(0u),
+                                                                          cap(size_t{1} << pow2_exponent){}
+            
+
+            constexpr ~nontrivial_pow2_cyclic_queue() noexcept{
+
+                this->clear();
+            }
+
+            constexpr nontrivial_pow2_cyclic_queue(self&& other) noexcept(true){
+
+                *this = std::move(other);
+            }
+
+            constexpr auto operator =(self&& other) noexcept(true) -> self&{
+
+                if (this == std::addressof(other)){
+                    return *this;
+                }
+
+                this->clear();
+
+                this->data_arr  = std::move(other.data_arr); //this is ... I dont know how to explain it...
+                this->off       = other.off;
+                this->sz        = other.sz;
+                this->cap       = other.cap;
+                other.off       = 0u;
+                other.sz        = 0u;
+                other.cap       = 0u;
+
+                return *this;
+            }
+
+            constexpr void swap(self& other) noexcept(true){
+
+                std::swap(this->data_arr, other.data_arr);
+                std::swap(this->off, other.off);
+                std::swap(this->sz, other.sz);
+                std::swap(this->cap, other.cap);
+            }
+
+            //access value via pointers are undefined for this very reason
+            //the array is not new[] constructible, every defined usage of these guys must be directly right after std::launder<>, a linger on such is UNDEFINED
+            //even if a storage reference is also not implemented correctly
+
+            constexpr auto front() const noexcept -> const T&{
+                
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr = this->to_index(0u);
+                return *std::launder(reinterpret_cast<const T*>(&this->data_arr[ptr]));
+            }
+
+            constexpr auto front() noexcept -> T&{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr = this->to_index(0u);
+                return *std::launder(reinterpret_cast<T *>(&this->data_arr[ptr]));
+            }
+
+            constexpr auto back() const noexcept -> const T&{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr = this->to_index(this->sz - 1u);
+                return *std::launder(reinterpret_cast<const T *>(&this->data_arr[ptr]));
+            }
+
+            constexpr auto back() noexcept -> T&{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr = this->to_index(this->sz - 1u);
+                return *std::launder(reinterpret_cast<T *>(&this->data_arr[ptr]));
+            }
+
+            constexpr auto empty() const noexcept -> bool{
+
+                return this->sz == 0u;
+            }
+
+            constexpr auto begin() const noexcept -> const_iterator{
+
+                return const_iterator(_internal_vector_semantic_const_iterator(this->data_arr.begin()), 0u, this->get_index_getter_device());
+            }
+
+            constexpr auto end() const noexcept -> const_iterator{
+
+                return const_iterator(_internal_vector_semantic_const_iterator(this->data_arr.begin()), this->sz, this->get_index_getter_device());
+            }
+
+            constexpr auto begin() noexcept -> iterator{
+
+                return iterator(_internal_vector_semantic_iterator(this->data_arr.begin()), 0u, this->get_index_getter_device());
+            }
+
+            constexpr auto end() noexcept -> iterator{
+
+                return iterator(_internal_vector_semantic_iterator(this->data_arr.begin()), this->sz, this->get_index_getter_device());
+            }
+
+            constexpr auto size() const noexcept -> size_t{
+
+                return this->sz;
+            }
+
+            constexpr auto capacity() const noexcept -> size_t{
+
+                return this->cap;
+            }
+
+            constexpr auto operator[](size_t idx) const noexcept -> const T&{
+
+                return *std::launder(reinterpret_cast<const T *>(&this->data_arr[this->to_index(idx)]));
+            }
+
+            constexpr auto operator[](size_t idx) noexcept -> T&{
+
+                return *std::launder(reinterpret_cast<T *>(&this->data_arr[this->to_index(idx)]));
+            }
+
+            constexpr auto at(size_t idx) const noexcept -> const T&{
+
+                return (*this)[idx];
+            }
+
+            constexpr auto at(size_t idx) noexcept -> T&{
+
+                return (*this)[idx];
+            }
+
+            template <class T1 = T, std::enable_if_t<std::is_default_constructible_v<T1>, bool> = true>
+            constexpr auto resize(size_t new_sz) noexcept -> exception_t{
+
+                //this is harder than expected
+
+                if (new_sz > this->cap){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+                
+                if (new_sz == this->sz){
+                    return dg::network_exception::SUCCESS;
+                }
+
+                if (new_sz > this->sz){
+                    exception_t err = this->dispatch_default_initialize(this->sz, new_sz - this->sz); //this is very hard to implement, i'll try
+
+                    if (dg::network_exception::is_failed(err)){
+                        return err;
+                    }
+
+                    this->sz = new_sz;
+                    return dg::network_exception::SUCCESS;
+                }
+
+                this->dispatch_destroy(new_sz, this->sz - new_sz);
+                this->sz = new_sz;
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            template <class ValueLike>
+            constexpr auto push_back(ValueLike&& value) noexcept -> exception_t{
+
+                if (this->sz == this->cap){
+                    return dg::network_exception::QUEUE_FULL;
+                }
+
+                size_t ptr = this->to_index(this->sz);
+
+                if constexpr(std::is_nothrow_constructible_v<T, ValueLike&&>){
+                    new (&this->data_arr[ptr]) T(std::forward<ValueLike>(value));
+                    this->sz += 1u;
+                    return dg::network_exception::SUCCESS;
+                } else{
+                    try{
+                        new (&this->data_arr[ptr]) T(std::forward<ValueLike>(value));
+                        this->sz += 1u;
+                        return dg::network_exception::SUCCESS;
+                    } catch (...){
+                        return dg::network_exception::wrap_std_exception(std::current_exception());
+                    }
+                }
+            }
+
+            constexpr void pop_front() noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr = this->to_index(0u);
+                std::destroy_at(std::launder(reinterpret_cast<T *>(&this->data_arr[ptr])));
+                this->off   += 1;
+                this->sz    -= 1;
+            }
+
+            constexpr void pop_back() noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (this->sz == 0u){
+                        // dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t ptr = this->to_index(this->sz - 1u);
+                std::destroy_at(std::launder(reinterpret_cast<T *>(&this->data_arr[ptr])));
+                this->sz    -= 1;
+            }
+
+            constexpr void erase_front_range(size_t sz) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->pop_front();
+                }
+            }
+
+            constexpr void erase_back_range(size_t sz) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    this->pop_back();
+                }
+            }
+
+            constexpr auto clear() noexcept{
+
+                this->erase_back_range(this->size());
+            }
+
+            constexpr auto operator ==(const self& other) const noexcept -> bool{
+
+                return std::equal(this->begin(), this->end(), other.begin(), other.end());
+            }
+        
+        private:
+
+            constexpr auto to_index(size_t virtual_off) const noexcept -> size_t{
+
+                return (this->off + virtual_off) & (this->cap - 1u);
+            }
+
+            constexpr auto get_index_getter_device() const noexcept -> pow2_cyclic_queue_index_getter_device{
+
+                return pow2_cyclic_queue_index_getter_device(this->off, this->cap);
+            }
+
+            constexpr void dispatch_destroy(size_t virtual_off, size_t sz) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t abs_off = this->to_index(virtual_off + i);
+                    std::destroy_at(std::launder(reinterpret_cast<T *>(&this->data_arr[abs_off])));
+                }
+            }
+
+            template <class T1 = T, std::enable_if_t<std::is_default_constructible_v<T1>, bool> = true>
+            constexpr auto dispatch_default_initialize(size_t virtual_off, size_t sz) noexcept -> exception_t{
+
+                if constexpr(std::is_nothrow_default_constructible_v<T>){
+                    for (size_t i = 0u; i < sz; ++i){
+                        size_t abs_off = this->to_index(virtual_off + i); 
+                        new (&this->data_arr[abs_off]) T(); //this is the error that I will forever remember, I never know that new () fundamental is NOT new, this is very new, this is the new thing that I will never forget in the new future
+                    }
+
+                    return dg::network_exception::SUCCESS;
+                } else{
+                    try{
+                        size_t success_sz   = 0u;
+                        auto backoff_task   = [&, this]() noexcept{
+                            this->dispatch_destroy(virtual_off, success_sz);
+                        };
+                        auto backoff_grd    = stdx::resource_guard(backoff_task); 
+
+                        for (size_t i = 0u; i < sz; ++i){
+                            size_t abs_off = this->to_index(virtual_off + i);
+                            new (&this->data_arr[abs_off]) T();
+                            success_sz += 1u;
+                        }
+
+                        backoff_grd.release();
+                        return dg::network_exception::SUCCESS;
+                    } catch (...){
+                        return dg::network_exception::wrap_std_exception(std::current_exception());
+                    }
+                }
+            }
+    };
+
+    template <class T, class Allocator, class = void>
+    struct pow2_cyclic_queue_chooser{
+        using type = nontrivial_pow2_cyclic_queue<T, Allocator>;
+    };
+
+    template <class T, class Allocator>
+    struct pow2_cyclic_queue_chooser<T, Allocator, std::void_t<std::enable_if_t<std::is_trivial_v<T>>>>{
+        using type = nontrivial_pow2_cyclic_queue<T, Allocator>;
+    };
+
+    template <class T, class Allocator = std::allocator<T>>
+    using pow2_cyclic_queue = typename pow2_cyclic_queue_chooser<T, Allocator>::type;
 }
 
 namespace dg::network_datastructure::unordered_map_variants{

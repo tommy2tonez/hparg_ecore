@@ -927,7 +927,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             temporal_finite_unordered_map(size_t tentative_cap){
 
-                size_t upcap            = stdx::ceil2(tentative_cap);
+                size_t upcap            = stdx::ceil2(std::max(size_t{2}, tentative_cap));
                 size_t pow2_exponent    = stdx::ulog2(upcap);
                 this->map_container.reserve(upcap);
                 this->cyclic_queue      = dg::pow2_cyclic_queue<std::pair<Key, Value>>(pow2_exponent);
