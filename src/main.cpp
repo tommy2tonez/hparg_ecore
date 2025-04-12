@@ -18,10 +18,11 @@
 #include <unordered_map>
 // #include "test_map.h"
 // #include "dg_dense_hash_map.h"
-#include "network_kernel_mailbox_impl1_x.h"
+// #include "network_kernel_mailbox_impl1_x.h"
 #include <vector>
 #include <type_traits>
 #include "network_datastructure.h"
+#include "network_fileio.h"
 
 // template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
 // constexpr auto ulog2(T val) noexcept -> T{
@@ -59,6 +60,12 @@ template <class Iter, class T>
 static inline constexpr bool is_normal_iter_v = is_normal_iter<Iter, T>::value;
 
 int main(){
+
+    char buf[128];
+
+    std::cout << static_cast<size_t>(dg::network_fileio::dg_create_binary("/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt", 128)) << std::endl;
+    // dg::network_fileio::dg_write_binary("/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt", buf, 128u);
+    std::cout << dg::network_fileio::dg_file_size("/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt").value();
 
     // std::cout << queue[0];
     // auto vec = std::vector<size_t>();

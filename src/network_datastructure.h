@@ -40,7 +40,7 @@ namespace dg::network_datastructure::cyclic_queue{
     //std::optional<>::move
     //std::variants<>::move
 
-    //std is afraid of strictening the rule -> invalid + good for destruction + good for another move
+    //std is afraid of strictening the rule -> invalid + good for destruction + good for another move + good for another copy
     //they are the all-method-valid absolutists
     //yet the semantic of move is specifically to break that 
 
@@ -65,7 +65,11 @@ namespace dg::network_datastructure::cyclic_queue{
             }
     };
 
-    //alright we'll be back
+    //alright we'll be back,
+    //we are back
+    //let's see the optimizables, first is decomposition by inheritance
+    //we dont really know why this is not optimized by the std compiler... 
+
     template <class BaseIterator>
     class pow2_cyclic_queue_iterator{
 

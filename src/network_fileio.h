@@ -21,6 +21,13 @@
 
 namespace dg::network_fileio{
 
+    //alright, we are to implement a virtual file path
+    //this introduces so many problems, let's see
+
+    //alright, I dont know about Linux, but Windows does lock the operating folder for concurrent writing | reading
+    //we dont really know unless we run some advisory calibration (there is not an official API to deal with this kind of stuff, and you probably dont want to mess with the internal API
+    //                                                             the calibration would kind of extract the optimal writing + reading patterns (this is SSDs + kernel specifics) and give the users the data)
+
     //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
 
     static constexpr inline auto DG_FILEIO_MODE                 = S_IRWXU; //user-configurable - compile-payload
@@ -112,7 +119,24 @@ namespace dg::network_fileio{
         }
 
         return rs.value();
-    } 
+    }
+
+    auto dg_internal_aggresive_file_size(const char * fp, int flags) noexcept -> std::expected<size_t, exception_t>{
+
+        auto raii_fd = dg_open_file(fp, flags);
+
+        if (!raii_fd.has_value()){
+            return std::unexpected(raii_fd.error());
+        }
+
+        std::expected<size_t, exception_t> rs = dg_file_size(raii_fd.value());
+
+        if (!rs.has_value()){
+            return std::unexpected(rs.error());
+        }
+
+        return rs.value();
+    }
 
     auto dg_create_binary(const char * fp, size_t fsz) noexcept -> exception_t{
 
@@ -156,6 +180,21 @@ namespace dg::network_fileio{
         return ret_code;
     }
 
+    auto dg_ftruncate(const char * fp, size_t fsz) noexcept -> exception_t{
+
+        auto raii_fd = dg_open_file(fp, O_WRONLY);
+
+        if (!raii_fd.has_value()){
+            return raii_fd.error();
+        }
+
+        if (ftruncate64(raii_fd.value(), fsz) == -1){
+            return dg::network_exception::wrap_kernel_error(errno);
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
     auto dg_remove(const char * fp) noexcept -> exception_t{
 
         if (remove(fp) == -1){
@@ -175,7 +214,7 @@ namespace dg::network_fileio{
 
         int fd = raii_fd.value();
         std::expected<size_t, exception_t> efsz = dg_file_size(fd);
-        
+
         if (!efsz.has_value()){
             return efsz.error();
         }
@@ -197,7 +236,7 @@ namespace dg::network_fileio{
         if (!is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(dst))){
             return dg::network_exception::BAD_ALIGNMENT;
         }
-        
+
         if (dst_cap < fsz){
             return dg::network_exception::BUFFER_OVERFLOW;
         }
@@ -229,13 +268,13 @@ namespace dg::network_fileio{
 
         int fd = raii_fd.value();
         std::expected<size_t, exception_t> efsz = dg_file_size(fd);
-        
+
         if (!efsz.has_value()){
             return efsz.error();
         }
 
         size_t fsz = efsz.value();
-                
+
         if (dst_cap < fsz){
             return dg::network_exception::BUFFER_OVERFLOW;
         }
@@ -278,20 +317,6 @@ namespace dg::network_fileio{
 
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
 
-        auto raii_fd = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC);
-
-        if (!raii_fd.has_value()){
-            return raii_fd.error();
-        }
-        
-        if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
-            exception_t err = dg_fadvise_nocache(raii_fd.value());
-
-            if (dg::network_exception::is_failed(err)){
-                return err;
-            }
-        }
-
         if (!is_met_direct_dgio_blksz_requirement(src_sz)){
             return dg::network_exception::BAD_ALIGNMENT;
         }
@@ -300,7 +325,36 @@ namespace dg::network_fileio{
             return dg::network_exception::BAD_ALIGNMENT;
         }
 
-        auto write_err = write(raii_fd.value(), src, src_sz);
+        std::expected<size_t, exception_t> old_fsz = dg_internal_aggresive_file_size(fp, O_RDWR | O_DIRECT); 
+        
+        if (!old_fsz.has_value()){
+            return old_fsz.error();
+        }
+
+        //I dont trust my fellows enough to place this post the open_file
+        auto grd_task       = [&]() noexcept{
+            if (dg::network_exception::is_failed(dg_ftruncate(fp, old_fsz.value()))){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //we rather abort if it is not possible to revert back to the org size, it breaches the contract of size atomicity, we can breach the contract of data atomicity
+                std::abort();
+            }
+        };
+        auto resource_grd   = stdx::resource_guard(grd_task);
+
+        auto raii_fd        = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC); // alright fellas, I did not know that there exists no way for us to write on a memregion except for using mmap
+
+        if (!raii_fd.has_value()){
+            return raii_fd.error();
+        }
+
+        if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
+            exception_t err = dg_fadvise_nocache(raii_fd.value());
+
+            if (dg::network_exception::is_failed(err)){
+                return err;
+            }
+        }
+
+        auto write_err  = write(raii_fd.value(), src, src_sz);
 
         if (write_err < 0){
             return dg::network_exception::wrap_kernel_error(errno);
@@ -310,10 +364,27 @@ namespace dg::network_fileio{
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
+        resource_grd.release();
+
         return dg::network_exception::SUCCESS;
     }
 
     auto dg_write_binary_indirect(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
+
+        std::expected<size_t, exception_t> old_fsz = dg_internal_aggresive_file_size(fp, O_RDWR); 
+
+        if (!old_fsz.has_value()){
+            return old_fsz.error();
+        }
+
+        //I dont trust my fellows enough to place this post the open_file
+        auto grd_task       = [&]() noexcept{
+            if (dg::network_exception::is_failed(dg_ftruncate(fp, old_fsz.value()))){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //we rather abort if it is not possible to revert back to the org size, it breaches the contract of size atomicity, we can breach the contract of data atomicity
+                std::abort();
+            }
+        };
+        auto resource_grd   = stdx::resource_guard(grd_task);
 
         auto raii_fd = dg_open_file(fp, O_WRONLY | O_TRUNC);
 
@@ -339,6 +410,8 @@ namespace dg::network_fileio{
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
+        resource_grd.release();
+
         return dg::network_exception::SUCCESS;
     }
 
@@ -361,8 +434,20 @@ namespace dg::network_fileio{
             return create_err;
         }
 
-        auto buf                = std::make_unique<char[]>(fsz);
-        exception_t write_err   = dg_write_binary(fp, buf.get(), fsz);
+        char * buf = static_cast<char *>(std::calloc(fsz, sizeof(char)));
+
+        if (buf == nullptr){
+            exception_t rm_err  = dg_remove(fp);
+
+            if (dg::network_exception::is_failed(rm_err)){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(rm_err));
+                std::abort();
+            }
+
+            return dg::network_exception::RESOURCE_EXHAUSTION;
+        }
+
+        exception_t write_err   = dg_write_binary(fp, buf, fsz);
 
         if (dg::network_exception::is_failed(write_err)){
             exception_t rm_err  = dg_remove(fp);

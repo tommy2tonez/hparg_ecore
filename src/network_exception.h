@@ -118,25 +118,31 @@ namespace dg::network_exception{
 
     static inline constexpr exception_t VARIANT_VBE                         = 00u;
     static inline constexpr exception_t QUEUE_FULL                          = 00u;
+    static inline constexpr exception_t UNSPECIFIED_ERROR                   = 1024u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 
+        return UNSPECIFIED_ERROR;
     }
 
     inline auto wrap_kernel_error(kernel_exception_t) noexcept -> exception_t{
 
+        return UNSPECIFIED_ERROR;
     }
 
     inline auto wrap_core_exception(core_exception_t) noexcept -> exception_t{
 
+        return UNSPECIFIED_ERROR;
     }
 
     inline auto wrap_std_errcode(...) -> exception_t{ 
 
+        return UNSPECIFIED_ERROR;
     }
 
     inline auto wrap_std_exception(std::exception_ptr) -> exception_t{
 
+        return UNSPECIFIED_ERROR;
     }
 
     inline auto is_success(exception_t err) noexcept -> bool{
@@ -151,10 +157,12 @@ namespace dg::network_exception{
 
     inline auto verbose(exception_t) noexcept -> const char *{
 
+        return "error";
     }
 
     inline void throw_exception(exception_t){
         
+        throw base_exception("unspecified error");
     }
 
     template <class T>
