@@ -349,11 +349,7 @@ namespace fileio_test{
                     std::filesystem::path fp    = current_file_vec[idx];
                     size_t fsz                  = filedata_map[fp].size();
 
-                    if (is_pow2(fsz)){
-                        break;
-                    }
-
-                    if (fsz == 0u){
+                    if (fsz % dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ == 0u){
                         break;
                     }
 
@@ -367,7 +363,7 @@ namespace fileio_test{
                     exception_t err = dg::network_fileio::dg_read_binary_direct(fp.c_str(), ptr, fsz);
 
                     if (err != dg::network_exception::BAD_ALIGNMENT){
-                        std::cout << "mayday, read_binary_direct_unaligned_fsz unexpected error" << "<>" << err << "<err>" << "<>" << fsz << "<fsz>" << std::endl;
+                        std::cout << "mayday, read_binary_direct_unaligned_fsz unexpected error" << "<>" << static_cast<size_t>(err) << "<err>" << "<>" << fsz << "<fsz>" << std::endl;
                         std::abort();
                     }
 

@@ -331,14 +331,9 @@ namespace dg::network_fileio{
             return old_fsz.error();
         }
 
-        //I dont trust my fellows enough to place this post the open_file
-        auto grd_task       = [=]() noexcept{
-            if (dg::network_exception::is_failed(dg_ftruncate(fp, old_fsz.value()))){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //we rather abort if it is not possible to revert back to the org size, it breaches the contract of size atomicity, we can breach the contract of data atomicity
-                std::abort();
-            }
-        };
-        auto resource_grd   = stdx::resource_guard(grd_task);
+        auto resource_grd   = stdx::resource_guard([=]() noexcept{
+            dg_ftruncate(fp, old_fsz.value()); //alright this is only a courtesy to snap back to the original data size, which should succeed 99.9999% of the time
+        });
 
         auto raii_fd        = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC); // alright fellas, I did not know that there exists no way for us to write on a memregion except for using mmap
 
@@ -376,16 +371,11 @@ namespace dg::network_fileio{
             return old_fsz.error();
         }
 
-        //I dont trust my fellows enough to place this post the open_file
-        auto grd_task       = [=]() noexcept{
-            if (dg::network_exception::is_failed(dg_ftruncate(fp, old_fsz.value()))){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //we rather abort if it is not possible to revert back to the org size, it breaches the contract of size atomicity, we can breach the contract of data atomicity
-                std::abort();
-            }
-        };
-        auto resource_grd   = stdx::resource_guard(grd_task);
+        auto resource_grd   = stdx::resource_guard([=]() noexcept{
+            dg_ftruncate(fp, old_fsz.value()); //alright this is only a courtesy to snap back to the original data size, which should succeed 99.9999% of the time
+        });
 
-        auto raii_fd = dg_open_file(fp, O_WRONLY | O_TRUNC);
+        auto raii_fd        = dg_open_file(fp, O_WRONLY | O_TRUNC);
 
         if (!raii_fd.has_value()){
             return raii_fd.error();

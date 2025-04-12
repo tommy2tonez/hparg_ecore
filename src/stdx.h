@@ -657,7 +657,7 @@ namespace stdx{
     constexpr auto is_pow2(T val) noexcept -> bool{
 
         return val != 0u && (val & (val - 1)) == 0u;
-    } 
+    }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto least_pow2_greater_equal_than(T val) noexcept -> T{
