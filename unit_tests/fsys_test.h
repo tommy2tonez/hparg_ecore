@@ -122,8 +122,8 @@ namespace fileio_test{
 
         const size_t CLEAR_INTERVAL_SZ                              = size_t{1} << 12;
         const size_t OPERATION_SZ                                   = size_t{1} << 20;
-        const size_t NEW_BINARY_RANGE                               = 16636u; 
-        const size_t POW2_RANGE                                     = 16u; 
+        const size_t NEW_BINARY_RANGE                               = 16384u; 
+        const size_t POW2_RANGE                                     = 16u;
 
         const uint8_t OPS_CODE_CHECK_FSZ_EXIST                      = 0u;
         const uint8_t OPS_CODE_CHECK_CURRENT_FILE_EXISTS            = 1u;
