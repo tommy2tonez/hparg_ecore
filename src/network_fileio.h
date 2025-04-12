@@ -331,15 +331,15 @@ namespace dg::network_fileio{
             return old_fsz.error();
         }
 
-        auto resource_grd   = stdx::resource_guard([=]() noexcept{
-            dg_ftruncate(fp, old_fsz.value()); //alright this is only a courtesy to snap back to the original data size, which should succeed 99.9999% of the time
-        });
-
         auto raii_fd        = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC); // alright fellas, I did not know that there exists no way for us to write on a memregion except for using mmap
 
         if (!raii_fd.has_value()){
             return raii_fd.error();
         }
+
+        auto resource_grd   = stdx::resource_guard([&]() noexcept{
+            ftruncate64(raii_fd.value(), old_fsz.value());
+        });
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
             exception_t err = dg_fadvise_nocache(raii_fd.value());
@@ -371,15 +371,15 @@ namespace dg::network_fileio{
             return old_fsz.error();
         }
 
-        auto resource_grd   = stdx::resource_guard([=]() noexcept{
-            dg_ftruncate(fp, old_fsz.value()); //alright this is only a courtesy to snap back to the original data size, which should succeed 99.9999% of the time
-        });
-
         auto raii_fd        = dg_open_file(fp, O_WRONLY | O_TRUNC);
 
         if (!raii_fd.has_value()){
             return raii_fd.error();
         }
+
+        auto resource_grd   = stdx::resource_guard([&]() noexcept{
+            ftruncate64(raii_fd.value(), old_fsz.value());
+        });
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
             exception_t err = dg_fadvise_nocache(raii_fd.value());
