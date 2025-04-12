@@ -36,6 +36,14 @@ namespace dg::network_datastructure::cyclic_queue{
     //I'm tired of implementing things that are not QUANTIFIABLE, like snapping sz off cap -> 0 after move
     //we are in C, there are literally 1024 ways to misuse the C program
 
+    //there are so many implementations that are hindered because of the ambiguity of the move rule
+    //std::optional<>::move
+    //std::variants<>::move
+
+    //std is afraid of strictening the rule -> invalid + good for destruction + good for another move
+    //they are the all-method-valid absolutists
+    //yet the semantic of move is specifically to break that 
+
     template <class = void>
     static inline constexpr bool FALSE_VAL = false;
  
@@ -202,53 +210,6 @@ namespace dg::network_datastructure::cyclic_queue{
                                                                       off(0u),
                                                                       sz(0u),
                                                                       cap(size_t{1} << pow2_exponent){}
-
-            constexpr simple_pow2_cyclic_queue(const self& other): data_arr(other.data_arr),
-                                                                   off(other.off),
-                                                                   sz(other.sz),
-                                                                   cap(other.cap){}
-
-            constexpr simple_pow2_cyclic_queue(self&& other) noexcept(std::is_nothrow_move_constructible_v<std::vector<T, Allocator>>): data_arr(std::move(other.data_arr)),
-                                                                                                                                        off(other.off),
-                                                                                                                                        sz(other.sz),
-                                                                                                                                        cap(other.cap){
-
-                other.off   = 0u; //this is not quantifiable, wrong, incorrect, not protected by range bro cap
-                other.sz    = 0u;
-                other.cap   = 0u;
-            }
-
-            constexpr auto operator =(const self& other) -> self&{
-
-                if (this == std::addressof(other)){ //let's not try to be smart
-                    return *this;
-                }
-
-                this->data_arr  = other.data_arr;
-                this->off       = other.off;
-                this->sz        = other.sz;
-                this->cap       = other.cap;
-
-                return *this;
-            }
-
-            constexpr auto operator =(self&& other) noexcept(std::is_nothrow_move_assignable_v<std::vector<T, Allocator>>) -> self&{
-
-                if (this == std::addressof(other)){
-                    return *this;
-                }
-
-                this->data_arr  = std::move(other.data_arr);
-                this->off       = other.off;
-                this->sz        = other.sz;
-                this->cap       = other.cap;
-
-                other.off       = 0u;
-                other.sz        = 0u;
-                other.cap       = 0u;
-
-                return *this;
-            } 
 
             constexpr void swap(self& other) noexcept(true){
 
