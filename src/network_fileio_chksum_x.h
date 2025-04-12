@@ -13,8 +13,11 @@ namespace dg::network_fileio_chksum_x{
 
     //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
 
+    //1 success write == guarantee the next success read to read the success write, this is the sole contract that we provide
+    //unified_fsys_io would keep track of the contract status, the only thing that is wrong is the metadata header of the unified_fsys_io
+
     struct FileHeader{
-        uint64_t chksum;
+        std::pair<uint64_t, uint64_t> chksum;
         uint64_t content_size;
 
         template <class Reflector>
@@ -173,8 +176,8 @@ namespace dg::network_fileio_chksum_x{
             dg::network_exception_handler::nothrow_log(dg_internal_remove_metadata(fp));
         });
 
-        auto empty_buf                      = std::make_unique<char[]>(fsz);
-        auto header                         = FileHeader{dg::network_hash::murmur_hash(empty_buf.get(), fsz), fsz};
+        auto empty_buf                      = std::make_unique<char[]>(fsz); //
+        auto header                         = FileHeader{dg::network_hash::murmur_hash_base(empty_buf.get(), fsz), fsz};
         exception_t header_write_err        = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(header_write_err)){
@@ -223,7 +226,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        uint64_t file_chksum = dg::network_hash::murmur_hash(reinterpret_cast<const char *>(dst), header->content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        std::pair<uint64_t, uint64_t> file_chksum = dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(dst), header->content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
 
         if (file_chksum != header->chksum){
             return dg::network_exception::CORRUPTED_FILE;
@@ -260,7 +263,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        uint64_t file_chksum = dg::network_hash::murmur_hash(reinterpret_cast<const char *>(dst), header->content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        std::pair<uint64_t, uint64_t> file_chksum = dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(dst), header->content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
 
         if (file_chksum != header->chksum){
             return dg::network_exception::CORRUPTED_FILE;
@@ -298,7 +301,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        FileHeader header{dg::network_hash::murmur_hash(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        FileHeader header{dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
         err = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){
@@ -326,7 +329,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        FileHeader header{dg::network_hash::murmur_hash(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        FileHeader header{dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
         err = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){

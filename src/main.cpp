@@ -23,6 +23,7 @@
 #include <type_traits>
 #include "network_datastructure.h"
 #include "network_fileio.h"
+#include "network_fileio_chksum_x.h"
 
 // template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
 // constexpr auto ulog2(T val) noexcept -> T{

@@ -331,7 +331,7 @@ namespace dg::network_fileio{
             return old_fsz.error();
         }
 
-        auto raii_fd        = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC); // alright fellas, I did not know that there exists no way for us to write on a memregion except for using mmap
+        auto raii_fd        = dg_open_file(fp, O_WRONLY | O_DIRECT | O_TRUNC);
 
         if (!raii_fd.has_value()){
             return raii_fd.error();
