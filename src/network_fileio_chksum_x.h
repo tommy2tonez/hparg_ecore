@@ -61,6 +61,8 @@ namespace dg::network_fileio_chksum_x{
     //                                    correct, incorrect (out)
     //whatever, we'll move on with the implementation
 
+    //I've run numbers, it chances better than RAM to have a success read
+    //we are probably risking more false negatives than necessary to get a true positive
     //it's complex
 
     struct FileHeader{
@@ -78,7 +80,7 @@ namespace dg::network_fileio_chksum_x{
         }
     };
 
-    static inline constexpr size_t MAX_FILE_PATH_SZ                         = 32u;
+    static inline constexpr size_t MAX_FILE_PATH_SZ                         = 128u;
     static inline std::string METADATA_SUFFIX                               = "DGFSYS_CHKSUM_X_METADATA"; 
     static inline std::string METADATA_EXT                                  = "data";
     static inline constexpr size_t DG_LEAST_DIRECTIO_BLK_SZ                 = dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ;
@@ -398,10 +400,8 @@ namespace dg::network_fileio_chksum_x{
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
             std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
 
-            if (fh.has_value()){
-                if (!reflectible_equal(fh.value(), header.value())){
-                    return dg::network_exception::CORRUPTED_FILE;
-                }
+            if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
+                return dg::network_exception::CORRUPTED_FILE;
             }
         }
 
@@ -445,10 +445,8 @@ namespace dg::network_fileio_chksum_x{
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
             std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
 
-            if (fh.has_value()){
-                if (!reflectible_equal(fh.value(), header.value())){
-                    return dg::network_exception::CORRUPTED_FILE;
-                }
+            if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
+                return dg::network_exception::CORRUPTED_FILE;
             }
         }
 
