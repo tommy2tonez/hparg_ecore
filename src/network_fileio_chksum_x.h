@@ -308,6 +308,12 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
+        std::expected<FileHeader, exception_t> cmp_metadata = dg_internal_read_metadata(fp);
+
+        if (!cmp_metadata.has_value() || !reflectible_equal(cmp_metadata.value(), header)){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
+        
         return dg::network_exception::SUCCESS;
     }
 
@@ -334,6 +340,12 @@ namespace dg::network_fileio_chksum_x{
 
         if (dg::network_exception::is_failed(err)){
             return err;
+        }
+
+        std::expected<FileHeader, exception_t> cmp_metadata = dg_internal_read_metadata(fp);
+
+        if (!cmp_metadata.has_value() || !reflectible_equal(cmp_metadata.value(), header)){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
        
         return dg::network_exception::SUCCESS;
