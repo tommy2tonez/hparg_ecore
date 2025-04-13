@@ -136,6 +136,9 @@ namespace dg::network_std_container{
     using pow2_cyclic_queue         = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<T, dg::network_allocation::NoExceptAllocator<T>>; 
 
     using string                    = std::basic_string<char, std::char_traits<char>, dg::network_allocation::NoExceptAllocator<char>>;
+
+    template <class T>
+    using reflectible_relaxed_loader = dg::network_datastructure::atomic_loader::reflectible_relaxed_loader<T>;
 }
 
 namespace dg{
@@ -162,6 +165,9 @@ namespace dg{
 
     template <class T>
     using pow2_cyclic_queue         = dg::network_std_container::pow2_cyclic_queue<T>;
+
+    template <class T>
+    using reflectible_relaxed_loader    = dg::network_std_container::reflectible_relaxed_loader<T>;
 }
 
 #endif

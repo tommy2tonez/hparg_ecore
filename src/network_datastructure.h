@@ -16,6 +16,8 @@
 #include <stdexcept>
 #include <limits>
 #include "stdx.h"
+#include <atomic>
+#include "network_trivial_serializer.h"
 
 // #include "network_log.h"
 
@@ -1891,32 +1893,56 @@ namespace std{
     }
 }
 
-namespace dg::network_datastructure::unordered_set_variants{
+namespace dg::network_datastructure::atomic_loader{
 
-    //alright let's write this
-    //its complex to write unordered_set
-    //this is an entire different radix of things, yet I think unordered_set would be a lot better if we are to do flat_hash_set + virtual_storage, because it has always been the way to do things
-    //if the set reaches a half-cap, we are to construct a new container to move things over
-    //we'll halt the implementation for now, because there is not a performance guide
+    template <class T>
+    class reflectible_relaxed_loader{
 
-    // template <class key_t, class virtual_addr_t>
-    // struct Node{
-    //     key_t first;
-    //     virtual_addr_t nxt_addr;
-    // };
+        private:
 
-    // template <class Key, class VirtualAddrType = std::size_t, class Hasher = std::hash<Key>, class KeyEqual = std::equal_to<Key>, class Allocator = std::allocator<Node<Key, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
-    // class unordered_node_set{
+            using word_t = std::array<char, 8u>; 
 
-    //     private:
+            static inline constexpr size_t REFLECTIBLE_SZ               = dg::network_trivial_serializer::size(T{});
+            static inline constexpr size_t ADJUSTED_REFLECTIBLE_SZ      = std::max(size_t{1}, REFLECTIBLE_SZ);
+            static inline constexpr size_t CONTAINER_EVEN_SZ            = ADJUSTED_REFLECTIBLE_SZ / sizeof(word_t);
+            static inline constexpr size_t CONTAINER_ODD_SZ             = size_t{ADJUSTED_REFLECTIBLE_SZ % sizeof(word_t) != 0u};
+            static inline constexpr size_t CONTAINER_SZ                 = CONTAINER_EVEN_SZ + CONTAINER_ODD_SZ;
+            static inline constexpr size_t SERIALIZED_RAW_CONTAINER_SZ  = dg::network_trivial_serializer::size(std::array<word_t, CONTAINER_SZ>{});
 
-    //         std::vector<Node<Key, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<Key, VirtualAddrType>>> virtual_storage_vec;
-    //         std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::typename rebind_alloc<Node<Key, VirtualAddrType>>> bucket_vec;
+            std::array<std::atomic<word_t>, CONTAINER_SZ> atomic_container;
 
-    //     public:
+        public:
 
+            constexpr auto load() noexcept -> T{
 
-    // };
+                std::array<char, SERIALIZED_RAW_CONTAINER_SZ> serialized_raw_container{};
+                std::array<word_t, CONTAINER_SZ> raw_container{};
+                T rs{};
+
+                for (size_t i = 0u; i < CONTAINER_SZ; ++i){
+                    raw_container[i] = this->atomic_container[i].load(std::memory_order_relaxed);
+                }
+
+                dg::network_trivial_serializer::serialize_into(serialized_raw_container.data(), raw_container);
+                dg::network_trivial_serializer::deserialize_into(rs, serialized_raw_container.data());
+
+                return rs;
+            }
+
+            constexpr void unload(T value) noexcept{
+
+                std::array<char, SERIALIZED_RAW_CONTAINER_SZ> serialized_raw_container{};
+                std::array<word_t, CONTAINER_SZ> raw_container{};
+
+                dg::network_trivial_serializer::serialize_into(serialized_raw_container.data(), value);
+                dg::network_trivial_serializer::deserialize_into(raw_container, serialized_raw_container.data());
+
+                for (size_t i = 0u; i < CONTAINER_SZ; ++i){
+                    this->atomic_container[i].exchange(raw_container[i], std::memory_order_relaxed);
+                }
+            }
+    };
+
 }
 
 #endif

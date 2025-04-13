@@ -62,25 +62,13 @@ static inline constexpr bool is_normal_iter_v = is_normal_iter<Iter, T>::value;
 
 int main(){
 
-    char buf[128];
+    const char * fp     = "/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt";
+    std::string msg     = "Hello World!"; 
+    std::string other   = "            ";
+    
+    dg::network_fileio_chksum_x::dg_create_cbinary(fp, msg.size());
+    dg::network_fileio_chksum_x::dg_write_binary_indirect(fp, msg.data(), msg.size());
+    dg::network_fileio_chksum_x::dg_read_binary_indirect(fp, other.data(), other.size());
 
-    std::cout << static_cast<size_t>(dg::network_fileio::dg_create_binary("/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt", 128)) << std::endl;
-    // dg::network_fileio::dg_write_binary("/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt", buf, 128u);
-    std::cout << dg::network_fileio::dg_file_size("/home/tommy2tonez/dg_projects/dg_polyobjects/src/test.txt").value();
-
-    // std::cout << queue[0];
-    // auto vec = std::vector<size_t>();
-
-    // static_assert(is_normal_iter_v<typename decltype(vec)::iterator, size_t>);
-
-    //alright, we have talked to a team of people worked on naive words compression
-    //its a bloom filter + sliding window compression to convert to an intermediate semantic space of size{1} << 1024
-    //assume that we have this sentence and a sliding window of size 3
-    //<assume that we>, <that we have>, <we have this>, <have this sentence>, <this sentence and>, <sentence and sliding> etc.
-    //each phrase is mapped -> a bit representation in the output semantic space
-    //this could be lossless compression if used with integrity hash being part of the compressed semantic space
-    //the optimal compressed space should be the numerical range of all possible word representations (we are converging to the point)
-
-    //we'll be back tomorrow, I have estimated at least 50MB of raw source code to get this core up and running
-    //we have literally a shit ton of work to do
+    std::cout << other;
 }

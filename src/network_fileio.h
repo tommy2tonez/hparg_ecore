@@ -1,4 +1,4 @@
-#ifndef __NETWORK_FILEIO_H_
+#ifndef __NETWORK_FILEIO_H__
 #define __NETWORK_FILEIO_H__
 
 //define HEADER_CONTROL 8

@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <type_traits>
+#include "../src/network_fileio_chksum_x.h"
 
 namespace fileio_test{
 
@@ -74,6 +75,15 @@ namespace fileio_test{
         auto randomizer = std::bind(std::uniform_int_distribution<char>{}, std::mt19937{static_cast<size_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
         auto buf        = make_buf(alignment, buf_sz);
         std::generate(buf.get(), std::next(buf.get(), buf_sz), randomizer);
+
+        return buf;
+    }
+
+    auto randomize_str(size_t buf_sz) -> std::string{
+
+        auto randomizer = std::bind(std::uniform_int_distribution<char>{}, std::mt19937{static_cast<size_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto buf        = std::string(buf_sz, ' ');
+        std::generate(buf.begin(), std::next(buf.begin(), buf_sz), randomizer);
 
         return buf;
     }
@@ -936,8 +946,319 @@ namespace fileio_test{
         //overriding posix functions, to check file leaks        
     }
 
-    void fileio_chksum_test(){
+    void fileio_chksum_test(std::filesystem::path test_dir){
 
+        std::cout << "<initializing_fileio_chksum_test>" << std::endl;
+
+        const size_t NEW_BINARY_RANGE                                       = (size_t{1} << 8) + 1u;
+        const size_t NEW_BLK_RANGE                                          = ((size_t{1} << 20) / dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ) + 1u;  
+
+        const uint8_t OPS_CODE_FILE_SIZE_EXPECT_EQUAL                       = 0u;
+        const uint8_t OPS_CODE_WRITE_DIRECT_READ_LESS_EXPECT_ERROR          = 1u;
+        const uint8_t OPS_CODE_WRITE_DIRECT_READ_NOT_LESS_EXPECT_SUCCESS    = 2u;
+        const uint8_t OPS_CODE_WRITE_INDIRECT_READ_LESS_EXPECT_ERROR        = 3u;
+        const uint8_t OPS_CODE_WRITE_INDIRECT_READ_NOT_LESS_EXPECT_SUCCESS  = 4u;
+        const uint8_t OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS           = 5u;
+        const uint8_t OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR             = 6u;
+
+        const size_t TEST_SZ                                                = size_t{1} << 20;
+        const size_t TENPERCENT_TEST_SZ                                     = TEST_SZ / 10u;
+        auto ops_code_gen                                                   = std::bind(std::uniform_int_distribution<uint8_t>(0u, 6u), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto sz_gen                                                         = std::bind(std::uniform_int_distribution<size_t>(0u, NEW_BINARY_RANGE), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto blk_sz_gen                                                     = std::bind(std::uniform_int_distribution<size_t>(0u, NEW_BLK_RANGE), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())}); 
+
+        for (size_t i = 0u; i < TEST_SZ; ++i){
+            uint8_t ops_code = ops_code_gen();
+
+            switch (ops_code){
+                case OPS_CODE_FILE_SIZE_EXPECT_EQUAL:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t fsz                  = sz_gen(); 
+                    std::string f_buf           = randomize_str(fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz + 1u);
+                    
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, file_size_check unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    std::expected<size_t, exception_t> fsz_chk1 = dg::network_fileio_chksum_x::dg_file_size(fp.c_str());
+
+                    if (!fsz_chk1.has_value()){
+                        std::cout << "mayday, file_size_check unexpected dg_file_size error" << std::endl;
+                        std::abort();
+                    } 
+
+                    if (fsz_chk1.value() != fsz + 1u){
+                        std::cout << "mayday, file_size_check compared not equal" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t write_bin_err   = dg::network_fileio_chksum_x::dg_write_binary_indirect(fp.c_str(), f_buf.data(), f_buf.size());
+
+                    if (dg::network_exception::is_failed(write_bin_err)){
+                        std::cout << "mayday, file_size_check dg_write_binary_indirect unexpected error" << std::endl;
+                    }
+
+                    std::expected<size_t, exception_t> fsz_chk2 = dg::network_fileio_chksum_x::dg_file_size(fp.c_str());
+
+                    if (!fsz_chk2.has_value()){
+                        std::cout << "mayday, file_size_check unexpected dg_file_size error" << std::endl;
+                        std::abort();
+                    }
+
+                    if (fsz_chk2.value() != fsz){
+                        std::cout << "mayday, file_size_check compared not equal" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, file_size_check unexpected remove error" << std::endl;
+                        std::abort(); 
+                    }
+
+                    break;
+                }
+                case OPS_CODE_WRITE_INDIRECT_READ_LESS_EXPECT_ERROR:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t fsz                  = sz_gen() + 1u;
+                    std::string f_buf           = randomize_str(fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz);
+
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t write_bin_err   = dg::network_fileio_chksum_x::dg_write_binary_indirect(fp.c_str(), f_buf.data(), f_buf.size());
+
+                    if (dg::network_exception::is_failed(write_bin_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected write_binary_indirect error" << std::endl;
+                        std::abort();
+                    }
+
+                    std::string in_buf          = randomize_str(fsz - 1u);
+                    exception_t read_bin_err    = dg::network_fileio_chksum_x::dg_read_binary_indirect(fp.c_str(), in_buf.data(), in_buf.size());
+
+                    if (read_bin_err != dg::network_exception::RUNTIME_FILEIO_ERROR){
+                        std::cout << "mayday, write_indirect_read_less unexpected dg_read_binary_indirect err" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected remove error" << std::endl;
+                        std::abort();
+                    }
+
+                    break;
+                }
+                case OPS_CODE_WRITE_INDIRECT_READ_NOT_LESS_EXPECT_SUCCESS:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t fsz                  = sz_gen();
+                    std::string f_buf           = randomize_str(fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz);
+
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, write_indirect_read_not_less unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t write_bin_err   = dg::network_fileio_chksum_x::dg_write_binary_indirect(fp.c_str(), f_buf.data(), f_buf.size());
+
+                    if (dg::network_exception::is_failed(write_bin_err)){
+                        std::cout << "mayday, write_indirect_read_not_less unexpected write_binary_indirect error" << std::endl;
+                        std::abort();
+                    }
+
+                    std::string in_buf          = randomize_str(fsz + sz_gen());
+                    exception_t read_bin_err    = dg::network_fileio_chksum_x::dg_read_binary_indirect(fp.c_str(), in_buf.data(), in_buf.size());
+
+                    if (dg::network_exception::is_failed(read_bin_err)){
+                        std::cout << "mayday, write_indirect_read_not_less unexpected dg_read_binary_indirect err" << std::endl;
+                        std::abort();
+                    }
+
+                    if (std::memcmp(f_buf.data(), in_buf.data(), f_buf.size()) != 0){
+                        std::cout << "mayday, write_indirect_read_not_less compared not equal" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected remove error" << std::endl;
+                        std::abort();
+                    }
+
+                    break;
+                }
+                case OPS_CODE_WRITE_DIRECT_READ_LESS_EXPECT_ERROR:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t blk_fsz              = blk_sz_gen() + 1u;
+                    size_t fsz                  = blk_fsz * dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ;
+                    auto f_buf                  = randomize_buf(dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ, fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz);
+
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t write_bin_err   = dg::network_fileio_chksum_x::dg_write_binary_direct(fp.c_str(), f_buf.get(), fsz);
+
+                    if (dg::network_exception::is_failed(write_bin_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected write_binary_indirect error" << std::endl;
+                        std::abort();
+                    }
+
+                    size_t bad_fsz              = (blk_fsz - 1u) * dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ;
+                    auto bad_f_buf              = randomize_buf(dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ, bad_fsz);
+                    exception_t read_bin_err    = dg::network_fileio_chksum_x::dg_read_binary_direct(fp.c_str(), bad_f_buf.get(), bad_fsz);
+
+                    if (read_bin_err != dg::network_exception::RUNTIME_FILEIO_ERROR){
+                        std::cout << "mayday, write_indirect_read_less unexpected dg_read_binary_indirect err" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected remove error" << std::endl;
+                        std::abort();
+                    }
+
+                    break;                
+                }
+                case OPS_CODE_WRITE_DIRECT_READ_NOT_LESS_EXPECT_SUCCESS:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t blk_fsz              = blk_sz_gen() + 1u;
+                    size_t fsz                  = blk_fsz * dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ;
+                    auto f_buf                  = randomize_buf(dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ, fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz);
+
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, write_indirect_read_not_less unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t write_bin_err   = dg::network_fileio_chksum_x::dg_read_binary_direct(fp.c_str(), f_buf.get(), fsz);
+
+                    if (dg::network_exception::is_failed(write_bin_err)){
+                        std::cout << "mayday, write_indirect_read_not_less unexpected write_binary_indirect error" << std::endl;
+                        std::abort();
+                    }
+
+                    size_t good_blk_fsz         = blk_fsz + blk_sz_gen();
+                    size_t good_fsz             = good_blk_fsz * dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ;
+                    auto in_buf                 = randomize_buf(dg::network_fileio_chksum_x::DG_LEAST_DIRECTIO_BLK_SZ, good_fsz);
+                    exception_t read_bin_err    = dg::network_fileio_chksum_x::dg_read_binary_direct(fp.c_str(), in_buf.get(), good_fsz);
+
+                    if (dg::network_exception::is_failed(read_bin_err)){
+                        std::cout << "mayday, write_indirect_read_not_less unexpected dg_read_binary_indirect err" << std::endl;
+                        std::abort();
+                    }
+
+                    if (std::memcmp(f_buf.get(), in_buf.get(), fsz) != 0){
+                        std::cout << "mayday, write_indirect_read_not_less compared not equal" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected remove error" << std::endl;
+                        std::abort();
+                    }
+
+                    break;
+                }
+                case OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t fsz                  = sz_gen(); 
+                    std::string f_buf           = randomize_str(fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz + 1u);
+                    
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, file_exists_current unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    std::expected<bool, exception_t> status = dg::network_fileio_chksum_x::dg_file_exists(fp.c_str());
+
+                    if (!status.has_value()){
+                        std::cout << "mayday, file_exists_current dg_file_exists unexpected error" << std::endl;
+                        std::abort();
+                    }
+
+                    if (!status.value()){
+                        std::cout << "mayday, file_exists_current dg_file_exists file not found" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, file_exists_current unexpected remove error" << std::endl;
+                        std::abort(); 
+                    }
+
+                    break;
+                }
+                case OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t fsz                  = sz_gen(); 
+                    std::string f_buf           = randomize_str(fsz);
+                    exception_t cbin_err        = dg::network_fileio_chksum_x::dg_create_cbinary(fp.c_str(), fsz + 1u);
+                    
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, file_exists_removed unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_chksum_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, file_exists_removed unexpected remove error" << std::endl;
+                        std::abort(); 
+                    }
+
+                    std::expected<bool, exception_t> status = dg::network_fileio_chksum_x::dg_file_exists(fp.c_str());
+
+                    if (!status.has_value()){
+                        std::cout << "mayday, file_exists_removed dg_file_exists unexpected error" << std::endl;
+                        std::abort();
+                    }
+
+                    if (status.value()){
+                        std::cout << "mayday, file_exists_removed dg_file_exists file not found" << std::endl;
+                        std::abort();
+                    }
+
+                    break;                
+                }
+                default:
+                {
+                    break;
+                }
+            }              
+
+            if (i % TENPERCENT_TEST_SZ == 0u){
+                std::cout << "progress >> " << i << "/" << TEST_SZ << std::endl;
+            }
+        }
+
+        std::cout << "<fileio_chksum_test_completed>" << std::endl;
     } 
 
     void fileio_unified_test(){
@@ -948,7 +1269,8 @@ namespace fileio_test{
 
         std::string folder_path = "/home/tommy2tonez/dg_projects/dg_polyobjects/unit_tests/fsys_test_folder";
         std::filesystem::create_directory(folder_path);
-        fileio_test::fileio_base_test(folder_path);
+        // fileio_base_test(folder_path);
+        fileio_chksum_test(folder_path);
         std::filesystem::remove(folder_path);
     }
 }
