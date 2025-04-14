@@ -985,7 +985,7 @@ namespace fileio_test{
         const uint8_t OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS           = 5u;
         const uint8_t OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR             = 6u;
 
-        const size_t TEST_SZ                                                = size_t{1} << 10;
+        const size_t TEST_SZ                                                = size_t{1} << 13;
         const size_t TENPERCENT_TEST_SZ                                     = TEST_SZ / 10u;
         auto ops_code_gen                                                   = std::bind(std::uniform_int_distribution<uint8_t>(0u, 6u), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
         auto sz_gen                                                         = std::bind(std::uniform_int_distribution<size_t>(0u, NEW_BINARY_RANGE), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
@@ -1297,10 +1297,11 @@ namespace fileio_test{
         const uint8_t OPS_CODE_WRITE_DIRECT_READ_NOT_LESS_EXPECT_SUCCESS    = 2u;
         const uint8_t OPS_CODE_WRITE_INDIRECT_READ_LESS_EXPECT_ERROR        = 3u;
         const uint8_t OPS_CODE_WRITE_INDIRECT_READ_NOT_LESS_EXPECT_SUCCESS  = 4u;
-        const uint8_t OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS           = 5u;
-        const uint8_t OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR             = 6u;
+        const uint8_t OPS_CODE_WRITE_EXPECT_SUCCESS                         = 5u;
+        const uint8_t OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS           = 6u;
+        const uint8_t OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR             = 7u;
 
-        const size_t TEST_SZ                                                = size_t{1} << 10;
+        const size_t TEST_SZ                                                = size_t{1} << 13;
         const size_t TENPERCENT_TEST_SZ                                     = TEST_SZ / 10u;
         auto ops_code_gen                                                   = std::bind(std::uniform_int_distribution<uint8_t>(0u, 6u), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
         auto sz_gen                                                         = std::bind(std::uniform_int_distribution<size_t>(0u, NEW_BINARY_RANGE), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
@@ -1508,6 +1509,53 @@ namespace fileio_test{
 
                     if (std::memcmp(f_buf.get(), in_buf.get(), fsz) != 0){
                         std::cout << "mayday, write_indirect_read_not_less compared not equal" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t rm_err = dg::network_fileio_unified_x::dg_remove(fp.c_str());
+
+                    if (dg::network_exception::is_failed(rm_err)){
+                        std::cout << "mayday, write_indirect_read_less unexpected remove error" << std::endl;
+                        std::abort();
+                    }
+
+                    break;
+                }
+                case OPS_CODE_WRITE_EXPECT_SUCCESS:
+                {
+                    std::filesystem::path fp    = create_tmp_file(test_dir);
+                    size_t fsz                  = [&]{
+                        if (sz_gen() % 2 == 0){
+                            return sz_gen();
+                        } else{
+                            return blk_sz_gen() * dg::network_fileio_unified_x::DG_LEAST_DIRECTIO_BLK_SZ;
+                        }
+                    }();
+                    std::string f_buf           = randomize_str(fsz);
+                    exception_t cbin_err        = dg::network_fileio_unified_x::dg_create_cbinary(fp.c_str(), get_replicated_path(fp, 3), fsz);
+
+                    if (dg::network_exception::is_failed(cbin_err)){
+                        std::cout << "mayday, write_expect_success unexpected dg_create_cbinary error" << std::endl;
+                        std::abort();
+                    }
+
+                    exception_t write_bin_err   = dg::network_fileio_unified_x::dg_write_binary(fp.c_str(), f_buf.data(), f_buf.size());
+
+                    if (dg::network_exception::is_failed(write_bin_err)){
+                        std::cout << "mayday, write_expect_success unexpected write_binary_indirect error" << std::endl;
+                        std::abort();
+                    }
+
+                    std::string in_buf          = randomize_str(fsz + sz_gen());
+                    exception_t read_bin_err    = dg::network_fileio_unified_x::dg_read_binary(fp.c_str(), in_buf.data(), in_buf.size());
+
+                    if (dg::network_exception::is_failed(read_bin_err)){
+                        std::cout << "mayday, write_expect_success unexpected dg_read_binary_indirect err" << std::endl;
+                        std::abort();
+                    }
+
+                    if (std::memcmp(f_buf.data(), in_buf.data(), f_buf.size()) != 0){
+                        std::cout << "mayday, write_expect_success compared not equal" << std::endl;
                         std::abort();
                     }
 

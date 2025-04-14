@@ -204,6 +204,11 @@ namespace dg::network_fileio{
         return dg::network_exception::SUCCESS;
     }
 
+    auto dg_is_met_direct_read_requirements(void * dst, size_t dst_cap) noexcept -> bool{
+
+        return is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(dst)); //its complicated
+    }
+
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
         if (!is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(dst))){
@@ -314,6 +319,11 @@ namespace dg::network_fileio{
 
         return dg_read_binary_indirect(fp, dst, dst_cap);
     }
+
+    auto dg_is_met_direct_write_requirements(const void * src, size_t src_sz) noexcept -> bool{
+
+        return is_met_direct_dgio_blksz_requirement(src_sz) && is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(src));
+    } 
 
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
 

@@ -32,6 +32,13 @@ namespace dg::network_fileio_unified_x{
         }
     };
 
+    //we'll move on for now
+    //https://www.ibm.com/support/pages/ibm-spectrum-scale-512-513-levels-alert-file-truncation-file-open-otrunc-flag-may-fail-take-effect-leading-undetected-data-corruption
+    //we don't O_CREATE the file yet it's better be safe than sorry
+    //there is not a single harder thing in comp_sci than to read + write files
+
+    static inline constexpr bool HAS_DOUBLE_METADATA_WRITE          = true; //this is important to unfault the file error, RAM cannot fault
+    static inline constexpr bool HAS_REVIST_METADATA_WRITE          = true; //this is very necessary, RAM cannot fault yet file can fault, O_TRUNC
     static inline std::string METADATA_SUFFIX                       = "DGFSYS_UNIFIED_X_METADATA";
     static inline std::string METADATA_EXT                          = "data";
     static inline constexpr uint32_t METADATA_SERIALIZATION_SECRET  = 1034526840ULL;
@@ -180,7 +187,27 @@ namespace dg::network_fileio_unified_x{
 
         dg::network_compact_serializer::capintegrity_serialize_into(bstream.get(), metadata, METADATA_SERIALIZATION_SECRET);
 
-        return dg::network_fileio::dg_write_binary(metadata_fp->c_str(), bstream.get(), metadata_sz);
+        exception_t bin_write_err = dg::network_fileio::dg_write_binary(metadata_fp->c_str(), bstream.get(), metadata_sz);
+
+        if (dg::network_exception::is_failed(bin_write_err)){
+            return bin_write_err;
+        }
+
+        if constexpr(HAS_REVIST_METADATA_WRITE){
+            std::expected<Metadata, exception_t> written_metadata = dg_internal_read_metadata(fp);
+
+            if (!written_metadata.has_value()){
+                return written_metadata.error();
+            }
+
+            if (std::tie(metadata.datapath_vec, metadata.path_status_vec, metadata.file_sz) 
+                != std::tie(written_metadata->datapath_vec, written_metadata->path_status_vec, written_metadata->file_sz)){
+
+                return dg::network_exception::RUNTIME_FILEIO_ERROR;
+            }
+        }
+
+        return dg::network_exception::SUCCESS;
     }
 
     auto dg_internal_make_metadata(const std::vector<std::string>& datapath_vec, size_t file_sz) noexcept -> std::expected<Metadata, exception_t>{
@@ -251,6 +278,10 @@ namespace dg::network_fileio_unified_x{
 
     auto dg_remove(const char * fp) noexcept -> exception_t{
 
+        //this is a complicated function
+        //the behavior of the program is probably undefined w.r.t. file path if the dg_remove does not reverse the dg_create_cbinary function
+        //this requires a purge of created files (users need to self-manage this), with the purge regex == specified suffix
+
         Metadata metadata = dg::network_exception_handler::nothrow_log(dg_internal_read_metadata(fp));
 
         for (const auto& path: metadata.datapath_vec){
@@ -290,7 +321,16 @@ namespace dg::network_fileio_unified_x{
         return metadata->file_sz;
     } 
 
+    auto dg_is_met_direct_read_requirements(void * dst, size_t dst_cap) noexcept -> bool{
+
+        return dg::network_fileio_chksum_x::dg_is_met_direct_read_requirements(dst, dst_cap); 
+    }
+
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
+
+        if (!dg_is_met_direct_read_requirements(dst, dst_cap)){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
 
         std::expected<bool, exception_t> status = dg_file_exists(fp);
 
@@ -376,7 +416,16 @@ namespace dg::network_fileio_unified_x{
     //we have not heard of a RAM virtual disk has a cache flush fail once
     //this implies serious kernel corruption, which is as unlikely as RAM failure or memory corruptions (nasty things could appear)
 
+    auto dg_is_met_direct_write_requirements(const void * src, size_t src_sz) noexcept -> bool{
+
+        return dg::network_fileio_chksum_x::dg_is_met_direct_write_requirements(src, src_sz);
+    } 
+
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
+
+        if (!dg_is_met_direct_write_requirements(src, src_sz)){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
 
         std::expected<bool, exception_t> status = dg_file_exists(fp);
 
@@ -402,8 +451,18 @@ namespace dg::network_fileio_unified_x{
             metadata->path_status_vec[i]    = dg::network_exception::is_success(bin_write_err);
         }
 
-        bool has_atleast_one_success = std::find(metadata->path_status_vec.begin(), metadata->path_status_vec.end(), true) != metadata->path_status_vec.end(); 
-        dg::network_exception_handler::nothrow_log(dg_internal_write_metadata(fp, metadata.value()));
+        if constexpr(HAS_DOUBLE_METADATA_WRITE){
+            exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value());
+
+            if (dg::network_exception::is_failed(metadata_write_err)){
+                dg::network_log_stackdump::error(dg::network_exception::verbose(metadata_write_err)); //unexpected need to document error
+                dg::network_exception_handler::nothrow_log(dg_internal_write_metadata(fp, metadata.value()));
+            }
+        } else{
+            dg::network_exception_handler::nothrow_log(dg_internal_write_metadata(fp, metadata.value()));
+        }
+
+        bool has_atleast_one_success = std::find(metadata->path_status_vec.begin(), metadata->path_status_vec.end(), true) != metadata->path_status_vec.end();
 
         if (!has_atleast_one_success){
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
@@ -438,8 +497,18 @@ namespace dg::network_fileio_unified_x{
             metadata->path_status_vec[i]    = dg::network_exception::is_success(bin_write_err);
         }
 
+        if constexpr(HAS_DOUBLE_METADATA_WRITE){
+            exception_t metadata_write_err = dg_internal_write_metadata(fp, metadata.value());
+
+            if (dg::network_exception::is_failed(metadata_write_err)){
+                dg::network_log_stackdump::error(dg::network_exception::verbose(metadata_write_err)); //unexpected need to document error
+                dg::network_exception_handler::nothrow_log(dg_internal_write_metadata(fp, metadata.value()));
+            }
+        } else{
+            dg::network_exception_handler::nothrow_log(dg_internal_write_metadata(fp, metadata.value()));
+        }
+
         bool has_atleast_one_success = std::find(metadata->path_status_vec.begin(), metadata->path_status_vec.end(), true) != metadata->path_status_vec.end(); 
-        dg::network_exception_handler::nothrow_log(dg_internal_write_metadata(fp, metadata.value()));
 
         if (!has_atleast_one_success){
             return dg::network_exception::RUNTIME_FILEIO_ERROR;        

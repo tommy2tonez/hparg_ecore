@@ -353,7 +353,16 @@ namespace dg::network_fileio_chksum_x{
         return dg_internal_remove_metadata(fp);
     }
 
+    auto dg_is_met_direct_read_requirements(void * dst, size_t dst_cap) noexcept -> bool{
+
+        return dg::network_fileio::dg_is_met_direct_read_requirements(dst, dst_cap);
+    }
+
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
+
+        if (!dg_is_met_direct_read_requirements(dst, dst_cap)){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR; //promoted error
+        }
 
         std::expected<bool, exception_t> status = dg_file_exists(fp);
 
@@ -454,7 +463,16 @@ namespace dg::network_fileio_chksum_x{
         return dg_read_binary_indirect(fp, dst, dst_cap);
     }
 
+    auto dg_is_met_direct_write_requirements(const void * src, size_t src_sz) noexcept -> bool{
+
+        return dg::network_fileio::dg_is_met_direct_write_requirements(src, src_sz);
+    }
+
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
+
+        if (!dg_is_met_direct_write_requirements(src, src_sz)){
+            return dg::network_exception::RUNTIME_FILEIO_ERROR;
+        }
 
         std::expected<bool, exception_t> status = dg_file_exists(fp);
 
