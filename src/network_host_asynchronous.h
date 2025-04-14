@@ -8,6 +8,11 @@
 namespace dg::network_host_asynchronous{
 
     //we'll add the std::memory_order_relaxed synchronization - this is a very important optimizable 
+    //alright, this is a very hard task
+    //we need to rebuild this to take batches of WorkOrder, we need to be considerate about the memory orderings, we'll revisit this tomorrow
+    //we'll stick with unique_ptr<> for best practices, yet we need to build a better affined allocator, such is like the stack_allocation yet does malloc + free on sz_cap or interval cap, or timeout, says 1MB/ free, or 1MB/ malloc, we have good partial deallocator (fragmentation management) internally, we just need to keep the allocation lifetimes under control 
+    //note that we can allocate from one affined allocator, and deallocate on another
+    //this is expected, yet we attempt to further affine things by doing aggregations
 
     using async_device_id_t = size_t;
 

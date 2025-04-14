@@ -2441,6 +2441,16 @@ namespace dg::network_tile_member_access{
     static inline constexpr bool IS_SAFE_ACCESS_ENABLED     = true;
     static inline constexpr size_t PADDING_SZ               = std::hardware_destructive_interference_size;
 
+    //I've been thinking
+    //our only problem is the backward problem
+    //I've been thinking of the way to solve this correctly
+    //what we actually want is the backward to stick to the <instrument_space> like water, our <instrument_space> is actually an unordered_set of fwd_tiles
+    //instead of doing naive backward, we would want to twist the immediate forward layers around to find our correct <backward>, <backward> in this sense is an absolute expected value instead of gradient values, we can say that the two are interchangable, we can find the absolute expected values and convert it to gradient values, we should keep things simple by doing one layer individualism d/dx for now
+    //gonna be hard, we can make it
+    //in the meantime, I came up with fwd_semaphore_tile + bwd_semaphore_tile, which is to attempt to serialize forward + backward, before forwarding the signals 
+    //semaphore is to signal when a threshold is reached, this is very crucial in computing a critical section of backwards
+    //timeout_semaphore is to recv, self ping (self decay) + update recv interval and timeout forward or full_signal forward + backward 
+
     enum tile_polymorphic_id_kind: tile_polymorphic_id_t{
         id_immu_8       = 0u,
         id_immu_16      = 1u,
@@ -2489,7 +2499,27 @@ namespace dg::network_tile_member_access{
         id_pacm_8       = 44u,
         id_pacm_16      = 45u,
         id_pacm_32      = 46u,
-        id_pacm_64      = 47u
+        id_pacm_64      = 47u,
+
+        id_smphfwd_8    = 48u,
+        id_smphfwd_16   = 49u,
+        id_smphfwd_32   = 50u,
+        id_smphfwd_64   = 51u, 
+
+        id_smphbwd_8    = 52u,
+        id_smphbwd_16   = 53u,
+        id_smphbwd_32   = 54u,
+        id_smphbwd_64   = 55u,
+
+        id_tosmfwd_8    = 56u,
+        id_tosmfwd_16   = 57u,
+        id_tosmfwd_32   = 58u,
+        id_tosmfwd_64   = 59u,
+
+        id_tosmbwd_8    = 60u,
+        id_tosmbwd_16   = 61u,
+        id_tosmbwd_32   = 62u,
+        id_tosmbwd_64   = 63u
     };
 
     struct network_tile_member_access_signature{}; 
