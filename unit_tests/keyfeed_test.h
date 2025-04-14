@@ -79,7 +79,7 @@ namespace keyfeed_test{
 
     auto randomize_vector(size_t sz, size_t key_range) -> std::vector<uint32_t>{
 
-        auto key_random_device = std::bind(std::uniform_int_distribution<uint32_t>(0u, key_range + 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
+        auto key_random_device = std::bind(std::uniform_int_distribution<uint32_t>(0u, key_range + 1), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
         std::vector<uint32_t> rs(sz);
         std::generate(rs.begin(), rs.end(), key_random_device);
 
@@ -211,8 +211,8 @@ namespace keyfeed_test{
         const size_t MAP_RANDOM_SZ          = 32; 
         const size_t MAP_RANDOM_FEED_SZ     = 32;
 
-        auto map_sz_random_device           = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_SZ - 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()}); 
-        auto map_feed_sz_random_device      = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_FEED_SZ - 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
+        auto map_sz_random_device           = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_SZ - 1), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto map_feed_sz_random_device      = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_FEED_SZ - 1), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
 
         for (size_t i = 0u; i < GROWTH_SZ; ++i){
             for (size_t j = 0u; j < TEST_SZ_PER_GROWTH; ++j){

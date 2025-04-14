@@ -206,6 +206,10 @@ namespace dg::network_fileio{
 
     auto dg_read_binary_direct(const char * fp, void * dst, size_t dst_cap) noexcept -> exception_t{
 
+        if (!is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(dst))){
+            return dg::network_exception::BAD_ALIGNMENT;
+        }
+
         auto raii_fd = dg_open_file(fp, O_RDONLY | O_DIRECT);
 
         if (!raii_fd.has_value()){
@@ -230,10 +234,6 @@ namespace dg::network_fileio{
         }
 
         if (!is_met_direct_dgio_blksz_requirement(fsz)){
-            return dg::network_exception::BAD_ALIGNMENT;
-        }
-
-        if (!is_met_direct_dgio_ptralignment_requirement(reinterpret_cast<uintptr_t>(dst))){
             return dg::network_exception::BAD_ALIGNMENT;
         }
 
@@ -338,7 +338,11 @@ namespace dg::network_fileio{
         }
 
         auto resource_grd   = stdx::resource_guard([&]() noexcept{
-            ftruncate64(raii_fd.value(), old_fsz.value());
+            exception_t trunc_err = ftruncate64(raii_fd.value(), old_fsz.value());
+
+            if (dg::network_exception::is_failed(trunc_err)){
+                dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(trunc_err));
+            }
         });
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){
@@ -378,7 +382,11 @@ namespace dg::network_fileio{
         }
 
         auto resource_grd   = stdx::resource_guard([&]() noexcept{
-            ftruncate64(raii_fd.value(), old_fsz.value());
+            exception_t trunc_err = ftruncate64(raii_fd.value(), old_fsz.value());
+
+            if (dg::network_exception::is_failed(trunc_err)){
+                dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(trunc_err));
+            }
         });
 
         if constexpr(NO_KERNEL_FSYS_CACHE_FLAG){

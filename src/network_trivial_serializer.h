@@ -352,7 +352,21 @@ namespace dg::network_trivial_serializer{
 
         archive::Backward().put(buf, obj);
         return buf;
-    } 
+    }
+
+    template <class T>
+    constexpr auto reflectible_is_equal(T lhs, T rhs) noexcept -> bool{
+
+        constexpr size_t REFLECTIBLE_SZ = dg::network_trivial_serializer::size(T{});
+
+        std::array<char, REFLECTIBLE_SZ> lhs_byte_representation{};
+        std::array<char, REFLECTIBLE_SZ> rhs_byte_representation{};
+
+        dg::network_trivial_serializer::serialize_into(lhs_byte_representation.data(), lhs);
+        dg::network_trivial_serializer::serialize_into(rhs_byte_representation.data(), rhs);
+
+        return lhs_byte_representation == rhs_byte_representation;
+    }
 }
 
 #endif

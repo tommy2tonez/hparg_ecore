@@ -50,7 +50,7 @@ namespace dg::network_fileio_chksum_x{
     static inline std::string METADATA_EXT                                  = "data";
     static inline constexpr size_t DG_LEAST_DIRECTIO_BLK_SZ                 = dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ;
 
-    static inline constexpr bool HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT    = true; //this is only used as the last resort for increasing true positive or decreasing false positive
+    static inline constexpr bool HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT    = false; //this is only used as the last resort for increasing true positive or decreasing false positive
     static inline constexpr bool FILE_HEADER_MAP_SZ                         = size_t{1} << 20;  
     static inline constexpr uint32_t HASH_SECRET                            = 4228045292ULL;
 
@@ -80,11 +80,20 @@ namespace dg::network_fileio_chksum_x{
         }
     };
 
-    template <class = void>
-    class DistributedFileHeaderMap{};
+    template <class T>
+    class DistributedFileHeaderMap{
+
+        public:
+
+            static auto read(...) noexcept -> std::optional<FileHeader>{
+                return std::nullopt;
+            }
+
+            static void push(...) noexcept{}
+    };
 
     template <>
-    class DistributedFileHeaderMap<std::void_t<std::enable_if_t<HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>>{
+    class DistributedFileHeaderMap<std::integral_constant<bool, true>>{
 
         private:
 
@@ -106,7 +115,7 @@ namespace dg::network_fileio_chksum_x{
 
             static auto read(const char * fp) noexcept -> std::optional<FileHeader>{
 
-                stdx::seq_cst_guard seqcst_tx;
+                stdx::seq_cst_guard seqcst_tx; //we are placing a seqcst_tx to avoid global variable access error, unlikely
 
                 std::array<char, MAX_FILE_PATH_SZ> char_fp  = raw_fp_to_array(fp);
                 size_t hashed_value                         = dg::network_hash::hash_reflectible(char_fp);
@@ -126,7 +135,7 @@ namespace dg::network_fileio_chksum_x{
 
             static void push(const char * fp, FileHeader header) noexcept{
 
-                stdx::seq_cst_guard seqcst_tx;
+                stdx::seq_cst_guard seqcst_tx; //we are placing a seqcst_tx to avoid global variable access error, unlikely
 
                 std::array<char, MAX_FILE_PATH_SZ> char_fp  = raw_fp_to_array(fp);
                 size_t hashed_value                         = dg::network_hash::hash_reflectible(char_fp);
@@ -136,19 +145,6 @@ namespace dg::network_fileio_chksum_x{
             }
     };
 
-    template <class T>
-    inline auto reflectible_equal(T lhs, T rhs) noexcept -> bool{
-
-        constexpr size_t REFLECTIBLE_SZ = dg::network_trivial_serializer::size(T{});
-
-        std::array<char, REFLECTIBLE_SZ> lhs_byte_representation{};
-        std::array<char, REFLECTIBLE_SZ> rhs_byte_representation{};
-
-        dg::network_trivial_serializer::serialize_into(lhs_byte_representation.data(), lhs);
-        dg::network_trivial_serializer::serialize_into(rhs_byte_representation.data(), rhs);
-
-        return lhs_byte_representation == rhs_byte_representation;
-    } 
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::expected<std::filesystem::path, exception_t>{
 
@@ -337,7 +333,7 @@ namespace dg::network_fileio_chksum_x{
         file_create_guard.release();
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            DistributedFileHeaderMap<>::push(fp, header);
+            DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::push(fp, header);
         }
 
         return dg::network_exception::SUCCESS;
@@ -391,13 +387,13 @@ namespace dg::network_fileio_chksum_x{
             return dg::network_exception::CORRUPTED_FILE;
         }
         
-        // if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-        //     std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
+        if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
+            std::optional<FileHeader> fh = DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::read(fp);
 
-        //     if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
-        //         return dg::network_exception::CORRUPTED_FILE;
-        //     }
-        // }
+            if (!fh.has_value() || !dg::network_trivial_serializer::reflectible_is_equal(fh.value(), header.value())){
+                return dg::network_exception::CORRUPTED_FILE;
+            }
+        }
 
         return dg::network_exception::SUCCESS;
     }
@@ -436,13 +432,13 @@ namespace dg::network_fileio_chksum_x{
             return dg::network_exception::CORRUPTED_FILE;
         }
 
-        // if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-        //     std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
+        if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
+            std::optional<FileHeader> fh = DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::read(fp);
 
-        //     if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
-        //         return dg::network_exception::CORRUPTED_FILE;
-        //     }
-        // }
+            if (!fh.has_value() || !dg::network_trivial_serializer::reflectible_is_equal(fh.value(), header.value())){
+                return dg::network_exception::CORRUPTED_FILE;
+            }
+        }
 
         return dg::network_exception::SUCCESS;
     }
@@ -485,12 +481,12 @@ namespace dg::network_fileio_chksum_x{
 
         std::expected<FileHeader, exception_t> cmp_metadata = dg_internal_read_metadata(fp);
 
-        if (!cmp_metadata.has_value() || !reflectible_equal(cmp_metadata.value(), header)){
+        if (!cmp_metadata.has_value() || !dg::network_trivial_serializer::reflectible_is_equal(cmp_metadata.value(), header)){
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            DistributedFileHeaderMap<>::push(fp, header);
+            DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::push(fp, header);
         }
 
         return dg::network_exception::SUCCESS;
@@ -523,12 +519,12 @@ namespace dg::network_fileio_chksum_x{
 
         std::expected<FileHeader, exception_t> cmp_metadata = dg_internal_read_metadata(fp);
 
-        if (!cmp_metadata.has_value() || !reflectible_equal(cmp_metadata.value(), header)){
+        if (!cmp_metadata.has_value() || !dg::network_trivial_serializer::reflectible_is_equal(cmp_metadata.value(), header)){
             return dg::network_exception::RUNTIME_FILEIO_ERROR;
         }
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            DistributedFileHeaderMap<>::push(fp, header);
+            DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::push(fp, header);
         }
        
         return dg::network_exception::SUCCESS;

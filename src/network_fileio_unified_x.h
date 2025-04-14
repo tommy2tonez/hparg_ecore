@@ -3,6 +3,7 @@
 
 //define HEADER_CONTROL 10
 
+#include "network_fileio.h"
 #include "network_fileio_chksum_x.h"
 #include "network_hash.h"
 #include <filesystem>
@@ -79,21 +80,38 @@ namespace dg::network_fileio_unified_x{
         }
 
         dg::network_compact_serializer::capintegrity_serialize_into(bstream.get(), metadata, METADATA_SERIALIZATION_SECRET);
-        exception_t create_err  = dg::network_fileio_chksum_x::dg_create_cbinary(metadata_fp->c_str(), metadata_sz);
+        exception_t create_err  = dg::network_fileio::dg_create_cbinary(metadata_fp->c_str(), metadata_sz);
 
         if (dg::network_exception::is_failed(create_err)){
             return create_err;
         }
 
-        exception_t write_err   = dg::network_fileio_chksum_x::dg_write_binary(metadata_fp->c_str(), bstream.get(), metadata_sz);
+        exception_t write_err   = dg::network_fileio::dg_write_binary(metadata_fp->c_str(), bstream.get(), metadata_sz);
 
         if (dg::network_exception::is_failed(write_err)){
-            dg::network_exception_handler::nothrow_log(dg::network_fileio_chksum_x::dg_remove(metadata_fp->c_str()));
+            dg::network_exception_handler::nothrow_log(dg::network_fileio::dg_remove(metadata_fp->c_str()));
             return write_err;
         }
 
         return dg::network_exception::SUCCESS;
     }
+
+    auto dg_internal_exists_metadata(const char * fp) noexcept -> std::expected<bool, exception_t>{
+
+        std::expected<std::filesystem::path, exception_t> metadata_fp = dg_internal_get_metadata_fp(fp);
+
+        if (!metadata_fp.has_value()){
+            return std::unexpected(metadata_fp.error());
+        }
+
+        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_fp->c_str());
+
+        if (!status.has_value()){
+            return std::unexpected(status.error());
+        }
+
+        return status.value();
+    } 
 
     auto dg_internal_remove_metadata(const char * fp) noexcept -> exception_t{
 
@@ -103,7 +121,7 @@ namespace dg::network_fileio_unified_x{
             return metadata_fp.error();
         }
 
-        return dg::network_fileio_chksum_x::dg_remove(metadata_fp->c_str());
+        return dg::network_fileio::dg_remove(metadata_fp->c_str());
     }
 
     auto dg_internal_read_metadata(const char * fp) noexcept -> std::expected<Metadata, exception_t>{
@@ -122,7 +140,7 @@ namespace dg::network_fileio_unified_x{
             return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
         }
 
-        exception_t err = dg::network_fileio_chksum_x::dg_read_binary(metadata_fp->c_str(), bstream.get(), MAX_METADATA_SIZE);
+        exception_t err = dg::network_fileio::dg_read_binary(metadata_fp->c_str(), bstream.get(), MAX_METADATA_SIZE);
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
@@ -162,7 +180,7 @@ namespace dg::network_fileio_unified_x{
 
         dg::network_compact_serializer::capintegrity_serialize_into(bstream.get(), metadata, METADATA_SERIALIZATION_SECRET);
 
-        return dg::network_fileio_chksum_x::dg_write_binary(metadata_fp->c_str(), bstream.get(), metadata_sz);
+        return dg::network_fileio::dg_write_binary(metadata_fp->c_str(), bstream.get(), metadata_sz);
     }
 
     auto dg_internal_make_metadata(const std::vector<std::string>& datapath_vec, size_t file_sz) noexcept -> std::expected<Metadata, exception_t>{
@@ -248,19 +266,7 @@ namespace dg::network_fileio_unified_x{
 
     auto dg_file_exists(const char * fp) noexcept -> std::expected<bool, exception_t>{
 
-        std::expected<std::filesystem::path, exception_t> metadata_fp = dg_internal_get_metadata_fp(fp);
-
-        if (!metadata_fp.has_value()){
-            return std::unexpected(metadata_fp.error());
-        }
-
-        std::expected<bool, exception_t> status = dg::network_fileio_chksum_x::dg_file_exists(metadata_fp->c_str());
-
-        if (!status.has_value()){
-            return std::unexpected(status.error());
-        }
-
-        return status.value(); 
+        return dg_internal_exists_metadata(fp);
     }
 
     auto dg_file_size(const char * fp) noexcept -> std::expected<size_t, exception_t>{
@@ -367,6 +373,8 @@ namespace dg::network_fileio_unified_x{
     //we are awared of 1024 other ways to die a program
     //until we've found a sound patch, we'll move on with the solution
     //the sound patch is probably to store the metadata_fp on a RAM virtual disk
+    //we have not heard of a RAM virtual disk has a cache flush fail once
+    //this implies serious kernel corruption, which is as unlikely as RAM failure or memory corruptions (nasty things could appear)
 
     auto dg_write_binary_direct(const char * fp, const void * src, size_t src_sz) noexcept -> exception_t{
 

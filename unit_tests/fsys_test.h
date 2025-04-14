@@ -142,12 +142,15 @@ namespace fileio_test{
         //probably 1 year, 2 years, 4 years, 8 years, 16 years
         //the only thing that makes us feel alive is differences, why should I ever want to disrupt that
 
+        std::cout << "<initializing_fileio_base_test>" << std::endl;
+
         std::unordered_map<std::filesystem::path, std::string> filedata_map{};
         std::vector<std::filesystem::path> past_file_vec{};
         std::vector<std::filesystem::path> current_file_vec{};
 
         const size_t CLEAR_INTERVAL_SZ                              = size_t{1} << 12;
         const size_t OPERATION_SZ                                   = size_t{1} << 20;
+        const size_t TENPERCENT_TEST_SZ                             = OPERATION_SZ / 10u;
         const size_t NEW_BINARY_RANGE                               = 16384u; 
         const size_t POW2_RANGE                                     = 16u;
 
@@ -943,6 +946,11 @@ namespace fileio_test{
                 past_file_vec.clear();
                 current_file_vec.clear();
             }
+
+
+            if (i % TENPERCENT_TEST_SZ == 0u){
+                std::cout << "progress >> " << i << "/" << OPERATION_SZ << std::endl;
+            }
         }
 
         for (const auto& fp: current_file_vec){
@@ -953,6 +961,8 @@ namespace fileio_test{
                 std::abort();
             }
         }
+
+        std::cout << "<fileio_base_test_completed>" << std::endl;
     }
 
     void filo_base_leak_test(){
@@ -975,7 +985,7 @@ namespace fileio_test{
         const uint8_t OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS           = 5u;
         const uint8_t OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR             = 6u;
 
-        const size_t TEST_SZ                                                = size_t{1} << 20;
+        const size_t TEST_SZ                                                = size_t{1} << 10;
         const size_t TENPERCENT_TEST_SZ                                     = TEST_SZ / 10u;
         auto ops_code_gen                                                   = std::bind(std::uniform_int_distribution<uint8_t>(0u, 6u), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
         auto sz_gen                                                         = std::bind(std::uniform_int_distribution<size_t>(0u, NEW_BINARY_RANGE), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
@@ -1290,7 +1300,7 @@ namespace fileio_test{
         const uint8_t OPS_CODE_FILE_EXISTS_CURRENT_EXPECT_SUCCESS           = 5u;
         const uint8_t OPS_CODE_FILE_EXISTS_REMOVED_EXPECT_ERROR             = 6u;
 
-        const size_t TEST_SZ                                                = size_t{1} << 20;
+        const size_t TEST_SZ                                                = size_t{1} << 10;
         const size_t TENPERCENT_TEST_SZ                                     = TEST_SZ / 10u;
         auto ops_code_gen                                                   = std::bind(std::uniform_int_distribution<uint8_t>(0u, 6u), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
         auto sz_gen                                                         = std::bind(std::uniform_int_distribution<size_t>(0u, NEW_BINARY_RANGE), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
@@ -1594,8 +1604,8 @@ namespace fileio_test{
 
         std::string folder_path = "/home/tommy2tonez/dg_projects/dg_polyobjects/unit_tests/fsys_test_folder";
         std::filesystem::create_directory(folder_path);
-        // fileio_base_test(folder_path);
-        // fileio_chksum_test(folder_path);
+        fileio_base_test(folder_path);
+        fileio_chksum_test(folder_path);
         fileio_unified_test(folder_path);
         std::filesystem::remove(folder_path);
     }

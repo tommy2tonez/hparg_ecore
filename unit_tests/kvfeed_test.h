@@ -94,8 +94,8 @@ namespace kvfeed_test{
 
     auto randomize_map(size_t sz, size_t key_range, size_t value_range) -> std::unordered_map<uint32_t, std::vector<uint32_t>>{
 
-        auto key_random_device      = std::bind(std::uniform_int_distribution<uint32_t>(0u, key_range + 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
-        auto value_random_device    = std::bind(std::uniform_int_distribution<uint32_t>{0u, value_range + 1}, std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
+        auto key_random_device      = std::bind(std::uniform_int_distribution<uint32_t>(0u, static_cast<uint32_t>(key_range + 1)), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto value_random_device    = std::bind(std::uniform_int_distribution<uint32_t>{0u, static_cast<uint32_t>(value_range + 1)}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
 
         std::unordered_map<uint32_t, std::vector<uint32_t>> rs{};
 
@@ -266,8 +266,8 @@ namespace kvfeed_test{
         const size_t MAP_RANDOM_SZ          = 32; 
         const size_t MAP_RANDOM_FEED_SZ     = 32;
 
-        auto map_sz_random_device           = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_SZ - 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()}); 
-        auto map_feed_sz_random_device      = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_FEED_SZ - 1), std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
+        auto map_sz_random_device           = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_SZ - 1), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto map_feed_sz_random_device      = std::bind(std::uniform_int_distribution<size_t>(0u, MAP_RANDOM_FEED_SZ - 1), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
 
         for (size_t i = 0u; i < GROWTH_SZ; ++i){
             std::cout << "testing completing " << i << "/" << GROWTH_SZ << std::endl;

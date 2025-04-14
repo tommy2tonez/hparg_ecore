@@ -33,8 +33,8 @@ namespace pow2_cyclic_queue_test{
         const uint8_t OPS_CODE_CMP_FRONT_BACK                       = 15u;
 
         const size_t cap        = size_t{1} << pow2_exp;
-        auto random_device      = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
-        auto random_ops_device  = std::bind(std::uniform_int_distribution<uint8_t>{}, std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
+        auto random_device      = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto random_ops_device  = std::bind(std::uniform_int_distribution<uint8_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
 
         auto queue              = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<uint32_t>(pow2_exp);
         auto vec                = std::deque<uint32_t>();
@@ -305,8 +305,8 @@ namespace pow2_cyclic_queue_test{
 
         const size_t cap        = size_t{1} << pow2_exp;
         auto queue              = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::unique_ptr<Foo>>(pow2_exp);
-        auto random_device      = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
-        auto random_ops_device  = std::bind(std::uniform_int_distribution<uint8_t>{}, std::mt19937{std::chrono::high_resolution_clock::now().time_since_epoch().count()});
+        auto random_device      = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+        auto random_ops_device  = std::bind(std::uniform_int_distribution<uint8_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
 
         for (size_t i = 0u; i < operation_sz; ++i){
 
