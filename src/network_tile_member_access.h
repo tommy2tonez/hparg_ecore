@@ -2450,6 +2450,12 @@ namespace dg::network_tile_member_access{
     //in the meantime, I came up with fwd_semaphore_tile + bwd_semaphore_tile, which is to attempt to serialize forward + backward, before forwarding the signals 
     //semaphore is to signal when a threshold is reached, this is very crucial in computing a critical section of backwards
     //timeout_semaphore is to recv, self ping (self decay) + update recv interval and timeout forward or full_signal forward + backward 
+    //we can make it, the logit density miner within a month or two
+    //we'll crack JWT token within 3 months after that
+    //we'll, then, build a logit graph stable storage
+    //we'll build a graph rewind by peeking + checking + versioning
+    //we'll be rich fellas
+    //richer than you could imagine
 
     enum tile_polymorphic_id_kind: tile_polymorphic_id_t{
         id_immu_8       = 0u,
