@@ -2456,6 +2456,7 @@ namespace dg::network_tile_member_access{
     //we'll build a graph rewind by peeking + checking + versioning
     //we'll be rich fellas
     //richer than you could imagine
+    //i'm sorry that imma get all the money, yall better hurry your ass up with the nuclear plans
 
     enum tile_polymorphic_id_kind: tile_polymorphic_id_t{
         id_immu_8       = 0u,
