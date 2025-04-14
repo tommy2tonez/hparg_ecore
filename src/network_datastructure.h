@@ -1895,6 +1895,13 @@ namespace std{
 
 namespace dg::network_datastructure::atomic_loader{
 
+    //we will use this a lot
+    //because we can prove that relaxed ordering (in the compiler's eyes) is not less than the ordering of normal non-concurrent variables
+    //thus the code that is correct for normal variables must be correct for relaxed variables
+    //we dont use std::memory_order_seq_cst tx in and out of the load() and unload() for this very reason
+    //what we are missing is a relaxed mutual exclusion lock(), unlock()
+    //we'll be back
+
     template <class T>
     class reflectible_relaxed_loader{
 

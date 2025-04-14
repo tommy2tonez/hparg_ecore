@@ -912,11 +912,11 @@ namespace stdx{
 
         private:
 
-            std::unique_ptr<Args...> resource;
+            dg::unique_resource<Args...> resource;
         
         public:
 
-            UniquePtrVirtualGuard(std::unique_ptr<Args...> resource) noexcept: resource(std::move(resource)){}
+            UniquePtrVirtualGuard(dg::unique_resource<Args...> resource) noexcept: resource(std::move(resource)){}
 
             void release() noexcept{
 
@@ -926,10 +926,11 @@ namespace stdx{
     };
 
     template <class Destructor>
-    auto vresource_guard(Destructor destructor) noexcept -> std::unique_ptr<VirtualResourceGuard>{ //mem-exhaustion is not an error here - it's bad to have it as an error
+    auto vresource_guard(Destructor destructor) -> std::unique_ptr<VirtualResourceGuard>{ //mem-exhaustion is not an error here - it's bad to have it as an error
 
         auto resource_grd = resource_guard(std::move(destructor));
         UniquePtrVirtualGuard virt_guard(std::move(resource_grd));
+
         return std::make_unique<decltype(virt_guard)>(std::move(virt_guard));
     }
 

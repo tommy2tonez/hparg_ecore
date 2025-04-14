@@ -20,6 +20,15 @@ namespace dg::network_fileio_chksum_x{
     //the hash_map is only good when used with the unified_fileio, and the unified_io does the business of multiple buckets to avoid the false negative filter of the chksum_x
     //remember, the chksum_x responsibility is to filter as many as possible, as long as the true positive rate is high and false positive rate is low
     //we can have false negatives, that's irrelevant
+    //alright, this is ..., against our principle of correct is correct, incorrect is incorrect
+    //let's improve this
+    //we are to design a relaxed hash_map
+    //we'll be back
+    //I know what you are referring 
+    //we chance better than most fellas out there
+    //the chance of all bucket collisions for 10 rehashed replicated filepath is lower than that of RAM 
+    //as long as we chance better than RAM, I dont even care about the absolute accuracy
+    //I mean even the bool cmp can be flipped from false to true or true to false
 
     struct FileHeader{
         std::pair<uint64_t, uint64_t> chksum;
@@ -41,8 +50,9 @@ namespace dg::network_fileio_chksum_x{
     static inline std::string METADATA_EXT                                  = "data";
     static inline constexpr size_t DG_LEAST_DIRECTIO_BLK_SZ                 = dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ;
 
-    static inline constexpr bool HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT    = true;
+    static inline constexpr bool HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT    = true; //this is only used as the last resort for increasing true positive or decreasing false positive
     static inline constexpr bool FILE_HEADER_MAP_SZ                         = size_t{1} << 20;  
+    static inline constexpr uint32_t HASH_SECRET                            = 4228045292ULL;
 
     auto raw_fp_to_array(const char * fp) noexcept -> std::array<char, MAX_FILE_PATH_SZ>{
 
@@ -95,7 +105,7 @@ namespace dg::network_fileio_chksum_x{
         public:
 
             static auto read(const char * fp) noexcept -> std::optional<FileHeader>{
-                
+
                 stdx::seq_cst_guard seqcst_tx;
 
                 std::array<char, MAX_FILE_PATH_SZ> char_fp  = raw_fp_to_array(fp);
@@ -140,7 +150,7 @@ namespace dg::network_fileio_chksum_x{
         return lhs_byte_representation == rhs_byte_representation;
     } 
 
-    auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::filesystem::path{
+    auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::expected<std::filesystem::path, exception_t>{
 
         try{
             auto rawname        = std::filesystem::path(fp).replace_extension("").filename();
@@ -149,33 +159,46 @@ namespace dg::network_fileio_chksum_x{
 
             return new_fp;
         } catch (...){
-            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception(std::current_exception())));
-            std::abort();
-            return {};
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
         }
     }
 
     auto dg_internal_create_metadata(const char * fp) noexcept -> exception_t{
 
+        std::expected<std::filesystem::path, exception_t> header_path   = dg_internal_get_metadata_fp(fp);
+        
+        if (!header_path.has_value()){
+            return header_path.error();
+        }
+
         constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{}); 
-        std::filesystem::path header_path   = dg_internal_get_metadata_fp(fp);
-        exception_t err                     = dg::network_fileio::dg_create_binary(header_path.c_str(), HEADER_SZ);
+        exception_t err                     = dg::network_fileio::dg_create_binary(header_path->c_str(), HEADER_SZ);
 
         return err;
     }
 
     auto dg_internal_remove_metadata(const char * fp) noexcept -> exception_t{
 
-        std::filesystem::path header_path   = dg_internal_get_metadata_fp(fp);
-        return dg::network_fileio::dg_remove(header_path.c_str());
+        std::expected<std::filesystem::path, exception_t> header_path   = dg_internal_get_metadata_fp(fp);
+
+        if (!header_path.has_value()){
+            return header_path.error();
+        }
+
+        return dg::network_fileio::dg_remove(header_path->c_str());
     }
 
     auto dg_internal_read_metadata(const char * fp) noexcept -> std::expected<FileHeader, exception_t>{
 
+        std::expected<std::filesystem::path, exception_t> header_path   = dg_internal_get_metadata_fp(fp);
+
+        if (!header_path.has_value()){
+            return std::unexpected(header_path.error());
+        }
+
         constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{}); 
-        std::filesystem::path header_path   = dg_internal_get_metadata_fp(fp);
         auto serialized_header              = std::array<char, HEADER_SZ>{};
-        exception_t err                     = dg::network_fileio::dg_read_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+        exception_t err                     = dg::network_fileio::dg_read_binary_indirect(header_path->c_str(), serialized_header.data(), HEADER_SZ);
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
@@ -189,18 +212,28 @@ namespace dg::network_fileio_chksum_x{
 
     auto dg_internal_write_metadata(const char * fp, FileHeader metadata) noexcept -> exception_t{
 
+        std::expected<std::filesystem::path, exception_t> header_path   = dg_internal_get_metadata_fp(fp); 
+
+        if (!header_path.has_value()){
+            return header_path.error();
+        }
+
         constexpr size_t HEADER_SZ          = dg::network_trivial_serializer::size(FileHeader{});
-        std::filesystem::path header_path   = dg_internal_get_metadata_fp(fp); 
         auto serialized_header              = std::array<char, HEADER_SZ>{};
         dg::network_trivial_serializer::serialize_into(serialized_header.data(), metadata);
 
-        return dg::network_fileio::dg_write_binary_indirect(header_path.c_str(), serialized_header.data(), HEADER_SZ);
+        return dg::network_fileio::dg_write_binary_indirect(header_path->c_str(), serialized_header.data(), HEADER_SZ);
     }
 
     auto dg_internal_is_file_creatable(const char * fp) noexcept -> std::expected<bool, exception_t>{
 
-        std::filesystem::path metadata_path     = dg_internal_get_metadata_fp(fp);
-        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_path.c_str());
+        std::expected<std::filesystem::path, exception_t> metadata_path = dg_internal_get_metadata_fp(fp);
+
+        if (!metadata_path.has_value()){
+            return std::unexpected(metadata_path.error());
+        }
+
+        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_path->c_str());
 
         if (!status.has_value()){
             return std::unexpected(status.error());
@@ -225,8 +258,13 @@ namespace dg::network_fileio_chksum_x{
 
     auto dg_file_exists(const char * fp) noexcept -> std::expected<bool, exception_t>{
 
-        std::filesystem::path metadata_path     = dg_internal_get_metadata_fp(fp);
-        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_path.c_str());
+        std::expected<std::filesystem::path, exception_t> metadata_path = dg_internal_get_metadata_fp(fp);
+
+        if (!metadata_path.has_value()){
+            return std::unexpected(metadata_path.error());
+        }
+
+        std::expected<bool, exception_t> status = dg::network_fileio::dg_file_exists(metadata_path->c_str());
 
         if (!status.has_value()){
             return std::unexpected(status.error());
@@ -287,7 +325,7 @@ namespace dg::network_fileio_chksum_x{
         });
 
         char * empty_buf                    = static_cast<char *>(std::calloc(fsz, sizeof(char)));
-        auto header                         = FileHeader{dg::network_hash::murmur_hash_base(empty_buf, fsz), fsz};
+        auto header                         = FileHeader{dg::network_hash::murmur_hash_base(empty_buf, fsz, HASH_SECRET), fsz};
         std::free(empty_buf);
         exception_t header_write_err        = dg_internal_write_metadata(fp, header);
 
@@ -347,19 +385,19 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        std::pair<uint64_t, uint64_t> file_chksum = dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(dst), header->content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        std::pair<uint64_t, uint64_t> file_chksum = dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(dst), header->content_size, HASH_SECRET); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
 
         if (file_chksum != header->chksum){
             return dg::network_exception::CORRUPTED_FILE;
         }
         
-        if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
+        // if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
+        //     std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
 
-            if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
-                return dg::network_exception::CORRUPTED_FILE;
-            }
-        }
+        //     if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
+        //         return dg::network_exception::CORRUPTED_FILE;
+        //     }
+        // }
 
         return dg::network_exception::SUCCESS;
     }
@@ -392,19 +430,19 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        std::pair<uint64_t, uint64_t> file_chksum = dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(dst), header->content_size); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        std::pair<uint64_t, uint64_t> file_chksum = dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(dst), header->content_size, HASH_SECRET); //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
 
         if (file_chksum != header->chksum){
             return dg::network_exception::CORRUPTED_FILE;
         }
 
-        if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
+        // if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
+        //     std::optional<FileHeader> fh = DistributedFileHeaderMap<>::read(fp);
 
-            if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
-                return dg::network_exception::CORRUPTED_FILE;
-            }
-        }
+        //     if (!fh.has_value() || !reflectible_equal(fh.value(), header.value())){
+        //         return dg::network_exception::CORRUPTED_FILE;
+        //     }
+        // }
 
         return dg::network_exception::SUCCESS;
     }
@@ -438,7 +476,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        FileHeader header{dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        FileHeader header{dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(src), src_sz, HASH_SECRET), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
         err = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){
@@ -476,7 +514,7 @@ namespace dg::network_fileio_chksum_x{
             return err;
         }
 
-        FileHeader header{dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(src), src_sz), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
+        FileHeader header{dg::network_hash::murmur_hash_base(reinterpret_cast<const char *>(src), src_sz, HASH_SECRET), src_sz};  //UB - keyword reinterpret_cast - resolution: start_lifetime_as_array, or precond void * to be a static_cast<void *>(char *) - this is a bad practice - where precond could be enforced by function signature 
         err = dg_internal_write_metadata(fp, header);
 
         if (dg::network_exception::is_failed(err)){

@@ -779,12 +779,12 @@ namespace dg::network_compact_serializer{
         size_t content_sz           = sz - size(types::hash_type{});
         const char * first          = buf;
         const char * last           = std::next(first, content_sz);
-        types::hash_type expected   = {};
+        types::hash_type expecting  = {};
         types::hash_type reality    = network_compact_serializer::utility::hash(first, content_sz, secret);
 
-        dg::network_compact_serializer::deserialize_into(expected, last);
+        dg::network_compact_serializer::deserialize_into(expecting, last);
 
-        if (expected != reality){
+        if (expecting != reality){
             throw dg::network_compact_serializer::exception_space::corrupted_format();
         }
 
@@ -797,6 +797,37 @@ namespace dg::network_compact_serializer{
                 throw dg::network_compact_serializer::exception_space::corrupted_format();
             }
         }
+    }
+
+    template <class T>
+    auto capintegrity_size(const T& obj) noexcept -> size_t{
+
+        return dg::network_compact_serializer::size(uint64_t{}) + dg::network_compact_serializer::integrity_size(obj);
+    }
+
+    template <class T>
+    auto capintegrity_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) noexcept -> char *{
+
+        char * first    = std::next(buf, dg::network_compact_serializer::size(uint64_t{}));
+        char * last     = dg::network_compact_serializer::integrity_serialize_into(first, obj, secret);
+        uint64_t sz     = std::distance(first, last);
+        dg::network_compact_serializer::serialize_into(buf, sz); 
+
+        return last;
+    }
+
+    template <class T>
+    auto capintegrity_deserialize_into(T& obj, const char * buf, size_t sz, uint32_t secret = 0u) -> const char *{
+
+        if (sz < dg::network_compact_serializer::size(uint64_t{})){
+            throw dg::network_compact_serializer::exception_space::corrupted_format();
+        }
+
+        uint64_t obj_sz     = {};
+        const char * first  = dg::network_compact_serializer::deserialize_into(obj_sz, buf);
+        dg::network_compact_serializer::integrity_deserialize_into(obj, first, obj_sz, secret);
+
+        return std::next(first, obj_sz);
     }
 
     template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
