@@ -2389,6 +2389,30 @@ namespace dg::network_tile_member_access::implementation{
                 return self::tile_logit_addr(ptr);
             }
     };
+
+    struct SmphFwdAddressLookup{
+
+    };
+
+    struct SmphBwdAddressLookup{
+
+    };
+
+    struct SmtoFwdAddressLookup{
+
+    };
+
+    struct SmtoBwdAddressLookup{
+
+    };
+
+    struct SigaFwdAddressLookup{
+
+    };
+
+    struct SigaBwdAddressLookup{
+
+    };
 }
 
 namespace dg::network_tile_member_access{
@@ -2458,6 +2482,22 @@ namespace dg::network_tile_member_access{
     //richer than you could imagine
     //i'm sorry that imma get all the money, yall better hurry your ass up with the nuclear plans
 
+    //assume you could tell the other guys what you saw, what would you tell?
+    //this is the question that i've been trying to answer
+    //would you tell him a straightforward stories or a curvy stories
+    //linearity and taylor approximation + complexity of semantic space is precisely this
+
+    //we have a sliding operation window f(f1(f2(f3(x)))), we try to "straighten things up"
+    //we tell the last guy f to tell the other guys f-1 f-2 f-3 f-4 to straighten things up
+    //alright, are we doing f(f1(f2(f3(x)))) in a same tile, is it an operation? we'll answer this later
+
+    //I dont say this is easy, but eventually, everything is straight, look at the taylor approximation series: f(x) = f(0) + f'(x) * x + 1/2 f''(x) * x * x, x is always straight in their own semantic space, f(x) = x
+    //this is only half of the answer
+    //we've been researching for a way to approx continuous-complete (such does not punch infinity holes) hard eqns by compressing + enumerating the Taylor Series patterns, sqrt(x) is a compressed form of an infinite diverging compute (the derivatives outrun their coefficients) pattern, cos(x) is also a compressed form of such
+    //yet things (the inputs) are still straight in the projection space
+
+    //alright semaphore tiles are not to synchronize, but are instructed to synchronize at a specific tile addr, which is signal_aggregation_tiles
+
     enum tile_polymorphic_id_kind: tile_polymorphic_id_t{
         id_immu_8       = 0u,
         id_immu_16      = 1u,
@@ -2518,15 +2558,18 @@ namespace dg::network_tile_member_access{
         id_smphbwd_32   = 54u,
         id_smphbwd_64   = 55u,
 
-        id_tosmfwd_8    = 56u,
-        id_tosmfwd_16   = 57u,
-        id_tosmfwd_32   = 58u,
-        id_tosmfwd_64   = 59u,
+        id_smtofwd_8    = 56u,
+        id_smtofwd_16   = 57u,
+        id_smtofwd_32   = 58u,
+        id_smtofwd_64   = 59u,
 
-        id_tosmbwd_8    = 60u,
-        id_tosmbwd_16   = 61u,
-        id_tosmbwd_32   = 62u,
-        id_tosmbwd_64   = 63u
+        id_smtobwd_8    = 60u,
+        id_smtobwd_16   = 61u,
+        id_smtobwd_32   = 62u,
+        id_smtobwd_64   = 63u,
+
+        id_sigafwd      = 64u,
+        id_sigabwd      = 65u
     };
 
     struct network_tile_member_access_signature{}; 
