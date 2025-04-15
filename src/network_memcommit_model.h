@@ -19,7 +19,8 @@ namespace dg::network_memcommit_factory{
         event_kind_forward_pingpong_request = 2u,
         event_kind_forward_pong_signal      = 3u,
         event_kind_forward_do_signal        = 4u,
-        event_kind_backward_do_signal       = 5u
+        event_kind_backward_do_signal       = 5u,
+        event_kind_signal_aggregation       = 6u
     };
 
     struct ForwardPingSignalEvent{
@@ -114,6 +115,24 @@ namespace dg::network_memcommit_factory{
         }
     };
 
+    struct SignalAggregationEvent{
+        uma_ptr_t dst;
+        uma_ptr_t signalee;
+        uma_ptr_t signaler;
+        memory_event_kind_t event_kind;
+        operatable_id_t operatable_id;
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(dst, signalee, signaler, event_kind, operatable_id);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(dst, signalee, signaler, event_kind, operatable_id);
+        }
+    };
+
     static inline constexpr size_t VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5; 
 
     struct VirtualEvent{
@@ -161,6 +180,11 @@ namespace dg::network_memcommit_factory{
     constexpr auto make_event_backward_do_signal(uma_ptr_t dst, operatable_id_t operatable_id) noexcept -> BackwardDoSignalEvent{
 
         return BackwardDoSignalEvent{dst, operatable_id};
+    }
+
+    constexpr auto make_event_sigagg_signal(uma_ptr_t dst, uma_ptr_t signalee, uma_ptr_t signaler, memory_event_kind_t event_kind, operatable_id_t operatable_id) noexcept -> SignalAggregationEvent{
+        
+        return SignalAggregationEvent{dst, signalee, signaler, event_kind, operatable_id};
     }
 
     constexpr auto virtualize_event(ForwardPingSignalEvent event) noexcept -> VirtualEvent{
@@ -224,6 +248,17 @@ namespace dg::network_memcommit_factory{
 
         VirtualEvent rs{};
         rs.event_kind = event_kind_backward_do_signal;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
+
+        return rs;
+    }
+
+    constexpr auto virtualize_event(SignalAggregationEvent event) noexcept -> VirtualEvent{
+
+        static_assert(dg::network_trivial_serializer::size(event) <= VIRTUAL_EVENT_BUFFER_SZ);
+
+        VirtualEvent rs{};
+        rs.event_kind = event_kind_signal_aggregation;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
@@ -319,6 +354,21 @@ namespace dg::network_memcommit_factory{
         }
 
         BackwardDoSignalEvent rs{};
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto devirtualize_sigagg_event(VirtualEvent event) noexcept -> SignalAggregationEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event_kind != event_kind_signal_aggregation){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        SignalAggregationEvent rs{};
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;

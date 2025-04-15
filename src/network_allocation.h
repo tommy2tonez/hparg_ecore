@@ -549,6 +549,35 @@ namespace dg::network_allocation{
 
         return false;
     }
+
+    template <class T, class ...Args>
+    auto std_new(Args&& ...args) -> T *{
+
+        return new T(std::forward<Args>(args)...);
+    }
+
+    template <class = void>
+    static inline constexpr bool FALSE_VAL = false;
+
+    template <class T>
+    auto std_delete(std::remove_extent_t<T> * obj) noexcept(std::is_nothrow_destructible_v<std::remove_extent_t<T>>){
+
+        if constexpr(std::is_array_v<T>){
+            if constexpr(std::is_unbounded_array_v<T>){
+                delete[] obj;
+            } else{
+                static_assert(FALSE_VAL<>);
+            }
+        } else{
+            delete obj;
+        }
+    }
+
+    template <class T, class ...Args>
+    auto make_unique(Args&& ...args) -> decltype(auto){
+
+        return std::make_unique<T>(std::forward<Args>(args)...);
+    }
 }
 
 #endif

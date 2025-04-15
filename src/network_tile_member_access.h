@@ -2390,28 +2390,405 @@ namespace dg::network_tile_member_access::implementation{
             }
     };
 
-    struct SmphFwdAddressLookup{
+    //normal mono tile, <signals> sigafwd or sigbfwd, its complicated, we need to include the requestee and requestor (semaphore tiles + forwarding tiles) in the request, we dont have that signal yet, post completetion
+    //sigbfwd is on another memory region that is less responsive than siga, siga is a very high frequency memory region whose sole purpose is to acquire + release semaphores
 
+    template <class ID, size_t TILE_COUNT, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t LOGIT_GROUP_SZ, size_t GRAD_GROUP_SZ, size_t OBSERVER_VALUE_SZ, size_t OBSERVER_ARRAY_SZ, size_t OPERATABLE_ID_SZ, size_t DISPATCH_CONTROL_SZ, size_t PONG_COUNT_SZ, size_t DESCENDANT_SZ, size_t SMPADDR_VALUE_SZ, size_t SMP_PING_OPT_SZ>
+    struct SmphAddressLookup{
+
+        private:
+
+            using self          = MonoAddressLookup;
+            using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>; 
+
+            static inline uma_ptr_t head{};
+
+            static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
+
+                return dg::memult::distance(self::head, ptr);
+            }
+
+            static constexpr auto offset_id(size_t idx) noexcept -> size_t{
+                
+                return idx;
+            }
+
+            static constexpr auto offset_init_status_addr(size_t idx) noexcept -> size_t{
+
+                return idx * INIT_STATUS_SZ + dg_align(ALIGNMENT_SZ, self::offset_id(TILE_COUNT) + PADDING_SZ);
+            }
+
+            template <size_t ARR_IDX>
+            static constexpr auto offset_observer_addr(size_t idx, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
+
+                return idx * (OBSERVER_VALUE_SZ * OBSERVER_ARRAY_SZ) + (dg_align(ALIGNMENT_SZ, self::offset_init_status_addr(TILE_COUNT) + PADDING_SZ) + OBSERVER_VALUE_SZ * ARR_IDX);
+            }
+
+            static constexpr auto offset_tile_logit_addr(size_t idx) noexcept -> size_t{
+
+                return idx * LOGIT_GROUP_SZ + dg_align(ALIGNMENT_SZ, self::offset_observer_addr(TILE_COUNT, std::integral_constant<size_t, 0u>{}) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_tile_grad_addr(size_t idx) noexcept -> size_t{
+
+                return idx * GRAD_GROUP_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_logit_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_operatable_id_addr(size_t idx) noexcept -> size_t{
+
+                return idx * OPERATABLE_ID_SZ + dg_align(ALIGNMENT_SZ, self::offset_tile_grad_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_dispatch_control_addr(size_t idx) noexcept -> size_t{
+
+                return idx * DISPATCH_CONTROL_SZ + dg_align(ALIGNMENT_SZ, self::offset_operatable_id_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_pong_count_addr(size_t idx) noexcept -> size_t{
+
+                return idx * PONG_COUNT_SZ + dg_align(ALIGNMENT_SZ, self::offset_dispatch_control_addr(TILE_COUNT) + PADDING_SZ);
+            }
+            
+            static constexpr auto offset_descendant_addr(size_t idx) noexcept -> size_t{
+
+                return idx * DESCENDANT_SZ + dg_align(ALIGNMENT_SZ, self::offset_pong_count_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_smpaddr_addr(size_t idx) noexcept -> size_t{
+
+                return idx * SMPHADDR_VALUE_SZ + dg_align(ALIGNMENT_SZ, self::offset_descendant_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+            static constexpr auto offset_smp_ping_option_addr(size_t idx) noexcept -> size_t{
+
+                return idx * SMP_PING_OPT_SZ + dg_align(ALIGNMENT_SZ, self::offset_smpaddr_addr(TILE_COUNT) + PADDING_SZ);
+            }
+
+        public:
+
+            static_assert(stdx::is_pow2(ALIGNMENT_SZ));
+
+            static void init(uma_ptr_t buf){
+
+                self::head = dg::pointer_cast<uma_ptr_t>(dg_align(ALIGNMENT_SZ, dg::pointer_cast<typename dg::ptr_info<uma_ptr_t>::max_unsigned_t>(buf)));
+                access_ins::init(self::head, dg::memult::next(self::head, TILE_COUNT));
+            }
+
+            static void deinit() noexcept{
+
+                (void) self::head;
+            }
+
+            static consteval auto buf_size() -> size_t{
+
+                return self::offset_smp_ping_option_addr(TILE_COUNT) + ALIGNMENT_SZ - 1u;
+            }
+
+            static consteval auto tile_size() -> size_t{
+
+                return TILE_COUNT;
+            }
+            
+            static consteval auto init_status_size() -> size_t{
+
+                return INIT_STATUS_SZ;
+            }
+
+            static consteval auto logit_group_size() -> size_t{
+
+                return LOGIT_GROUP_SZ;
+            }
+
+            static consteval auto grad_group_size() -> size_t{
+
+                return GRAD_GROUP_SZ;
+            }
+
+            static consteval auto observer_value_size() -> size_t{
+
+                return OBSERVER_VALUE_SZ;
+            }
+
+            static consteval auto observer_array_size() -> size_t{
+
+                return OBSERVER_ARRAY_SZ;
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+                return OPERATABLE_ID_SZ;
+            }
+
+            static consteval auto dispatch_control_size() -> size_t{
+
+                return DISPATCH_CONTROL_SZ;
+            }
+
+            static consteval auto pong_count_size() -> size_t{
+
+                return PONG_COUNT_SZ;
+            }
+
+            static consteval auto descendant_size() -> size_t{
+
+                return DESCENDANT_SZ;
+            }
+            
+            static inline auto get_head() noexcept -> uma_ptr_t{
+
+                return self::head;
+            }
+
+            static inline auto id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return access_ins::access(ptr);
+            }
+
+            static inline auto init_status_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_init_status_addr(self::index(access_ins::access(ptr))));
+            }
+
+            template <size_t ARR_IDX>
+            static inline auto observer_addr(uma_ptr_t ptr, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{
+
+                static_assert(ARR_IDX < OBSERVER_ARRAY_SZ);
+                return dg::memult::next(self::get_head(), self::offset_observer_addr(self::index(access_ins::access(ptr)), std::integral_constant<size_t, ARR_IDX>{}));
+            }
+
+            static inline auto tile_logit_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_tile_logit_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto tile_grad_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_tile_grad_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto operatable_id_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_operatable_id_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto dispatch_control_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_dispatch_control_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto pong_count_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_pong_count_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto descendant_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_descendant_addr(self::index(access_ins::access(ptr))));
+            }
+
+            static inline auto smpaddr_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_smpaddr_addr(self::index(access_ins::access(ptr))));
+            } 
+
+            static inline auto smp_ping_option_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return dg::memult::next(self::get_head(), self::offset_smp_ping_option_addr(self::index(access_ins::access(ptr))));
+            } 
+
+            static inline auto notification_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return self::tile_logit_addr(ptr);
+            }
+
+            static inline auto rcu_lock_addr(uma_ptr_t ptr) noexcept -> uma_ptr_t{
+
+                return self::tile_logit_addr(ptr);
+            }
     };
 
-    struct SmphBwdAddressLookup{
+    //initialized with a threshold, only trigger once the threshold has been reached
+    //let's see what siga has
+    //uint32_t sz
+    //std::array<SigaData, ARR_CAP>, siga data is serialized, dumped into an arbitrary fixed size buffer of size 128, we would attempt to <semanticalize> the buffer later, we are only to provide the layout of the structures
+    //operatable_id_t
+    //init_status_t
+    //trigger_threshold_sz
 
+    template <class ID, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t SIGDATA_ELEMENT_SZ, size_t SIGDATA_ARRAY_CAP, size_t SIGDATA_ARRAY_SZ_SZ, size_t OPERATABLE_ID_SZ, size_t TRIGGER_THRESHOLD_SZ_SZ>
+    struct SgnlAggAddressLookup{
+
+        private:
+
+            using self          = SgnlAggAddressLookup;
+            using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
+
+            static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_id(size_t) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_init_status_addr(size_t) noexcept -> size_t{
+
+            }
+
+            //compiler's smarter than me about code size management
+
+            template <size_t ARR_IDX>
+            static constexpr auto offset_sigdata_addr(size_t, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_sigdata_array_sz_addr(size_t) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_operatable_id_addr(size_t) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_trigger_threshold_sz_addr(size_t) noexcept -> size_t{
+
+            }
+        
+        public:
+
+            static void init(uma_ptr_t){
+
+            }
+
+            static void deinit() noexcept{
+
+            }
+
+            static consteval auto buf_size() -> size_t{
+
+            }
+
+            static consteval auto pad_size() -> size_t{
+
+            }
+
+            static consteval auto alignment_size() -> size_t{
+
+            }
+
+            static consteval auto init_status_size() -> size_t{
+
+            }
+
+            static consteval auto sigdata_element_size() -> size_t{
+
+            }
+
+            static consteval auto sigdata_array_capaciy() -> size_t{
+
+            }
+
+            static consteval auto sigdata_array_sz_size() -> size_t{
+
+            }
+
+            static consteval auto operatable_id_size() -> size_t{
+
+            }
+
+            static consteval auto trigger_threshold_sz_size() noexcept -> size_t{
+
+            }
+
+            static inline auto get_head() noexcept -> uma_ptr_t{}
+            static inline auto id_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            static inline auto init_status_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            template <size_t ARR_IDX>
+            static inline auto sigdata_addr(size_t, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{}
+            static inline auto sigdata_array_sz_addr(size_t) noexcept -> size_t{}
+            static inline auto operatable_id_addr(size_t) noexcept -> size_t{}
+            static inline auto trigger_threshold_sz_addr(size_t) noexcept -> size_t{}
     };
 
-    struct SmtoFwdAddressLookup{
+    //initialized with a threshold and a timeout, timeout is a self-decay technique where the sigb would attempt to decay itself into another timeout if the queue is not empty
+    //sigb normal layout
+    //uint32_t sz
+    //std::array<SigbData, ARR_CAP>
+    //operatable_id_t
+    //init_status_t
+    //trigger_threshold_sz
+    //successive_latency_max_interval
+    //this requires another data_type
 
-    };
+    template <class ID, size_t PADDING_SZ, size_t ALIGNMENT_SZ, size_t INIT_STATUS_SZ, size_t SIGDATA_ELEMENT_SZ, size_t SIGDATA_ARRAY_CAP, size_t SIGDATA_ARRAY_SZ_SZ, size_t OPERATABLE_ID_SZ, size_t TRIGGER_THRESHOLD_SZ_SZ, size_t SUCCESSIVE_LATENCY_SZ>
+    struct SgnlLtcAddressLookup{
 
-    struct SmtoBwdAddressLookup{
+        private:
 
-    };
+            using self          = SgnlLtcAddressLookup;
+            using access_ins    = dg::network_segcheck_bound::StdAccess<self, uma_ptr_t>;
 
-    struct SigaFwdAddressLookup{
+            static inline auto index(uma_ptr_t ptr) noexcept -> size_t{
 
-    };
+            }
 
-    struct SigaBwdAddressLookup{
+            static constexpr auto offset_id(size_t) noexcept -> size_t{
 
+            }
+
+            static constexpr auto offset_init_status_addr(size_t) noexcept -> size_t{
+
+            }
+
+            template <size_t ARR_IDX>
+            static constexpr auto offset_sigdata_addr(size_t, const std::integral_constant<size_t, ARR_IDX>) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_sigdata_array_sz_addr(size_t) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_operatable_id_addr(size_t) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_trigger_threshold_sz_addr(size_t) noexcept -> size_t{
+
+            }
+
+            static constexpr auto offset_successive_latency_addr(size_t) noexcept -> size_t{
+
+            }
+        
+        public:
+
+            static void init(uma_ptr_t){}
+
+            static void deinit() noexcept{
+
+            }
+
+            static consteval auto buf_size() -> size_t{}
+            static consteval auto pad_size() -> size_t{}
+            static consteval auto alignment_size() -> size_t{}
+            static consteval auto init_status_size() -> size_t{}
+            static consteval auto sigdata_element_size() -> size_t{}
+            static consteval auto sigdata_array_cap() -> size_t{}
+            static consteval auto sigdata_array_sz_size() -> size_t{}
+            static consteval auto operatable_id_size() -> size_t{}
+            static consteval auto trigger_threshold_sz_size() -> size_t{}
+            static consteval auto successive_latency_size() -> size_t{}
+
+            static inline auto get_head() noexcept -> uma_ptr_t{}
+            static inline auto id_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            static inline auto init_status_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            template <size_t ARR_IDX>
+            static inline auto sigdata_addr(uma_ptr_t, const std::integral_constant<size_t, ARR_IDX>) noexcept -> uma_ptr_t{}
+            static inline auto sigdata_array_sz_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            static inline auto operatable_id_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            static inline auto trigger_threshold_sz_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
+            static inline auto successive_latency_addr(uma_ptr_t) noexcept -> uma_ptr_t{}
     };
 }
 
@@ -2497,6 +2874,24 @@ namespace dg::network_tile_member_access{
     //yet things (the inputs) are still straight in the projection space
 
     //alright semaphore tiles are not to synchronize, but are instructed to synchronize at a specific tile addr, which is signal_aggregation_tiles
+    //it's complex tourist
+    //but trust me Son, we are going to hell if we can't make this, at least, let's have something we could be proud of for eternity
+
+    //I was thinking in terms of the hollistics view of this
+    //every output cell has a tree of compute
+    //each unordered data points set represents the instrument of the tree
+
+    //this instrument can be passed down to the immediate childs, this immediate child can have many versions of the instrument
+
+    //a = b + c
+    //a = 4
+
+    //b = 1, c = 3
+    //b = 2, c = 2
+    //so on and so forth
+    //what's the right unordered_set of data points that makes up the instrument to be passed down to the immediate childs?
+    //from what I could tell, things are initially straight
+    //we are moving from straight lines -> complex lines
 
     enum tile_polymorphic_id_kind: tile_polymorphic_id_t{
         id_immu_8       = 0u,
@@ -2547,29 +2942,12 @@ namespace dg::network_tile_member_access{
         id_pacm_16      = 45u,
         id_pacm_32      = 46u,
         id_pacm_64      = 47u,
-
-        id_smphfwd_8    = 48u,
-        id_smphfwd_16   = 49u,
-        id_smphfwd_32   = 50u,
-        id_smphfwd_64   = 51u, 
-
-        id_smphbwd_8    = 52u,
-        id_smphbwd_16   = 53u,
-        id_smphbwd_32   = 54u,
-        id_smphbwd_64   = 55u,
-
-        id_smtofwd_8    = 56u,
-        id_smtofwd_16   = 57u,
-        id_smtofwd_32   = 58u,
-        id_smtofwd_64   = 59u,
-
-        id_smtobwd_8    = 60u,
-        id_smtobwd_16   = 61u,
-        id_smtobwd_32   = 62u,
-        id_smtobwd_64   = 63u,
-
-        id_sigafwd      = 64u,
-        id_sigabwd      = 65u
+        id_smph_8       = 48u,
+        id_smph_16      = 49u,
+        id_smph_32      = 50u,
+        id_smph_64      = 51u,
+        id_sgnlagg      = 52u,
+        id_sgnlltc      = 53u
     };
 
     struct network_tile_member_access_signature{}; 
