@@ -11,6 +11,7 @@
 #include "stdx.h"
 #include "network_log.h"
 #include "network_randomizer.h"
+#include "network_exception_handler.h"
 
 namespace dg::network_host_asynchronous{
 
@@ -221,23 +222,34 @@ namespace dg::network_host_asynchronous{
                     return dg::network_exception::INVALID_ARGUMENT;
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                std::binary_semaphore * releasing_smp = nullptr; 
 
-                if (!this->waiting_vec.empty()){
-                    auto [pending_smp, fetching_addr] = this->waiting_vec.front();
-                    this->waiting_vec.pop_front();
-                    *fetching_addr = std::move(wo);
-                    std::atomic_signal_fence(std::memory_order_seq_cst); //semaphore has their virtues, we just need a signal fence
-                    pending_smp->release();
+                exception_t rs = [&, this]{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->waiting_vec.empty()){
+                        auto [pending_smp, fetching_addr] = this->waiting_vec.front();
+                        this->waiting_vec.pop_front();
+                        *fetching_addr = std::move(wo);
+                        std::atomic_signal_fence(std::memory_order_seq_cst); //semaphore has their virtues, we just need a signal fence
+                        // pending_smp->release(); //this could hinder the lockability of lck_grd
+                        releasing_smp = pending_smp;
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    if (this->wo_vec.size() == this->wo_vec.capacity()){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->wo_vec.push_back(std::move(wo)));
                     return dg::network_exception::SUCCESS;
-                }
+                }();
 
-                if (this->wo_vec.size() == this->wo_vec.capacity()){
-                    return dg::network_exception::RESOURCE_EXHAUSTION;
-                }
+                if (releasing_smp != nullptr){
+                    releasing_smp->release();
+                }                
 
-                this->wo_vec.push_back(std::move(wo));
-                return dg::network_exception::SUCCESS;
+                return rs;
             }
 
             auto pop() noexcept -> std::unique_ptr<WorkOrder>{
@@ -260,7 +272,7 @@ namespace dg::network_host_asynchronous{
                         continue;
                     }
 
-                    this->waiting_vec.push_back(std::make_pair(&pending_smp, &wo));
+                    dg::network_exception_handler::nothrow_log(this->waiting_vec.push_back(std::make_pair(&pending_smp, &wo)));
                     break;
                 }
 
