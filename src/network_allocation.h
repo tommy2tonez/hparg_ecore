@@ -42,6 +42,11 @@ namespace dg::network_allocation{
     //this Allocator guarantees no fragmentation if the allocation node lifetime is below the half cap threshold (switchfoot)
     //that Allocator guarantees to free allocations on time, punctually
     //alright, something went wrong
+    //we should expose the GC interface... yet we should not rely on GC to deallocate things correctly
+    //our heap allocations do not factor in sz as a clearable threshold, we must attempt to solve that here in this extension
+    //such is we are automatically invoking the GC every 5%-10% of total memory being allocated without loss of generality
+    //our affined allocator should not use internal metrics such as time because that could be not accurate. we should use absolute metrics such should reflect the low level implementation of fragmentation management
+    //as long as every node allocation lifetime does not exceed the time it takes to allocate half of the heap, we should be in the fragmentation free guaranteed zone
 
     class GCInterface{
 
