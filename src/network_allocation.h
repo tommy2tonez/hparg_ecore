@@ -54,7 +54,8 @@ namespace dg::network_allocation{
     //we can also prove that the rechoose_sz would decrease by the maximum size of fixed_allocation_sz
     //until it decreases -> the other branch size, we now enter the equilibrium state of switching (stable state)
     //only when both of the branches size >= fixed allocation size
-
+    //I have a pull request of doing a mixed of insertion sort and std::quicksort
+    //we increase the complexity to 2nlog(n), because we exhaustion n iteration for every quicksort invoke
     class GCInterface{
 
         public:
