@@ -42,20 +42,7 @@ namespace dg::network_allocation{
     //this Allocator guarantees no fragmentation if the allocation node lifetime is below the half cap threshold (switchfoot)
     //that Allocator guarantees to free allocations on time, punctually
     //alright, something went wrong
-    //we should expose the GC interface... yet we should not rely on GC to deallocate things correctly
-    //our heap allocations do not factor in sz as a clearable threshold, we must attempt to solve that here in this extension
-    //such is we are automatically invoking the GC every 5%-10% of total memory being allocated without loss of generality
-    //our affined allocator should not use internal metrics such as time because that could be not accurate. we should use absolute metrics such should reflect the low level implementation of fragmentation management
-    //as long as every node allocation lifetime does not exceed the time it takes to allocate half of the heap, we should be in the fragmentation free guaranteed zone
-    //the problem is that I could not prove that choosing the larger of two intervals is a correct approach. the differences might not converge...
-    //this implies that we should force a switch unless the other branch is empty. this is the guaranteed way
-    //unless we give the assumption that the allocation_lifetime == fixed_allocation_sz
-    //we can prove that the problem happens when the allocator chooses the previous branch ... again
-    //we can also prove that the rechoose_sz would decrease by the maximum size of fixed_allocation_sz
-    //until it decreases -> the other branch size, we now enter the equilibrium state of switching (stable state)
-    //only when both of the branches size >= fixed allocation size
-    //I have a pull request of doing a mixed of insertion sort and std::quicksort
-    //we increase the complexity to 2nlog(n), because we exhaustion n iteration for every quicksort invoke
+
     class GCInterface{
 
         public:
@@ -333,7 +320,7 @@ namespace dg::network_allocation{
                 }
             };
 
-            struct InternalFreeFeedArgument: dg::network_producer_consumer::KVConsumerInterface<size_t, ptr_type>{
+            struct InternalFreeFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, ptr_type>{
 
                 std::vector<std::unique_ptr<Allocator>> * dst;
 
@@ -365,12 +352,10 @@ namespace dg::network_allocation{
 
             std::shared_ptr<GCAllocatorInterface> base_allocator;
             std::unordered_map<size_t, AllocationBag> allocation_map;
-            std::vector<void *> free_bag;
-            size_t free_bag_cap;
-            std::chrono::nanoseconds flush_interval;
-            std::chrono::time_point<std::chrono::high_resolution_clock> last_flush;
             size_t operation_counter;
             size_t max_operation_per_flush;
+            size_t allocation_sz_counter;
+            size_t max_allocation_sz_per_flush; 
             size_t minimum_allocation_blk_sz;
             size_t maximum_smallbin_blk_sz;
             size_t pow2_malloc_chk_interval_sz; 
@@ -379,25 +364,21 @@ namespace dg::network_allocation{
 
             DGStdAllocator(std::shared_ptr<GCAllocatorInterface> base_allocator,
                            std::unordered_map<size_t, AllocationBag> allocation_map,
-                           std::vector<void *> free_bag,
-                           size_t free_bag_cap,
-                           std::chrono::nanoseconds flush_interval,
-                           std::chrono::time_point<std::chrono::high_resolution_clock> last_flush,
                            size_t operation_counter,
                            size_t max_operation_per_flush,
+                           size_t allocation_sz_counter,
+                           size_t max_allocation_sz_per_flush,
                            size_t minimum_allocation_blk_sz,
                            size_t maximum_smallbin_blk_sz,
                            size_t pow2_malloc_chk_interval_sz) noexcept: base_allocator(std::move(base_allocator)),
-                                                                    allocation_map(std::move(allocation_map)),
-                                                                    free_bag(std::move(free_bag)),
-                                                                    free_bag_cap(free_bag_cap),
-                                                                    flush_interval(flush_interval),
-                                                                    last_flush(last_flush),
-                                                                    operation_counter(operation_counter),
-                                                                    max_operation_per_flush(max_operation_per_flush),
-                                                                    minimum_allocation_blk_sz(minimum_allocation_blk_sz),
-                                                                    maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
-                                                                    pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz){}
+                                                                         allocation_map(std::move(allocation_map)),
+                                                                         operation_counter(operation_counter),
+                                                                         max_operation_per_flush(max_operation_per_flush),
+                                                                         allocation_sz_counter(allocation_sz_counter),
+                                                                         max_allocation_sz_per_flush(max_allocation_sz_per_flush),
+                                                                         minimum_allocation_blk_sz(minimum_allocation_blk_sz),
+                                                                         maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
+                                                                         pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz){}
 
             ~DGStdAllocator() noexcept{
 
@@ -415,6 +396,7 @@ namespace dg::network_allocation{
                 } else [[likely]]{
                     size_t pow2_blk_sz  = stdx::ceil2(std::max(blk_sz, this->minimum_allocation_blk_sz)); //ceil2 is just a way to describe things, we can do ceil 1.2, 1.3 etc. 
                     auto map_ptr        = this->allocation_map.find(pow2_blk_sz);
+                    [[assume(map_ptr != this->allocation_map.end())]]; //2026 optimizations written by committees
 
                     if (map_ptr->second.allocation_stack.empty()) [[unlikely]]{
                         return this->internal_careful_malloc(blk_sz);
@@ -422,6 +404,7 @@ namespace dg::network_allocation{
                         void * blk = map_ptr->second.allocation_stack.back();
                         map_ptr->second.allocation_stack.pop_back(); 
                         this->operation_counter += 1;
+                        this->allocation_sz_counter += blk_sz;
 
                         return blk;
                     }
@@ -430,29 +413,80 @@ namespace dg::network_allocation{
 
             void free(void * ptr) noexcept{
 
-                //free is a through operation, noaction, because we dont want to trigger things in the free functions, it makes no sense
+                if (ptr == nullptr){
+                    return;
+                }
 
-                // if (this->free_bag.size() == this->free_bag_cap) [[unlikely]]{
-                //     this->internal_flush_free_bag();
-                // }
+                size_t ptr_sz   = this->internal_read_ptr_size(ptr);
+                auto map_ptr    = this->allocation_map.find(ptr_sz);
 
-                //this is where we want to reuse the freed alloctions
-                //we have not come up with a way to reasonably not write header to void * ptr, this is a very expensive operation  
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (map_ptr == this->allocation_map.end()){
+                        std::abort();
+                    }
+                } else{
+                    [[assume(map_ptr != this->allocation_map.end())]]; //2026 optimizations written by committees
+                }
 
-                // this->free_bag.push_back(ptr);
+                map_ptr->second.allocation_stack.push_back(ptr);
             }
 
         private:
 
+            void internal_reset() noexcept{
+
+            }
+
+            void internal_cleanup() noexcept{
+
+            }
+
+            void internal_check_for_reset() noexcept{
+
+                bool reset_cond_1   = this->allocation_sz_counter > this->max_allocation_sz_per_flush;
+                bool reset_cond_2   = this->operation_counter > this->max_operation_per_flush; 
+
+                if (reset_cond_1 || reset_cond_2){
+                    this->internal_reset();
+                }
+            }
+
+            auto internal_large_malloc(size_t blk_sz) noexcept -> void *{
+
+            }
+
+            void internal_refill_smallbin_allocation(size_t pow2_blk_sz, AllocationBag& allocation_bag){
+
+            }
+
             __attribute__((noinline)) auto internal_careful_malloc(size_t blk_sz) noexcept -> void *{
 
+                if (blk_sz == 0u){
+                    return nullptr;
+                }
+
+                this->internal_check_for_reset();
+
+                if (blk_sz > this->maximum_smallbin_blk_sz){
+                    return this->internal_large_malloc(blk_sz);
+                }
+
+                size_t pow2_blk_sz  = stdx::ceil2(std::max(blk_sz, this->minimum_allocation_blk_sz)); //ceil2 is just a way to describe things, we can do ceil 1.2, 1.3 etc. 
+                auto map_ptr        = this->allocation_map.find(pow2_blk_sz);
+
+                if (map_ptr->second.allocation_stack.empty()){
+                    this->internal_refill_smallbin_allocation(map_ptr->first, map_ptr->second);
+                }
+
+                void * rs = map_ptr->second.allocation_stack.back();
+                map_ptr->second.allocation_stack.pop_back();
+                this->operation_counter += 1;
+                this->allocation_sz_counter += blk_sz;
+
+                return rs;
             }
 
-            __attribute__((noinline)) void internal_flush_free_bag() noexcept{
-
-            }
-
-            void internal_cleanup(){
+            inline auto internal_read_ptr_size(void * ptr) noexcept -> size_t{
 
             }
     };
