@@ -49,6 +49,11 @@ namespace dg::network_allocation{
     //as long as every node allocation lifetime does not exceed the time it takes to allocate half of the heap, we should be in the fragmentation free guaranteed zone
     //the problem is that I could not prove that choosing the larger of two intervals is a correct approach. the differences might not converge...
     //this implies that we should force a switch unless the other branch is empty. this is the guaranteed way
+    //unless we give the assumption that the allocation_lifetime == fixed_allocation_sz
+    //we can prove that the problem happens when the allocator chooses the previous branch ... again
+    //we can also prove that the rechoose_sz would decrease by the maximum size of fixed_allocation_sz
+    //until it decreases -> the other branch size, we now enter the equilibrium state of switching (stable state)
+    //only when both of the branches size >= fixed allocation size
 
     class GCInterface{
 
