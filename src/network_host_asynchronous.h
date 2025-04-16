@@ -633,6 +633,21 @@ namespace dg::network_host_asynchronous{
     };
 
     //alright, this is the very hard myth, such is if the compiler cant see your memory orderings, they only instruct a hardware instruction, compiler has absolutely no knowledge about where, what, variables, pointer optimizations they should make in accordance to the memory ordering
+    //alright, this is hard
+
+    //if the calling function taints the argument variables, and the compiler can't see the calling functions, the argument variables are safe
+    //if the calling function taints the argument variables, and the compiler can the the calling functions, the argument variables are safe thanks to the memory orderings
+
+    //in that sense, std::atomic_signal_fence(std::memory_order_seq_cst) only applies to the content of the calling function
+
+    //this means that a correctly implemented + defined function is a function that behaves as if there is no memory ordering, the only allowed ordering is the implicit ordering based on the arguments or the return result
+    //this is a very important note
+    //sequential consistency only applies to two might-be concurrent functions, if a function is not concurrent, there is no need for sequential consistency
+    //if the program is misbehaved if there is a reordering of a-two-has-to-be-successive-cant-be-proved-by-compiler-concurrent functions, we must emit a sequential consistency signal to the compiler
+    //this is the only correct guide that we must adhere to 
+
+    //why do we implement this memory_safe_synchronizer again? because the arguments that passed in std::unique_ptr<WorkOrder> might not taint the variables that std::unique_ptr<Synchronizable> protects, there are proofs of misimplementations, we dont go there yet 
+
     class MemorySafeSynchronizer{
 
         private:

@@ -105,7 +105,7 @@ namespace dg::network_fileio_chksum_x{
                 auto rs = std::make_unique<bucket_loader_t[]>(FILE_HEADER_MAP_SZ);
 
                 for (size_t i = 0u; i < FILE_HEADER_MAP_SZ; ++i){
-                    rs[i].unload(FileHeaderMapBucket{{}, {}, false});
+                    rs[i].dump(FileHeaderMapBucket{{}, {}, false});
                 }
 
                 return rs;
@@ -141,7 +141,7 @@ namespace dg::network_fileio_chksum_x{
                 size_t hashed_value                         = dg::network_hash::hash_reflectible(char_fp);
                 size_t idx                                  = hashed_value % FILE_HEADER_MAP_SZ;
 
-                self::bucket_array[idx].unload(FileHeaderMapBucket{char_fp, header, true});
+                self::bucket_array[idx].dump(FileHeaderMapBucket{char_fp, header, true});
             }
     };
 

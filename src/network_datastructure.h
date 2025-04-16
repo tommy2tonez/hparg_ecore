@@ -1936,7 +1936,7 @@ namespace dg::network_datastructure::atomic_loader{
                 return rs;
             }
 
-            constexpr void unload(T value) noexcept{
+            constexpr void dump(T value) noexcept{
 
                 std::array<char, SERIALIZED_RAW_CONTAINER_SZ> serialized_raw_container{};
                 std::array<word_t, CONTAINER_SZ> raw_container{};
