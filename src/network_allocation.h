@@ -47,6 +47,8 @@ namespace dg::network_allocation{
     //such is we are automatically invoking the GC every 5%-10% of total memory being allocated without loss of generality
     //our affined allocator should not use internal metrics such as time because that could be not accurate. we should use absolute metrics such should reflect the low level implementation of fragmentation management
     //as long as every node allocation lifetime does not exceed the time it takes to allocate half of the heap, we should be in the fragmentation free guaranteed zone
+    //the problem is that I could not prove that choosing the larger of two intervals is a correct approach. the differences might not converge...
+    //this implies that we should force a switch unless the other branch is empty. this is the guaranteed way
 
     class GCInterface{
 
