@@ -4611,7 +4611,7 @@ namespace dg::heap::internal_core{
             }
 
             void free(const interval_type& interval) noexcept{
-                
+
                 try{
                     this->fast_allocator->free(interval);
                 } catch(std::exception& e){
