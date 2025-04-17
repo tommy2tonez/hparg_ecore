@@ -245,9 +245,9 @@ namespace dg::network_allocation{
 
             auto decommission() noexcept -> std::pair<void *, size_t>{
 
-                auto rs = std::make_pair(static_cast<void *>(this->buf), this->sz);
-                std::advance(this->buf, this->sz);
-                this->sz = 0u;
+                auto rs     = std::make_pair(static_cast<void *>(this->buf), this->sz);
+                this->buf   = nullptr;
+                this->sz    = 0u;
 
                 return rs;
             }
@@ -271,7 +271,8 @@ namespace dg::network_allocation{
         private:
 
             BumpAllocator bump_allocator;
-            size_t bump_allocator_refill_sz; 
+            size_t bump_allocator_refill_sz;
+            size_t bump_allocator_version_control; 
             std::shared_ptr<char[]> buf;
             std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator;
             std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table;
@@ -292,11 +293,14 @@ namespace dg::network_allocation{
 
         public:
 
-            using header_t = uint16_t;
-            static inline constexpr size_t ALLOCATION_HEADER_SZ = sizeof(header_tr);  
+            using sz_header_t       = uint16_t;
+            using vrs_ctrl_header_t = uint8_t; 
+
+            static inline constexpr size_t ALLOCATION_HEADER_SZ = sizeof(sz_header_t) + sizeof(vrs_ctrl_header_t);  
 
             DGStdAllocator(BumpAllocator bump_allocator,
                            size_t bump_allocator_refill_sz,
+                           size_t bump_allocator_version_control,
                            std::shared_ptr<char[]> buf,
                            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator,
                            std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
@@ -314,21 +318,23 @@ namespace dg::network_allocation{
 
                            dg::network_datastructure::unordered_map_variants::unordered_node_map<uintptr_t, LargeBinMetadata> largebin_metadata_dict,
                            size_t largebin_metada_dict_cap) noexcept: bump_allocator(bump_allocator),
-                                                                                   buf(std::move(buf)),
-                                                                                   heap_allocator(std::move(heap_allocator)),
-                                                                                   smallbin_reuse_table(std::move(smallbin_reuse_table)),
-                                                                                   minimum_allocation_blk_sz(minimum_allocation_blk_sz),
-                                                                                   maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
-                                                                                   freebin_vec(std::move(free_bin_vec)),
-                                                                                   freebin_vec_cap(freebin_vec_cap),
-                                                                                   pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz),
-                                                                                   malloc_chk_interval_counter(malloc_chk_interval_counter),
-                                                                                   last_flush(last_flush),
-                                                                                   flush_interval(flush_interval),
-                                                                                   allocation_sz_counter(allocation_sz_counter),
-                                                                                   allocation_sz_counter_flush_threshold(allocation_sz_counter_flush_threshold),
-                                                                                   largebin_metadata_dict(std::move(largebin_metadata_dict)),
-                                                                                   largebin_metadata_dict_cap(largebin_metadata_dict_cap){}
+                                                                      bump_allocator_refill_sz(bump_allocator_refill_sz),
+                                                                      bump_allocator_version_control(bump_allocator_version_control),
+                                                                      buf(std::move(buf)),
+                                                                      heap_allocator(std::move(heap_allocator)),
+                                                                      smallbin_reuse_table(std::move(smallbin_reuse_table)),
+                                                                      minimum_allocation_blk_sz(minimum_allocation_blk_sz),
+                                                                      maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
+                                                                      freebin_vec(std::move(freebin_vec)),
+                                                                      freebin_vec_cap(freebin_vec_cap),
+                                                                      pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz),
+                                                                      malloc_chk_interval_counter(malloc_chk_interval_counter),
+                                                                      last_flush(last_flush),
+                                                                      flush_interval(flush_interval),
+                                                                      allocation_sz_counter(allocation_sz_counter),
+                                                                      allocation_sz_counter_flush_threshold(allocation_sz_counter_flush_threshold),
+                                                                      largebin_metadata_dict(std::move(largebin_metadata_dict)),
+                                                                      largebin_metadata_dict_cap(largebin_metadata_dict_cap){}
 
             ~DGStdAllocator() noexcept{
 
@@ -389,29 +395,36 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                size_t user_ptr_sz = this->internal_read_user_ptr_size(user_ptr);
+                size_t user_ptr_sz                          = this->internal_read_user_ptr_size(user_ptr);
+                uint8_t user_ptr_truncated_version_control  = this->internal_read_user_ptr_truncated_version_control(user_ptr);  
 
                 if (user_ptr_sz > this->maximum_smallbin_blk_sz) [[unlikely]]{
                     this->internal_large_free(user_ptr);
                 } else [[likely]]{
-                    size_t floor_smallbin_table_idx = stdx::ulog2(user_ptr_sz); 
-                    auto& smallbin_vec              = this->smallbin_reuse_table[floor_smallbin_table_idx];
+                    uint8_t current_truncated_version_control   = this->internal_get_truncated_version_control(this->bump_allocator_version_control);
+                    size_t floor_smallbin_table_idx             = stdx::ulog2(user_ptr_sz); 
+                    auto& smallbin_vec                          = this->smallbin_reuse_table[floor_smallbin_table_idx];
 
-                    if (smallbin_vec.size() != smallbin_vec.capacity()){
+                    if (smallbin_vec.size() != smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control){
                         dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                     } else{
                         if (this->freebin_vec.size() == this->freebin_vec_cap) [[unlikely]]{
                             this->internal_dump_freebin_vec();
                         }
 
-                        dg::network_exception::dg_noexcept(this->freebin_vec.push_back(smallbin_vec.front()));
+                        this->freebin_vec.push_back(smallbin_vec.front());
                         smallbin_vec.pop_front();
-                        smallbin_vec.push_back(user_ptr);
+                        dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                     }
                 }
             }
 
         private:
+
+            inline auto internal_get_truncated_version_control(size_t version_control) noexcept -> uint8_t{
+
+                return version_control & static_cast<size_t>(std::numeric_limits<uint8_t>::max()); //static cast should suffice
+            } 
 
             inline auto internal_has_largemalloc_dict_room() noexcept -> bool{
 
@@ -453,7 +466,7 @@ namespace dg::network_allocation{
                 return std::make_pair(static_cast<const void *>(std::next(this->buf.get(), buf_offset)), buf_sz);
             }
 
-            inline auto internal_buf_to_interval(const std::pair<const void *, size_t>& arg) const noexcept -> interval_type{
+            inline auto internal_aligned_buf_to_interval(const std::pair<const void *, size_t>& arg) const noexcept -> interval_type{
 
                 size_t buf_offset   = std::distance(this->buf.get(), arg.first);
                 size_t buf_sz       = arg.second;
@@ -463,7 +476,7 @@ namespace dg::network_allocation{
                 return std::make_pair(heap_offset, heap_excl_sz);
             }
 
-            inline auto interval_buf_to_interval(const std::pair<void *, size_t>& arg) const noexcept -> interval_type{
+            inline auto interval_aligned_buf_to_interval(const std::pair<void *, size_t>& arg) const noexcept -> interval_type{
 
                 size_t buf_offset   = std::distance(this->buf.get(), arg.first);
                 size_t buf_sz       = arg.second;
@@ -507,11 +520,24 @@ namespace dg::network_allocation{
                 return allocation_sz; 
             }
 
-            inline auto internal_write_allocation_header(void * internal_ptr, uint16_t user_ptr_sz) const noexcept -> void *{
+            inline auto internal_read_user_ptr_truncated_version_control(const void * user_ptr) noexcept -> uint8_t{
+
+                const void * ptr_head               = this->internal_get_internal_ptr_head(user_ptr);
+                const void * version_control_head   = std::next(static_cast<const char *>(ptr_head), sizeof(uint16_t)); 
+                uint8_t version_ctrl                = {};
+
+                std::memcpy(&version_ctrl, ptr_head, sizeof(uint16_t));
+
+                return version_ctrl; 
+            }
+
+            inline auto internal_write_allocation_header(void * internal_ptr, uint16_t user_ptr_sz, uint8_t version_control) const noexcept -> void *{
 
                 std::memcpy(internal_ptr, &user_ptr_sz, sizeof(uint16_t));
+                std::memcpy(std::next(static_cast<char *>(internal_ptr), sizeof(uint16_t)), &version_control, sizeof(uint8_t));
+
                 return this->internal_get_user_ptr_head(internal_ptr);
-            } 
+            }
 
             __attribute__((noinline)) void internal_dump_freebin_vec(){
 
@@ -539,7 +565,7 @@ namespace dg::network_allocation{
                 auto [decom_buf, decom_sz] = this->bump_allocator.decommission();
 
                 if (decom_sz != 0u){
-                    auto heap_interval = this->internal_buf_to_interval({static_cast<char *>(decom_buf), decom_sz});
+                    auto heap_interval = this->internal_aligned_buf_to_interval({static_cast<char *>(decom_buf), decom_sz});
                     this->heap_allocator->free(&heap_interval, 1u);
                 }
             }
@@ -557,8 +583,10 @@ namespace dg::network_allocation{
                     return false;
                 }
 
-                std::pair<char *, size_t> requesting_buf = this->internal_interval_to_buf(requesting_interval.value());
-                this->bump_allocator = BumpAllocator(requesting_buf.first, requesting_buf.second);
+                std::pair<char *, size_t> requesting_buf    = this->internal_interval_to_buf(requesting_interval.value());
+                this->bump_allocator                        = BumpAllocator(requesting_buf.first, requesting_buf.second);
+                this->bump_allocator_version_control        += 1;
+
                 this->internal_update_allocation_sensor(this->bump_allocator_refill_sz);
 
                 return true;
@@ -569,12 +597,12 @@ namespace dg::network_allocation{
                 //blk_sz != 0u;
 
                 if (user_blk_sz > this->maximum_smallbin_blk_sz){
-                    return nullptr;
+                    return nullptr; //nullptr is holding more semantic than it supposes to
                 }
 
                 size_t pad_blk_sz                       = user_blk_sz + ALLOCATION_HEADER_SZ;
                 size_t ceil_blk_sz                      = (((pad_blk_sz - 1u) / HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                size_t user_usable_blk_sz               = ceil_blk_sz - 1u; 
+                size_t user_usable_blk_sz               = ceil_blk_sz - ALLOCATION_HEADER_SZ; 
                 std::expected<void *, exception_t> rs   = this->bump_allocator.malloc(ceil_blk_sz);
 
                 if (!rs.has_value()){
@@ -595,7 +623,9 @@ namespace dg::network_allocation{
                     }
                 }
 
-                return this->internal_write_allocation_header(rs.value(), stdx::wrap_safe_integer_cast(user_usable_blk_sz));
+                return this->internal_write_allocation_header(rs.value(), 
+                                                              stdx::wrap_safe_integer_cast(user_usable_blk_sz), 
+                                                              this->internal_get_truncated_version_control(this->bump_allocator_version_control));
             }
 
             void internal_commit_waiting_bin()() noexcept{
@@ -620,6 +650,7 @@ namespace dg::network_allocation{
             void internal_reset() noexcept{
 
                 this->internal_commit_waiting_bin()();
+
                 this->last_flush            = std::chrono::high_resolution_clock::now();
                 this->allocation_sz_counter = 0u;
             }
@@ -640,34 +671,40 @@ namespace dg::network_allocation{
             //this is complicated
             auto internal_large_malloc(size_t user_blk_sz) noexcept -> void *{
 
+                if (user_blk_sz <= this->maximum_smallbin_blk_sz){
+                    return nullptr; //nullptr is holding more semantic than it supposes to hold
+                }
+
                 if (!this->internal_has_largemalloc_dict_room()){
                     return nullptr;
                 }
 
                 size_t pad_blk_sz                           = user_blk_sz + ALLOCATION_HEADER_SZ;
                 size_t ceil_blk_sz                          = (((pad_blk_sz - 1u) / HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                size_t user_usable_blk_sz                   = ceil_blk_sz - 1u;
+                size_t user_usable_blk_sz                   = ceil_blk_sz - ALLOCATION_HEADER_SZ;
+                size_t allocating_heap_node_sz              = ceil_blk_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ; 
                 std::optional<interval_type> allocated_intv = {};
 
-                this->heap_allocator->malloc(&ceil_blk_sz, 1u, &allocated_intv);
+                this->heap_allocator->malloc(&allocating_heap_node_sz, 1u, &allocated_intv);
 
                 if (!allocated_intv.has_value()){
                     return nullptr;
                 }
 
                 std::pair<char *, size_t> requesting_buf    = this->internal_interval_to_buf(allocated_intv.value());
-                void * rs                                   = this->internal_write_allocation_header(requesting_buf.first, this->maximum_smallbin_blk_sz + 1u);
+                void * rs                                   = this->internal_write_allocation_header(requesting_buf.first, this->maximum_smallbin_blk_sz + 1u, 0u);
 
-                dg::network_exception::dg_noexcept(this->internal_write_largemalloc_user_ptr_size(rs, user_usable_blk_sz));
+                this->internal_write_largemalloc_user_ptr_size(rs, user_usable_blk_sz);
                 this->internal_update_allocation_sensor(ceil_blk_sz);
 
                 return rs; //it is large enough to hold my unordered_map, my unordered_map is not expensive, its just ...
             }
 
             __attribute__((noinline)) void internal_large_free(void * user_ptr) noexcept{
-                
+
                 void * internal_ptr         = this->internal_get_internal_ptr_head(user_ptr);
-                size_t user_ptr_sz          = this->internal_read_largemalloc_user_ptr_size(internal_ptr);
+                size_t user_ptr_sz          = this->internal_read_largemalloc_user_ptr_size(user_ptr);
+
                 size_t internal_ptr_offset  = std::distance(this->buf.get(), internal_ptr);
                 size_t internal_ptr_sz      = user_ptr_sz + ALLOCATION_HEADER_SZ; 
 
