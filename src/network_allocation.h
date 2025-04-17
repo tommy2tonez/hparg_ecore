@@ -405,16 +405,20 @@ namespace dg::network_allocation{
                     size_t floor_smallbin_table_idx             = stdx::ulog2(user_ptr_sz); 
                     auto& smallbin_vec                          = this->smallbin_reuse_table[floor_smallbin_table_idx];
 
-                    if (smallbin_vec.size() != smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control){
+                    if (smallbin_vec.size() != smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{
                         dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                     } else{
                         if (this->freebin_vec.size() == this->freebin_vec_cap) [[unlikely]]{
                             this->internal_dump_freebin_vec();
                         }
 
-                        this->freebin_vec.push_back(smallbin_vec.front());
-                        smallbin_vec.pop_front();
-                        dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
+                        if (current_truncated_version_control == user_ptr_truncated_version_control){
+                            this->freebin_vec.push_back(smallbin_vec.front());
+                            smallbin_vec.pop_front();
+                            dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
+                        } else{
+                            this->free_bin.push_back(Allocation{user_ptr, user_ptr_sz});
+                        }
                     }
                 }
             }
@@ -628,7 +632,7 @@ namespace dg::network_allocation{
                                                               this->internal_get_truncated_version_control(this->bump_allocator_version_control));
             }
 
-            void internal_commit_waiting_bin()() noexcept{
+            void internal_commit_waiting_bin() noexcept{
 
                 this->internal_decommision_bump_allocator();
 
@@ -649,7 +653,7 @@ namespace dg::network_allocation{
 
             void internal_reset() noexcept{
 
-                this->internal_commit_waiting_bin()();
+                this->internal_commit_waiting_bin();
 
                 this->last_flush            = std::chrono::high_resolution_clock::now();
                 this->allocation_sz_counter = 0u;
@@ -713,8 +717,8 @@ namespace dg::network_allocation{
                 size_t heap_ptr_excl_sz     = heap_ptr_sz - 1u;
 
                 interval_type intv          = std::make_pair(heap_ptr_offset, heap_ptr_excl_sz);
-                this->internal_erase_largemalloc_entry(user_ptr);
 
+                this->internal_erase_largemalloc_entry(user_ptr);
                 this->heap_allocator->free(&intv, 1u);
             }
 
