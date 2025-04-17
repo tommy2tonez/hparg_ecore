@@ -290,7 +290,7 @@ namespace dg::network_allocation{
             size_t allocation_sz_counter_flush_threshold; 
 
             dg::network_datastructure::unordered_map_variants::unordered_node_map<uintptr_t, LargeBinMetadata> largebin_metadata_dict; 
-            size_t largebin_metadata_dict_cap;
+            size_t largebin_metadata_dict_cap; //we've got bad feedbacks about this, I dont think that's an issue, we are allocating 64KB chunk of memory, 16 bytes of largebin's not gonna dent our overheads
 
         public:
 
@@ -318,24 +318,24 @@ namespace dg::network_allocation{
                            size_t allocation_sz_counter_flush_threshold,
 
                            dg::network_datastructure::unordered_map_variants::unordered_node_map<uintptr_t, LargeBinMetadata> largebin_metadata_dict,
-                           size_t largebin_metada_dict_cap) noexcept: bump_allocator(bump_allocator),
-                                                                      bump_allocator_refill_sz(bump_allocator_refill_sz),
-                                                                      bump_allocator_version_control(bump_allocator_version_control),
-                                                                      buf(std::move(buf)),
-                                                                      heap_allocator(std::move(heap_allocator)),
-                                                                      smallbin_reuse_table(std::move(smallbin_reuse_table)),
-                                                                      minimum_allocation_blk_sz(minimum_allocation_blk_sz),
-                                                                      maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
-                                                                      freebin_vec(std::move(freebin_vec)),
-                                                                      freebin_vec_cap(freebin_vec_cap),
-                                                                      pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz),
-                                                                      malloc_chk_interval_counter(malloc_chk_interval_counter),
-                                                                      last_flush(last_flush),
-                                                                      flush_interval(flush_interval),
-                                                                      allocation_sz_counter(allocation_sz_counter),
-                                                                      allocation_sz_counter_flush_threshold(allocation_sz_counter_flush_threshold),
-                                                                      largebin_metadata_dict(std::move(largebin_metadata_dict)),
-                                                                      largebin_metadata_dict_cap(largebin_metadata_dict_cap){}
+                           size_t largebin_metadata_dict_cap) noexcept: bump_allocator(bump_allocator),
+                                                                        bump_allocator_refill_sz(bump_allocator_refill_sz),
+                                                                        bump_allocator_version_control(bump_allocator_version_control),
+                                                                        buf(std::move(buf)),
+                                                                        heap_allocator(std::move(heap_allocator)),
+                                                                        smallbin_reuse_table(std::move(smallbin_reuse_table)),
+                                                                        minimum_allocation_blk_sz(minimum_allocation_blk_sz),
+                                                                        maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
+                                                                        freebin_vec(std::move(freebin_vec)),
+                                                                        freebin_vec_cap(freebin_vec_cap),
+                                                                        pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz),
+                                                                        malloc_chk_interval_counter(malloc_chk_interval_counter),
+                                                                        last_flush(last_flush),
+                                                                        flush_interval(flush_interval),
+                                                                        allocation_sz_counter(allocation_sz_counter),
+                                                                        allocation_sz_counter_flush_threshold(allocation_sz_counter_flush_threshold),
+                                                                        largebin_metadata_dict(std::move(largebin_metadata_dict)),
+                                                                        largebin_metadata_dict_cap(largebin_metadata_dict_cap){}
 
             ~DGStdAllocator() noexcept{
 
@@ -481,7 +481,7 @@ namespace dg::network_allocation{
                 return std::make_pair(heap_offset, heap_excl_sz);
             }
 
-            inline auto interval_aligned_buf_to_interval(const std::pair<void *, size_t>& arg) const noexcept -> interval_type{
+            inline auto internal_aligned_buf_to_interval(const std::pair<void *, size_t>& arg) const noexcept -> interval_type{
 
                 size_t buf_offset   = std::distance(this->buf.get(), arg.first);
                 size_t buf_sz       = arg.second;
