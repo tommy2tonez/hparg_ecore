@@ -264,6 +264,7 @@ namespace dg::network_allocation{
 
     //this is harder to write than most people think
     //I couldn't even semanticalize the methods naturally, it's complicated
+    //this should be clear
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
@@ -380,7 +381,7 @@ namespace dg::network_allocation{
                     this->free(user_ptr);
                     return this->malloc(blk_sz);
                 } else{
-                    if (user_ptr_sz <= blk_sz){
+                    if (blk_sz <= user_ptr_sz){
                         return user_ptr;
                     } else{
                         this->free(user_ptr);
@@ -417,7 +418,7 @@ namespace dg::network_allocation{
                             smallbin_vec.pop_front();
                             dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                         } else{
-                            this->free_bin.push_back(Allocation{user_ptr, user_ptr_sz});
+                            this->freebin_vec.push_back(Allocation{user_ptr, user_ptr_sz});
                         }
                     }
                 }
