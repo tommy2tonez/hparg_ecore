@@ -230,7 +230,7 @@ namespace dg::network_allocation{
             BumpAllocator(char * buf, size_t sz) noexcept: buf(buf), 
                                                            sz(sz){}
 
-            auto malloc(size_t blk_sz) noexcept -> std::expected<void *, exception_t>{
+            inline auto malloc(size_t blk_sz) noexcept -> std::expected<void *, exception_t>{
 
                 if (blk_sz > this->sz){
                     return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
@@ -243,7 +243,7 @@ namespace dg::network_allocation{
                 return static_cast<void *>(rs);
             }
 
-            auto decommission() noexcept -> std::pair<void *, size_t>{
+            inline auto decommission() noexcept -> std::pair<void *, size_t>{
 
                 auto rs     = std::make_pair(static_cast<void *>(this->buf), this->sz);
                 this->buf   = nullptr;
@@ -286,27 +286,32 @@ namespace dg::network_allocation{
     //in the meantime, we need to work on Taylor Series compression, our client does not like low-level code ... we'll be understandable
     //let's show them the real way of socialism
     //undertrained neural networks of less than 10 ** 18 decimal accurate would terminate the integrating living organism
-    //we dont do bullshit or fancy coding, we focus on what works, what fast, we'll move on
     //this is the $1000 B question that we've been working very hard on
+    //I'm tired of people tricks on encodings | decodings
+    //it's not gonna work
+    //the only way that works is the way of using accurate logit density mining machine
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
 
         private:
 
-            BumpAllocator bump_allocator;
-            size_t bump_allocator_refill_sz;
-            size_t bump_allocator_version_control; 
             std::shared_ptr<char[]> buf;
-            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator;
-            std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table;
             size_t minimum_allocation_blk_sz;
             size_t maximum_smallbin_blk_sz;
+            size_t pow2_malloc_chk_interval_sz;
+            size_t malloc_chk_interval_counter;
+            std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table; //too many indirections
+
+            BumpAllocator bump_allocator;
+            size_t bump_allocator_refill_sz;
+            size_t bump_allocator_version_control;
+
             std::vector<Allocation> freebin_vec;
             size_t freebin_vec_cap;
 
-            size_t pow2_malloc_chk_interval_sz;
-            size_t malloc_chk_interval_counter;
+            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator;
+
             std::chrono::time_point<std::chrono::high_resolution_clock> last_flush;
             std::chrono::nanoseconds flush_interval;
             size_t allocation_sz_counter;
@@ -323,37 +328,42 @@ namespace dg::network_allocation{
 
             static inline constexpr size_t ALLOCATION_HEADER_SZ = sizeof(sz_header_t) + sizeof(vrs_ctrl_header_t);  
 
-            DGStdAllocator(BumpAllocator bump_allocator,
-                           size_t bump_allocator_refill_sz,
-                           size_t bump_allocator_version_control,
-                           std::shared_ptr<char[]> buf,
-                           std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator,
-                           std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
+            DGStdAllocator(std::shared_ptr<char[]> buf,
                            size_t minimum_allocation_blk_sz,
                            size_t maximum_smallbin_blk_sz,
+                           size_t pow2_malloc_chk_interval_sz,
+                           size_t malloc_chk_interval_counter,
+                           std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
+
+                           BumpAllocator bump_allocator,
+                           size_t bump_allocator_refill_sz,
+                           size_t bump_allocator_version_control,
+
                            std::vector<Allocation> freebin_vec,
                            size_t freebin_vec_cap, 
 
-                           size_t pow2_malloc_chk_interval_sz,
-                           size_t malloc_chk_interval_counter,
+                           std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator,
+
                            std::chrono::time_point<std::chrono::high_resolution_clock> last_flush,
                            std::chrono::nanoseconds flush_interval,
                            size_t allocation_sz_counter,
                            size_t allocation_sz_counter_flush_threshold,
 
                            dg::network_datastructure::unordered_map_variants::unordered_node_map<uintptr_t, LargeBinMetadata> largebin_metadata_dict,
-                           size_t largebin_metadata_dict_cap) noexcept: bump_allocator(bump_allocator),
-                                                                        bump_allocator_refill_sz(bump_allocator_refill_sz),
-                                                                        bump_allocator_version_control(bump_allocator_version_control),
-                                                                        buf(std::move(buf)),
-                                                                        heap_allocator(std::move(heap_allocator)),
-                                                                        smallbin_reuse_table(std::move(smallbin_reuse_table)),
+                           size_t largebin_metadata_dict_cap) noexcept: buf(std::move(buf)),
                                                                         minimum_allocation_blk_sz(minimum_allocation_blk_sz),
                                                                         maximum_smallbin_blk_sz(maximum_smallbin_blk_sz),
-                                                                        freebin_vec(std::move(freebin_vec)),
-                                                                        freebin_vec_cap(freebin_vec_cap),
                                                                         pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz),
                                                                         malloc_chk_interval_counter(malloc_chk_interval_counter),
+                                                                        smallbin_reuse_table(std::move(smallbin_reuse_table)),
+
+                                                                        bump_allocator(bump_allocator),
+                                                                        bump_allocator_refill_sz(bump_allocator_refill_sz),
+                                                                        bump_allocator_version_control(bump_allocator_version_control),
+                                                                        freebin_vec(std::move(freebin_vec)),
+                                                                        freebin_vec_cap(freebin_vec_cap),
+                                                                        heap_allocator(std::move(heap_allocator)),
+
                                                                         last_flush(last_flush),
                                                                         flush_interval(flush_interval),
                                                                         allocation_sz_counter(allocation_sz_counter),
@@ -619,7 +629,7 @@ namespace dg::network_allocation{
 
                 if (decom_sz != 0u){
                     //assumption is clear, assume that bump_allocator remaining is aligned, this is achieved by aligned refill_sz + aligned bump_malloc_sz
-                    auto heap_interval = this->internal_aligned_buf_to_interval({static_cast<char *>(decom_buf), decom_sz});
+                    interval_type heap_interval = this->internal_aligned_buf_to_interval({static_cast<void *>(decom_buf), decom_sz});
                     this->heap_allocator->free(&heap_interval, 1u);
                 }
             }
@@ -691,16 +701,16 @@ namespace dg::network_allocation{
 
                 this->internal_decommission_bump_allocator();
 
-                for (size_t i = 0u; i < this->smallbin_reuse_table.size(); ++i){
-                    for (size_t j = 0u; j < this->smallbin_reuse_table[i].size(); ++j){
+                for (auto& smallbin_queue: this->smallbin_reuse_table){
+                    for (auto& smallbin: smallbin_queue){
                         if (this->freebin_vec.size() == this->freebin_vec_cap){
                             this->internal_dump_freebin_vec();
                         }
 
-                        this->freebin_vec.push_back(this->smallbin_reuse_table[i][j]);
+                        this->freebin_vec.push_back(smallbin);
                     }
 
-                    this->smallbin_reuse_table[i].clear();
+                    smallbin_queue.clear();
                 }
 
                 this->internal_dump_freebin_vec();
@@ -717,7 +727,7 @@ namespace dg::network_allocation{
             void internal_check_for_reset() noexcept{
                 
                 std::chrono::time_point<std::chrono::high_resolution_clock> now             = std::chrono::high_resolution_clock::now();
-                std::chrono::time_point<std::chrono::high_resolution_clock> flush_expiry    = this-last_flush + this->flush_interval;
+                std::chrono::time_point<std::chrono::high_resolution_clock> flush_expiry    = this->last_flush + this->flush_interval;
 
                 bool reset_cond_1   = this->allocation_sz_counter >= this->allocation_sz_counter_flush_threshold;
                 bool reset_cond_2   = now >= flush_expiry; 
