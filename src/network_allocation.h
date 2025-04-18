@@ -599,11 +599,8 @@ namespace dg::network_allocation{
 
             __attribute__((noinline)) auto internal_bump_allocate(size_t user_blk_sz) noexcept -> void *{
 
-                //blk_sz != 0u;
-
-                if (user_blk_sz > this->maximum_smallbin_blk_sz){
-                    return nullptr; //nullptr is holding more semantic than it supposes to
-                }
+                assert(blk_sz != 0u);
+                assert(user_blk_sz <= this->maximum_smallbin_blk_sz);
 
                 size_t pad_blk_sz                       = user_blk_sz + ALLOCATION_HEADER_SZ;
                 size_t ceil_blk_sz                      = (((pad_blk_sz - 1u) / HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * HEAP_LEAF_UNIT_ALLOCATION_SZ;
@@ -676,9 +673,7 @@ namespace dg::network_allocation{
             //this is complicated
             auto internal_large_malloc(size_t user_blk_sz) noexcept -> void *{
 
-                if (user_blk_sz <= this->maximum_smallbin_blk_sz){
-                    return nullptr; //nullptr is holding more semantic than it supposes to hold
-                }
+                assert(user_blk_sz > this->maximum_smallbin_blk_sz);
 
                 if (!this->internal_has_largemalloc_dict_room()){
                     return nullptr;
