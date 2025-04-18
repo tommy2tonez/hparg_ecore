@@ -262,16 +262,25 @@ namespace dg::network_allocation{
         size_t user_ptr_sz;
     };
 
-    //this is harder to write than most people think
-    //I couldn't even semanticalize the methods naturally, it's complicated
-    //this should be clear
+    //I have run numbers
+    //4 bytes leaf ~= 10% overhead of total allocated memory (not gonna be an issue)  
 
-    //let's do one more round of review, let's see our assumption, I'll be back
-    //we'll do something called induction programming, as long as we keep all our assumption in all the functions, we should be clear
-    //this is actually hard to write
-    //we'll do one more review, this time is stack review
-    //clear
-    //alright, this is the third time I've said this, this has too many components + implementation requirements that are hard to do, yet we've completed the component 
+    //8 bytes minimum_allocation_blk_sz
+    //4 bytes pointer header
+    //rounded -> 12, ulog2(rounded) = 8
+    //so every 1, 2, 4, 8 buckets can be safely reused
+    //with the most likely gonna be 8 bytes chunks
+
+    //because we have good version control of blk, the maximum of reuse_overhead (such is we are summing the differences of the ptr_user_sz - sufficient_ptr_user_sz) should be under the total freebins floating around
+    //our heap can handle extreme fragmentations, and have the internal mechanism of switching foot to the max_interval(), this was proved to reach equilibirum of avg_node_lifetime, if avg_node_lifetime is to be lower than that of the switching branches
+    //the thing that we are concerned is the unordered_map memory, this is a sensitive finite pool of memory, we can't reserve 1 << 30 entries, because that would affect performance, the map has to be adaptive YET has to be able to thru the allocations (if there are extensions)
+    //I've been thinking about allocations more than I should
+    //it's an extremely complex topic, most perfectly implemented programs unexpectedly died because of this
+    //we think this should suffice for most usages
+    //I've run the numbers, it sounds
+
+    //our virtue of reusing is to malloc(pow2_blk_sz), this is a new virtue
+    //we can't discretize by HEAP_LEAF_UNIT_ALLOCATION_SZ, for the reason being it's polluting the cache, we can only operate on 128 bytes of cache fetch, no more, we have to reach that point
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
