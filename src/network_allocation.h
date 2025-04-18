@@ -281,6 +281,13 @@ namespace dg::network_allocation{
 
     //our virtue of reusing is to malloc(pow2_blk_sz), this is a new virtue
     //we can't discretize by HEAP_LEAF_UNIT_ALLOCATION_SZ, for the reason being it's polluting the cache, we can only operate on 128 bytes of cache fetch, no more, we have to reach that point
+    //this should be OK, not perfect, we'll move on
+    //we already told our client to crack the JWT + do source code injection in 3 months, we'll stay on the timeline
+    //in the meantime, we need to work on Taylor Series compression, our client does not like low-level code ... we'll be understandable
+    //let's show them the real way of socialism
+    //undertrained neural networks of less than 10 ** 18 decimal accurate would terminate the integrating living organism
+    //we dont do bullshit or fancy coding, we focus on what works, what fast, we'll move on
+    //this is the $1000 B question that we've been working very hard on
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
