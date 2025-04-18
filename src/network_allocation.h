@@ -379,44 +379,45 @@ namespace dg::network_allocation{
                 }
             }
 
-            //even if we are reallocating a valid buffer -> size of 0, std::free has to be invoked for non-null ptrs returned by this function
-            //this is not a good assumption...
+            //we can't write realloc for the reason this is hard to write
+            //nullptr does not denote enough informations
+            //it is logically incorrect to not have std::expected<void *, exception_t>
 
-            inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
+            // inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
 
-                //this is clear
+            //     //this is clear
 
-                //nullptr special dispatch code, because malloc returns nullptr, realloc has to consider nullptr
+            //     //nullptr special dispatch code, because malloc returns nullptr, realloc has to consider nullptr
 
-                if (user_ptr == nullptr || blk_sz == 0u){
-                    this->free(user_ptr);
-                    return this->malloc(blk_sz);
-                }
+            //     if (user_ptr == nullptr || blk_sz == 0u){
+            //         this->free(user_ptr);
+            //         return this->malloc(blk_sz);
+            //     }
 
-                size_t user_ptr_sz = self::internal_read_user_ptr_size(user_ptr);
+            //     size_t user_ptr_sz = self::internal_read_user_ptr_size(user_ptr);
 
-                if (user_ptr_sz > maximum_smallbin_blk_sz){ //this is large size allocation as specified in malloc()
-                    //maximum user_ptr_sz triggered
-                    //i have yet to know if to read the large size allocation metadata here
-                    size_t user_largeptr_sz = this->internal_read_largemalloc_user_ptr_size(user_ptr); 
+            //     if (user_ptr_sz > maximum_smallbin_blk_sz){ //this is large size allocation as specified in malloc()
+            //         //maximum user_ptr_sz triggered
+            //         //i have yet to know if to read the large size allocation metadata here
+            //         size_t user_largeptr_sz = this->internal_read_largemalloc_user_ptr_size(user_ptr); 
 
-                    if (blk_sz <= user_largeptr_sz){
-                        return user_ptr;
-                    } else{
-                        this->free(user_ptr);
-                        return this->malloc(blk_sz);
-                    }
-                } else{
-                    //this is small size allocation, user_ptr_sz denotes the exact size of user_ptr
+            //         if (blk_sz <= user_largeptr_sz){
+            //             return user_ptr;
+            //         } else{
+            //             this->free(user_ptr);
+            //             return this->malloc(blk_sz);
+            //         }
+            //     } else{
+            //         //this is small size allocation, user_ptr_sz denotes the exact size of user_ptr
 
-                    if (blk_sz <= user_ptr_sz){ //shrinking the sz, user_ptr_sz should do
-                        return user_ptr;
-                    } else{
-                        this->free(user_ptr);
-                        return this->malloc(blk_sz);
-                    }
-                }
-            }
+            //         if (blk_sz <= user_ptr_sz){ //shrinking the sz, user_ptr_sz should do
+            //             return user_ptr;
+            //         } else{
+            //             this->free(user_ptr);
+            //             return this->malloc(blk_sz);
+            //         }
+            //     }
+            // }
 
             inline void free(void * user_ptr) noexcept{
 
