@@ -642,6 +642,7 @@ namespace dg::network_allocation{
                 //things are clear
                 //we dont want to trip the threshold, because that would break the contract of maximum_smallbin_blk_sz by large_free
 
+                user_blk_sz                                     = std::max(user_blk_sz, this->minimum_allocation_blk_sz); //people are requesting user_pow2_blk_sz to be reusable, this is more important than the allocations saved by bump allocator
                 size_t pad_blk_sz                               = user_blk_sz + ALLOCATION_HEADER_SZ;
                 size_t ceil_blk_sz                              = (((pad_blk_sz - 1u) / HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * HEAP_LEAF_UNIT_ALLOCATION_SZ;
                 size_t user_usable_blk_sz                       = ceil_blk_sz - ALLOCATION_HEADER_SZ; 
