@@ -293,6 +293,7 @@ namespace dg::network_allocation{
 
     //I did have a hard time to semanticalize this component. Its not natural, seems forcy in terms of logics
     //writing code is a problem, writing cricial code, easy to prove is another profession
+
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
 
@@ -413,7 +414,7 @@ namespace dg::network_allocation{
                     return this->malloc(blk_sz); //returns null -> user_ptr is valid (true), returns non-null, user_ptr is invalidated (true)
                 }
 
-                size_t user_ptr_sz = self::internal_read_user_ptr_size(user_ptr); 
+                size_t user_ptr_sz = this->internal_read_user_ptr_size(user_ptr); 
 
                 if (user_ptr_sz > this->maximum_smallbin_blk_sz){ //this is large size allocation as specified in malloc()
                     user_ptr_sz = this->internal_read_largemalloc_user_ptr_size(user_ptr); 
@@ -443,8 +444,8 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                size_t user_ptr_sz                          = self::internal_read_user_ptr_size(user_ptr);
-                size_t user_ptr_truncated_version_control   = self::internal_read_user_ptr_truncated_version_control(user_ptr);  
+                size_t user_ptr_sz                          = this->internal_read_user_ptr_size(user_ptr);
+                size_t user_ptr_truncated_version_control   = this->internal_read_user_ptr_truncated_version_control(user_ptr);  
 
                 if (user_ptr_sz > this->maximum_smallbin_blk_sz) [[unlikely]]{ //user_ptr_sz > maximum_smallbin_blk_sz, guaranteed by malloc() to be allocated by largemalloc(), dispatch the inverse operation, internal_large_free()
                     this->internal_large_free(user_ptr);
@@ -498,7 +499,7 @@ namespace dg::network_allocation{
                 assert(insert_status); //declare assumptions
             }
 
-            inline void internal_read_largemalloc_user_ptr_size(const void * user_ptr) const noexcept -> size_t{
+            inline auto internal_read_largemalloc_user_ptr_size(const void * user_ptr) const noexcept -> size_t{
 
                 auto map_ptr = this->largebin_metadata_dict.find(reinterpret_cast<uintptr_t>(user_ptr));
 
@@ -539,22 +540,45 @@ namespace dg::network_allocation{
                 return std::make_pair(heap_offset, heap_excl_sz);
             }
 
-            static constexpr auto internal_get_internal_ptr_head(void * user_ptr) noexcept -> void *{
+            //my std friends complained that this is UB, they are not wrong
+            //where should we begin, the void * to the free() is the void * from malloc() which is originated from char * which is pointer arithmetic compatible
+            //then there is a new operation, new operation is the magic operation that voids all the logics, bringing a newly spawned pointer out of nowhere to life, what about that void * from the malloc() which is originated from a char *, no, not existed
+            //alright, so what's the rescue plan?
+            //void * std::prev(static_cast<char *>(user_ptr)) wont work
+            //what's gonna work? std::next(buf.get(), reinterpret_cast<size_t>(user_ptr) - reinterpret_cast<size_t>(buf.get())), why? because it is a size_t (this is numeric arithmetic) operation followed by a valid char[] increment operation  
+            //compiler still doesnt see your intention, they see reinterpret_cast<size_t>() and think this is a malicious operation, what's the rescue plan, we must store that as a different variable, this variable is not trackable by compiler post construction, we'll make sure of this
+            //we need to bit_cast it, so compiler must not track the value of the arithmetic
 
-                return std::prev(static_cast<char *>(user_ptr), ALLOCATION_HEADER_SZ);
+            constexpr auto internal_get_internal_ptr_head(void * user_ptr) noexcept -> void *{
+
+                using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
+
+                //fencing
+                ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
+                ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
+                ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - ALLOCATION_HEADER_SZ;
+
+                return static_cast<void *>(std::next(this->buf.get(), off));
             }
 
-            static constexpr auto internal_get_internal_ptr_head(const void * user_ptr) noexcept -> const void *{
+            constexpr auto internal_get_internal_ptr_head(const void * user_ptr) noexcept -> const void *{
 
-                return std::prev(static_cast<const char *>(user_ptr), ALLOCATION_HEADER_SZ);
+                using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
+
+                //fencing
+                ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
+                ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
+                ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - ALLOCATION_HEADER_SZ;
+
+                return static_cast<const void *>(std::next(this->buf.get(), off));
             }
 
-            static constexpr auto internal_get_user_ptr_head(void * internal_ptr) noexcept -> void *{
+            constexpr auto internal_get_user_ptr_head(void * internal_ptr) noexcept -> void *{
                 
                 return std::next(static_cast<char *>(internal_ptr), ALLOCATION_HEADER_SZ);
             }
 
-            static constexpr auto internal_get_user_ptr_head(const void * internal_ptr) noexcept -> const void *{
+            constexpr auto internal_get_user_ptr_head(const void * internal_ptr) noexcept -> const void *{
 
                 return std::next(static_cast<const char *>(internal_ptr), ALLOCATION_HEADER_SZ);
             }
@@ -564,18 +588,18 @@ namespace dg::network_allocation{
                 this->allocation_sz_counter += new_blk_sz;
             }
 
-            static constexpr auto internal_read_user_ptr_size(const void * user_ptr) noexcept -> size_t{
+            constexpr auto internal_read_user_ptr_size(const void * user_ptr) noexcept -> size_t{
 
-                const void * ptr_head       = self::internal_get_internal_ptr_head(user_ptr);
+                const void * ptr_head       = this->internal_get_internal_ptr_head(user_ptr);
                 sz_header_t allocation_sz   = {};
                 std::memcpy(&allocation_sz, ptr_head, sizeof(sz_header_t));
 
                 return allocation_sz; 
             }
 
-            static constexpr auto internal_read_user_ptr_truncated_version_control(const void * user_ptr) noexcept -> size_t{
+            constexpr auto internal_read_user_ptr_truncated_version_control(const void * user_ptr) noexcept -> size_t{
 
-                const void * ptr_head               = self::internal_get_internal_ptr_head(user_ptr);
+                const void * ptr_head               = this->internal_get_internal_ptr_head(user_ptr);
                 const void * version_control_head   = std::next(static_cast<const char *>(ptr_head), sizeof(sz_header_t)); 
                 vrs_ctrl_header_t version_ctrl      = {};
                 std::memcpy(&version_ctrl, version_control_head, sizeof(vrs_ctrl_header_t));
@@ -588,7 +612,7 @@ namespace dg::network_allocation{
                 std::memcpy(internal_ptr, &user_ptr_sz, sizeof(sz_header_t));
                 std::memcpy(std::next(static_cast<char *>(internal_ptr), sizeof(sz_header_t)), &version_control, sizeof(vrs_ctrl_header_t));
 
-                return self::internal_get_user_ptr_head(internal_ptr);
+                return this->internal_get_user_ptr_head(internal_ptr);
             }
 
             __attribute__((noinline)) void internal_dump_freebin_vec(){
@@ -600,7 +624,7 @@ namespace dg::network_allocation{
                 for (size_t i = 0u; i < this->freebin_vec.size(); ++i){
                     auto [user_ptr, user_ptr_sz]    = std::make_pair(this->freebin_vec[i].user_ptr, this->freebin_vec[i].user_ptr_sz);
 
-                    size_t internal_ptr_offset      = std::distance(this->buf.get(), static_cast<char *>(self::internal_get_internal_ptr_head(user_ptr)));
+                    size_t internal_ptr_offset      = std::distance(this->buf.get(), static_cast<char *>(this->internal_get_internal_ptr_head(user_ptr)));
                     size_t internal_ptr_sz          = user_ptr_sz + ALLOCATION_HEADER_SZ;
 
                     size_t heap_ptr_offset          = internal_ptr_offset / HEAP_LEAF_UNIT_ALLOCATION_SZ;
@@ -765,7 +789,7 @@ namespace dg::network_allocation{
                 
                 //inverse operation of internal_large_malloc
 
-                void * internal_ptr         = self::internal_get_internal_ptr_head(user_ptr);
+                void * internal_ptr         = this->internal_get_internal_ptr_head(user_ptr);
                 size_t user_ptr_sz          = this->internal_read_largemalloc_user_ptr_size(user_ptr); //reading largebin metadata from user_ptr
 
                 size_t internal_ptr_offset  = std::distance(this->buf.get(), static_cast<char *>(internal_ptr));

@@ -20,6 +20,16 @@
 
 namespace stdx{
 
+    //to check the get_ptr_arithemtic, we need to focus on the bit representations, such is two complements bit pattern when we are in the negative territory, we would want to increment, and extract the direction
+    //we need to make sure that this is the cases by doing compile-time measurements
+    //things got complicated when pointer is unsigned or contains unsigned addresses, we'll break assumptions
+
+    using ptr_bitcastable_arithmetic_t = std::conditional_t<sizeof(void *) == 4u, 
+                                                            uint32_t,
+                                                            std::conditional_t<sizeof(void *) == 8u,
+                                                                               uint64_t,
+                                                                               void>>; 
+
     inline __attribute__((always_inline)) auto try_lock(std::atomic_flag& mtx, std::memory_order order = std::memory_order_relaxed) noexcept -> bool{
         return mtx.test_and_set(order) == false;
     }
