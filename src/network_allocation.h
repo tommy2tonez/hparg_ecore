@@ -405,45 +405,34 @@ namespace dg::network_allocation{
                 }
             }
 
-            //we can't write realloc for the reason this is hard to write
-            //nullptr does not denote enough informations
-            //it is logically incorrect to not have std::expected<void *, exception_t>
+            inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
 
-            // inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
+                if (user_ptr == nullptr){
+                    return this->malloc(blk_sz); //returns null -> user_ptr is valid (true), returns non-null, user_ptr is invalidated (true)
+                }
 
-            //     //this is clear
+                size_t user_ptr_sz = self::internal_read_user_ptr_size(user_ptr); 
 
-            //     //nullptr special dispatch code, because malloc returns nullptr, realloc has to consider nullptr
+                if (user_ptr_sz > this->maximum_smallbin_blk_sz){ //this is large size allocation as specified in malloc()
+                    user_ptr_sz = this->internal_read_largemalloc_user_ptr_size(user_ptr); 
+                }
 
-            //     if (user_ptr == nullptr || blk_sz == 0u){
-            //         this->free(user_ptr);
-            //         return this->malloc(blk_sz);
-            //     }
+                if (blk_sz <= user_ptr_sz){
+                    return user_ptr; //true
+                }
 
-            //     size_t user_ptr_sz = self::internal_read_user_ptr_size(user_ptr);
+                //blk_sz > 0, we are to do transfer, first we need to malloc 
+                void * return_mem = this->malloc(blk_sz);
 
-            //     if (user_ptr_sz > maximum_smallbin_blk_sz){ //this is large size allocation as specified in malloc()
-            //         //maximum user_ptr_sz triggered
-            //         //i have yet to know if to read the large size allocation metadata here
-            //         size_t user_largeptr_sz = this->internal_read_largemalloc_user_ptr_size(user_ptr); 
+                if (return_mem == nullptr){
+                    return nullptr; //no-actions, user_ptr remains valid
+                }
 
-            //         if (blk_sz <= user_largeptr_sz){
-            //             return user_ptr;
-            //         } else{
-            //             this->free(user_ptr);
-            //             return this->malloc(blk_sz);
-            //         }
-            //     } else{
-            //         //this is small size allocation, user_ptr_sz denotes the exact size of user_ptr
+                std::memcpy(return_mem, user_ptr, user_ptr_sz); //our return_mem can fit user_ptr_sz
+                this->free(user_ptr);
 
-            //         if (blk_sz <= user_ptr_sz){ //shrinking the sz, user_ptr_sz should do
-            //             return user_ptr;
-            //         } else{
-            //             this->free(user_ptr);
-            //             return this->malloc(blk_sz);
-            //         }
-            //     }
-            // }
+                return return_mem; //thru, return_mem is non-null, user_ptr is invalidated
+            }
 
             inline void free(void * user_ptr) noexcept{
 
