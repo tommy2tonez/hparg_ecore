@@ -853,6 +853,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 
     struct pow2_initialization_tag{}; 
 
+    //bloom filter
     template <class T>
     class temporal_finite_unordered_set{
 
@@ -5068,7 +5069,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             bool run_one_epoch() noexcept{
 
                 this->updatable->update();
-                std::this_thread::sleep_for(this->wait_dur);
+                std::this_thread::sleep_for(this->wait_dur); //we got complained because this would introduce lock-contentions, wait_dur has to be of different values
                 return true;
             }
     };

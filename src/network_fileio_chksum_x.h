@@ -97,7 +97,7 @@ namespace dg::network_fileio_chksum_x{
 
         private:
 
-            using bucket_loader_t   = dg::network_datastructure::atomic_loader::reflectible_relaxed_loader<FileHeaderMapBucket>;           
+            using bucket_loader_t   = dg::network_datastructure::atomic_loader::reflectible_relaxed_loader<FileHeaderMapBucket>; //we got bad feedbacks about this, alright, it's bad, yet I have run numbers for 1024 entries + 1M bucket slots, chances is low
             using self              = DistributedFileHeaderMap;
 
             static inline std::unique_ptr<bucket_loader_t[]> bucket_array = []{

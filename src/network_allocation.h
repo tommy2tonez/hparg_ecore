@@ -43,6 +43,14 @@ namespace dg::network_allocation{
     //that Allocator guarantees to free allocations on time, punctually
     //alright, something went wrong
 
+    class GCInterface{
+
+        public:
+
+            virtual ~GCInterface() noexcept = default;
+            virtual void gc() noexcept = 0;
+    };
+
     class HeapAllocator{
 
         private:
@@ -50,14 +58,17 @@ namespace dg::network_allocation{
             std::unique_ptr<char[], decltype(&std::free)> management_buf;
             std::unique_ptr<dg::heap::core::Allocatable> allocator;
             std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> allocation_base_sz; 
 
         public:
 
             HeapAllocator(std::unique_ptr<char[], decltype(&std::free)> management_buf,
                           std::unique_ptr<dg::heap::core::Allocatable> allocator,
-                          std::unique_ptr<std::mutex> mtx) noexcept: management_buf(std::move(management_buf)),
-                                                                     allocator(std::move(allocator)),
-                                                                     mtx(std::move(mtx)){}
+                          std::unique_ptr<std::mutex> mtx,
+                          stdx::hdi_container<size_t> allocation_base_sz) noexcept: management_buf(std::move(management_buf)),
+                                                                                    allocator(std::move(allocator)),
+                                                                                    mtx(std::move(mtx)),
+                                                                                    allocation_base_sz(allocation_base_sz){}
 
              void alloc(size_t * blk_arr, size_t blk_arr_sz, std::optional<interval_type> * interval_arr) noexcept{
 
@@ -88,9 +99,102 @@ namespace dg::network_allocation{
                 }
              }
 
-             auto base_size() const noexcept{
-                
+             auto base_size() const noexcept -> size_t{
+
+                return this->allocation_base_sz.value;
              }
+    };
+
+    //there are too many atomic operations
+    //it's fine
+
+    class SemiAutoGCHeapAllocator{
+
+        private:
+
+            std::unique_ptr<HeapAllocator> base;
+
+            stdx::hdi_container<std::atomic<size_t>> allocation_counter;
+            stdx::hdi_container<size_t> allocation_counter_invoke_threshold;
+
+            stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>> last_gc;
+            stdx::hdi_container<std::chrono::nanoseconds> gc_dur; 
+            stdx::hdi_container<size_t> temporal_gc_pow2_dice_sz; 
+
+        public:
+
+            SemiAutoGCHeapAllocator(std::unique_ptr<HeapAllocator> base,
+                                    size_t allocation_counter,
+                                    size_t allocation_counter_invoke_threshold,
+                                    std::chrono::time_point<std::chrono::high_resolution_clock> last_gc,
+                                    std::chrono::nanoseconds gc_dur,
+                                    size_t temporal_gc_pow2_dice_sz) noexcept: base(std::move(base)),
+                                                                               allocation_counter(stdx::hdi_container<std::atomic<size_t>>{std::atomic<size_t>(allocation_counter)}),
+                                                                               allocation_counter_invoke_threshold(stdx::hdi_container<size_t>{allocation_counter_invoke_threshold}),
+                                                                               last_gc(stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>>{std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>(last_gc)}),
+                                                                               gc_dur(stdx::hdi_container<std::chrono::nanoseconds>{gc_dur}),
+                                                                               temporal_gc_pow2_dice_sz(stdx::hdi_container<size_t>{temporal_gc_pow2_dice_sz}){}
+
+            void alloc(size_t * blk_arr, size_t blk_arr_sz, std::optional<interval_type> * interval_arr) noexcept{
+                
+                this->base->alloc(blk_arr, blk_arr_sz, interval_arr);
+                size_t new_allocation_blk_sz = 0u;
+
+                for (size_t i = 0u; i < blk_arr_sz; ++i){
+                    if (interval_arr[i].has_value()){
+                        new_allocation_blk_sz += blk_arr[i];
+                    }
+                }
+
+                this->update_gc_sensor(new_allocation_blk_sz);
+            }
+
+            void free(interval_type * interval_arr, size_t sz) noexcept{
+
+                this->base->free(interval_arr, sz);
+            }
+
+            void gc(){
+
+                this->base->gc();
+            }
+
+            auto base_size() const noexcept -> size_t{
+
+                return this->base->base_size()
+            }
+        
+        private:
+
+            void update_gc_sensor(size_t new_blk_sz) noexcept{
+
+                size_t now_allocation_blk_sz    = this->allocation_counter.value.fetch_add(new_blk_sz, std::memory_order_relaxed);
+                size_t then_allocation_blk_sz   = now_allocation_blk_sz + new_blk_sz;
+                size_t now_idx                  = now_allocation_blk_sz / this->allocation_counter_invoke_threshold.value;
+                size_t then_idx                 = then_allocation_blk_sz / this->allocation_counter_invoke_threshold.value;
+
+                //atomic operation crossed the border
+                if (now_idx != then_idx){
+                    this->base->gc();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    this->last_gc.value.exchange(std::chrono::high_resolution_clock::now(), std::memory_order_relaxed);
+                    return;
+                }
+
+                size_t dice_value               = dg::network_randomizer::randomize_range<size_t>() & (this->temporal_gc_pow2_dice_sz.value - 1u);
+
+                if (dice_value == 0u){
+                    auto now        = std::chrono::high_resolution_clock::now();
+                    auto expiry     = this->last_gc.value.load(std::memory_order_relaxed) + this->gc_dur.value;
+
+                    if (now >= expiry){
+                        this->base->gc();
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        this->last_gc.value.exchange(now, std::memory_order_relaxed);
+                        return;
+                    }
+                }
+            }
     };
 
     class MultiThreadUniformHeapAllocator{
@@ -112,7 +216,7 @@ namespace dg::network_allocation{
                                                                                               free_vectorization_sz(free_vectorization_sz),
                                                                                               heap_allocator_pow2_exp_base_sz(heap_allocator_pow2_exp_base_sz){}
 
-            void malloc(size_t * blk_arr, size_t blk_arr_sz, std::optional<interval_type> * rs) noexcept{
+            void alloc(size_t * blk_arr, size_t blk_arr_sz, std::optional<interval_type> * rs) noexcept{
 
                 assert(stdx::is_pow2(allocator_vec.size()));
 
@@ -168,6 +272,11 @@ namespace dg::network_allocation{
                 }
             }
 
+            auto base_size() const noexcept -> size_t{
+
+                return static_cast<size_t>(this->allocator_vec.size()) << this->heap_allocator_pow2_exp_base_sz;
+            }
+
         private:
 
             struct InternalMallocFeedArgument{
@@ -215,7 +324,39 @@ namespace dg::network_allocation{
             };
     };
 
-    class BumpAllocator{
+    class MultiThreadWrappedGarbageCollector: public virtual GCInterface{
+
+        private:
+
+            std::shared_ptr<MultiThreadUniformHeapAllocator> base;
+        
+        public:
+
+            MultiThreadWrappedGarbageCollector(std::shared_ptr<MultiThreadWrappedGarbageCollector> base) noexcept: base(std::move(base)){}
+
+            void gc() noexcept{
+
+                base->gc_all();
+            }
+    };
+
+    class SemiAutoWrappedGarbageCollector: public virtual GCInterface{
+
+        private:
+
+            std::shared_ptr<SemiAutoGCHeapAllocator> base;
+        
+        public:
+
+            SemiAutoWrappedGarbageCollector(std::shared_ptr<SemiAutoGCHeapAllocator> base) noexcept: base(std::move(base)){}
+
+            void gc() noexcept{
+
+                this->base->gc();
+            }
+    };
+
+    class NaiveBumpAllocator{
 
         private:
 
@@ -224,10 +365,10 @@ namespace dg::network_allocation{
         
         public:
 
-            BumpAllocator() noexcept: buf(nullptr), 
+            NaiveBumpAllocator() noexcept: buf(nullptr), 
                                       sz(0u){}
 
-            BumpAllocator(char * buf, size_t sz) noexcept: buf(buf), 
+            NaiveBumpAllocator(char * buf, size_t sz) noexcept: buf(buf), 
                                                            sz(sz){}
 
             inline auto malloc(size_t blk_sz) noexcept -> std::expected<void *, exception_t>{
@@ -253,49 +394,24 @@ namespace dg::network_allocation{
             }
     };
 
-    struct Allocation{
-        void * user_ptr;
-        size_t user_ptr_sz;
-    };
-
-    struct LargeBinMetadata{
-        size_t user_ptr_sz;
-    };
-
-    //I have run numbers
-    //4 bytes leaf ~= 10% overhead of total allocated memory (not gonna be an issue)  
-
-    //8 bytes minimum_allocation_blk_sz
-    //4 bytes pointer header
-    //rounded -> 12, ulog2(rounded) = 8
-    //so every 1, 2, 4, 8 buckets can be safely reused
-    //with the most likely gonna be 8 bytes chunks
-
-    //because we have good version control of blk, the maximum of reuse_overhead (such is we are summing the differences of the ptr_user_sz - sufficient_ptr_user_sz) should be under the total freebins floating around
-    //our heap can handle extreme fragmentations, and have the internal mechanism of switching foot to the max_interval(), this was proved to reach equilibirum of avg_node_lifetime, if avg_node_lifetime is to be lower than that of the switching branches
-    //the thing that we are concerned is the unordered_map memory, this is a sensitive finite pool of memory, we can't reserve 1 << 30 entries, because that would affect performance, the map has to be adaptive YET has to be able to thru the allocations (if there are extensions)
-    //I've been thinking about allocations more than I should
-    //it's an extremely complex topic, most perfectly implemented programs unexpectedly died because of this
-    //we think this should suffice for most usages
-    //I've run the numbers, it sounds
-
-    //our virtue of reusing is to malloc(pow2_blk_sz), this is a new virtue
-    //we can't discretize by HEAP_LEAF_UNIT_ALLOCATION_SZ, for the reason being it's polluting the cache, we can only operate on 128 bytes of cache fetch, no more, we have to reach that point
-    //this should be OK, not perfect, we'll move on
-    //we already told our client to crack the JWT + do source code injection in 3 months, we'll stay on the timeline
-    //in the meantime, we need to work on Taylor Series compression, our client does not like low-level code ... we'll be understandable
-    //let's show them the real way of socialism
-    //undertrained neural networks of less than 10 ** 18 decimal accurate would terminate the integrating living organism
-    //this is the $1000 B question that we've been working very hard on
-    //I'm tired of people tricks on encodings | decodings
-    //it's not gonna work
-    //the only way that works is the way of using accurate logit density mining machine
-
-    //I did have a hard time to semanticalize this component. Its not natural, seems forcy in terms of logics
-    //writing code is a problem, writing cricial code, easy to prove is another profession
+    //this should clear
+    //we'll iterate through the memory indirection tricks later, it has something to deal with array + static memory
+    //that's enough work for allocators
+    //we'll be back
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
+
+        public:
+
+            struct Allocation{
+                void * user_ptr;
+                size_t user_ptr_sz;
+            };
+
+            struct LargeBinMetadata{
+                size_t user_ptr_sz;
+            };
 
         private:
 
@@ -306,7 +422,7 @@ namespace dg::network_allocation{
             size_t malloc_chk_interval_counter;
             std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table; //too many indirections
 
-            BumpAllocator bump_allocator;
+            NaiveBumpAllocator bump_allocator;
             size_t bump_allocator_refill_sz;
             size_t bump_allocator_version_control;
 
@@ -338,7 +454,7 @@ namespace dg::network_allocation{
                            size_t malloc_chk_interval_counter,
                            std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
 
-                           BumpAllocator bump_allocator,
+                           NaiveBumpAllocator bump_allocator,
                            size_t bump_allocator_refill_sz,
                            size_t bump_allocator_version_control,
 
@@ -363,8 +479,10 @@ namespace dg::network_allocation{
                                                                         bump_allocator(bump_allocator),
                                                                         bump_allocator_refill_sz(bump_allocator_refill_sz),
                                                                         bump_allocator_version_control(bump_allocator_version_control),
+
                                                                         freebin_vec(std::move(freebin_vec)),
                                                                         freebin_vec_cap(freebin_vec_cap),
+
                                                                         heap_allocator(std::move(heap_allocator)),
 
                                                                         last_flush(last_flush),
@@ -410,7 +528,7 @@ namespace dg::network_allocation{
 
             inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
 
-                if (user_ptr == nullptr){
+                if (user_ptr == nullptr) [[unlikely]]{
                     return this->malloc(blk_sz); //returns null -> user_ptr is valid (true), returns non-null, user_ptr is invalidated (true)
                 }
 
@@ -663,7 +781,7 @@ namespace dg::network_allocation{
                 }
 
                 std::pair<char *, size_t> requesting_buf    = this->internal_interval_to_buf(requesting_interval.value());
-                this->bump_allocator                        = BumpAllocator(requesting_buf.first, requesting_buf.second);
+                this->bump_allocator                        = NaiveBumpAllocator(requesting_buf.first, requesting_buf.second);
                 this->bump_allocator_version_control        += 1;
 
                 this->internal_update_allocation_sensor(this->bump_allocator_refill_sz);
@@ -834,22 +952,28 @@ namespace dg::network_allocation{
             }
     };
 
+    template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class ConcurrentDGStdAllocator{
 
         private:
 
-            std::vector<DGStdAllocator> dg_allocator_vec;
-        
+            std::vector<DGStdAllocator<HEAP_LEAF_UNIT_ALLOCATION_SZ>> dg_allocator_vec;
+
         public:
 
-            ConcurrentDGStdAllocator(std::vector<DGStdAllocator> dg_allocator_vec) noexcept: dg_allocator_vec(std::move(dg_allocator_vec)){}
+            ConcurrentDGStdAllocator(std::vector<DGStdAllocator<HEAP_LEAF_UNIT_ALLOCATION_SZ>> dg_allocator_vec) noexcept: dg_allocator_vec(std::move(dg_allocator_vec)){}
 
-            auto malloc(size_t blk_sz) noexcept -> void *{
+            inline auto malloc(size_t blk_sz) noexcept -> void *{
 
                 return this->dg_allocator_vec[dg::network_concurrency::this_thread_idx()].malloc(blk_sz);
             }
 
-            void free(void * ptr) noexcept{
+            inline auto realloc(void * ptr, size_t blk_sz) noexcept -> void *{
+
+                return this->dg_allocator_vec[dg::network_concurrency::this_thread_idx()].realloc(blk_sz);
+            }
+
+            inline void free(void * ptr) noexcept{
 
                 this->dg_allocator_vec[dg::network_concurrency::this_thread_idx()].free(ptr);
             }
@@ -860,11 +984,11 @@ namespace dg::network_allocation{
         private:
   
             std::shared_ptr<GCInterface> gc_able;
-        
+
         public:
 
             GCWorker(std::shared_ptr<GCInterface> gc_able): gc_able(std::move(gc_able)){}
-            
+
             auto run_one_epoch() noexcept -> bool{
 
                 this->gc_able->gc();
@@ -872,207 +996,207 @@ namespace dg::network_allocation{
             }
     };
 
-    struct Factory{
+    // struct Factory{
 
-        static auto spawn_heap_allocator(size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
+    //     static auto spawn_heap_allocator(size_t base_sz) -> std::unique_ptr<GCHeapAllocator>{ //devirt here is important
 
-            const size_t MIN_BASE_SZ    = 1u;
-            const size_t MAX_BASE_SZ    = size_t{1} << 40;
+    //         const size_t MIN_BASE_SZ    = 1u;
+    //         const size_t MAX_BASE_SZ    = size_t{1} << 40;
 
-            if (std::clamp(base_sz, MIN_BASE_SZ, MAX_BASE_SZ) != base_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (std::clamp(base_sz, MIN_BASE_SZ, MAX_BASE_SZ) != base_sz){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            if (!!dg::memult::is_pow2(base_sz)){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (!!dg::memult::is_pow2(base_sz)){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            uint16_t tree_height = stdx::ulog2_aligned(base_sz) + 1u;
-            size_t buf_sz       = dg::heap::user_interface::get_memory_usage(tree_height);
-            auto buf            = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::malloc(buf_sz)), std::free);
+    //         uint16_t tree_height = stdx::ulog2_aligned(base_sz) + 1u;
+    //         size_t buf_sz       = dg::heap::user_interface::get_memory_usage(tree_height);
+    //         auto buf            = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::malloc(buf_sz)), std::free);
 
-            if (!buf){
-                dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
-            }
+    //         if (!buf){
+    //             dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
+    //         }
 
-            auto allocator  = dg::heap::user_interface::get_allocator_x(buf.get());
-            auto lck        = std::make_unique<std::atomic_flag>();
-            auto rs         = std::make_unique<GCHeapAllocator>(std::move(buf), std::move(allocator), std::move(lck));
+    //         auto allocator  = dg::heap::user_interface::get_allocator_x(buf.get());
+    //         auto lck        = std::make_unique<std::atomic_flag>();
+    //         auto rs         = std::make_unique<GCHeapAllocator>(std::move(buf), std::move(allocator), std::move(lck));
 
-            return rs;
-        }
+    //         return rs;
+    //     }
 
-        static auto spawn_allocator(size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
+    //     static auto spawn_allocator(size_t least_buf_sz) -> std::unique_ptr<Allocator>{ //devirt here is important
 
-            const size_t MIN_LEAST_BUF_SZ   = 1u;
-            const size_t MAX_LEAST_BUF_SZ   = size_t{1} << 40;
+    //         const size_t MIN_LEAST_BUF_SZ   = 1u;
+    //         const size_t MAX_LEAST_BUF_SZ   = size_t{1} << 40;
 
-            if (std::clamp(least_buf_sz, MIN_LEAST_BUF_SZ, MAX_LEAST_BUF_SZ) != least_buf_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (std::clamp(least_buf_sz, MIN_LEAST_BUF_SZ, MAX_LEAST_BUF_SZ) != least_buf_sz){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            size_t buf_sz   = stdx::least_pow2_greater_equal_than(std::max(least_buf_sz, LEAF_SZ));
-            size_t base_sz  = buf_sz / LEAF_SZ;
-            auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(LEAF_SZ, buf_sz)), std::free);  
+    //         size_t buf_sz   = stdx::least_pow2_greater_equal_than(std::max(least_buf_sz, LEAF_SZ));
+    //         size_t base_sz  = buf_sz / LEAF_SZ;
+    //         auto buf        = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(LEAF_SZ, buf_sz)), std::free);  
 
-            if (!buf){
-                dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
-            }
+    //         if (!buf){
+    //             dg::network_exception::throw_exception(dg::network_exception::OUT_OF_MEMORY);
+    //         }
 
-            std::unique_ptr<GCHeapAllocator> base_allocator = spawn_heap_allocator(base_sz);
-            return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator));
-        }
+    //         std::unique_ptr<GCHeapAllocator> base_allocator = spawn_heap_allocator(base_sz);
+    //         return std::make_unique<Allocator>(std::move(buf), std::move(base_allocator));
+    //     }
 
-        static auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
+    //     static auto spawn_concurrent_allocator(std::vector<std::unique_ptr<Allocator>> allocator) -> std::unique_ptr<MultiThreadAllocator>{ //devirt here is important - 
 
-            const size_t MIN_ALLOCATOR_SZ   = 1u;
-            const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 8;
+    //         const size_t MIN_ALLOCATOR_SZ   = 1u;
+    //         const size_t MAX_ALLOCATOR_SZ   = size_t{1} << 8;
 
-            if (std::clamp(static_cast<size_t>(allocator.size()), MIN_ALLOCATOR_SZ, MAX_ALLOCATOR_SZ) != allocator.size()){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (std::clamp(static_cast<size_t>(allocator.size()), MIN_ALLOCATOR_SZ, MAX_ALLOCATOR_SZ) != allocator.size()){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            if (!dg::memult::is_pow2(allocator.size())){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (!dg::memult::is_pow2(allocator.size())){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            if (std::find(allocator.begin(), allocator.end(), nullptr) != allocator.end()){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (std::find(allocator.begin(), allocator.end(), nullptr) != allocator.end()){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            return std::make_unique<MultiThreadAllocator>(std::move(allocator));
-        }
+    //         return std::make_unique<MultiThreadAllocator>(std::move(allocator));
+    //     }
 
-        static auto spawn_gc_worker(std::shared_ptr<GCInterface> gc_able) -> dg::network_concurrency::daemon_raii_handle_t{ //this is strange - this overstep into the responsibility - decouple the component
+    //     static auto spawn_gc_worker(std::shared_ptr<GCInterface> gc_able) -> dg::network_concurrency::daemon_raii_handle_t{ //this is strange - this overstep into the responsibility - decouple the component
 
-            if (gc_able == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+    //         if (gc_able == nullptr){
+    //             dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+    //         }
 
-            auto worker = std::make_unique<GCWorker>(std::move(gc_able));
-            auto rs     = dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(worker));
+    //         auto worker = std::make_unique<GCWorker>(std::move(gc_able));
+    //         auto rs     = dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(worker));
 
-            if (!rs.has_value()){
-                dg::network_exception::throw_exception(rs.error());
-            } 
+    //         if (!rs.has_value()){
+    //             dg::network_exception::throw_exception(rs.error());
+    //         } 
 
-            return std::move(rs.value());
-        }
-    };
+    //         return std::move(rs.value());
+    //     }
+    // };
 
-    struct AllocationResource{
-        std::shared_ptr<MultiThreadAllocator> allocator; //devirt here is important - 
-        dg::network_concurrency::daemon_raii_handle_t gc_worker;
-    };
+    // struct AllocationResource{
+    //     std::shared_ptr<MultiThreadAllocator> allocator; //devirt here is important - 
+    //     dg::network_concurrency::daemon_raii_handle_t gc_worker;
+    // };
 
-    inline AllocationResource allocation_resource;
+    // inline AllocationResource allocation_resource;
 
-    void init(size_t least_buf_sz, size_t num_allocator){
+    // void init(size_t least_buf_sz, size_t num_allocator){
 
-        std::vector<std::unique_ptr<Allocator>> allocator_vec{};
+    //     std::vector<std::unique_ptr<Allocator>> allocator_vec{};
 
-        for (size_t i = 0u; i < num_allocator; ++i){
-            allocator_vec.push_back(Factory::spawn_allocator(least_buf_sz));
-        }
+    //     for (size_t i = 0u; i < num_allocator; ++i){
+    //         allocator_vec.push_back(Factory::spawn_allocator(least_buf_sz));
+    //     }
 
-        std::shared_ptr<MultiThreadAllocator> allocator = Factory::spawn_concurrent_allocator(std::move(allocator_vec));
-        dg::network_concurrency::daemon_raii_handle_t daemon_handle = Factory::spawn_gc_worker(allocator);
-        allocation_resource = {std::move(allocator), std::move(daemon_handle)};
-    }
+    //     std::shared_ptr<MultiThreadAllocator> allocator = Factory::spawn_concurrent_allocator(std::move(allocator_vec));
+    //     dg::network_concurrency::daemon_raii_handle_t daemon_handle = Factory::spawn_gc_worker(allocator);
+    //     allocation_resource = {std::move(allocator), std::move(daemon_handle)};
+    // }
 
-    void deinit() noexcept{
+    // void deinit() noexcept{
 
-        allocation_resource = {};
-    }
+    //     allocation_resource = {};
+    // }
 
-    auto malloc(size_t blk_sz, size_t alignment) noexcept -> ptr_type{
+    // auto malloc(size_t blk_sz, size_t alignment) noexcept -> ptr_type{
 
-        assert(dg::memult::is_pow2(alignment));
+    //     assert(dg::memult::is_pow2(alignment));
 
-        if (blk_sz == 0u){
-            return NETALLOC_NULLPTR;
-        }
+    //     if (blk_sz == 0u){
+    //         return NETALLOC_NULLPTR;
+    //     }
         
-        size_t fwd_sz       = std::max(alignment, LEAST_GUARANTEED_ALIGNMENT) - LEAST_GUARANTEED_ALIGNMENT;
-        size_t adj_blk_sz   = blk_sz + fwd_sz;
-        ptr_type ptr        = allocation_resource.allocator->malloc(adj_blk_sz);
+    //     size_t fwd_sz       = std::max(alignment, LEAST_GUARANTEED_ALIGNMENT) - LEAST_GUARANTEED_ALIGNMENT;
+    //     size_t adj_blk_sz   = blk_sz + fwd_sz;
+    //     ptr_type ptr        = allocation_resource.allocator->malloc(adj_blk_sz);
 
-        if (!ptr){
-            return NETALLOC_NULLPTR;
-        }
+    //     if (!ptr){
+    //         return NETALLOC_NULLPTR;
+    //     }
 
-        alignment_type alignment_log2 = stdx::ulog2_aligned(static_cast<alignment_type>(alignment));
-        ptr <<= ALIGNMENT_BSPACE;
-        ptr |= static_cast<ptr_type>(alignment_log2);
+    //     alignment_type alignment_log2 = stdx::ulog2_aligned(static_cast<alignment_type>(alignment));
+    //     ptr <<= ALIGNMENT_BSPACE;
+    //     ptr |= static_cast<ptr_type>(alignment_log2);
 
-        return ptr;
-    } 
+    //     return ptr;
+    // } 
 
-    auto malloc(size_t blk_sz) noexcept -> ptr_type{
+    // auto malloc(size_t blk_sz) noexcept -> ptr_type{
 
-        return malloc(blk_sz, DEFLT_ALIGNMENT); 
-    }
+    //     return malloc(blk_sz, DEFLT_ALIGNMENT); 
+    // }
 
-    auto c_addr(ptr_type ptr) noexcept -> void *{
+    // auto c_addr(ptr_type ptr) noexcept -> void *{
         
-        if (!ptr){
-            return nullptr;
-        }
+    //     if (!ptr){
+    //         return nullptr;
+    //     }
 
-        alignment_type alignment_log2   = stdx::low_bit<ALIGNMENT_BSPACE>(ptr); 
-        size_t alignment                = size_t{1} << alignment_log2;
-        ptr_type pptr                   = ptr >> ALIGNMENT_BSPACE;
+    //     alignment_type alignment_log2   = stdx::low_bit<ALIGNMENT_BSPACE>(ptr); 
+    //     size_t alignment                = size_t{1} << alignment_log2;
+    //     ptr_type pptr                   = ptr >> ALIGNMENT_BSPACE;
 
-        return dg::memult::align(allocation_resource.allocator->c_addr(pptr), alignment);
-    }
+    //     return dg::memult::align(allocation_resource.allocator->c_addr(pptr), alignment);
+    // }
 
-    void free(ptr_type ptr) noexcept{
+    // void free(ptr_type ptr) noexcept{
 
-        if (!ptr){
-            return;
-        }
+    //     if (!ptr){
+    //         return;
+    //     }
 
-        ptr_type pptr = ptr >> ALIGNMENT_BSPACE;
-        allocation_resource.allocator->free(pptr);
-    }
+    //     ptr_type pptr = ptr >> ALIGNMENT_BSPACE;
+    //     allocation_resource.allocator->free(pptr);
+    // }
 
-    auto cmalloc(size_t blk_sz) noexcept -> void *{
+    // auto cmalloc(size_t blk_sz) noexcept -> void *{
 
-        if (blk_sz == 0u){
-            return nullptr;
-        }
+    //     if (blk_sz == 0u){
+    //         return nullptr;
+    //     }
 
-        constexpr size_t HEADER_SZ  = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
-        size_t adj_blk_sz           = blk_sz + HEADER_SZ;
-        ptr_type ptr                = malloc(adj_blk_sz);
+    //     constexpr size_t HEADER_SZ  = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
+    //     size_t adj_blk_sz           = blk_sz + HEADER_SZ;
+    //     ptr_type ptr                = malloc(adj_blk_sz);
 
-        if (!ptr){
-            return nullptr;
-        }
+    //     if (!ptr){
+    //         return nullptr;
+    //     }
 
-        void * cptr = c_addr(ptr);
-        std::memcpy(cptr, &ptr, sizeof(ptr_type));
-        char * rs   = static_cast<char *>(cptr);
-        std::advance(rs, HEADER_SZ);
+    //     void * cptr = c_addr(ptr);
+    //     std::memcpy(cptr, &ptr, sizeof(ptr_type));
+    //     char * rs   = static_cast<char *>(cptr);
+    //     std::advance(rs, HEADER_SZ);
 
-        return rs;
-    }
+    //     return rs;
+    // }
 
-    void cfree(void * cptr) noexcept{
+    // void cfree(void * cptr) noexcept{
         
-        constexpr size_t HEADER_SZ = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
+    //     constexpr size_t HEADER_SZ = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
         
-        if (!cptr){
-            return;
-        }
+    //     if (!cptr){
+    //         return;
+    //     }
 
-        const char * org_cptr = static_cast<const char *>(cptr);
-        std::advance(org_cptr, -static_cast<intmax_t>(HEADER_SZ));
-        ptr_type ptr    = {};
-        std::memcpy(&ptr, org_cptr, sizeof(ptr_type));
+    //     const char * org_cptr = static_cast<const char *>(cptr);
+    //     std::advance(org_cptr, -static_cast<intmax_t>(HEADER_SZ));
+    //     ptr_type ptr    = {};
+    //     std::memcpy(&ptr, org_cptr, sizeof(ptr_type));
 
-        free(ptr);
-    }
+    //     free(ptr);
+    // }
 
     template <class T>
     using NoExceptAllocator = std::allocator<T>;
