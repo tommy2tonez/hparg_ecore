@@ -291,6 +291,8 @@ namespace dg::network_allocation{
     //it's not gonna work
     //the only way that works is the way of using accurate logit density mining machine
 
+    //I did have a hard time to semanticalize this component. Its not natural, seems forcy in terms of logics
+    //writing code is a problem, writing cricial code, easy to prove is another profession
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
 
