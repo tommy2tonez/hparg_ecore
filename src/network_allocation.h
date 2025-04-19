@@ -411,6 +411,9 @@ namespace dg::network_allocation{
     //the best practices of engineering was not reflected in the component
     //first is the header, these should be two distinct allocators, one is smallbin allocator, one is largebin allocator 
     //the third allocator should write the header, and dispatch accordingly, this is easier to debug
+    //we got two very good feedbacks
+    //first is membership testing by using unsigned bitset of slots
+    //second is largebin header backward extensions
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
