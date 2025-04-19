@@ -414,6 +414,8 @@ namespace dg::network_allocation{
     //we got two very good feedbacks
     //first is membership testing by using unsigned bitset of slots
     //second is largebin header backward extensions
+    //it only takes 6 months - a year of programming, we'll try to stay on the timeline
+    //the best part is building these components, cool people have cool feedbacks. we'll keep yall updated.
 
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
