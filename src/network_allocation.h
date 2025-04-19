@@ -478,6 +478,11 @@ namespace dg::network_allocation{
 
                 return POW2_PUNCTUAL_CHECK_INTERVAL_SIZE;
             }
+
+            static consteval auto get_largebin_smallbin_size() noexcept -> size_t{ //I cant come up with a sound version just yet
+
+                return 1u;
+            }
     };
 
     template <class Metadata>
@@ -526,6 +531,7 @@ namespace dg::network_allocation{
             static inline constexpr size_t MINIMUM_ALLOCATION_BLK_SZ        = Metadata::get_minimum_allocation_blk_size();
             static inline constexpr size_t MAXIMUM_SMALLBIN_BLK_SZ          = Metadata::get_maximum_smallbin_blk_size();
             static inline constexpr size_t PUNCTUAL_CHECK_INTERVAL_SZ       = Metadata::get_pow2_punctual_check_interval_size();
+            static inline constexpr size_t LARGEBIN_SMALLBIN_SZ             = Metadata::get_largebin_smallbin_size();
 
             DGStdAllocator(std::shared_ptr<char[]> buf,
                            size_t pow2_malloc_chk_interval_sz,
@@ -607,7 +613,7 @@ namespace dg::network_allocation{
 
                 size_t user_ptr_sz = this->internal_read_user_ptr_size(user_ptr); 
 
-                if (user_ptr_sz > self::MAXIMUM_SMALLBIN_BLK_SZ){
+                if (user_ptr_sz >= self::LARGEBIN_SMALLBIN_SZ){
                     user_ptr_sz = this->internal_read_largebin_user_ptr_size(user_ptr); 
                 }
 
@@ -636,7 +642,7 @@ namespace dg::network_allocation{
                 size_t user_ptr_sz                          = this->internal_read_user_ptr_size(user_ptr);
                 size_t user_ptr_truncated_version_control   = this->internal_read_user_ptr_truncated_version_control(user_ptr);  
 
-                if (user_ptr_sz > self::MAXIMUM_SMALLBIN_BLK_SZ) [[unlikely]]{
+                if (user_ptr_sz >= self::LARGEBIN_SMALLBIN_SZ) [[unlikely]]{
                     this->internal_large_free(user_ptr);
                 } else [[likely]]{
                     size_t current_truncated_version_control    = self::internal_get_truncated_version_control(this->bump_allocator_version_control);
@@ -818,7 +824,7 @@ namespace dg::network_allocation{
 
                 assert(user_ptr_sz > self::MAXIMUM_SMALLBIN_BLK_SZ);
                 std::memcpy(internal_ptr, &user_ptr_sz, sizeof(largebin_sz_header_t));
-                return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), self::MAXIMUM_SMALLBIN_BLK_SZ + 1u, 0u); 
+                return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), self::LARGEBIN_SMALLBIN_SZ, 0u); 
             }
 
             __attribute__((noinline)) void internal_dump_freebin_vec(){
@@ -1063,7 +1069,7 @@ namespace dg::network_allocation{
             }
     };
 
-    using concurrent_dg_std_allocator = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<8u, 256u, 16u, 60u, 4u>>;
+    using concurrent_dg_std_allocator = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<8u, 256u, 16u, 64u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
 
     class GCWorker: public virtual dg::network_concurrency::WorkerInterface{
 
