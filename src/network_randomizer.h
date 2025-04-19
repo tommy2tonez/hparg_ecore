@@ -12,6 +12,7 @@
 #include <random>
 #include "stdx.h"
 #include <type_traits>
+#include "network_type_traits_x.h"
 
 namespace dg::network_randomizer{
 

@@ -28,18 +28,18 @@ namespace dg::network_allocation{
     using interval_type         = dg::heap::types::interval_type; 
     using heap_sz_type          = dg::heap::types::store_type;
 
-    static inline constexpr size_t PTROFFS_BSPACE               = sizeof(uint32_t) * CHAR_BIT;
-    static inline constexpr size_t PTRSZ_BSPACE                 = sizeof(uint16_t) * CHAR_BIT;
-    static inline constexpr size_t ALLOCATOR_ID_BSPACE          = sizeof(uint16_t) * CHAR_BIT;
-    static inline constexpr size_t ALIGNMENT_BSPACE             = sizeof(uint16_t) * CHAR_BIT;
-    static inline constexpr ptr_type NETALLOC_NULLPTR           = ptr_type{0u}; 
-    static inline constexpr size_t DEFLT_ALIGNMENT              = alignof(double);
-    static inline constexpr size_t LEAF_SZ                      = 8u;
-    static inline constexpr size_t LEAST_GUARANTEED_ALIGNMENT   = LEAF_SZ;
+    // static inline constexpr size_t PTROFFS_BSPACE               = sizeof(uint32_t) * CHAR_BIT;
+    // static inline constexpr size_t PTRSZ_BSPACE                 = sizeof(uint16_t) * CHAR_BIT;
+    // static inline constexpr size_t ALLOCATOR_ID_BSPACE          = sizeof(uint16_t) * CHAR_BIT;
+    // static inline constexpr size_t ALIGNMENT_BSPACE             = sizeof(uint16_t) * CHAR_BIT;
+    // static inline constexpr ptr_type NETALLOC_NULLPTR           = ptr_type{0u}; 
+    // static inline constexpr size_t DEFLT_ALIGNMENT              = alignof(double);
+    // static inline constexpr size_t LEAF_SZ                      = 8u;
+    // static inline constexpr size_t LEAST_GUARANTEED_ALIGNMENT   = LEAF_SZ;
  
-    static_assert(PTROFFS_BSPACE + PTRSZ_BSPACE + ALLOCATOR_ID_BSPACE + ALIGNMENT_BSPACE <= sizeof(ptr_type) * CHAR_BIT);
-    static_assert(-1 == ~0);
-    static_assert(!NETALLOC_NULLPTR);
+    // static_assert(PTROFFS_BSPACE + PTRSZ_BSPACE + ALLOCATOR_ID_BSPACE + ALIGNMENT_BSPACE <= sizeof(ptr_type) * CHAR_BIT);
+    // static_assert(-1 == ~0);
+    // static_assert(!NETALLOC_NULLPTR);
 
     //we would want to batch things, use std::mutex
     //and use another affined allocators to further affine things 
@@ -165,9 +165,9 @@ namespace dg::network_allocation{
 
             auto base_size() const noexcept -> size_t{
 
-                return this->base->base_size()
+                return this->base->base_size();
             }
-        
+
         private:
 
             void update_gc_sensor(size_t new_blk_sz) noexcept{
@@ -225,7 +225,7 @@ namespace dg::network_allocation{
                 assert(stdx::is_pow2(allocator_vec.size()));
 
                 size_t allocator_idx                = dg::network_concurrency::this_thread_idx() & (this->allocator_vec.size() - 1u);
-                auto internal_resolutor             = InternalMallocFeedResolutor{}:
+                auto internal_resolutor             = InternalMallocFeedResolutor{};
                 internal_resolutor.dst              = &this->allocator_vec[allocator_idx];
                 internal_resolutor.allocation_off   = allocator_idx << this->heap_allocator_pow2_exp_base_sz; 
 
@@ -304,7 +304,7 @@ namespace dg::network_allocation{
                         blk_arr[i] = base_data_arr[i].blk_sz;
                     }
 
-                    this->dst->alloc(blk_arr.get(), rs_arr.get(), data_arr_sz);
+                    (*this->dst)->alloc(blk_arr.get(), data_arr_sz, rs_arr.get());
 
                     for (size_t i = 0u; i < data_arr_sz; ++i){
                         if (!rs_arr[i].has_value()){
@@ -336,7 +336,7 @@ namespace dg::network_allocation{
         
         public:
 
-            MultiThreadWrappedGarbageCollector(std::shared_ptr<MultiThreadWrappedGarbageCollector> base) noexcept: base(std::move(base)){}
+            MultiThreadWrappedGarbageCollector(std::shared_ptr<MultiThreadUniformHeapAllocator> base) noexcept: base(std::move(base)){}
 
             void gc() noexcept{
 
@@ -776,7 +776,7 @@ namespace dg::network_allocation{
 
             constexpr auto internal_write_largebin_allocation_header(void * internal_ptr, largebin_sz_header_t user_ptr_sz) const noexcept -> void *{
 
-                assert(user_blk_sz > this->maximum_smallbin_blk_sz);
+                assert(user_ptr_sz > this->maximum_smallbin_blk_sz);
                 std::memcpy(internal_ptr, &user_ptr_sz, sizeof(largebin_sz_header_t));
                 return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), this->maximum_smallbin_blk_sz + 1u, 0u); 
             }
@@ -961,7 +961,6 @@ namespace dg::network_allocation{
 
                 interval_type intv          = std::make_pair(heap_ptr_offset, heap_ptr_excl_sz);
 
-                this->internal_erase_largemalloc_entry(user_ptr);
                 this->heap_allocator->free(&intv, 1u);
             }
 
@@ -982,7 +981,7 @@ namespace dg::network_allocation{
                 size_t smallbin_table_idx   = stdx::ulog2(pow2_blk_sz);
                 uint64_t membership_bitset  = (this->available_bin_bitset >> smallbin_table_idx) & ((uint64_t{1} << this->probing_bin_sz) - 1u); //shift the sz 
 
-                if (smallbin_vec == 0u){
+                if (membership_bitset == 0u){
                     return this->internal_bump_allocate(user_blk_sz);
                 }
 

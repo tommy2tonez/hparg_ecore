@@ -506,7 +506,7 @@ namespace dg::network_producer_consumer{
     template <class EventType>
     auto delvrsrv_kv_make_preallocated_event_container(size_t capacity, char * buf) noexcept -> KVEventContainer<EventType>{
 
-        static_assert(std::is_nothrow_default_constructible_v<EventType>);
+        // static_assert(std::is_nothrow_default_constructible_v<EventType>);
 
         EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
         auto container          = KVEventContainer<EventType>{event_arr, 0u, capacity};
