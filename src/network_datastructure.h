@@ -309,6 +309,8 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto capacity() const noexcept -> size_t{
 
+                //its good to add assumptions
+                [[assume(stdx::is_pow2(this->cap))]];
                 return this->cap;
             }
 
@@ -828,6 +830,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto capacity() const noexcept -> size_t{
 
+                [[assume(stdx::is_pow2(this->cap))]];
                 return this->cap;
             }
 

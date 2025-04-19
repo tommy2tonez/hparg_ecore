@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <type_traits>
+#include "network_allocation.h"
 
 static consteval auto get_ptr() -> uintptr_t{
 
@@ -36,5 +37,6 @@ static consteval auto get_ptr() -> uintptr_t{
 
 int main(){
 
+    int i;
     // static_assert(std::is_same_v<uint32_t, size_t>);
 }

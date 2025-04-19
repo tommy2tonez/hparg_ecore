@@ -16,6 +16,10 @@
 #include "network_memult.h"
 #include "network_exception.h"
 #include "network_concurrency.h"
+#include "network_randomizer.h"
+#include "network_producer_consumer.h"
+#include <memory>
+#include "network_stack_allocation.h"
 
 namespace dg::network_allocation{
     
@@ -115,7 +119,7 @@ namespace dg::network_allocation{
             std::unique_ptr<HeapAllocator> base;
 
             stdx::hdi_container<std::atomic<size_t>> allocation_counter;
-            stdx::hdi_container<size_t> allocation_counter_invoke_threshold;
+            stdx::hdi_container<size_t> allocation_counter_exp2_invoke_threshold;
 
             stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>> last_gc;
             stdx::hdi_container<std::chrono::nanoseconds> gc_dur; 
@@ -125,12 +129,12 @@ namespace dg::network_allocation{
 
             SemiAutoGCHeapAllocator(std::unique_ptr<HeapAllocator> base,
                                     size_t allocation_counter,
-                                    size_t allocation_counter_invoke_threshold,
+                                    size_t allocation_counter_exp2_invoke_threshold,
                                     std::chrono::time_point<std::chrono::high_resolution_clock> last_gc,
                                     std::chrono::nanoseconds gc_dur,
                                     size_t temporal_gc_pow2_dice_sz) noexcept: base(std::move(base)),
                                                                                allocation_counter(stdx::hdi_container<std::atomic<size_t>>{std::atomic<size_t>(allocation_counter)}),
-                                                                               allocation_counter_invoke_threshold(stdx::hdi_container<size_t>{allocation_counter_invoke_threshold}),
+                                                                               allocation_counter_exp2_invoke_threshold(stdx::hdi_container<size_t>{allocation_counter_exp2_invoke_threshold}),
                                                                                last_gc(stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>>{std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>(last_gc)}),
                                                                                gc_dur(stdx::hdi_container<std::chrono::nanoseconds>{gc_dur}),
                                                                                temporal_gc_pow2_dice_sz(stdx::hdi_container<size_t>{temporal_gc_pow2_dice_sz}){}
@@ -170,8 +174,8 @@ namespace dg::network_allocation{
 
                 size_t now_allocation_blk_sz    = this->allocation_counter.value.fetch_add(new_blk_sz, std::memory_order_relaxed);
                 size_t then_allocation_blk_sz   = now_allocation_blk_sz + new_blk_sz;
-                size_t now_idx                  = now_allocation_blk_sz / this->allocation_counter_invoke_threshold.value;
-                size_t then_idx                 = then_allocation_blk_sz / this->allocation_counter_invoke_threshold.value;
+                size_t now_idx                  = now_allocation_blk_sz >> this->allocation_counter_exp2_invoke_threshold.value;
+                size_t then_idx                 = then_allocation_blk_sz >> this->allocation_counter_exp2_invoke_threshold.value;
 
                 //atomic operation crossed the border
                 if (now_idx != then_idx){
@@ -181,7 +185,7 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                size_t dice_value               = dg::network_randomizer::randomize_range<size_t>() & (this->temporal_gc_pow2_dice_sz.value - 1u);
+                size_t dice_value               = dg::network_randomizer::randomize_int<size_t>() & (this->temporal_gc_pow2_dice_sz.value - 1u);
 
                 if (dice_value == 0u){
                     auto now        = std::chrono::high_resolution_clock::now();
@@ -201,14 +205,14 @@ namespace dg::network_allocation{
 
         private:
 
-            std::vector<std::unique_ptr<HeapAllocator>> allocator_vec;
+            std::vector<std::unique_ptr<SemiAutoGCHeapAllocator>> allocator_vec;
             size_t malloc_vectorization_sz;
             size_t free_vectorization_sz;
             size_t heap_allocator_pow2_exp_base_sz; //let me think of how to split this 
 
         public:
 
-            MultiThreadUniformHeapAllocator(std::vector<std::unique_ptr<HeapAllocator>> allocator_vec,
+            MultiThreadUniformHeapAllocator(std::vector<std::unique_ptr<SemiAutoGCHeapAllocator>> allocator_vec,
                                             size_t malloc_vectorization_sz,
                                             size_t free_vectorization_sz,
                                             size_t heap_allocator_pow2_exp_base_sz) noexcept: allocator_vec(std::move(allocator_vec)),
@@ -247,7 +251,7 @@ namespace dg::network_allocation{
                 size_t trimmed_keyvalue_feed_cap    = std::min(this->free_vectorization_sz, ptr_arr_sz);
                 size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                         = dg::network_exception::remove_expected(dg::network_producer_consumer::delvsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
+                auto feeder                         = dg::network_exception::remove_expected(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < ptr_arr_sz; ++i){
                     auto [base_off, excl_sz]    = ptr_arr[i]; 
@@ -280,27 +284,27 @@ namespace dg::network_allocation{
         private:
 
             struct InternalMallocFeedArgument{
-                szie_t blk_sz;
+                size_t blk_sz;
                 std::optional<interval_type> * rs;
             };
 
             struct InternalMallocFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalMallocFeedArgument>{
 
-                std::unique_ptr<Allocator> * dst;
+                std::unique_ptr<SemiAutoGCHeapAllocator> * dst;
                 size_t allocation_off;
 
                 void push(std::move_iterator<InternalMallocFeedArgument *> data_arr, size_t data_arr_sz) noexcept{
 
                     auto base_data_arr = data_arr.base();
 
-                    dg::network_stack_allocation::NoExceptRawAllocation<size_t[]> blk_arr(data_arr_sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::optional<interval_type>[]> rs_arr(data_arr_sz)
+                    dg::network_stack_allocation::NoExceptAllocation<size_t[]> blk_arr(data_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::optional<interval_type>[]> rs_arr(data_arr_sz);
 
                     for (size_t i = 0u; i < data_arr_sz; ++i){
                         blk_arr[i] = base_data_arr[i].blk_sz;
                     }
 
-                    this->dst->malloc(blk_arr.get(), rs_arr.get(), data_arr_sz);
+                    this->dst->alloc(blk_arr.get(), rs_arr.get(), data_arr_sz);
 
                     for (size_t i = 0u; i < data_arr_sz; ++i){
                         if (!rs_arr[i].has_value()){
@@ -313,11 +317,11 @@ namespace dg::network_allocation{
                 }
             };
 
-            struct InternalFreeFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, ptr_type>{
+            struct InternalFreeFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, interval_type>{
 
-                std::vector<std::unique_ptr<Allocator>> * dst;
+                std::vector<std::unique_ptr<SemiAutoGCHeapAllocator>> * dst;
 
-                void push(const size_t& allocator_idx, std::move_iterator<ptr_type *> data_arr, size_t sz) noexcept{
+                void push(const size_t& allocator_idx, std::move_iterator<interval_type *> data_arr, size_t sz) noexcept{
 
                     (*this->dst)[allocator_idx]->free(data_arr.base(), sz);
                 }
@@ -399,6 +403,15 @@ namespace dg::network_allocation{
     //that's enough work for allocators
     //we'll be back
 
+    //I was thinking of the generic way to program the open-close patterns
+    //open, radix -> open_1, open_2, open_3, open_4, write dispatch header -> returning result
+    //close, read header, dispatch close_1, close_2, close_3, close_4
+    //open does not necessarily need to follow a certain programming pattern, as long as it returns one of the open_1, ... along with the printed header
+    //smallbin, make sure that it was orginated from open, returning the smallbin to user == user bounce the buffer without ever interferring with the component, free() was never invoked 
+    //the best practices of engineering was not reflected in the component
+    //first is the header, these should be two distinct allocators, one is smallbin allocator, one is largebin allocator 
+    //the third allocator should write the header, and dispatch accordingly, this is easier to debug
+
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
 
@@ -420,7 +433,7 @@ namespace dg::network_allocation{
             size_t maximum_smallbin_blk_sz;
             size_t pow2_malloc_chk_interval_sz;
             size_t malloc_chk_interval_counter;
-            std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table; //too many indirections
+            std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Allocation>> smallbin_reuse_table; //too many indirections
 
             NaiveBumpAllocator bump_allocator;
             size_t bump_allocator_refill_sz;
@@ -436,8 +449,10 @@ namespace dg::network_allocation{
             size_t allocation_sz_counter;
             size_t allocation_sz_counter_flush_threshold; 
 
-            dg::network_datastructure::unordered_map_variants::unordered_node_map<uintptr_t, LargeBinMetadata> largebin_metadata_dict; 
+            dg::network_datastructure::unordered_map_variants::unordered_node_map<uintptr_t, LargeBinMetadata> largebin_metadata_dict;
             size_t largebin_metadata_dict_cap; //we've got bad feedbacks about this, I dont think that's an issue, we are allocating 64KB chunk of memory, 16 bytes of largebin's not gonna dent our overheads
+            //we've got tons of complains about the largebin, alright, whatever we do, we can't read a uint32_t header load, which is a very efficient unaligned load
+            //64KB chunk of memory being freed == 128 bytes of cache fetch does not sound very bad to me
 
         public:
 
@@ -452,7 +467,7 @@ namespace dg::network_allocation{
                            size_t maximum_smallbin_blk_sz,
                            size_t pow2_malloc_chk_interval_sz,
                            size_t malloc_chk_interval_counter,
-                           std::vector<dg::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
+                           std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
 
                            NaiveBumpAllocator bump_allocator,
                            size_t bump_allocator_refill_sz,
@@ -774,7 +789,7 @@ namespace dg::network_allocation{
                 size_t requesting_interval_sz   = this->bump_allocator_refill_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
                 auto requesting_interval        = std::optional<interval_type>{};
 
-                this->heap_allocator->malloc(&requesting_interval_sz, 1u, &requesting_interval);
+                this->heap_allocator->alloc(&requesting_interval_sz, 1u, &requesting_interval);
 
                 if (!requesting_interval.has_value()){
                     return false;
@@ -885,7 +900,7 @@ namespace dg::network_allocation{
                 size_t allocating_heap_node_sz              = ceil_blk_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ; 
                 std::optional<interval_type> allocated_intv = {};
 
-                this->heap_allocator->malloc(&allocating_heap_node_sz, 1u, &allocated_intv);
+                this->heap_allocator->alloc(&allocating_heap_node_sz, 1u, &allocated_intv);
 
                 if (!allocated_intv.has_value()){
                     return nullptr;
@@ -978,6 +993,8 @@ namespace dg::network_allocation{
                 this->dg_allocator_vec[dg::network_concurrency::this_thread_idx()].free(ptr);
             }
     };
+
+    using concurrent_dg_std_allocator = ConcurrentDGStdAllocator<8u>;
 
     class GCWorker: public virtual dg::network_concurrency::WorkerInterface{
 

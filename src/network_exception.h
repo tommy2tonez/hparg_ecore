@@ -215,6 +215,26 @@ namespace dg::network_exception{
         return rs;
     } 
 
+    template <class T>
+    inline auto remove_expected(std::expected<T, exception_t> inp) noexcept -> T{
+        
+        static_assert(std::is_nothrow_move_constructible_v<T>);
+
+        if (!inp.has_value()){
+            std::abort();
+        }
+
+        return std::move(inp.value());
+    } 
+
+    template <class T>
+    inline void dg_noexcept(exception_t err) noexcept{
+
+        if (dg::network_exception::is_failed(err)){
+            std::abort();
+        }
+    } 
+
     template <class T, class ...Args>
     inline auto cstyle_initialize(Args&& ...args) noexcept -> std::expected<T, exception_t>{
 

@@ -12,11 +12,11 @@
 #include "stdx.h"
 #include <utility>
 #include <iterator>
-#include "network_std_container.h"
+// #include "network_std_container.h"
 // #include "network_log.h"
 #include "network_exception.h"
 #include "assert.h"
-#include "dg_map_variants.h"
+#include "network_datastructure.h"
 #include "network_exception_handler.h"
 #include "network_type_traits_x.h"
 
@@ -467,13 +467,16 @@ namespace dg::network_producer_consumer{
     template <class = void>
     static constexpr bool FALSE_VAL = false;
 
+    template <class KeyType, class MappedType>
+    using kv_feed_unordered_map_t = dg::network_datastructure::unordered_map_variants::unordered_node_map<KeyType, MappedType>;
+
     template<class KeyType, class EventType>
     struct KVDeliveryHandle{
         BumpAllocatorResource * bump_allocator;
         size_t deliverable_sz;
         size_t deliverable_cap;
         KVConsumerInterface<KeyType, EventType> * consumer;
-        dg::unordered_unstable_map<KeyType, KVEventContainer<EventType>> key_event_map; //we dont want to reinvent the wheel to confuse our peers, we'll leverage advanced inplace allocator + throw, the complexity + debuggability + maintainability of the keyvalue feed are already reaching the unacceptable threshold  
+        kv_feed_unordered_map_t<KeyType, KVEventContainer<EventType>> key_event_map; //we dont want to reinvent the wheel to confuse our peers, we'll leverage advanced inplace allocator + throw, the complexity + debuggability + maintainability of the keyvalue feed are already reaching the unacceptable threshold  
     };
 
     //clear
@@ -552,7 +555,7 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = dg::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(deliverable_cap);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = std::unique_ptr<KVDeliveryHandle<key_t, event_t>>(new KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
             auto rs                 = delivery_handle.get();
@@ -590,7 +593,7 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_preallocated_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = dg::unordered_unstable_map<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(deliverable_cap);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = inplace_construct<KVDeliveryHandle<key_t, event_t>>(std::next(preallocated_buf, bump_allocator_allocation_cost(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap))),
                                                                                           KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
