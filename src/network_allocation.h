@@ -424,6 +424,9 @@ namespace dg::network_allocation{
     //maximum_smallbin_blk_sz has to be of accurate size to disambiguate from that of largemalloc header
     //there was no component that makes me break practices as much as this one
 
+    //some people are crazy, they spent 20 years of their career just do one thing, writing malloc, free, or socket, or file
+    //we just hope that we can implement something quick-n-dirty, we'll circle back to cross-the-t-dot-the-i later, we dont have manpower + time 
+
     template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ>
     class DGStdAllocator{
 
@@ -790,6 +793,7 @@ namespace dg::network_allocation{
                 for (size_t i = 0u; i < this->freebin_vec.size(); ++i){
                     auto [user_ptr, user_ptr_sz]    = std::make_pair(this->freebin_vec[i].user_ptr, this->freebin_vec[i].user_ptr_sz);
 
+                    //
                     size_t internal_ptr_offset      = std::distance(this->buf.get(), static_cast<char *>(this->internal_get_internal_ptr_head(user_ptr)));
                     size_t internal_ptr_sz          = user_ptr_sz + ALLOCATION_HEADER_SZ;
 
