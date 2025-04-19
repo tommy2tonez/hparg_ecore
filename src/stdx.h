@@ -738,6 +738,18 @@ namespace stdx{
         }
     }
 
+    template <class T, size_t BIT_SIZE, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    consteval auto lowones_bitgen(const std::integral_constant<size_t, BIT_SIZE>) noexcept -> T{
+
+        static_assert(BIT_SIZE <= std::numeric_limits<T>::digits);
+
+        if constexpr(BIT_SIZE == std::numeric_limits<T>::digits){
+            return std::numeric_limits<T>::max();
+        } else{
+            return (T{1} << BIT_SIZE) - 1u;
+        }
+    }
+
     template <class T>
     struct safe_integer_cast_wrapper{
 
