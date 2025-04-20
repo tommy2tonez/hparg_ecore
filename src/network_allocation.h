@@ -703,7 +703,7 @@ namespace dg::network_allocation{
                 size_t buf_offset   = std::distance(this->buf.get(), static_cast<char *>(arg.first));
                 size_t buf_sz       = arg.second;
                 size_t heap_offset  = buf_offset / HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                size_t heap_excl_sz = (buf_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ) - 1u; 
+                size_t heap_excl_sz = (buf_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ) - 1u;
 
                 return std::make_pair(heap_offset, heap_excl_sz);
             }
@@ -838,16 +838,9 @@ namespace dg::network_allocation{
                 dg::network_stack_allocation::NoExceptAllocation<interval_type[]> intv_arr(this->freebin_vec.size());
 
                 for (size_t i = 0u; i < this->freebin_vec.size(); ++i){
-                    auto [user_ptr, user_ptr_sz]    = std::make_pair(this->freebin_vec[i].user_ptr, this->freebin_vec[i].user_ptr_sz);
-
-                    size_t internal_ptr_offset      = std::distance(this->buf.get(), static_cast<char *>(this->internal_get_internal_ptr_head(user_ptr))); //we cant read the memory to determine the blk_kind, we need to store that in the Allocation... yet that would unalign our reads, so let's assume that this is smallbin for now
-                    size_t internal_ptr_sz          = user_ptr_sz + ALLOCATION_HEADER_SZ;
-
-                    size_t heap_ptr_offset          = internal_ptr_offset / HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                    size_t heap_ptr_sz              = internal_ptr_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                    size_t heap_ptr_excl_sz         = heap_ptr_sz - 1u;
-
-                    intv_arr[i]                     = std::make_pair(heap_ptr_offset, heap_ptr_excl_sz);
+                    void * internal_ptr     = this->internal_get_internal_ptr_head(this->freebin_vec[i].user_ptr);
+                    size_t internal_ptr_sz  = this->freebin_vec[i].user_ptr_sz + ALLOCATION_HEADER_SZ;
+                    intv_arr[i]             = this->internal_aligned_buf_to_interval({internal_ptr, internal_ptr_sz});
                 }
 
                 this->heap_allocator->free(intv_arr.get(), this->freebin_vec.size());
