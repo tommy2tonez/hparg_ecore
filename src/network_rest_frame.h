@@ -11,25 +11,44 @@
 #include "stdx.h"
 #include "network_kernel_mailbox.h"
 
+//let me think
+//request should be an absolute unit, because mailbox can do flash_streamx, aggregation of requests, it makes no sense to unitize things here
+
+//dg::vector<model::InternalRequest> as a unit of consume (1)
+//std::unique_ptr<binary_semaphore> to do absolute waiting to avoid shared_ptr<> (2)
+//we dispatch the release workorder to a third party, the third party would take release right after a certain period from the ticket_controller(3)
+//a hash_distributed ticket_controller (4)
+//abs_timeout on server side to do hard synchronization of failed request (no response requests), such is we can do another request without being afraid of overriding (5)
+//we need to reduce the memory orderings, binary semaphore for each of the requests in the batch does not sound, does not scale (6)
+//we can't factor in time-dilation because there is literally no instruments (7)
+//we need to do some sort of encoding + decoding schemes, we can't offload this responsibility to user-space because there are sensitive datas like timeout uri + etc. (8)
+//we can skip the encoding + decodings for now
+//we'll be working on this component for the next week
+//this is a very important component
+
+//our focus would be to not pollute the system memory-orderings-wise
+//we have a lot of other jobs to run concurrently, memory-orderings acquire release is a no-no in these situations
+
 namespace dg::network_rest_frame::model{
 
     using ticket_id_t   = uint64_t;
     using clock_id_t    = uint64_t;
 
     struct Request{
-        dg::string uri;
+        dg::string requestee_uri;
         dg::string requestor;
         dg::string payload;
-        std::chrono::nanoseconds timeout;
+        std::chrono::nanoseconds client_timeout_dur;
+        std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(uri, requestor, payload, timeout);
+            reflector(requestee_uri, requestor, payload, client_timeout_dur, server_abs_timeout);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(uri, requestor, payload, timeout);
+            reflector(requestee_uri, requestor, payload, client_timeout_dur, server_abs_timeout);
         }
     };
 
@@ -51,15 +70,16 @@ namespace dg::network_rest_frame::model{
     struct InternalRequest{
         Request request;
         ticket_id_t ticket_id;
+        std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout; //we cant solve the time dilation eqn yet, this is a very important technical problem to overcome the implicit hard synchronization of request by using timeout, we can't determine the state of the server machine post the request otherwise
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(request, ticket_id);
+            reflector(request, ticket_id, server_abs_timeout);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(request, ticket_id);
+            reflector(request, ticket_id, server_abs_timeout);
         }
     };
 
@@ -86,7 +106,7 @@ namespace dg::network_rest_frame::server{
         using Response  = model::Response; 
 
         virtual ~RequestHandlerInterface() noexcept = default;
-        virtual auto handle(Request) noexcept -> Response = 0;
+        virtual auto handle(Request&&) noexcept -> std::expected<Response, exception_t> = 0;
     };
 } 
 
@@ -94,7 +114,7 @@ namespace dg::network_rest_frame::client{
 
     struct ResponseObserverInterface{
         virtual ~ResponseObserverInterface() noexcept = 0;
-        virtual void update(Response) noexcept = 0;
+        virtual void update(std::optional<Response>) noexcept = 0;
     };
 
     struct ResponseInterface{
@@ -104,25 +124,29 @@ namespace dg::network_rest_frame::client{
 
     struct RequestContainerInterface{
         virtual ~RequestContainerInterface() noexcept = default;
-        virtual auto push(model::InternalRequest) noexcept -> exception_t = 0;
-        virtual auto pop() noexcept -> model::InternalRequest = 0;
+        virtual auto push(dg::vector<model::InternalRequest>&&) noexcept -> exception_t = 0;
+        virtual auto pop() noexcept -> dg::vector<model::InternalRequest> = 0;
     };
 
     struct TicketControllerInterface{
         virtual ~TicketControllerInterface() noexcept = default;
-        virtual auto get_ticket(std::shared_ptr<ResponseObserverInterface>) noexcept -> std::expected<model::ticket_id_t, exception_t> = 0;
-        virtual auto set_response(model::ticket_id_t, model::Response) noexcept -> exception_t = 0;
-        virtual void close_ticket(model::ticket_id_t) noexcept = 0; 
+        virtual void open_ticket(ResponseObserverInterface * observer_arr, size_t sz, std::expected<model::ticket_id_t, exception_t> * generated_ticket_arr) noexcept = 0;
+        virtual void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept = 0;
+        virtual void close_ticket(model::ticket_id_t * ticket_id_arr, size_t sz) noexcept = 0;
+        virtual auto max_consume_size() noexcept -> size_t = 0; 
     };
 
-    struct ExpiryFactoryInterface{
-        virtual ~ExpiryFactoryInterface() noexcept = default;
-        virtual auto get_expiry(std::chrono::nanoseconds) noexcept -> std::expected<std::chrono::timepoint<std::chrono::system_clock, std::chrono::nanoseconds>, exception_t> = 0;
+    struct TicketTimeoutManangerInterface{
+        virtual ~TicketTimeoutManagerInterface() noexcept = default;
+        virtual void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept = 0;
+        virtual void get_expired_ticket(model::ticket_id_t * output_arr, size_t& sz, size_t cap) noexcept = 0;
+        virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     struct RestControllerInterface{
         virtual ~RestControllerInterface() noexcept = default;
-        virtual auto request(model::Request) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t> = 0;
+        virtual void request(std::move_iterator<model::Request *>, size_t, std::expected<std::unique_ptr<ResponseInterface>, exception_t> *) noexcept = 0;
+        virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     auto make_raii_ticket(model::ticket_id_t ticket_id, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::shared_ptr<model::ticket_id_t>{

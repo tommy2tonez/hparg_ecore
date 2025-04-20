@@ -481,6 +481,7 @@ namespace dg::network_allocation{
             }
     };
 
+    //we got a pull request for doing sliding window, I've yet to know what that means
     template <class Metadata>
     class DGStdAllocator{
 
