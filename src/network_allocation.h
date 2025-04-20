@@ -1431,6 +1431,24 @@ namespace dg::network_allocation{
         return false;
     }
 
+    //the case of std object lifetime is a hard case
+    //assume that std::malloc() + std::free() works perfectly for segments (as if we are passing reinterpret_cast<uintptr_t>()), not reading the address 
+
+    //what's going on?
+    //we create a new object, this object is guaranteed to be __restrict__ * by malloc()
+    //this object is tracked by compiler for the restrictness to do pointer optimizations
+
+    //what happens if we step out of the comfort zones, cast to char and read value pre-the object living address?
+    //compiler can't see your intentions and mark your program as undefined, what happens next is irrelevant
+    //so std_new_object is only defined when post the new () inplace construction operation, the sole memory referenced by the user inferred from the address is the pointer-intercompatible version of the object
+    //our program works fine if we only have new operations
+    //we actually dont care about delete except for doing cleanup (for the lifetime duration, guaranteed to be read-correct by compiler) and freeing the address, what happens at the address thereafter is irrelevant, yeah, free can actually write things to the address (zero out the bytes) and the std_delete_object or users cannot see (this is defined)
+    //this is why my proposal of std::bit_cast<> for std::free is actually a 100% patch
+    //we just standardize the free by making it noipa, such is what happens at T * post the free is "seeable" by the std_delete_object, except for std_delete_object cannot see what beyond their scope of seeing, such is the confined place of new[], not the headers
+
+    //who supposed to take in this responsibility, it is the std_new_object + std_delete_object to invoke [[gnu::noinline]] free()
+    //this is the std way, because new_object taints the char * lifetime at the address, it must the std_delete_object to untaint the lifetime, we don't yet have std measurements, so its best to extern + noipa the malloc + free for now, actually it's both
+
     template <class T, class ...Args>
     auto std_new_object(Args&& ...args) -> T *{
 
@@ -1454,11 +1472,11 @@ namespace dg::network_allocation{
             try {
                 return new (blk) T(std::forward<Args>(args)...);
             } catch (...){
-                
+
                 if constexpr(alignof(T) <= dg::network_allocation::DEFAULT_ALIGNMENT_SZ){
-                    dg::network_allocation::dg_free(blk);
+                    [[gnu::noinline]] dg::network_allocation::dg_free(blk);
                 } else{
-                    dg::network_allocation::dg_aligned_free(blk);
+                    [[gnu::noinline]] dg::network_allocation::dg_aligned_free(blk);
                 }
 
                 throw;
@@ -1476,9 +1494,9 @@ namespace dg::network_allocation{
         std::destroy_at(obj);
 
         if constexpr(alignof(T) <= dg::network_allocation::DEFAULT_ALIGNMENT_SZ){
-            dg::network_allocation::dg_free(static_cast<void *>(obj));
+            [[gnu::noinline]] dg::network_allocation::dg_free(static_cast<void *>(obj));
         } else{
-            dg::network_allocation::dg_aligned_free(static_cast<void *>(obj));
+            [[gnu::noinline]] dg::network_allocation::dg_aligned_free(static_cast<void *>(obj));
         }
     }
 
@@ -1515,7 +1533,7 @@ namespace dg::network_allocation{
         size_t sz                   = allocation_blk_sz / sizeof(T);
 
         std::destroy(arr, std::next(arr, sz));
-        dg::network_allocation::dg_xaligned_free(static_cast<void *>(arr));
+        [[gnu::noinline]] dg::network_allocation::dg_xaligned_free(static_cast<void *>(arr));
     }
 
     template <class T, class ...Args>
