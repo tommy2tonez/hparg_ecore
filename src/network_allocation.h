@@ -430,13 +430,14 @@ namespace dg::network_allocation{
     //we'll attempt to compile-time as many operations as possible
     //this looks not good, I think the only thing's worth compile-time compute is the HEAP_LEAF_UNIT_ALLOCATION_SZ
 
-    template <size_t HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t POW2_PUNCTUAL_CHECK_INTERVAL_SIZE, size_t MINIMUM_ALLOCATION_BLK_SZ, size_t MAXIMUM_SMALLBIN_BLK_SZ, size_t SMALLBIN_PROBE_SZ>
+    template <class BlkSizeOperatableType, size_t HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t POW2_PUNCTUAL_CHECK_INTERVAL_SIZE, size_t MINIMUM_ALLOCATION_BLK_SZ, size_t MAXIMUM_SMALLBIN_BLK_SZ, size_t SMALLBIN_PROBE_SZ>
     class DGStdAllocatorMetadata{
 
         public:
 
             //static_asserts();
 
+            using blk_sz_operatable_t   = BlkSizeOperatableType;
             using sz_header_t           = uint16_t;
             using vrs_ctrl_header_t     = uint16_t;
             using largebin_sz_header_t  = uint64_t; 
@@ -481,7 +482,12 @@ namespace dg::network_allocation{
 
             static consteval auto get_largebin_smallbin_size() noexcept -> size_t{ //I cant come up with a sound version just yet
 
-                return 1u;
+                return 0u;
+            }
+
+            static constexpr auto compile_time_demote_blk_sz(size_t sz) noexcept -> blk_sz_operatable_t{
+
+                return sz;
             }
     };
 
@@ -584,7 +590,14 @@ namespace dg::network_allocation{
 
                 this->malloc_chk_interval_counter += 1u;
 
-                if (this->malloc_chk_interval_counter % PUNCTUAL_CHECK_INTERVAL_SZ == 0u || blk_sz > self::MAXIMUM_SMALLBIN_BLK_SZ) [[unlikely]]{
+                //there is no modulo performed if INTERVAL_CHECK_SZ is of uint8_t, uint16_t or uint32_t
+                //> MAXIMUM_SMALLBIN_BLK_SZ == > 63 == >= 64
+                //== shift 6 bits, 0 cmp
+                //or MAXIMUM_SMALLBIN_BLK_SZ == 65535
+                //blk_sz <= sizeof(uint32_t) => uint16_t read of latter + 0 cmp, this is the sound solution
+                //this means we need to demote blk_sz > uint32_t, we have to specify this in our Metadata
+
+                if (this->malloc_chk_interval_counter % PUNCTUAL_CHECK_INTERVAL_SZ == 0u || Metadata::compile_time_demote_blk_sz(blk_sz) > self::MAXIMUM_SMALLBIN_BLK_SZ) [[unlikely]]{
                     return this->internal_careful_malloc(blk_sz);
                 } else [[likely]]{
                     size_t pow2_blk_sz          = stdx::ceil2(std::max(blk_sz, self::MINIMUM_ALLOCATION_BLK_SZ));
@@ -613,7 +626,7 @@ namespace dg::network_allocation{
 
                 size_t user_ptr_sz = this->internal_read_user_ptr_size(user_ptr); 
 
-                if (user_ptr_sz >= self::LARGEBIN_SMALLBIN_SZ){
+                if (user_ptr_sz == self::LARGEBIN_SMALLBIN_SZ){
                     user_ptr_sz = this->internal_read_largebin_user_ptr_size(user_ptr); 
                 }
 
@@ -639,17 +652,26 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                size_t user_ptr_sz                          = this->internal_read_user_ptr_size(user_ptr);
-                size_t user_ptr_truncated_version_control   = this->internal_read_user_ptr_truncated_version_control(user_ptr);  
+                //uint32_t load
 
-                if (user_ptr_sz >= self::LARGEBIN_SMALLBIN_SZ) [[unlikely]]{
+                sz_header_t user_ptr_sz                                 = this->internal_read_user_ptr_size(user_ptr);
+                vrs_ctrl_header_t user_ptr_truncated_version_control    = this->internal_read_user_ptr_truncated_version_control(user_ptr);  
+
+                //this is constituted as a shift and a 0 cmp
+                //what's better, a direct address read and a cmp
+                //this requires user_ptr_sz to be of uint32_t
+                //and LARGEBIN_SMALLBIN_SZ to be of uint16_t
+                //this is hard
+                //or ... we just do a direct read of uint16_t negate cmp, this is the sound solution
+
+                if (user_ptr_sz == self::LARGEBIN_SMALLBIN_SZ) [[unlikely]]{
                     this->internal_large_free(user_ptr);
                 } else [[likely]]{
-                    size_t current_truncated_version_control    = self::internal_get_truncated_version_control(this->bump_allocator_version_control);
-                    size_t floor_smallbin_table_idx             = stdx::ulog2(user_ptr_sz);
-                    auto& smallbin_vec                          = this->smallbin_reuse_table[floor_smallbin_table_idx];
+                    vrs_ctrl_header_t current_truncated_version_control = self::internal_get_truncated_version_control(this->bump_allocator_version_control);
+                    size_t floor_smallbin_table_idx                     = stdx::ulog2(user_ptr_sz);
+                    auto& smallbin_vec                                  = this->smallbin_reuse_table[floor_smallbin_table_idx];
 
-                    if (smallbin_vec.size() != smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{
+                    if (smallbin_vec.size() != smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{ //cmp is better if low_resolution, compiler is better than us to decide what instruction to be used
                         //meets the cond of fast free
                         dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                         this->smallbin_avail_bitset |= uint64_t{1} << floor_smallbin_table_idx; //membership registration
@@ -829,15 +851,12 @@ namespace dg::network_allocation{
 
             __attribute__((noinline)) void internal_dump_freebin_vec(){
 
-                //assume that freebin is only for smallbins, thus there is no largemalloc dict clear 
-
                 dg::network_stack_allocation::NoExceptAllocation<interval_type[]> intv_arr(this->freebin_vec.size());
 
                 for (size_t i = 0u; i < this->freebin_vec.size(); ++i){
                     auto [user_ptr, user_ptr_sz]    = std::make_pair(this->freebin_vec[i].user_ptr, this->freebin_vec[i].user_ptr_sz);
 
-                    //
-                    size_t internal_ptr_offset      = std::distance(this->buf.get(), static_cast<char *>(this->internal_get_internal_ptr_head(user_ptr)));
+                    size_t internal_ptr_offset      = std::distance(this->buf.get(), static_cast<char *>(this->internal_get_internal_ptr_head(user_ptr))); //we cant read the memory to determine the blk_kind, we need to store that in the Allocation... yet that would unalign our reads, so let's assume that this is smallbin for now
                     size_t internal_ptr_sz          = user_ptr_sz + ALLOCATION_HEADER_SZ;
 
                     size_t heap_ptr_offset          = internal_ptr_offset / HEAP_LEAF_UNIT_ALLOCATION_SZ;
@@ -1020,7 +1039,7 @@ namespace dg::network_allocation{
 
                 this->internal_check_for_reset();
 
-                if (user_blk_sz > self::MAXIMUM_SMALLBIN_BLK_SZ){
+                if (Metadata::compile_time_demote_blk_sz(user_blk_sz) > self::MAXIMUM_SMALLBIN_BLK_SZ){
                     return this->internal_large_malloc(user_blk_sz);
                 }
 
@@ -1069,7 +1088,7 @@ namespace dg::network_allocation{
             }
     };
 
-    using concurrent_dg_std_allocator = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<8u, 256u, 16u, 64u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
+    using concurrent_dg_std_allocator = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<uint32_t, 8u, 256u, 16u, 63u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
 
     class GCWorker: public virtual dg::network_concurrency::WorkerInterface{
 
