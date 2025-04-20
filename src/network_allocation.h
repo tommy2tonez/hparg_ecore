@@ -1234,7 +1234,7 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        size_t align_fwd_sz = std::max(alignment, DEFAULT_ALIGNMENT_SZ) - DEFAULT_ALIGNMENT_SZ;
+        size_t align_fwd_sz = alignment - 1u;
         size_t adj_blk_sz   = blk_sz + align_fwd_sz + sizeof(alignment_header_t);
         void * ptr          = allocation_resource_obj::get().allocator->malloc(adj_blk_sz);
 
@@ -1298,7 +1298,7 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        size_t align_fwd_sz = std::max(alignment, DEFAULT_ALIGNMENT_SZ) - DEFAULT_ALIGNMENT_SZ;
+        size_t align_fwd_sz = alignment - 1u;
         size_t adj_blk_sz   = blk_sz + align_fwd_sz + METADATA_SZ;
         void * ptr          = allocation_resource_obj::get().allocator->malloc(adj_blk_sz);
 
@@ -1494,6 +1494,8 @@ namespace dg::network_allocation{
 
         size_t allocation_blk_sz    = sz * sizeof(T); 
         void * blk                  = dg::network_allocation::dg_xaligned_alloc(alignof(T), allocation_blk_sz);
+
+        //
 
         if (blk == nullptr){
             throw std::bad_alloc();
