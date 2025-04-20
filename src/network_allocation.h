@@ -1202,23 +1202,23 @@ namespace dg::network_allocation{
         return reinterpret_cast<const void *>(aligned_ptr_numerical_addr);
     }
 
-    extern __attribute__((noinline)) auto dg_malloc(size_t blk_sz) noexcept -> void *{
+    extern __attribute__((noipa)) auto dg_malloc(size_t blk_sz) noexcept -> void *{
 
         return allocation_resource_obj::get().allocator->malloc(blk_sz); 
     }
 
     //alright, this is the headache
-    extern __attribute__((noinline)) auto dg_realloc(void * buf, size_t blk_sz) noexcept -> void *{
+    extern __attribute__((noipa)) auto dg_realloc(void * buf, size_t blk_sz) noexcept -> void *{
 
         allocation_resource_obj::get().allocator->realloc(buf, blk_sz);
     } 
 
-    extern __attribute__((noinline)) void dg_free(void * ptr) noexcept{
+    extern __attribute__((noipa)) void dg_free(void * ptr) noexcept{
 
         allocation_resource_obj::get().allocator->free(ptr);
     }
 
-    extern __attribute__((noinline)) auto dg_aligned_alloc(size_t alignment, size_t blk_sz) noexcept -> void *{
+    extern __attribute__((noipa)) auto dg_aligned_alloc(size_t alignment, size_t blk_sz) noexcept -> void *{
 
         if (!stdx::is_pow2(alignment)){
             return nullptr;
@@ -1251,7 +1251,7 @@ namespace dg::network_allocation{
         return aligned_ptr; 
     } 
 
-    extern __attribute__((noinline)) void dg_aligned_free(void * ptr) noexcept{
+    extern __attribute__((noipa)) void dg_aligned_free(void * ptr) noexcept{
 
         if (ptr == nullptr){
             return;
@@ -1280,7 +1280,7 @@ namespace dg::network_allocation{
         }
     };
 
-    extern __attribute__((noinline)) auto dg_xaligned_alloc(size_t alignment, size_t blk_sz) noexcept -> void *{
+    extern __attribute__((noipa)) auto dg_xaligned_alloc(size_t alignment, size_t blk_sz) noexcept -> void *{
 
         constexpr size_t METADATA_SZ = dg::network_trivial_serializer::size(XAlignMetadata{});
 
@@ -1315,9 +1315,9 @@ namespace dg::network_allocation{
         return aligned_ptr;
     }
 
-    extern __attribute__((noinline)) void dg_xaligned_free(void * ptr) noexcept{
+    extern __attribute__((noipa)) void dg_xaligned_free(void * ptr) noexcept{
 
-        constexpr size_t METADATA_SZ = dg::network_trivial_serializer::size(XAlignMetadata{});
+        constexpr size_t METADATA_SZ    = dg::network_trivial_serializer::size(XAlignMetadata{});
 
         void * metadata_header_addr     = std::prev(static_cast<char *>(ptr), METADATA_SZ);
         auto metadata                   = XAlignMetadata{};
@@ -1327,9 +1327,9 @@ namespace dg::network_allocation{
         allocation_resource_obj::get().allocator->free(org_ptr); 
     }
 
-    extern __attribute__((noinline)) auto dg_xaligned_blk_size(void * ptr) noexcept -> size_t{
+    extern __attribute__((noipa)) auto dg_xaligned_blk_size(void * ptr) noexcept -> size_t{
 
-        constexpr size_t METADATA_SZ = dg::network_trivial_serializer::size(XAlignMetadata{});
+        constexpr size_t METADATA_SZ    = dg::network_trivial_serializer::size(XAlignMetadata{});
 
         void * metadata_header_addr     = std::prev(static_cast<char *>(ptr), METADATA_SZ);
         auto metadata                   = XAlignMetadata{};

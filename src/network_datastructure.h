@@ -1537,6 +1537,8 @@ namespace dg::network_datastructure::unordered_map_variants{
                 }
             }
 
+            //__attribute__ ((const)) for considerations, this is very important because our map can replace table lookups with lower memory footprints
+
             template <class KeyLike>
             constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
