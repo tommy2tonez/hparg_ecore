@@ -482,6 +482,16 @@ namespace dg::network_allocation{
     };
 
     //we got a pull request for doing sliding window, I've yet to know what that means
+    //alright, we'd want to do a cyclic bump queue
+    //this is an extension of bump queue to bump_allocate not-reusable segments on L1 cache
+
+    //let's see how we could patch this
+    //think in terms of cyclic queue, we have a sliding window, we want to extend the head or tail everytime we dump our bins, and snap back in the opposite direction
+    //we would want to move forward and backward in the cyclic queue, what...
+    //because forward head is head, backward head is tail
+    //the implementation is not easy, we can do this in 2 days
+    //until the cyclic bump queue is not extensible, we'll request a new chunk of memory
+
     template <class Metadata>
     class DGStdAllocator{
 
