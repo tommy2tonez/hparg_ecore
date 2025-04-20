@@ -411,6 +411,8 @@ namespace dg::network_allocation{
     //good inlinability of malloc functions 
     //we haven't done the static memory indirections yet (we wont be polluting), we wont go there unless there is a proved performance constraint 
     //we'll move on to implementing other functions, this is giving me headache, the engineering practices were not reflected in the components due to a lot of contraints
+    //we'll be adding compile-time measurements, it's been hard because we broke practices for performance
+    //we are proud fellas, it's actually hard to write this, I have to admit, it took me months
 
     template <class BlkSizeOperatableType, size_t HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t POW2_PUNCTUAL_CHECK_INTERVAL_SIZE, size_t MINIMUM_ALLOCATION_BLK_SZ, size_t MAXIMUM_SMALLBIN_BLK_SZ, size_t SMALLBIN_PROBE_SZ>
     class DGStdAllocatorMetadata{
@@ -492,7 +494,6 @@ namespace dg::network_allocation{
         private:
 
             std::shared_ptr<char[]> buf;
-            size_t pow2_malloc_chk_interval_sz;
             size_t malloc_chk_interval_counter;
             uint64_t smallbin_avail_bitset;
             std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Allocation>> smallbin_reuse_table; //too many indirections
@@ -529,7 +530,6 @@ namespace dg::network_allocation{
             static inline constexpr size_t ALIGNMENT_SZ                     = Metadata::get_alignment_size();
 
             DGStdAllocator(std::shared_ptr<char[]> buf,
-                           size_t pow2_malloc_chk_interval_sz,
                            size_t malloc_chk_interval_counter,
                            uint64_t smallbin_avail_bitset,
                            std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
@@ -547,7 +547,6 @@ namespace dg::network_allocation{
                            std::chrono::nanoseconds flush_interval,
                            size_t allocation_sz_counter,
                            size_t allocation_sz_counter_flush_threshold) noexcept: buf(std::move(buf)),
-                                                                                   pow2_malloc_chk_interval_sz(pow2_malloc_chk_interval_sz),
                                                                                    malloc_chk_interval_counter(malloc_chk_interval_counter),
                                                                                    smallbin_avail_bitset(smallbin_avail_bitset),
                                                                                    smallbin_reuse_table(std::move(smallbin_reuse_table)),
