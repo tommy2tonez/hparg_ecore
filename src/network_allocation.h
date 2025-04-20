@@ -446,6 +446,11 @@ namespace dg::network_allocation{
                 return SMALLBIN_PROBE_SZ;
             }
 
+            static constexpr auto get_alignment_size() noexcept -> size_t{
+
+                return HEAP_LEAF_UNIT_ALLOCATION_SZ;                
+            }
+
             static consteval auto get_allocation_header_size() noexcept -> size_t{
 
                 return sizeof(sz_header_t) + sizeof(vrs_ctrl_header_t);
@@ -520,6 +525,7 @@ namespace dg::network_allocation{
             static inline constexpr size_t MAXIMUM_SMALLBIN_BLK_SZ          = Metadata::get_maximum_smallbin_blk_size();
             static inline constexpr size_t PUNCTUAL_CHECK_INTERVAL_SZ       = Metadata::get_pow2_punctual_check_interval_size();
             static inline constexpr size_t LARGEBIN_SMALLBIN_SZ             = Metadata::get_largebin_smallbin_size();
+            static inline constexpr size_t ALIGNMENT_SZ                     = Metadata::get_alignment_size();
 
             DGStdAllocator(std::shared_ptr<char[]> buf,
                            size_t pow2_malloc_chk_interval_sz,
@@ -564,7 +570,7 @@ namespace dg::network_allocation{
                 this->internal_commit_waiting_bin();
             }
 
-            inline auto malloc(size_t blk_sz) noexcept -> void *{
+            __attribute__((noinline)) auto malloc(size_t blk_sz) noexcept -> void *{
 
                 if (blk_sz == 0u){
                     return nullptr;
@@ -600,7 +606,7 @@ namespace dg::network_allocation{
                 }
             }
 
-            inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
+            __attribute__((noinline)) auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
 
                 if (user_ptr == nullptr) [[unlikely]]{
                     return this->malloc(blk_sz);
@@ -628,7 +634,7 @@ namespace dg::network_allocation{
                 return return_mem;
             }
 
-            inline void free(void * user_ptr) noexcept{
+            __attribute__((noinline)) void free(void * user_ptr) noexcept{
 
                 if (user_ptr == nullptr){
                     return;
@@ -708,37 +714,14 @@ namespace dg::network_allocation{
                 return std::make_pair(heap_offset, heap_excl_sz);
             }
 
-            //my std friends complained that this is UB, they are not wrong
-            //where should we begin, the void * to the free() is the void * from malloc() which is originated from char * which is pointer arithmetic compatible
-            //then there is a new operation, new operation is the magic operation that voids all the logics, bringing a newly spawned pointer out of nowhere to life, what about that void * from the malloc() which is originated from a char *, no, not existed
-            //alright, so what's the rescue plan?
-            //void * std::prev(static_cast<char *>(user_ptr)) wont work
-            //what's gonna work? std::next(buf.get(), reinterpret_cast<size_t>(user_ptr) - reinterpret_cast<size_t>(buf.get())), why? because it is a size_t (this is numeric arithmetic) operation followed by a valid char[] increment operation  
-            //compiler still doesnt see your intention, they see reinterpret_cast<size_t>() and think this is a malicious operation, what's the rescue plan, we must store that as a different variable, this variable is not trackable by compiler post construction, we'll make sure of this
-            //we need to bit_cast it, so compiler must not track the value of the arithmetic
-
             constexpr auto internal_get_internal_ptr_head(void * user_ptr) const noexcept -> void *{
 
-                using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
-
-                //fencing, hinder compiler's optimizations, might or might not be good
-                ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
-                ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
-                ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - ALLOCATION_HEADER_SZ;
-
-                return static_cast<void *>(std::next(this->buf.get(), off));
+                return static_cast<void *>(std::prev(static_cast<char *>(user_ptr), ALLOCATION_HEADER_SZ));
             }
 
             constexpr auto internal_get_internal_ptr_head(const void * user_ptr) const noexcept -> const void *{
 
-                using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
-
-                //fencing, hinder compiler's optimizations, might or might not be good
-                ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
-                ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
-                ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - ALLOCATION_HEADER_SZ;
-
-                return static_cast<const void *>(std::next(this->buf.get(), off));
+                return static_cast<const void *>(std::prev(static_cast<const char *>(user_ptr), ALLOCATION_HEADER_SZ));
             }
 
             constexpr auto internal_get_user_ptr_head(void * internal_ptr) const noexcept -> void *{
@@ -753,26 +736,12 @@ namespace dg::network_allocation{
 
             constexpr auto internal_get_largebin_internal_ptr_head(void * user_ptr) const noexcept -> void *{
 
-                using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
-
-                //fencing, hinder compiler's optimizations, might or might not be good
-                ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
-                ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
-                ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - LARGEBIN_ALLOCATION_HEADER_SZ;
-
-                return static_cast<void *>(std::next(this->buf.get(), off));
+                return static_cast<void *>(std::prev(static_cast<char *>(user_ptr), LARGEBIN_ALLOCATION_HEADER_SZ));
             }
 
             constexpr auto internal_get_largebin_internal_ptr_head(const void * user_ptr) const noexcept -> const void *{
 
-                using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
-
-                //fencing, hinder compiler's optimizations, might or might not be good
-                ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
-                ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
-                ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - LARGEBIN_ALLOCATION_HEADER_SZ;
-
-                return static_cast<const void *>(std::next(this->buf.get(), off));
+                return static_cast<const void *>(std::prev(static_cast<const char *>(user_ptr), LARGEBIN_ALLOCATION_HEADER_SZ));
             }
 
             constexpr auto internal_get_largebin_user_ptr_head(void * internal_ptr) const noexcept -> void *{
@@ -830,6 +799,7 @@ namespace dg::network_allocation{
 
                 assert(user_ptr_sz > self::MAXIMUM_SMALLBIN_BLK_SZ);
                 std::memcpy(internal_ptr, &user_ptr_sz, sizeof(largebin_sz_header_t));
+
                 return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), self::LARGEBIN_SMALLBIN_SZ, 0u); 
             }
 
@@ -1075,6 +1045,14 @@ namespace dg::network_allocation{
                 return false;
             }
     };
+
+    //the problem is probably the aligned alloc, we can't sanitize the address after the address has been tainted by new () inplace construction
+    //the only guy that has the ability to do so is the DGStdAllocator without messing with the compiler escape analysis
+    //recall that this is a valid address sanitize operation, or it is not...
+    //what's the viking way of doing addr_sant, __force__noinline__ + separate make
+    //we'll stick with THE WAY to avoid bad practices of new lifetime + friends, it's ... hard
+    //because void * user_ptr is originated from the malloc, it is the compiler responsibility to track that, YET... the new case is special, we can't track things post new
+    //so we must detach the malloc responsibility there
 
     // struct Factory{
 

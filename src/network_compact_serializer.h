@@ -679,7 +679,7 @@ namespace dg::network_compact_serializer::archive{
 
         template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, size_t& buf_sz, T&& data) const{
-            
+
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
             
