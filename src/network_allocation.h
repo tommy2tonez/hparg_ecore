@@ -398,37 +398,18 @@ namespace dg::network_allocation{
             }
     };
 
-    //this should clear
-    //we'll iterate through the memory indirection tricks later, it has something to deal with array + static memory
-    //that's enough work for allocators
-    //we'll be back
-
-    //I was thinking of the generic way to program the open-close patterns
-    //open, radix -> open_1, open_2, open_3, open_4, write dispatch header -> returning result
-    //close, read header, dispatch close_1, close_2, close_3, close_4
-    //open does not necessarily need to follow a certain programming pattern, as long as it returns one of the open_1, ... along with the printed header
-    //smallbin, make sure that it was orginated from open, returning the smallbin to user == user bounce the buffer without ever interferring with the component, free() was never invoked 
-    //the best practices of engineering was not reflected in the component
-    //first is the header, these should be two distinct allocators, one is smallbin allocator, one is largebin allocator 
-    //the third allocator should write the header, and dispatch accordingly, this is easier to debug
-    //we got two very good feedbacks
-    //first is membership testing by using unsigned bitset of slots
-    //second is largebin header backward extensions
-    //it only takes 6 months - a year of programming, we'll try to stay on the timeline
-    //the best part is building these components, cool people have cool feedbacks. we'll keep yall updated.
-
-    //this component is extremely hard to write efficiently
-    //there are so many technical decisions, uint32_t fast_path one-read, another read for large malloc, large malloc header has to be of accurate sizes so the user_ptr could be at least LEAF_SZ_ALIGNED
-    //bitset membership testing, bitset toggling + fast path + branching + prediction pipeline + inlinability, etc. 
-    //intervally conditionally branched sensor
-    //maximum_smallbin_blk_sz has to be of accurate size to disambiguate from that of largemalloc header
-    //there was no component that makes me break practices as much as this one
-
-    //some people are crazy, they spent 20 years of their career just do one thing, writing malloc, free, or socket, or file
-    //we just hope that we can implement something quick-n-dirty, we'll circle back to cross-the-t-dot-the-i later, we dont have manpower + time 
-
-    //we'll attempt to compile-time as many operations as possible
-    //this looks not good, I think the only thing's worth compile-time compute is the HEAP_LEAF_UNIT_ALLOCATION_SZ
+    //we've been working on critical paths for longer than we should have, we'll add compile-time measurements
+    //but for now, this allocation allocator is industry-grade
+    //no fragmenetation, worst case bound of 5% of total memory
+    //maximum overhead from smallbin is 1MB 
+    //fast free + fast alloc
+    //good temporal locality by using backreferences + window
+    //fast malloc
+    //good branching
+    //good binary size
+    //good inlinability of malloc functions 
+    //we haven't done the static memory indirections yet (we wont be polluting), we wont go there unless there is a proved performance constraint 
+    //we'll move on to implementing other functions, this is giving me headache, the engineering practices were not reflected in the components due to a lot of contraints
 
     template <class BlkSizeOperatableType, size_t HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t POW2_PUNCTUAL_CHECK_INTERVAL_SIZE, size_t MINIMUM_ALLOCATION_BLK_SZ, size_t MAXIMUM_SMALLBIN_BLK_SZ, size_t SMALLBIN_PROBE_SZ>
     class DGStdAllocatorMetadata{
@@ -485,8 +466,9 @@ namespace dg::network_allocation{
                 return 0u;
             }
 
-            static constexpr auto compile_time_demote_blk_sz(size_t sz) noexcept -> blk_sz_operatable_t{
+            static constexpr auto compile_time_demote_blk_sz(size_t sz) noexcept -> size_t{
 
+                [[assume(sz <= std::numeric_limits<blk_sz_operatable_t>::max())]];
                 return sz;
             }
     };
@@ -601,7 +583,7 @@ namespace dg::network_allocation{
                     return this->internal_careful_malloc(blk_sz);
                 } else [[likely]]{
                     size_t pow2_blk_sz          = stdx::ceil2(std::max(blk_sz, self::MINIMUM_ALLOCATION_BLK_SZ));
-                    size_t smallbin_table_idx   = stdx::ulog2(pow2_blk_sz); 
+                    size_t smallbin_table_idx   = std::countr_zero(pow2_blk_sz); 
                     uint64_t membership_bitset  = (this->smallbin_avail_bitset >> smallbin_table_idx) & stdx::lowones_bitgen<uint64_t>(std::integral_constant<size_t, SMALLBIN_PROBE_SZ>{}); //shift the sz, SMALLBIN_PROBE_SZ if compile-time deterministic would translate to a uint8_t direct read, if probing 8 bits
 
                     if (membership_bitset == 0u) [[unlikely]]{
@@ -671,7 +653,9 @@ namespace dg::network_allocation{
                     size_t floor_smallbin_table_idx                     = stdx::ulog2(user_ptr_sz);
                     auto& smallbin_vec                                  = this->smallbin_reuse_table[floor_smallbin_table_idx];
 
-                    if (smallbin_vec.size() != smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{ //cmp is better if low_resolution, compiler is better than us to decide what instruction to be used
+                    //we break practices because smallbin_vec is pow2, < capacity, == shift + 0 cmp, remember 0 cmp is everything, we just hint the compiler to do optimization, we are not allowed to do optimization
+
+                    if (smallbin_vec.size() < smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{ //cmp is better if low_resolution, compiler is better than us to decide what instruction to be used
                         //meets the cond of fast free
                         dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                         this->smallbin_avail_bitset |= uint64_t{1} << floor_smallbin_table_idx; //membership registration
@@ -737,7 +721,7 @@ namespace dg::network_allocation{
 
                 using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
 
-                //fencing
+                //fencing, hinder compiler's optimizations, might or might not be good
                 ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
                 ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
                 ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - ALLOCATION_HEADER_SZ;
@@ -749,7 +733,7 @@ namespace dg::network_allocation{
 
                 using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
 
-                //fencing
+                //fencing, hinder compiler's optimizations, might or might not be good
                 ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
                 ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
                 ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - ALLOCATION_HEADER_SZ;
@@ -771,7 +755,7 @@ namespace dg::network_allocation{
 
                 using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
 
-                //fencing
+                //fencing, hinder compiler's optimizations, might or might not be good
                 ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
                 ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
                 ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - LARGEBIN_ALLOCATION_HEADER_SZ;
@@ -783,7 +767,7 @@ namespace dg::network_allocation{
 
                 using ptr_arithmetic_t          = stdx::ptr_bitcastable_arithmetic_t;
 
-                //fencing
+                //fencing, hinder compiler's optimizations, might or might not be good
                 ptr_arithmetic_t user_ptr_addr  = std::bit_cast<ptr_arithmetic_t>(user_ptr);
                 ptr_arithmetic_t buf_ptr_addr   = std::bit_cast<ptr_arithmetic_t>(this->buf.get());
                 ptr_arithmetic_t off            = user_ptr_addr - buf_ptr_addr - LARGEBIN_ALLOCATION_HEADER_SZ;
@@ -1044,7 +1028,7 @@ namespace dg::network_allocation{
                 }
 
                 size_t pow2_blk_sz          = stdx::ceil2(std::max(user_blk_sz, self::MINIMUM_ALLOCATION_BLK_SZ));
-                size_t smallbin_table_idx   = stdx::ulog2(pow2_blk_sz);
+                size_t smallbin_table_idx   = std::countr_zero(pow2_blk_sz);
                 uint64_t membership_bitset  = (this->smallbin_avail_bitset >> smallbin_table_idx) & stdx::lowones_bitgen<uint64_t>(std::integral_constant<size_t, SMALLBIN_PROBE_SZ>{}); //shift the sz 
 
                 if (membership_bitset == 0u){
