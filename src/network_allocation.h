@@ -996,20 +996,12 @@ namespace dg::network_allocation{
             }
 
             __attribute__((noinline)) void internal_large_free(void * user_ptr) noexcept{
-                
+
                 //inverse operation of internal_large_malloc
 
                 void * internal_ptr         = this->internal_get_largebin_internal_ptr_head(user_ptr);
-                size_t user_ptr_sz          = this->internal_read_largebin_user_ptr_size(user_ptr);
-
-                size_t internal_ptr_offset  = std::distance(this->buf.get(), static_cast<char *>(internal_ptr));
-                size_t internal_ptr_sz      = user_ptr_sz + LARGEBIN_ALLOCATION_HEADER_SZ; 
-
-                size_t heap_ptr_offset      = internal_ptr_offset / HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                size_t heap_ptr_sz          = internal_ptr_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
-                size_t heap_ptr_excl_sz     = heap_ptr_sz - 1u;
-
-                interval_type intv          = std::make_pair(heap_ptr_offset, heap_ptr_excl_sz);
+                size_t internal_ptr_sz      = this->internal_read_largebin_user_ptr_size(user_ptr) + LARGEBIN_ALLOCATION_HEADER_SZ; 
+                interval_type intv          = this->internal_aligned_buf_to_interval({internal_ptr, internal_ptr_sz});
 
                 this->heap_allocator->free(&intv, 1u);
             }
