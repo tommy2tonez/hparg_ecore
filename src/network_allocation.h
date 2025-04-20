@@ -20,6 +20,7 @@
 #include "network_producer_consumer.h"
 #include <memory>
 #include "network_stack_allocation.h"
+#include "network_trivial_serializer.h"
 
 namespace dg::network_allocation{
     
@@ -595,7 +596,7 @@ namespace dg::network_allocation{
                     if (membership_bitset == 0u) [[unlikely]]{
                         return this->internal_bump_allocate(blk_sz);
                     } else [[likely]]{                        
-                        size_t actual_table_idx     = smallbin_table_idx + std::countr_zero(membership_bitset); 
+                        size_t actual_table_idx     = smallbin_table_idx + std::countr_zero(membership_bitset);
                         auto& smallbin_vec          = this->smallbin_reuse_table[actual_table_idx];
                         void * rs                   = smallbin_vec.back().user_ptr;
                         smallbin_vec.pop_back();
@@ -1177,6 +1178,29 @@ namespace dg::network_allocation{
     //DEFAULT_ALIGNMENT_SZ should SUFFICE
 
     static inline constexpr size_t DEFAULT_ALIGNMENT_SZ = concurrent_dg_std_allocator_t::ALIGNMENT_SZ; 
+    using alignment_header_t = uint32_t;
+
+    static inline auto dg_align(void * ptr, uintptr_t alignment_sz) noexcept -> void *{
+
+        assert(stdx::is_pow2(alignment_sz));
+
+        uintptr_t fwd_sz                        = alignment_sz - 1u;
+        uintptr_t bit_mask                      = ~fwd_sz;
+        uintptr_t aligned_ptr_numerical_addr    = (reinterpret_cast<uintptr_t>(ptr) + fwd_sz) & bit_mask;
+
+        return reinterpret_cast<void *>(aligned_ptr_numerical_addr);
+    }
+
+    static inline auto dg_align(const void * ptr, uintptr_t alignment_sz) noexcept -> const void *{
+
+        assert(stdx::is_pow2(alignment_sz));
+
+        uintptr_t fwd_sz                        = alignment_sz - 1u;
+        uintptr_t bit_mask                      = ~fwd_sz;
+        uintptr_t aligned_ptr_numerical_addr    = (reinterpret_cast<uintptr_t>(ptr) + fwd_sz) & bit_mask;
+
+        return reinterpret_cast<const void *>(aligned_ptr_numerical_addr);
+    }
 
     extern __attribute__((noinline)) auto dg_malloc(size_t blk_sz) noexcept -> void *{
 
@@ -1194,6 +1218,127 @@ namespace dg::network_allocation{
         allocation_resource_obj::get().allocator->free(ptr);
     }
 
+    extern __attribute__((noinline)) auto dg_aligned_alloc(size_t alignment, size_t blk_sz) noexcept -> void *{
+
+        if (!stdx::is_pow2(alignment)){
+            return nullptr;
+        }
+
+        const size_t max_fwd_sz = alignment + (sizeof(alignment_header_t) - 1u);  
+
+        if (max_fwd_sz > std::numeric_limits<alignment_header_t>::max()){
+            return nullptr;
+        }
+
+        if (blk_sz == 0u){
+            return nullptr;
+        }
+
+        size_t align_fwd_sz = std::max(alignment, DEFAULT_ALIGNMENT_SZ) - DEFAULT_ALIGNMENT_SZ;
+        size_t adj_blk_sz   = blk_sz + align_fwd_sz + sizeof(alignment_header_t);
+        void * ptr          = allocation_resource_obj::get().allocator->malloc(adj_blk_sz);
+
+        if (ptr == nullptr){
+            return nullptr;
+        }
+
+        void * aligned_ptr              = dg::network_allocation::dg_align(std::next(static_cast<char *>(ptr), sizeof(alignment_header_t)), alignment);
+        alignment_header_t difference   = std::distance(static_cast<char *>(ptr), static_cast<char *>(aligned_ptr));
+        void * alignment_header_addr    = std::prev(static_cast<char *>(aligned_ptr), sizeof(alignment_header_t));
+
+        std::memcpy(alignment_header_addr, &difference, sizeof(alignment_header_t));
+
+        return aligned_ptr; 
+    } 
+
+    extern __attribute__((noinline)) void dg_aligned_free(void * ptr) noexcept{
+
+        if (ptr == nullptr){
+            return;
+        }
+
+        void * alignment_header_addr    = std::prev(static_cast<char *>(ptr), sizeof(alignment_header_t));
+        alignment_header_t difference   = {};
+        std::memcpy(&difference, alignment_header_addr, sizeof(alignment_header_t));
+        void * org_ptr                  = std::prev(static_cast<char *>(ptr), difference); 
+
+        allocation_resource_obj::get().allocator->free(org_ptr); 
+    }
+
+    struct XAlignMetadata{
+        alignment_header_t difference;
+        size_t blk_sz; 
+        
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(difference, blk_sz);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(difference, blk_sz);
+        }
+    };
+
+    extern __attribute__((noinline)) auto dg_xaligned_alloc(size_t alignment, size_t blk_sz) noexcept -> void *{
+
+        constexpr size_t METADATA_SZ = dg::network_trivial_serializer::size(XAlignMetadata{});
+
+        if (!stdx::is_pow2(alignment)){
+            return nullptr;
+        }
+
+        const size_t max_fwd_sz = alignment + (METADATA_SZ - 1u);
+
+        if (max_fwd_sz > std::numeric_limits<alignment_header_t>::max()){
+            return nullptr;
+        }
+
+        if (blk_sz == 0u){
+            return nullptr;
+        }
+
+        size_t align_fwd_sz = std::max(alignment, DEFAULT_ALIGNMENT_SZ) - DEFAULT_ALIGNMENT_SZ;
+        size_t adj_blk_sz   = blk_sz + align_fwd_sz + METADATA_SZ;
+        void * ptr          = allocation_resource_obj::get().allocator->malloc(adj_blk_sz);
+
+        if (ptr == nullptr){
+            return nullptr;
+        }
+
+        void * aligned_ptr              = dg::network_allocation::dg_align(std::next(static_cast<char *>(ptr), METADATA_SZ), alignment);
+        alignment_header_t difference   = std::distance(static_cast<char *>(ptr), static_cast<char *>(aligned_ptr));
+        void * metadata_header_addr     = std::prev(static_cast<char *>(aligned_ptr), METADATA_SZ);
+
+        dg::network_trivial_serializer::serialize_into(static_cast<char *>(metadata_header_addr), XAlignMetadata{difference, blk_sz});
+
+        return aligned_ptr;
+    }
+
+    extern __attribute__((noinline)) void dg_xaligned_free(void * ptr) noexcept{
+
+        constexpr size_t METADATA_SZ = dg::network_trivial_serializer::size(XAlignMetadata{});
+
+        void * metadata_header_addr     = std::prev(static_cast<char *>(ptr), METADATA_SZ);
+        auto metadata                   = XAlignMetadata{};
+        dg::network_trivial_serializer::deserialize_into(metadata, static_cast<const char *>(metadata_header_addr));
+        void * org_ptr                  = std::prev(static_cast<char *>(ptr), metadata.difference); 
+
+        allocation_resource_obj::get().allocator->free(org_ptr); 
+    }
+
+    extern __attribute__((noinline)) auto dg_xaligned_blk_size(void * ptr) noexcept -> size_t{
+
+        constexpr size_t METADATA_SZ = dg::network_trivial_serializer::size(XAlignMetadata{});
+
+        void * metadata_header_addr     = std::prev(static_cast<char *>(ptr), METADATA_SZ);
+        auto metadata                   = XAlignMetadata{};
+        dg::network_trivial_serializer::deserialize_into(metadata, static_cast<const char *>(metadata_header_addr));
+
+        return metadata.blk_sz;
+    }
+
+    //alright now I regretted I just got damn put my code elsewhere
     template <class T>
     using NoExceptAllocator = std::allocator<T>;
     
@@ -1287,26 +1432,88 @@ namespace dg::network_allocation{
     }
 
     template <class T, class ...Args>
-    auto std_new(Args&& ...args) -> T *{
+    auto std_new_object(Args&& ...args) -> T *{
 
-        return new T(std::forward<Args>(args)...);
+        static_assert(sizeof(T) != 0u);
+        // char * blk = dg::network_allocation::dg_malloc(sizeof(T) + alignof(T) - 1u); //what's the right way, we can do post write, because we know the object size
+        void * blk = nullptr;
+
+        if constexpr(alignof(T) <= dg::network_allocation::DEFAULT_ALIGNMENT_SZ){
+            blk = dg::network_allocation::dg_malloc(sizeof(T));
+        } else{
+            blk = dg::network_allocation::dg_aligned_alloc(alignof(T), sizeof(T));
+        }
+
+        if (blk == nullptr){
+            throw std::bad_alloc();
+        }
+
+        if constexpr(std::is_nothrow_constructible_v<T, Args&&...>){
+            return new (blk) T(std::forward<Args>(args)...);
+        } else{
+            try {
+                return new (blk) T(std::forward<Args>(args)...);
+            } catch (...){
+                
+                if constexpr(alignof(T) <= dg::network_allocation::DEFAULT_ALIGNMENT_SZ){
+                    dg::network_allocation::dg_free(blk);
+                } else{
+                    dg::network_allocation::dg_aligned_free(blk);
+                }
+
+                throw;
+            }
+        }
     }
+
 
     template <class = void>
     static inline constexpr bool FALSE_VAL = false;
 
     template <class T>
-    auto std_delete(std::remove_extent_t<T> * obj) noexcept(std::is_nothrow_destructible_v<std::remove_extent_t<T>>){
+    auto std_delete_object(T * obj) noexcept(std::is_nothrow_destructible_v<T>){ //I dont even know what to do if this throws
 
-        if constexpr(std::is_array_v<T>){
-            if constexpr(std::is_unbounded_array_v<T>){
-                delete[] obj;
-            } else{
-                static_assert(FALSE_VAL<>);
-            }
+        std::destroy_at(obj);
+
+        if constexpr(alignof(T) <= dg::network_allocation::DEFAULT_ALIGNMENT_SZ){
+            dg::network_allocation::dg_free(static_cast<void *>(obj));
         } else{
-            delete obj;
+            dg::network_allocation::dg_aligned_free(static_cast<void *>(obj));
         }
+    }
+
+    template <class T>
+    auto std_new_array(size_t sz) -> T *{
+
+        static_assert(sizeof(T) != 0u);
+        static_assert(std::is_nothrow_default_constructible_v<T>);
+
+        if (sz == 0u){
+            return nullptr;
+        }
+
+        size_t allocation_blk_sz    = sz * sizeof(T); 
+        void * blk                  = dg::network_allocation::dg_xaligned_alloc(alignof(T), allocation_blk_sz);
+
+        if (blk == nullptr){
+            throw std::bad_alloc();
+        }  
+
+        return new (blk) T[sz];
+    }
+
+    template <class T>
+    void std_delete_array(T * arr) noexcept{
+
+        if (arr == nullptr){
+            return;
+        }
+
+        size_t allocation_blk_sz    = dg::network_allocation::dg_xaligned_blk_size(arr);
+        size_t sz                   = allocation_blk_sz / sizeof(T);
+
+        std::destroy(arr, std::next(arr, sz));
+        dg::network_allocation::dg_xaligned_free(static_cast<void *>(arr));
     }
 
     template <class T, class ...Args>
