@@ -227,7 +227,6 @@ namespace dg::network_exception{
         return std::move(inp.value());
     } 
 
-    template <class T>
     inline void dg_noexcept(exception_t err) noexcept{
 
         if (dg::network_exception::is_failed(err)){

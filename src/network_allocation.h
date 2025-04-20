@@ -570,7 +570,7 @@ namespace dg::network_allocation{
                 this->internal_commit_waiting_bin();
             }
 
-            __attribute__((noinline)) auto malloc(size_t blk_sz) noexcept -> void *{
+            inline auto malloc(size_t blk_sz) noexcept -> void *{
 
                 if (blk_sz == 0u){
                     return nullptr;
@@ -606,7 +606,7 @@ namespace dg::network_allocation{
                 }
             }
 
-            __attribute__((noinline)) auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
+            inline auto realloc(void * user_ptr, size_t blk_sz) noexcept -> void *{
 
                 if (user_ptr == nullptr) [[unlikely]]{
                     return this->malloc(blk_sz);
@@ -634,7 +634,7 @@ namespace dg::network_allocation{
                 return return_mem;
             }
 
-            __attribute__((noinline)) void free(void * user_ptr) noexcept{
+            inline void free(void * user_ptr) noexcept{
 
                 if (user_ptr == nullptr){
                     return;
@@ -841,8 +841,8 @@ namespace dg::network_allocation{
                     return false;
                 }
 
-                std::pair<char *, size_t> requesting_buf    = this->internal_interval_to_buf(requesting_interval.value());
-                this->bump_allocator                        = NaiveBumpAllocator(requesting_buf.first, requesting_buf.second);
+                std::pair<void *, size_t> requesting_buf    = this->internal_interval_to_buf(requesting_interval.value());
+                this->bump_allocator                        = NaiveBumpAllocator(static_cast<char *>(requesting_buf.first), requesting_buf.second);
                 this->bump_allocator_version_control        += 1;
 
                 this->internal_update_allocation_sensor(this->bump_allocator_refill_sz);
@@ -949,7 +949,7 @@ namespace dg::network_allocation{
                     return nullptr;
                 }
 
-                std::pair<char *, size_t> requesting_buf    = this->internal_interval_to_buf(allocated_intv.value());
+                std::pair<void *, size_t> requesting_buf    = this->internal_interval_to_buf(allocated_intv.value());
                 void * internal_ptr                         = requesting_buf.first;
                 void * user_ptr                             = this->internal_write_largebin_allocation_header(internal_ptr, user_usable_blk_sz); //writing maximum_smallbin_blk_sz + 1u for free dispatch code, vrs_ctrl is irrelevant, can be of any values
 
@@ -1009,6 +1009,8 @@ namespace dg::network_allocation{
 
         public:
 
+            static inline constexpr size_t ALIGNMENT_SZ = DGStdAllocator<AllocatorMetadata>::ALIGNMENT_SZ;
+
             ConcurrentDGStdAllocator(std::vector<DGStdAllocator<AllocatorMetadata>> dg_allocator_vec) noexcept: dg_allocator_vec(std::move(dg_allocator_vec)){}
 
             inline auto malloc(size_t blk_sz) noexcept -> void *{
@@ -1018,7 +1020,7 @@ namespace dg::network_allocation{
 
             inline auto realloc(void * ptr, size_t blk_sz) noexcept -> void *{
 
-                return this->dg_allocator_vec[dg::network_concurrency::this_thread_idx()].realloc(blk_sz);
+                return this->dg_allocator_vec[dg::network_concurrency::this_thread_idx()].realloc(ptr, blk_sz);
             }
 
             inline void free(void * ptr) noexcept{
@@ -1027,7 +1029,7 @@ namespace dg::network_allocation{
             }
     };
 
-    using concurrent_dg_std_allocator = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<uint32_t, 8u, 256u, 16u, 63u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
+    using concurrent_dg_std_allocator_t = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<uint32_t, 8u, 256u, 16u, 63u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
 
     class GCWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -1142,12 +1144,16 @@ namespace dg::network_allocation{
     //     }
     // };
 
-    // struct AllocationResource{
-    //     std::shared_ptr<MultiThreadAllocator> allocator; //devirt here is important - 
-    //     dg::network_concurrency::daemon_raii_handle_t gc_worker;
-    // };
+    struct AllocationResource{
+        std::shared_ptr<concurrent_dg_std_allocator_t> allocator; 
+        dg::network_concurrency::daemon_raii_handle_t gc_worker;
+    };
 
-    // inline AllocationResource allocation_resource;
+    struct AllocationResourceSignature{};
+
+    using allocation_resource_obj = stdx::singleton<AllocationResourceSignature, AllocationResource>; 
+
+    // inline stdx::singleton<AllocationResource> allocation_resource;
 
     // void init(size_t least_buf_sz, size_t num_allocator){
 
@@ -1167,94 +1173,26 @@ namespace dg::network_allocation{
     //     allocation_resource = {};
     // }
 
-    // auto malloc(size_t blk_sz, size_t alignment) noexcept -> ptr_type{
+    //we cant do aligned alloc for the reason being it's hard, aligned alloc is shared_ptr + type-erased allocation responsibility, we literally can't store the offset for performance + everything constraints
+    //DEFAULT_ALIGNMENT_SZ should SUFFICE
 
-    //     assert(dg::memult::is_pow2(alignment));
+    static inline constexpr size_t DEFAULT_ALIGNMENT_SZ = concurrent_dg_std_allocator_t::ALIGNMENT_SZ; 
 
-    //     if (blk_sz == 0u){
-    //         return NETALLOC_NULLPTR;
-    //     }
-        
-    //     size_t fwd_sz       = std::max(alignment, LEAST_GUARANTEED_ALIGNMENT) - LEAST_GUARANTEED_ALIGNMENT;
-    //     size_t adj_blk_sz   = blk_sz + fwd_sz;
-    //     ptr_type ptr        = allocation_resource.allocator->malloc(adj_blk_sz);
+    extern __attribute__((noinline)) auto dg_malloc(size_t blk_sz) noexcept -> void *{
 
-    //     if (!ptr){
-    //         return NETALLOC_NULLPTR;
-    //     }
+        return allocation_resource_obj::get().allocator->malloc(blk_sz); 
+    }
 
-    //     alignment_type alignment_log2 = stdx::ulog2_aligned(static_cast<alignment_type>(alignment));
-    //     ptr <<= ALIGNMENT_BSPACE;
-    //     ptr |= static_cast<ptr_type>(alignment_log2);
+    //alright, this is the headache
+    extern __attribute__((noinline)) auto dg_realloc(void * buf, size_t blk_sz) noexcept -> void *{
 
-    //     return ptr;
-    // } 
+        allocation_resource_obj::get().allocator->realloc(buf, blk_sz);
+    } 
 
-    // auto malloc(size_t blk_sz) noexcept -> ptr_type{
+    extern __attribute__((noinline)) void dg_free(void * ptr) noexcept{
 
-    //     return malloc(blk_sz, DEFLT_ALIGNMENT); 
-    // }
-
-    // auto c_addr(ptr_type ptr) noexcept -> void *{
-        
-    //     if (!ptr){
-    //         return nullptr;
-    //     }
-
-    //     alignment_type alignment_log2   = stdx::low_bit<ALIGNMENT_BSPACE>(ptr); 
-    //     size_t alignment                = size_t{1} << alignment_log2;
-    //     ptr_type pptr                   = ptr >> ALIGNMENT_BSPACE;
-
-    //     return dg::memult::align(allocation_resource.allocator->c_addr(pptr), alignment);
-    // }
-
-    // void free(ptr_type ptr) noexcept{
-
-    //     if (!ptr){
-    //         return;
-    //     }
-
-    //     ptr_type pptr = ptr >> ALIGNMENT_BSPACE;
-    //     allocation_resource.allocator->free(pptr);
-    // }
-
-    // auto cmalloc(size_t blk_sz) noexcept -> void *{
-
-    //     if (blk_sz == 0u){
-    //         return nullptr;
-    //     }
-
-    //     constexpr size_t HEADER_SZ  = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
-    //     size_t adj_blk_sz           = blk_sz + HEADER_SZ;
-    //     ptr_type ptr                = malloc(adj_blk_sz);
-
-    //     if (!ptr){
-    //         return nullptr;
-    //     }
-
-    //     void * cptr = c_addr(ptr);
-    //     std::memcpy(cptr, &ptr, sizeof(ptr_type));
-    //     char * rs   = static_cast<char *>(cptr);
-    //     std::advance(rs, HEADER_SZ);
-
-    //     return rs;
-    // }
-
-    // void cfree(void * cptr) noexcept{
-        
-    //     constexpr size_t HEADER_SZ = std::max(stdx::least_pow2_greater_equal_than(sizeof(ptr_type)), DEFLT_ALIGNMENT);
-        
-    //     if (!cptr){
-    //         return;
-    //     }
-
-    //     const char * org_cptr = static_cast<const char *>(cptr);
-    //     std::advance(org_cptr, -static_cast<intmax_t>(HEADER_SZ));
-    //     ptr_type ptr    = {};
-    //     std::memcpy(&ptr, org_cptr, sizeof(ptr_type));
-
-    //     free(ptr);
-    // }
+        allocation_resource_obj::get().allocator->free(ptr);
+    }
 
     template <class T>
     using NoExceptAllocator = std::allocator<T>;

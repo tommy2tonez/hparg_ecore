@@ -916,7 +916,7 @@ namespace stdx{
 
             static inline auto get() noexcept -> T&{
                 
-                std::atomic_signal_fence(std::memory_order_acquire);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 return obj;
             }
     };
