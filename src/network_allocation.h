@@ -501,6 +501,16 @@ namespace dg::network_allocation{
     //the only problem is the in the freebin_vec
     //we'll sleep on this
 
+    //imagine we have an arbitrary cyclic queue
+    //this could extend in the head or extend in the tail
+    //if more head, then our restart point is the tail
+    //if more tail, then our restart point is the head
+
+    //alright, the reverse logic is hard
+    //we'll build a forward bump_allocator, and a translator (a virtual layer) to convert from backward -> forward and forward -> backward
+    //so a backward allocation == forward_to_backward(backward_to_forward(backward)(mem_blk))
+    //we'll keep this our backlogs
+
     template <class Metadata>
     class DGStdAllocator{
 

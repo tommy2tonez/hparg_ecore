@@ -964,6 +964,12 @@ namespace stdx{
     void high_resolution_sleep(std::chrono::nanoseconds) noexcept{
 
     }
+
+    template <class ...Args>
+    __attribute__((noipa)) void empty_noipa(Args&& ...args) noexcept{
+
+        (((void) args), ...);
+    }
 }
 
 #endif
