@@ -491,6 +491,15 @@ namespace dg::network_allocation{
     //because forward head is head, backward head is tail
     //the implementation is not easy, we can do this in 2 days
     //until the cyclic bump queue is not extensible, we'll request a new chunk of memory
+    //the implementation we've been longing for
+
+    //a dictionary vectorization of head_tail, with the memory footprint overhead of at most the vectorizing freebin, uint16_t bucket_virtual_addr_t, so the total overhead should not exceed 10% of the freebin_vec
+    //we compromise the bump_extension at the internal_dump_freebin_vec, 
+    //do a dictionary vectorization, find, extend, get head_tail, iterate through the map, find the intervals that do not intersect with the headtail and redump it to the freebin_vec for final dispatch
+    //the howtos write this cleanly is another problem
+    //when to reverse our cyclic queue, when to forward only, when to etc.
+    //the only problem is the in the freebin_vec
+    //we'll sleep on this
 
     template <class Metadata>
     class DGStdAllocator{
