@@ -30,6 +30,9 @@
 //we have a lot of other jobs to run concurrently, memory-orderings acquire release is a no-no in these situations
 //we are hoping we could push 10GB of rest request/ second, it's hard
 //this is our main way of doing external comm
+//I dont know why our client is being pushy
+//we already told them to give us a hard deadline of within 6months - a year to deploy on the mainframe
+//I dont know what's so hard with these foos about writing a Taylor Series approximations
 
 namespace dg::network_rest_frame::model{
 
@@ -316,29 +319,16 @@ namespace dg::network_rest_frame::client_impl1{
 
             std::binary_semaphore smp;
             std::expected<Response, exception_t> resp;
-            bool is_smp_acquire_responsibility; 
+            std::atomic<bool> is_response_invoked;
 
         public:
 
             RequestResponse() noexcept: smp(0u),
                                         resp(std::nullopt),
-                                        is_smp_acquire_responsibility(true){}
-
-            ~RequestResponse() noexcept{
-
-                //this is ... a concurrent destructor waiting on a method to be called, I dont know if this is defined
-                //I doubt that this is defined ...
-                //what we could do, however is to do binary_semaphore injection, unique_ptr is actually good,
-
-                if (this->is_smp_acquire_responsibility){
-                    this->smp.acquire();
-                    stdx::empty_noipa(this->resp);
-                    // this->response = std::nullopt; //compiler can actually optimize this away, this is not defined, unless we make a call of response -> a noipa function, post the acquire, then this is defined
-                }
-            }
+                                        is_response_invoked(false){}
 
             void update(std::expected<Response, exception_t> response_arg) noexcept{
-                
+
                 //another fence
                 std::atomic_thread_fence(std::memory_order_acquire); //this is not necessary because RequestResponse * acquisition must involve these mechanisms
                 this->resp = std::move(response_arg); //this is the undefined
@@ -347,15 +337,61 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto response() noexcept -> std::expected<Response, exception_t>{
 
-                this->smp.acquire();
-                this->is_smp_acquire_responsibility = false;
+                bool was_invoked = this->is_response_invoked.exchange(true, std::memory_order_relaxed);
 
+                if (was_invoked){
+                    return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
+                }
+
+                this->smp.acquire();
                 return std::expected<Response, exception_t>(std::move(this->resp));
             }
+    };
 
-            void release_smp_acquire_responsibility() noexcept{
+    //this is harder than expected,
 
-                this->is_smp_acquire_responsibility = false;
+    // auto get_release_safe_request_response() -> std::shared_ptr<RequestResponse>{ //
+
+    //     auto destructor = [](RequestResponse * base) noexcept{
+    //         stdx::noipa(base->response());
+    //         dg::network_allocation::std_delete_object(base);
+    //     };
+
+    //     return std::unique_ptr<RequestResponse, decltype(destructor)>(dg::network_allocation::std_new_object<RequestResponse>(), destructor);
+    // } 
+
+    //this is unfortunately still undefined
+    //I hate to use shared_ptr but that's actually the way, this is way too funny
+
+    class ReleaseSafeRequestResponse: public virtual ResponseObserverInterface,
+                                      public virtual ResponseInterface{
+
+        private:
+
+            RequestResponse base;
+
+        public:
+
+            ReleaseSafeRequestResponse(): base(){}
+
+            ~ReleaseSafeRequestResponse() noexcept{
+
+                stdx::empty_noipa(base->response());
+            }
+
+            void update(std::expected<Response, exception_t> response_arg) noexcept{
+
+                this->base->update(std::move(response_arg));
+            }
+
+            auto response() noexcept -> std::expected<Response, exception_t>{
+
+                return this->base->response();
+            }
+
+            auto base() noexcept -> RequestResponse&{
+
+                return this->base;
             }
     };
 
@@ -448,8 +484,8 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                mtx(std::move(mtx)),
                                                                                max_consume_per_load(std::move(max_consume_per_load)){}
 
-            void open_ticket(ResponseObserverInterface ** observer_arr, size_t sz, std::expected<model::ticket_id_t, exception_t> * out_ticket_arr) noexcept{
-                
+            void open_ticket(size_t sz, std::expected<model::ticket_id_t, exception_t> * out_ticket_arr) noexcept{
+
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -460,20 +496,60 @@ namespace dg::network_rest_frame::client_impl1{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (observer_arr[i] == nullptr){
-                        out_ticket_arr[i] = std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-                        continue;
-                    }
-
                     if (this->ticket_resource_map.size() == this->ticket_resource_map_cap){
                         out_ticket_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
                         continue;
                     }
 
                     model::ticket_id_t new_ticket_id    = this->ticket_id_counter++;
-                    auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<ResponseObserverInterface *>(observer_arr[i])));
+                    auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<ResponseObserverInterface *>(std::nullopt)));
                     dg::network_exception_handler::dg_assert(status);
                     out_ticket_arr[i]                   = new_ticket_id;
+                }
+            }
+
+            void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** corresponding_observer_arr, exception_t * exception_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    model::ticket_id_t current_ticket_id = ticket_id_arr[i];
+                    auto map_ptr = this->ticket_resource_map.find(current_ticket_id);
+
+                    if (map_ptr == this->ticket_resource_map.end()){
+                        exception_arr[i] = dg::network_exception::REST_TICKET_NOT_FOUND;
+                        continue;
+                    }
+
+                    if (map_ptr->second.has_value()){
+                        exception_arr[i] = dg::network_exception::REST_TICKET_OBSERVER_EXISTED;
+                        continue;
+                    }
+
+                    map_ptr->second     = corresponding_observer_arr[i];
+                    exception_arr[i]    = dg::network_exception::SUCCESS;
+                }
+            }
+
+            void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    model::ticket_id_t current_ticket_id = ticket_id_arr[i];
+                    auto map_ptr = this->ticket_resource_map.find(current_ticket_id);
+
+                    if (map_ptr == this->ticket_resource_map.end()){
+                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
+                        continue;
+                    }
+
+                    if (!map_ptr->second.has_value()){
+                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_AVAILABLE);
+                        continue;
+                    }
+
+                    response_arr[i] = map_ptr->second.value();
                 }
             }
 
@@ -491,7 +567,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     if (!map_ptr->second.has_value()){
-                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_STOLEN_RESOURCE);
+                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_AVAILABLE);
                         continue;
                     }
 
@@ -521,6 +597,28 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return this->max_consume_per_load.value;
             }
+    };
+
+    //alright, it is advised that we spawn multiple distributed rest controller + multiple distributed ticket controller
+    //RequestContainer is an absolute unit, so we can't really change that
+    //we are expecting to do 10GB of REST request payloads per second, it's possible
+
+    class DistributedTicketController: public virtual TicketControllerInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<TicketControllerInterface>[]> base_arr;
+            size_t pow2_base_arr_sz;
+            size_t max_consume_per_load;
+            size_t keyvalue_feed_cap;
+
+        public:
+
+            DistributedTicketController(std::unique_ptr<std::unique_ptr<TicketControllerInterface>[]> base_arr,
+                                        size_t pow2_base_arr_sz,
+                                        size_t max_consume_per_load,
+                                        size_t keyvalue_feed_cap) noexcept{}
+
     };
 
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
@@ -643,6 +741,10 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return true;
             }
+    };
+
+    class ExpiryWorker: public virtual dg::network_concurrency::WorkerInterface{
+
     };
 
     class RestController: public virtual RestControllerInterface{

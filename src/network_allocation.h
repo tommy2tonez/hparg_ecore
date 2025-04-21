@@ -112,6 +112,8 @@ namespace dg::network_allocation{
 
     //there are too many atomic operations
     //it's fine
+    //people complained that these variables should be inside the stdx::xlock_guard
+    //alright, we'll fix that 
 
     class SemiAutoGCHeapAllocator{
 
