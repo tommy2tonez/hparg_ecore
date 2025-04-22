@@ -183,18 +183,47 @@ namespace dg::network_rest_frame::client{
 
     struct RestControllerInterface{
         virtual ~RestControllerInterface() noexcept = default;
-        virtual void request(std::move_iterator<model::ClientRequest *>, size_t, std::expected<std::unique_ptr<ResponseInterface>, exception_t> *) noexcept = 0; 
+        virtual void request(std::move_iterator<model::ClientRequest *>, size_t, std::expected<std::unique_ptr<ResponseInterface>, exception_t> *) noexcept = 0;
+        virtual auto batch_request(std::move_iterator<model::ClientRequest *>, size_t) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t> = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    auto make_raii_ticket(model::ticket_id_t ticket_id, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::shared_ptr<model::ticket_id_t>{
-        
-        auto destructor = [controller_arg = std::move(ticket_controller)](model::ticket_id_t * arg) noexcept{
-            controller_arg->close_ticket(*arg);
-            delete arg;
-        };
+    auto make_raii_ticket(model::ticket_id_t * ticket_id_arr, size_t ticket_id_arr_sz, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::expected<std::shared_ptr<void>, exception_t>{
 
-        return std::unique_ptr<model::ticket_id_t, dectype(destructor)>(new ticket_id_t{ticket_id}, std::move(destructor));
+        if (ticket_id_arr_sz == 0u){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        if (ticket_controller == nullptr){
+            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        }
+
+        std::expected<model::ticket_id_t *, exception_t> cpy_ticket_id_arr = dg::network_exception::to_cstyle_function(dg::network_allocation::std_new_array<ticket_id_t>)(ticket_id_arr_sz);
+
+        if (!cpy_ticket_id_arr.has_value()){
+            return std::unexpected(cpy_ticket_id_arr.error());
+        }
+
+        std::copy(ticket_id_arr, std::next(ticket_id_arr, ticket_id_arr_sz), cpy_ticket_id_arr.get());
+
+        auto destructor = [ticket_id_arr_sz, ticket_controller](void * arg) noexcept{ //weird
+            model::ticket_id_t * org_arr = static_cast<model::ticket_id_t *>(arg); 
+            ticket_controller->close_ticket(org_arr, ticket_id_arr_sz);
+            dg::network_allocation::std_delete_array(org_arg);
+        }
+
+        // 13) If an exception is thrown, the constructor has no effects, what does no effects mean?
+
+        auto unique_resource    = std::unique_ptr<model::ticket_id_t, decltype(destructor)>(cpy_ticket_id_arr.get(), destructor);
+        auto shared_resource    = dg::network_exception::cstyle_initialize<std::shared_ptr<void>>(static_cast<decltype(unique_resource)&&>(unique_resource));
+
+        if (!shared_resource.has_value()){
+            unique_resource.release();
+            dg::network_allocation::std_delete_array(cpy_ticket_id_arr.get());
+            return shared_resource;
+        } else{
+            return shared_resource;
+        }
     }
 }
 
@@ -207,6 +236,7 @@ namespace dg::network_rest_frame::server_impl1{
         private:
 
             dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map;
+            dg::network_kernel_mailbox::transmit_option_t transmit_opt;
             uint32_t resolve_channel;
             size_t resolve_consume_sz;
             uint32_t response_channel;
@@ -216,6 +246,7 @@ namespace dg::network_rest_frame::server_impl1{
         public:
 
             RequestResolverWorker(dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map,
+                                  dg::network_kernel_mailbox::transmit_option_t transmit_opt,
                                   uint32_t resolve_channel,
                                   size_t resolve_consume_sz,
                                   uint32_t response_channel,
@@ -234,8 +265,9 @@ namespace dg::network_rest_frame::server_impl1{
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> recv_buf_arr(recv_buf_cap);
                 dg::network_kernel_mailbox::recv(this->resolve_channel, recv_buf_arr.get(), recv_buf_sz, recv_buf_cap);
 
-                auto feed_resolutor             = InternalResponseFeedResolutor{}; 
+                auto feed_resolutor             = InternalResponseFeedResolutor{};
                 feed_resolutor.mailbox_channel  = this->response_channel;
+                feed_resolutor.transmit_opt     = this->transmit_opt;
             
                 size_t trimmed_vectorization_sz = std::min(this->response_vectorization_sz, recv_buf_sz);
                 size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_vectorization_sz);
@@ -301,11 +333,12 @@ namespace dg::network_rest_frame::server_impl1{
             struct InternalResponseFeedResolutor: dg::network_producer_consumer::ConsumerInterface<dg::network_kernel_mailbox::MailBoxArgument>{
 
                 uint32_t mailbox_channel;
+                dg::network_kernel_mailbox::transmit_option_t transmit_opt;
 
                 void push(std::move_iterator<MailBoxArgument *> mailbox_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_kernel_mailbox::send(this->mailbox_channel, mailbox_arr, sz, exception_arr.get());
+                    dg::network_kernel_mailbox::send(this->mailbox_channel, mailbox_arr, sz, exception_arr.get(), this->transmit_opt);
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -487,7 +520,7 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            std::vector<BatchRequestResponseBaseDesignatedObserver> observer_arr; 
+            dg::vector<BatchRequestResponseBaseDesignatedObserver> observer_arr; 
             BatchRequestResponseBase base;
         
         public:
@@ -522,6 +555,11 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
+    auto make_batch_request_response(size_t resp_sz) noexcept -> std::expected<std::unique_ptr<BatchRequestResponse>, exception_t>{
+
+        return dg::network_exception::to_cstyle_function(dg::network_allocation::std_make_unique<BatchRequestResponse, size_t>)(resp_sz);
+    }
+
     class RequestResponse: public virtual ResponseInterface{
 
         private:
@@ -551,6 +589,11 @@ namespace dg::network_rest_frame::client_impl1{
                 return &this->observer;
             }
     };
+
+    auto make_request_response() -> std::expected<std::unique_ptr<RequestResponse>, exception_t>{
+
+        return dg::network_exception::to_cstyle_function(dg::network_allocation::std_make_unique<RequestResponse>)();
+    }
 
     class RequestContainer: public virtual RequestContainerInterface{
 
@@ -760,6 +803,7 @@ namespace dg::network_rest_frame::client_impl1{
     //RequestContainer is an absolute unit, so we can't really change that
     //we are expecting to do 10GB of REST request payloads per second, it's possible
 
+    //this is to utilize CPU resource, not CPU efficiency, CPU efficiency is already achieved by batching ticket_id_arr, kernel has effective schedulings that render the overhead of mtx -> 1/1000 of the actual tx 
     class DistributedTicketController: public virtual TicketControllerInterface{
 
         private:
@@ -806,48 +850,246 @@ namespace dg::network_rest_frame::client_impl1{
 
     class TicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
 
+        public:
+
+            struct ExpiryBucket{
+                model::ticket_id_t ticket_id;
+                std::chrono::time_point<std::chrono::high_resolution_clock> abs_timeout;
+            };
+
         private:
 
-        
+            dg::vector<ExpiryBucket> expiry_bucket_queue; //this is harder than expected, we are afraid of the priority queue, yet we would want to discretize this to avoid priority queues
+            size_t expiry_bucket_queue_cap;
+            std::chrono::nanoseconds max_dur;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> max_consume_per_load;
+
         public:
+
+            TicketTimeoutManager(dg::vector<ExpiryBucket> expiry_bucket_queue,
+                                 size_t expiry_bucket_queue_cap,
+                                 std::chrono::nanoseconds max_dur,
+                                 std::unique_ptr<std::mutex> mtx,
+                                 stdx::hdi_container<size_t> max_consume_per_load) noexcept: expiry_bucket_queue(std::move(expiry_bucket_queue)),
+                                                                                             expiry_bucket_queue_cap(expiry_bucket_queue_cap),
+                                                                                             mtx(std::move(mtx)),
+                                                                                             max_consume_per_load(std::move(max_consume_per_load)){}
 
             void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
 
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+                
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                auto now        = std::chrono::high_resolution_clock::now(); 
+                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timepout > rhs.abs_timeout;};
+
+                for (size_t i = 0u; i < sz; ++i){
+                    auto [ticket_id, current_dur] = registering_arr[i];
+
+                    if (current_dur > this->max_dur){
+                        exception_arr[i] = dg::network_exception::INVALID_ARGUMENT;
+                        continue;
+                    }
+
+                    if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue_cap){
+                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        continue;
+                    }
+
+                    this->expiry_bucket_queue.push_back(ExpiryBucket{ticket_id, now + current_dur});
+                    std::push_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
             }
 
             void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                ticket_arr_sz   = 0u;
+                auto now        = std::chrono::high_resolution_clock::now();
+                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timepout > rhs.abs_timeout;};
+
+                while (true){
+                    if (ticket_arr_sz == ticket_arr_cap){
+                        return;
+                    }
+
+                    if (this->expiry_bucket_queue.empty()){
+                        return;
+                    }
+
+                    if (this->expiry_bucket_queue.front().abs_timeout > now){
+                        return;
+                    }
+
+                    ticket_arr[ticket_arr_sz++] = this->expiry_bucket_queue.front().ticket_id;
+                    std::pop_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                    this->expiry_bucket_queue.pop_back();
+                }
             }
 
             void clear() noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                this->expiry_bucket_queue.clear();
             }
 
             auto max_consume_size() noexcept -> size_t{
 
+                return this->max_consume_per_load.value;
             }
     };
 
+    //this is to utilize CPU resource, not CPU efficiency, CPU efficiency is already achieved by batching ticket_id_arr, kernel has effective schedulings that render the overhead of mtx -> 1/1000 of the actual tx 
     class DistributedTicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
 
         private:
 
+            std::unique_ptr<std::unique_ptr<TicketTimeoutManagerInterface>[]> base_arr;
+            size_t pow2_base_arr_sz;
+            size_t keyvalue_feed_cap;
+            size_t zero_bounce_sz;
+            std::unique_ptr<DrainerPredicateInterface> drainer_predicate;
+            size_t drain_peek_cap_per_container;
+            size_t max_consume_per_load;
+
         public:
+
+            DistributedTicketTimeoutManager(std::unique_ptr<std::unique_ptr<TicketTimeoutManagerInterface>[]> base_arr,
+                                            size_t pow2_base_arr_sz,
+                                            size_t keyvalue_feed_cap,
+                                            size_t zero_bounce_sz,
+                                            std::unique_ptr<DrainerPredicateInterface> drainer_predicate,
+                                            size_t max_consume_per_load) noexcept: base_arr(std::move(base_arr)),
+                                                                                   pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                   keyvalue_feed_cap(keyvalue_feed_cap),
+                                                                                   zero_bounce_sz(zero_bounce_sz),
+                                                                                   drainer_predicate(std::move(drainer_predicate)),
+                                                                                   drain_peek_cap_per_container(drain_peek_cap_per_container),
+                                                                                   max_consume_per_load(max_consume_per_load){}
 
             void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
 
+                auto feed_resolutor                 = InternalClockInFeedResolutor{};
+                feed_resolutor.dst                  = this->base_arr.get(); 
+
+                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS;);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t hashed_value     = dg::network_hash::hash_reflectible(registering_arr[i].first);
+                    size_t partitioned_idx  = hashed_value & (this->pow2_base_arr_sz - 1u);
+                    auto feed_arg           = InternalClockInFeedArgument{};
+                    feed_arg.ticket_id      = registering_arr[i].first;
+                    feed_arg.dur            = registering_arr[i].second;
+                    feed_arg.exception_ptr  = std::next(exception_arr, i); 
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
+                }
             }
 
             void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept{
 
+                if (this->drainer_predicate->is_should_drain()){
+                    this->internal_drain(ticket_arr, ticket_arr_sz, ticket_arr_cap);
+                    this->drainer_predicate->reset();
+                } else{
+                    this->internal_curious_pop(ticket_arr, ticket_arr_sz, ticket_arr_cap);
+                }
             }
 
             void clear() noexcept{
 
+                for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
+                    this->base_arr[i]->clear();
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
 
+                return this->max_consume_per_load;
+            }
+        
+        private:
+
+            struct InternalClockInFeedArgument{
+                ticket_id_t ticket_id;
+                std::chrono::nanoseconds dur;
+                exception_t * exception_ptr;
+            };
+
+            struct InternalClockInFeedResolutor{
+
+                std::unique_ptr<TicketTimeoutManagerInterface> * dst;
+
+                void push(const size_t& idx, std::move_iteartor<InternalClockInFeedArgument *> data_arr, size_t sz) noexcept{
+                    
+                    auto base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> registering_arr(sz); //pair is not good
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        registering_arr[i] = std::make_pair(base_data_arr[i].ticket_id, base_data_arr[i].dur);
+                    }
+
+                    this->dst[idx]->clock_in(registering_arr.get(), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            *base_data_arr[i].exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
+
+            void internal_drain(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept{
+
+                size_t random_clue                      = dg::network_randomizer::randomize_int<size_t>();
+                ticket_arr_sz                           = 0u;
+                model::ticket_id_t * current_ticket_arr = ticket_arr;
+                size_t current_arr_cap                  = ticket_arr_cap;
+
+                for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
+                    if (current_arr_cap == 0u){
+                        break;
+                    }
+
+                    size_t random_idx   = (random_clue + i) & (this->pow2_base_arr_sz - 1u);
+                    size_t current_sz   = {};
+                    size_t peeking_cap  = std::min(current_arr_cap, this->drain_peek_cap_per_container); 
+                    this->base_arr[random_idx]->get_expired_ticket(current_ticket_arr, current_sz, peeking_cap);
+                    std::advance(current_ticket_arr, current_sz);
+                    current_arr_cap     -= current_sz;
+                    ticket_arr_sz       += current_sz;
+                }
+            }
+
+            void internal_curious_pop(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept{
+
+                ticket_arr_sz = 0u;
+
+                for (size_t i = 0u; i < this->zero_bounce_sz; ++i){
+                    size_t idx = dg::network_randomizer::randomize_int<size_t>() & (this->pow2_base_arr_sz - 1u);
+                    this->base_arr[idx]->get_expired_ticket(ticket_arr, ticket_arr_sz, ticket_arr_cap);
+
+                    if (ticket_arr_sz != 0u){
+                        return;
+                    }
+                }
             }
     };
 
@@ -946,17 +1188,32 @@ namespace dg::network_rest_frame::client_impl1{
         private:
 
             std::shared_ptr<RequestContainerInterface> request_container;
+            dg::network_kernel_mailbox::transmit_option_t transmit_opt;
             uint32_t channel;
+            size_t mailbox_feed_cap;
 
         public:
 
             OutBoundWorker(std::shared_ptr<RequestContainerInterface> request_container,
-                           uint32_t channel) noexcept: request_container(std::move(request_container)),
-                                                       channel(channel){}
+                           dg::network_kernel_mailbox::transmit_option_t transmit_opt,
+                           uint32_t channel,
+                           size_t mailbox_feed_cap) noexcept: request_container(std::move(request_container)),
+                                                              transmit_opt(transmit_opt),
+                                                              channel(channel),
+                                                              mailbox_feed_cap(mailbox_feed_cap){}
 
             bool run_one_epoch() noexcept{
 
                 dg::vector<model::InternalRequest> request_vec = this->request_container->pop();
+
+                auto feed_resolutor             = InternalFeedResolutor{};
+                feed_resolutor.channel          = this->channel;
+                feed_resolutor.transmit_opt     = this->transmit_opt;
+
+                size_t trimmed_mailbox_feed_cap = std::min(static_cast<size_t>(request_vec.size()), this->mailbox_feed_cap);
+                size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_cap, feeder_mem.get()));
 
                 for (auto& request: request_vec){
                     std::expected<dg::network_kernel_mailbox::Address, exception_t> addr = dg::network_uri_encoder::extract_mailbox_addr(request.request.requestee_uri);
@@ -970,17 +1227,36 @@ namespace dg::network_rest_frame::client_impl1{
 
                     if (!bstream.has_value()){
                         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(bstream.error()));
+                        continue;
                     }
 
-                    auto feed_arg       = dg::network_kernel_mailbox::MailBoxArgument{};
-                    feed_arg.to         = addr.value();
-                    feed_arg.content    = std::move(bstream.value()); 
+                    auto feed_arg       = dg::network_kernel_mailbox::MailBoxArgument{.to       = addr.value(),
+                                                                                      .content  = std::move(bstream.value())};
 
                     dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(feed_arg));
                 }
 
                 return true;
             }
+        
+        private:
+
+            struct InternalFeedResolutor{
+                uint32_t channel;
+                dg::network_kernel_mailbox::transmit_option_t transmit_opt;
+
+                void push(std::move_iterator<dg::network_kernel_mailbox::MailBoxArgument *> mailbox_arg, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+                    dg::network_kernel_mailbox::send(mailbox_arg, sz, exception_arr.get(), this->transmit_opt);
+
+                    for (size_t i = 0u; i < sz; ++I){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
     };
 
     class ExpiryWorker: public virtual dg::network_concurrency::WorkerInterface{
@@ -1063,26 +1339,33 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
+    //alright, we'll do a shared_ptr scheme to close_tickets
+    //std::unique_ptr<ticket_id_t[]>, an internalized raii_ticket_response holding a reference to a batch_close_ticket shared_ptr
+    //this is to guarantee that our ticket close is post the synchronization, thus there are no unsafe memory accesses
+
     class RestController: public virtual RestControllerInterface{
 
         private:
 
             std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+            std::shared_ptr<RequestContainerInterface> request_container;
             std::shared_ptr<TicketControllerInterface> ticket_controller;
-            std::unique_ptr<RequestContainerInterface> request_container;
-            std::unique_ptr<ExpiryFactoryInterface> expiry_factory;
+            std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager;
+            stdx::hdi_container<size_t> max_consume_per_load;
 
         public:
 
             RestController(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
-                           std::unique_ptr<TicketControllerInterface> ticket_controller,
-                           std::unique_ptr<RequestContainerInterface> request_container,
-                           std::unique_ptr<ExpiryFactoryInterface> expiry_factory) noexcept: daemon_vec(std::move(daemon_vec)),
-                                                                                             ticket_controller(std::move(ticket_controller)),
-                                                                                             request_container(std::move(request_container)),
-                                                                                             expiry_factory(std::move(expiry_factory)){}
+                           std::shared_ptr<RequestContainerInterface> request_container,
+                           std::shared_ptr<TicketControllerInterface> ticket_controller,
+                           std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager,
+                           stdx::hdi_container<size_t> max_consume_per_load) noexcept: daemon_vec(std::move(daemon_vec)),
+                                                                                       request_container(std::move(request_container)),
+                                                                                       ticket_controller(std::move(ticket_controller)),
+                                                                                       ticket_timeout_manager(std::move(ticket_timeout_manager)),
+                                                                                       max_consume_per_load(std::move(max_consume_per_load)){}
 
-            auto request(model::Request rq) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
+            void request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t sz, std::expected<std::unique_ptr<ResponseInterface>, exception_t> * response_arr) noexcept{
 
                 auto timepoint = this->expiry_factory->get_expiry(rq.timeout);
 
@@ -1108,47 +1391,98 @@ namespace dg::network_rest_frame::client_impl1{
                 return std::unique_ptr<ResponseInterface>(std::make_unique<RAIITicketResponse>(std::move(response), make_raii_ticket(ticket_id.value(), this->ticket_controller)));
             }
 
+            auto batch_request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
+
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load.value;
+            }
+
         private:
 
             class RAIITicketResponse: public virtual ResponseInterface{
 
                 private:
 
-                    std::shared_ptr<ResponseInterface> base;
-                    std::shared_ptr<model::ticket_id_t> ticket;
-                
+                    std::unique_ptr<RequestResponse> base;
+                    std::shared_ptr<void> ticket_resource;
+
                 public:
 
-                    RaiiTicketResponse(std::shared_ptr<ResponseInterface> base, 
-                                       std::shared_ptr<model::ticket_id_t> ticket) noexcept: base(std::move(base)),
-                                                                                             ticket(std::move(ticket)){}
+                    RaiiTicketResponse(std::unique_ptr<RequestResponse> base, 
+                                       std::shared_ptr<void> ticket_resource) noexcept: base(std::move(base)),
+                                                                                        ticket(std::move(ticket)){}
 
                     auto response() noexcept -> std::expected<Response, exception_t>{
 
-                        return this->base->response();
+                        auto rs                 = this->base->response();
+                        this->ticket_resource   = nullptr;
+                        return rs;
+                    }
+            };
+
+            class RAIITicketBatchResponse: public virtual BatchResponseInterface{
+
+                private:
+
+                    std::unique_ptr<BatchRequestResponse> base;
+                    std::shared_ptr<void> ticket_resource;
+                
+                public:
+
+                    RAIITicketBatchResponse(std::unique_ptr<BatchRequestResponse> base,
+                                            std::shared_ptr<void> ticket_resource) noexcept: base(std::move(base)),
+                                                                                             ticket_resource(std::move(ticket_resource)){}
+
+                    auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
+
+                        auto rs                 = this->base->response();
+                        this->ticket_resource   = nullptr;
+                        return rs;
                     }
             };
     };
 
     //we are reducing the serialization overheads of ticket_center
+    //this is to utilize CPU resource + CPU efficiency by running affined task
+
     class DistributedRestController: public virtual RestControllerInterface{
 
         private:
 
-            std::vector<std::unique_ptr<RestControllerInterface>> rest_controller_vec;
+            std::unique_ptr<std::unique_ptr<RestControllerInterface>>[]> rest_controller_arr;
+            size_t pow2_rest_controller_arr_sz;
+            stdx::hdi_container<size_t> max_consume_per_load;
 
         public:
 
-            DistributedRestController(std::vector<std::unique_ptr<RestControllerInterface>> rest_controller_vec) noexcept: rest_controller_vec(std::move(rest_controller_vec)){} 
+            DistributedRestController(std::unique_ptr<std::unique_ptr<RestControllerInterface>[]> rest_controller_arr,
+                                      size_t pow2_rest_controller_arr_sz,
+                                      stdx::hdi_container<size_t> max_consume_per_load) noexcept: rest_controller_arr(std::move(rest_controller_arr)),
+                                                                                                  pow2_rest_controller_arr_sz(pow2_rest_controller_arr_sz),
+                                                                                                  max_consume_per_load(std::move(max_consume_per_load)){} 
 
-            auto request(model::Request rq) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
-
-                assert(stdx::is_pow2(this->rest_controller_vec.size()));
+            void request(std::move_iterator<model::ClientRequest *> request_arr, size_t request_arr_sz, std::expected<std::unique_ptr<ResponseInterface>, exception_t> * response_arr) noexcept{
 
                 size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
-                size_t idx          = random_clue & (this->rest_controller_vec.size() - 1u);
+                size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
 
-                return this->rest_controller_vec[idx]->request(std::move(rq));          
+                this->rest_controller_vec[idx]->request(request_arr, request_arr_sz, response_arr);
+            }
+
+            auto batch_request(std::move_iterator<model::ClientRequest *> request_arr, size_t request_arr_sz) -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
+
+                size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
+                size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
+
+                return this->rest_controller_vec[idx]->request(request_arr, request_arr_sz);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load.value;
             }
     };
 }
