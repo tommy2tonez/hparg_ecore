@@ -451,7 +451,7 @@ namespace dg::network_rest_frame::client_impl1{
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
 
                 this->resp_vec[idx] = std::move(response);
-                std::atomic_thread_fence(std::memory_order_release);
+                std::atomic_thread_fence(std::memory_order_seq_cst);
                 this->atomic_smp.fetch_add(1u, std::memory_order_relaxed);
             }
 
