@@ -36,6 +36,10 @@
 
 namespace dg::network_rest_frame::model{
 
+    //we'll be back tomorrow
+    //it's been an exhausting day
+    //we are on a rampage of nonstop incoming requests
+
     using ticket_id_t   = uint64_t;
     using clock_id_t    = uint64_t;
     
@@ -139,6 +143,13 @@ namespace dg::network_rest_frame::client{
     struct ResponseObserverInterface{
         virtual ~ResponseObserverInterface() noexcept = 0;
         virtual void update(std::expected<Response, exception_t>) noexcept = 0;
+        virtual void maybedefer_memory_ordering_fetch(std::expected<Response, exception_t>) noexcept = 0;
+        virtual void maybedefer_memory_ordering_fetch_close(void * dirty_memory) noexcept = 0;
+    };
+
+    struct BatchResponseInterface{
+        virtual ~BatchResponseInterface() noexcept = default;
+        virtual auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t> = 0;
     };
 
     struct ResponseInterface{
@@ -312,12 +323,11 @@ namespace dg::network_rest_frame::client_impl1{
 
     //what's the clever way
 
-    class RequestResponse: public virtual ResponseObserverInterface,
-                           public virtual ResponseInterface{
+    class RequestResponseBase{
         
         private:
 
-            std::binary_semaphore smp;
+            std::binary_semaphore smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
             std::expected<Response, exception_t> resp;
             std::atomic<bool> is_response_invoked;
 
@@ -330,9 +340,19 @@ namespace dg::network_rest_frame::client_impl1{
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
                 //another fence
-                std::atomic_thread_fence(std::memory_order_acquire); //this is not necessary because RequestResponse * acquisition must involve these mechanisms
+                // std::atomic_thread_fence(std::memory_order_acquire); //this is not necessary because RequestResponse * acquisition must involve these mechanisms
                 this->resp = std::move(response_arg); //this is the undefined
                 this->smp.release();
+            }
+
+            void maybedefer_memory_ordering_fetch(std::expected<Response, exception_t> response_arg) noexcept{
+
+                this->update(std::move(response_arg));
+            }
+
+            void maybedefer_memory_ordering_fetch_close(void * dirty_memory) noexcept{
+
+                (void) dirty_memory;
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -348,40 +368,177 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
-    //this is harder than expected,
-
-    // auto get_release_safe_request_response() -> std::shared_ptr<RequestResponse>{ //
-
-    //     auto destructor = [](RequestResponse * base) noexcept{
-    //         stdx::noipa(base->response());
-    //         dg::network_allocation::std_delete_object(base);
-    //     };
-
-    //     return std::unique_ptr<RequestResponse, decltype(destructor)>(dg::network_allocation::std_new_object<RequestResponse>(), destructor);
-    // } 
-
-    //this is unfortunately still undefined
-    //I hate to use shared_ptr but that's actually the way, this is way too funny
-
-    class ReleaseSafeRequestResponse: public virtual ResponseObserverInterface,
-                                      public virtual ResponseInterface{
+    class RequestResponseBaseObserver: public virtual ResponseObserverInterface{
 
         private:
 
-            RequestResponse base;
+            RequestResponseBase * base;
+        
+        public:
+
+            RequestResponseBaseObserver() = default;
+
+            RequestResponseBaseObserver(RequestResponseBase * base) noexcept: base(base){}
+
+            void update(std::expected<Response, exception_t> resp) noexcept{
+
+                this->base->update(std::move(resp));
+            }
+
+            void maybedefer_memory_ordering_fetch(std::expected<Response, exception_t> resp) noexcept{
+
+                this->base->maybedefer_memory_ordering_fetch(std::move(resp));
+            }
+
+            void maybedefer_memory_ordering_fetch_close(void * dirty_memory) noexcept{
+
+                this->base->maybedefer_memory_ordering_fetch_close(dirty_memory);
+            }
+    };
+
+    class BatchRequestResponseBase{
+
+        private:
+
+            std::atomic<intmax_t> atomic_smp;
+            dg::vector<std::expected<Response, exception_t>> resp_vec;
+            std::atomic<bool> is_response_invoked;
 
         public:
 
-            ReleaseSafeRequestResponse(): base(){}
+            BatchRequestResponseBase(size_t resp_sz): atomic_smp(-static_cast<intmax_t>(resp_sz) + 1),
+                                                      resp_vec(resp_sz),
+                                                      is_response_invoked(false){
+
+                if (resp_sz == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
+
+            void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
+
+                this->resp_vec[idx] = std::move(response);
+                std::atomic_thread_fence(std::memory_order_release);
+                this->atomic_smp.fetch_add(1u, std::memory_order_relaxed);
+            }
+
+            void maybedefer_memory_ordering_fetch(size_t idx, std::expected<Response, exception_t> response) noexcept{
+                
+                //this is ..., the designated memory area of the producer is clear
+                //dg::vector<> size is const, dg::vector<> ptr is const, the logic is sound, but it is not 
+                //producer is responsible to defer the memory ordering and do 1 big std::atomic_thread_fence(std::memory_order_release) after the consume
+
+                this->resp_vec[idx] = std::move(response);
+            }
+
+            void maybedefer_memory_ordering_fetch_close(size_t idx, void * dirty_memory) noexcept{
+
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                stdx::empty_noipa(dirty_memory);
+                this->atomic_smp.fetch_add(1u, std::memory_order_relaxed);
+            }
+
+            auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
+
+                bool was_invoked = this->is_response_invoked.exchange(true, std::memory_order_relaxed);
+
+                if (was_invoked){
+                    return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
+                } 
+
+                this->atomic_smp.wait(0, std::memory_order_acquire);
+                return dg::vector<std::expected<Response, exception_t>>(std::move(this->resp_vec));
+            }
+    };
+
+    class BatchRequestResponseBaseDesignatedObserver: public virtual ResponseObserverInterface{
+
+        private:
+
+            BatchRequestResponseBase * base; //we dont care about memory safety, we'll talk about this later, because we are in the dangy phase of performance
+                                             //we'll do some very break-the-practice coding
+            size_t idx;
+
+        public:
+
+            BatchRequestResponseBaseDesignatedObserver() = default;
+
+            BatchRequestResponseBaseDesignatedObserver(BatchRequestResponseBase * base, 
+                                                       size_t idx) noexcept: base(base),
+                                                                             idx(idx){}
+
+            void update(std::expected<Response, exception_t> response) noexcept{
+
+                this->base->update(this->idx, std::move(response));
+            }
+
+            void maybedefer_memory_ordering_fetch(std::expected<Response, exception_t> response) noexcept{
+
+                this->base->maybedefer_memory_ordering_fetch(std::move(response));
+            }
+
+            void maybedefer_memory_ordering_fetch_close(void * dirty_memory) noexcept{
+
+                this->base->maybedefer_memory_ordering_fetch_close(dirty_memory);
+            }
+    };
+
+    class BatchRequestResponse: public virtual BatchResponseInterface{
+
+        private:
+
+            std::vector<BatchRequestResponseBaseDesignatedObserver> observer_arr; 
+            BatchRequestResponseBase base;
+        
+        public:
+
+            BatchRequestResponse(size_t resp_sz): observer_arr(resp_sz),
+                                                  base(resp_sz){
+
+                for (size_t i = 0u; i < resp_sz; ++i){
+                    this->observer_arr[i] = BatchRequestResponseBaseDesignatedObserver(&this->base, i);
+                }
+            }
+
+            ~BatchRequestResponse() noexcept{
+
+                //this is harder than expected
+                stdx::empty_noipa(this->base->response(), this->observer_arr);
+            }
+
+            auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
+
+                return this->base->response();
+            }
+
+            auto response_size() const noexcept -> size_t{
+
+                return this->observer_arr.size();
+            }
+
+            auto get_observer(size_t idx) noexcept -> ResponseObserverInterface *{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
+
+                return std::addressof(this->observer_arr[idx]);
+            }
+    };
+
+    class RequestResponse: public virtual ResponseInterface{
+
+        private:
+
+            RequestResponseBase base;
+            RequestResponseBaseObserver observer;
+
+        public:
+
+            RequestResponse(): base(){
+
+                this->observer = RequestResponseBaseObserver(&this->base);
+            }
 
             ~ReleaseSafeRequestResponse() noexcept{
 
-                stdx::empty_noipa(base->response());
-            }
-
-            void update(std::expected<Response, exception_t> response_arg) noexcept{
-
-                this->base->update(std::move(response_arg));
+                stdx::empty_noipa(this->base->response(), this->observer);
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -389,9 +546,9 @@ namespace dg::network_rest_frame::client_impl1{
                 return this->base->response();
             }
 
-            auto base() noexcept -> RequestResponse&{
+            auto get_observer() noexcept -> ResponseObserverInterface *{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
 
-                return this->base;
+                return &this->observer;
             }
     };
 
@@ -617,8 +774,81 @@ namespace dg::network_rest_frame::client_impl1{
             DistributedTicketController(std::unique_ptr<std::unique_ptr<TicketControllerInterface>[]> base_arr,
                                         size_t pow2_base_arr_sz,
                                         size_t max_consume_per_load,
-                                        size_t keyvalue_feed_cap) noexcept{}
+                                        size_t keyvalue_feed_cap) noexcept: base_arr(std::move(base_arr)),
+                                                                            pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                            max_consume_per_load(max_consume_per_load),
+                                                                            keyvalue_feed_cap(keyvalue_feed_cap){}
 
+            void open_ticket(){
+
+            }
+
+            void assign_observer(){
+
+            }
+
+            void steal_observer(){
+
+            }
+
+            void get_observer(){
+
+            }
+
+            void close_ticket(){
+
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+            }
+    };
+
+    class TicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
+
+        private:
+
+        
+        public:
+
+            void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+            }
+
+            void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept{
+
+            }
+
+            void clear() noexcept{
+
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+            }
+    };
+
+    class DistributedTicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
+
+        private:
+
+        public:
+
+            void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+            }
+
+            void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept{
+
+            }
+
+            void clear() noexcept{
+
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+            }
     };
 
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
@@ -695,7 +925,17 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        observer_arr[i].value()->update(std::move(base_response_arr[i].response));
+                        observer_arr[i].value()->maybedefer_memory_ordering_fetch(std::move(base_response_arr[i].response));
+                    }
+
+                    std::atomic_thread_fence(std::memory_order_release);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!observer_arr[i].has_value()){
+                            continue;
+                        }
+
+                        observer_arr[i].value()->maybedefer_memory_ordering_fetch_close(static_cast<void *>(&base_response_arr[i].response));
                     }
                 }
             };
@@ -745,6 +985,82 @@ namespace dg::network_rest_frame::client_impl1{
 
     class ExpiryWorker: public virtual dg::network_concurrency::WorkerInterface{
 
+        private:
+
+            std::shared_ptr<TicketControllerInterface> ticket_controller;
+            std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager;
+            size_t timeout_consume_sz;
+            size_t ticketcontroller_observer_steal_cap;
+            size_t busy_timeout_consume_sz;  
+
+        public:
+
+            ExpiryWorker(std::shared_ptr<TicketControllerInterface> ticket_controller,
+                         std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager,
+                         size_t timeout_consume_sz,
+                         size_t ticketcontroller_observer_steal_sz,
+                         size_t busy_timeout_consume_sz) noexcept: ticket_controller(std::move(ticket_controller)),
+                                                                   ticket_timeout_manager(std::move(ticket_timeout_manager)),
+                                                                   timeout_consume_sz(timeout_consume_sz),
+                                                                   ticketcontroller_observer_steal_cap(ticketcontroller_observer_steal_cap),
+                                                                   busy_timeout_consume_sz(busy_timeout_consume_sz){}
+
+            bool run_one_epoch() noexcept{
+
+                size_t expired_ticket_arr_cap       = this->timeout_consume_sz;
+                size_t expired_ticket_arr_sz        = {};
+                dg::network_stack_allocation::NoExceptAllocation<model::ticket_id_t[]> expired_ticket_arr(expired_ticket_arr_cap);
+                this->ticket_timeout_manager->get_expired_ticket(expired_ticket_arr.get(), expired_ticket_arr_sz, expired_ticket_arr_cap);
+
+                auto feed_resolutor                 = InternalFeedResolutor{};
+                feed_resolutor.ticket_controller    = this->ticket_controller.get();
+
+                size_t trimmed_observer_steal_cap   = std::min(this->ticketcontroller_observer_steal_cap, expired_ticket_arr_sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_observer_steal_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_observer_steal_cap, feeder_mem.get()));
+
+                for (size_t i = 0u; i < expired_ticket_arr_sz; ++i){
+                    dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), expired_ticket_arr[i]);
+                }
+
+                return expired_ticket_arr_sz >= this->busy_timeout_consume_sz;
+            }
+        
+        private:
+
+            struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<model::ticket_id_t>{
+
+                TicketControllerInterface * ticket_controller;
+
+                void push(std::move_iterator<model::ticket_id_t *> ticket_id_arr, size_t ticket_id_arr_sz) noexcept{
+
+                    model::ticket_id_t * base_ticket_id_arr = ticket_id_arr.base();
+                    dg::network_stack_allocation<std::expected<ResponseObserverInterface *, exception_t>[]> stolen_response_observer_arr(ticket_id_arr_sz);
+                    dg::network_stack_allocation<std::expected<Response, exception_t>[]> timeout_response_arr(ticket_id_arr_sz);
+
+                    std::fill(timeout_response_arr.get(), std::next(timeout_response_arr.get(), ticket_id_arr_sz), std::expected<Response, exception_t>(std::unexpected(dg::network_exception::REST_TIMEOUT)));
+                    this->ticket_controller->steal_observer(base_ticket_id_arr, ticket_id_arr_sz, stoken_response_observer_arr.get());
+
+                    for (size_t i = 0u; i < ticket_id_arr_sz; ++i){
+                        if (!stoken_response_observer_arr[i].has_value()){
+                            continue;
+                        }
+
+                        stolen_response_observer_arr[i].value()->maybedefer_memory_ordering_fetch(std::move(timeout_response_arr[i]));
+                    }
+
+                    std::atomic_thread_fence(std::memory_order_release);
+
+                    for (size_t i = 0u; i < ticket_id_arr_sz; ++i){
+                        if (!stolen_response_observer_arr[i].has_value()){
+                            continue;
+                        }
+
+                        stolen_response_observer_arr[i].value()->maybedefer_memory_ordering_fetch_close(static_cast<void *>(&timeout_response_arr[i]));
+                    }
+                }
+            };
     };
 
     class RestController: public virtual RestControllerInterface{
