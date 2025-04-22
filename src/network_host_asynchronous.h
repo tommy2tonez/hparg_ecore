@@ -254,7 +254,7 @@ namespace dg::network_host_asynchronous{
 
             auto pop() noexcept -> std::unique_ptr<WorkOrder>{
 
-                std::binary_semaphore pending_smp(0u);
+                std::binary_semaphore pending_smp(0);
                 std::unique_ptr<WorkOrder> wo = {};
 
                 while (true){
@@ -340,7 +340,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto expected_mtx_uptr  = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<std::binary_semaphore, size_t>)(size_t{0u});
+                auto expected_mtx_uptr  = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<std::binary_semaphore, std::ptrdiff_t>)(std::ptrdiff_t{0});
 
                 if (!expected_mtx_uptr.has_value()){
                     return std::unexpected(expected_mtx_uptr.error());

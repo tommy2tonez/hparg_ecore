@@ -611,7 +611,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto pop() noexcept -> dg::vector<model::InternalRequest>{
 
-                auto pending_smp        = std::binary_semaphore(0u);
+                auto pending_smp        = std::binary_semaphore(0);
                 auto internal_request   = std::optional<dg::vector<model::InternalRequest>>{};
 
                 while (true){
@@ -1424,6 +1424,8 @@ namespace dg::network_rest_frame::client_impl1{
 
     //we are reducing the serialization overheads of ticket_center
     //this is to utilize CPU resource + CPU efficiency by running affined task
+    //we'll do partial load balancing, Ive yet to know what that is
+    //because I think random hash in conjunction with max_consume_size should be representative
 
     class DistributedRestController: public virtual RestControllerInterface{
 

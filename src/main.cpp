@@ -31,12 +31,6 @@
 #include "network_allocation.h"
 #include <atomic>
 
-static consteval auto get_ptr() -> uintptr_t{
-
-    return reinterpret_cast<uintptr_t>(std::add_pointer_t<void>());
-} 
-
 int main(){
 
-    // static_assert(std::is_same_v<uint32_t, size_t>);
 }

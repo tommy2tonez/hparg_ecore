@@ -1197,7 +1197,7 @@ namespace dg::network_kernel_mailbox_impl1::semaphore_impl{
 
         public:
 
-            constexpr binary_semaphore(size_t state): base(state){}
+            constexpr binary_semaphore(std::ptrdiff_t state): base(state){}
 
             auto acquire() noexcept -> exception_t{
 
@@ -1337,7 +1337,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                std::shared_ptr<semaphore_impl::binary_semaphore> spinning_mtx = std::make_shared<semaphore_impl::binary_semaphore>(0u);
+                std::shared_ptr<semaphore_impl::binary_semaphore> spinning_mtx = std::make_shared<semaphore_impl::binary_semaphore>(0);
 
                 uint8_t action = [&, this]() noexcept{
                     stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);

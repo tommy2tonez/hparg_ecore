@@ -1165,7 +1165,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         public:
 
-            constexpr dg_binary_semaphore(size_t state): base(state){}
+            constexpr dg_binary_semaphore(std::ptrdiff_t state): base(state){}
 
             auto acquire() noexcept -> exception_t{
 
@@ -1302,7 +1302,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return;
                 }
 
-                std::shared_ptr<dg_binary_semaphore> spinning_mtx = std::make_shared<dg_binary_semaphore>(0u);
+                std::shared_ptr<dg_binary_semaphore> spinning_mtx = std::make_shared<dg_binary_semaphore>(0);
 
                 uint8_t action = [&, this]() noexcept{
                     stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);

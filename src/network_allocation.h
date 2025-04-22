@@ -21,6 +21,7 @@
 #include <memory>
 #include "network_stack_allocation.h"
 #include "network_trivial_serializer.h"
+#include "network_datastructure.h"
 
 namespace dg::network_allocation{
     
@@ -56,7 +57,102 @@ namespace dg::network_allocation{
             virtual void gc() noexcept = 0;
     };
 
-    class HeapAllocator{
+    class HeapAllocatorInterface{
+
+        public:
+
+            virtual ~HeapAllocatorInterface() noexcept = default;
+            virtual void alloc(size_t * blk_arr, size_t blk_arr_sz, std::optional<interval_type> * rs) noexcept = 0;
+            virtual void free(interval_type * interval_arr, size_t interval_arr_sz) noexcept = 0;
+            virtual auto base_size() noexcept -> size_t = 0;
+    };
+
+    struct DeferDeallocationArgument{
+        std::unique_ptr<interval_type[]> deallocation_interval_arr; //how could we reuse this container??
+        size_t arr_sz;
+        std::shared_ptr<HeapAllocatorInterface> dst;
+    };
+
+    class DeferDeallocationContainerInterface{
+
+        public:
+
+            virtual ~DeferDeallocationContainerInterface() noexcept = default;
+            virtual auto push(DeferDeallocationArgument&&) noexcept -> exception_t = 0;
+            virtual auto pop() noexcept -> DeferDeallocationArgument = 0;
+    };
+
+    class DeferDeallocationContainer: public virtual DeferDeallocationContainerInterface{
+
+        private:
+
+            dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<DeferDeallocationArgument> defer_dealloc_arg_queue;
+            dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::pair<std::binary_semaphore *, DeferDeallocationArgument *>> waiting_queue;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            DeferDeallocationContainer(dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<DeferDeallocationArgument> defer_dealloc_arg_queue,
+                                       dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::pair<std::binary_semaphore *, DeferDeallocationArgument *>> waiting_queue,
+                                       std::unique_ptr<std::mutex> mtx) noexcept: defer_dealloc_arg_queue(std::move(defer_dealloc_arg_queue)),
+                                                                                  waiting_queue(std::move(waiting_queue)),
+                                                                                  mtx(std::move(mtx)){}
+
+            auto push(DeferDeallocationArgument&& defer_arg) noexcept -> exception_t{
+
+                if (defer_arg.dst == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                if (!this->waiting_queue.empty()){
+                    auto [pending_smp, fetching_arg] = waiting_queue.front();
+                    waiting_queue.pop_front();
+                    *fetching_arg = std::move(defer_arg);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    pending_smp->release(); //
+                    return dg::network_exception::SUCCESS;
+                }
+
+                if (this->defer_dealloc_arg_queue.size() == this->defer_dealloc_arg_queue.capacity()){
+                    return dg::network_exception::QUEUE_FULL;
+                }
+
+                this->defer_dealloc_arg_queue.push_back(std::move(defer_arg));
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto pop() noexcept -> DeferDeallocationArgument{
+
+                auto smp        = std::binary_semaphore(0);
+                auto defer_arg  = DeferDeallocationArgument();
+
+                while (true){
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->defer_dealloc_arg_queue.empty()){
+                        auto rs = std::move(this->defer_dealloc_arg_queue.front());
+                        this->defer_dealloc_arg_queue.pop_front();
+                        return rs;
+                    }
+
+                    if (this->waiting_queue.size() == this->waiting_queue.capacity()){
+                        continue;
+                    }
+
+                    this->waiting_queue.push_back(std::make_pair(&smp, &defer_arg));
+                    break;
+                }
+
+                smp.acquire();
+                return defer_arg;
+            }
+
+    };
+
+    class HeapAllocator: public virtual HeapAllocatorInterface,
+                         public virtual GCInterface{
 
         private:
 
@@ -110,12 +206,8 @@ namespace dg::network_allocation{
              }
     };
 
-    //there are too many atomic operations
-    //it's fine
-    //people complained that these variables should be inside the stdx::xlock_guard
-    //alright, we'll fix that 
-
-    class SemiAutoGCHeapAllocator{
+    class SemiAutoGCHeapAllocator: public virtual HeapAllocatorInterface,
+                                   public virtual GCInterface{
 
         private:
 
@@ -161,7 +253,7 @@ namespace dg::network_allocation{
                 this->base->free(interval_arr, sz);
             }
 
-            void gc(){
+            void gc() noexcept{ //
 
                 this->base->gc();
             }
@@ -204,7 +296,8 @@ namespace dg::network_allocation{
             }
     };
 
-    class MultiThreadUniformHeapAllocator{
+    class MultiThreadUniformHeapAllocator: public virtual HeapAllocatorInterface,
+                                           public virtual GCInterface{
 
         private:
 
@@ -266,13 +359,7 @@ namespace dg::network_allocation{
                 }
             }
 
-            void gc(size_t thr_idx) noexcept{ // this might be a bottleneck if more than 1024 concurrent allocators are in use - this is not likely going to be the case - if a computer has more than 1024 cores - it's something wrong with the computer
-
-                size_t allocator_idx = thr_idx & (this->allocator_vec.size() - 1u);
-                this->allocator_vec[allocator_idx]->gc();
-            }
-
-            void gc_all() noexcept{
+            void gc() noexcept{
 
                 for (size_t i = 0u; i < this->allocator_vec.size(); ++i){
                     this->allocator_vec[i]->gc();
@@ -329,38 +416,6 @@ namespace dg::network_allocation{
                     (*this->dst)[allocator_idx]->free(data_arr.base(), sz);
                 }
             };
-    };
-
-    class MultiThreadWrappedGarbageCollector: public virtual GCInterface{
-
-        private:
-
-            std::shared_ptr<MultiThreadUniformHeapAllocator> base;
-        
-        public:
-
-            MultiThreadWrappedGarbageCollector(std::shared_ptr<MultiThreadUniformHeapAllocator> base) noexcept: base(std::move(base)){}
-
-            void gc() noexcept{
-
-                base->gc_all();
-            }
-    };
-
-    class SemiAutoWrappedGarbageCollector: public virtual GCInterface{
-
-        private:
-
-            std::shared_ptr<SemiAutoGCHeapAllocator> base;
-        
-        public:
-
-            SemiAutoWrappedGarbageCollector(std::shared_ptr<SemiAutoGCHeapAllocator> base) noexcept: base(std::move(base)){}
-
-            void gc() noexcept{
-
-                this->base->gc();
-            }
     };
 
     class NaiveBumpAllocator{
@@ -538,6 +593,7 @@ namespace dg::network_allocation{
             size_t freebin_vec_cap;
 
             std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator; //we have to defer std::free for the reason that this operation must be noblock, we offload the responsibility to an intermediate container
+            std::shared_ptr<DeferDeallocationContainerInterface> defer_deallocation_offloader; //is there a way to make this optional?
 
             std::chrono::time_point<std::chrono::high_resolution_clock> last_flush;
             std::chrono::nanoseconds flush_interval;
@@ -574,6 +630,7 @@ namespace dg::network_allocation{
                            size_t freebin_vec_cap, 
 
                            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator,
+                           std::shared_ptr<DeferDeallocationContainerInterface> defer_deallocation_offloader,
 
                            std::chrono::time_point<std::chrono::high_resolution_clock> last_flush,
                            std::chrono::nanoseconds flush_interval,
@@ -591,6 +648,7 @@ namespace dg::network_allocation{
                                                                                    freebin_vec_cap(freebin_vec_cap),
 
                                                                                    heap_allocator(std::move(heap_allocator)),
+                                                                                   defer_deallocation_offloader(std::move(defer_deallocation_offloader)),
 
                                                                                    last_flush(last_flush),
                                                                                    flush_interval(flush_interval),
@@ -835,7 +893,7 @@ namespace dg::network_allocation{
                 return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), self::LARGEBIN_SMALLBIN_SZ, 0u); 
             }
 
-            __attribute__((noinline)) void internal_dump_freebin_vec(){
+            void internal_direct_dump_freebin_vec() noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<interval_type[]> intv_arr(this->freebin_vec.size());
 
@@ -847,6 +905,41 @@ namespace dg::network_allocation{
 
                 this->heap_allocator->free(intv_arr.get(), this->freebin_vec.size());
                 this->freebin_vec.clear();
+            } 
+
+            auto internal_indirect_dump_freebin_vec() noexcept -> exception_t{
+
+                std::expected<std::unique_ptr<interval_type[]>, exception_t> std_interval_arr = dg::network_exception::to_cstyle_function(std::make_unique<interval_type[]>)(this->freebin_vec.size());
+
+                if (!std_interval_arr.has_value()){
+                    return std_interval_arr.error();
+                }
+
+                for (size_t i = 0u; i < this->freebin_vec.size(); ++i){
+                    void * internal_ptr         = this->internal_get_internal_ptr_head(this->freebin_vec[i].user_ptr);
+                    size_t internal_ptr_sz      = this->freebin_vec[i].user_ptr_sz + ALLOCATION_HEADER_SZ;
+                    std_interval_arr.value()[i] = this->internal_aligned_buf_to_interval({internal_ptr, internal_ptr_sz});
+                }
+
+                auto defer_allocation_arg   = DeferDeallocationArgument{.deallocation_interval_arr  = std::move(std_interval_arr.value()),
+                                                                        .arr_sz                     = this->freebin_vec.size(),
+                                                                        .dst                        = this->heap_allocator};
+
+                exception_t err             = this->defer_deallocation_offloader->push(std::move(defer_allocation_arg));
+
+                if (dg::network_exception::is_failed(err)){
+                    return err;
+                }            
+
+                this->freebin_vec.clear();
+                return dg::network_exception::SUCCESS;
+            }
+
+            __attribute__((noinline)) void internal_dump_freebin_vec() noexcept{
+
+                if (!internal_indirect_dump_freebin_vec()){
+                    internal_direct_dump_freebin_vec();
+                }
             }
 
             inline void internal_decommission_bump_allocator() noexcept{
@@ -1063,6 +1156,31 @@ namespace dg::network_allocation{
 
     using concurrent_dg_std_allocator_t = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<uint32_t, 8u, 256u, 16u, 63u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
 
+    class FreeDispatcherWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<DeferDeallocationContainerInterface> container;
+        
+        public:
+
+            FreeDispatcherWorker(std::shared_ptr<DeferDeallocationContainerInterface> container) noexcept: container(std::move(container)){}
+
+            bool run_one_epoch() noexcept{
+
+                DeferDeallocationArgument arg = this->container->pop();
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (arg.dst == nullptr){
+                        std::abort();
+                    }
+                }
+
+                arg.dst->free(arg.deallocation_interval_arr.get(), arg.arr_sz);
+                return true;
+            }
+    };
+
     class GCWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -1073,7 +1191,7 @@ namespace dg::network_allocation{
 
             GCWorker(std::shared_ptr<GCInterface> gc_able): gc_able(std::move(gc_able)){}
 
-            auto run_one_epoch() noexcept -> bool{
+            bool run_one_epoch() noexcept{
 
                 this->gc_able->gc();
                 return false;
