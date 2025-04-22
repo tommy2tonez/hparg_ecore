@@ -537,7 +537,7 @@ namespace dg::network_allocation{
             std::vector<Allocation> freebin_vec;
             size_t freebin_vec_cap;
 
-            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator;
+            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator; //we have to defer std::free for the reason that this operation must be noblock, we offload the responsibility to an intermediate container
 
             std::chrono::time_point<std::chrono::high_resolution_clock> last_flush;
             std::chrono::nanoseconds flush_interval;

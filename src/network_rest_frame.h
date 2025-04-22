@@ -11,34 +11,11 @@
 #include "stdx.h"
 #include "network_kernel_mailbox.h"
 
-//let me think
-//request should be an absolute unit, because mailbox can do flash_streamx, aggregation of requests, it makes no sense to unitize things here
-
-//dg::vector<model::InternalRequest> as a unit of consume (1)
-//std::unique_ptr<binary_semaphore> to do absolute waiting to avoid shared_ptr<> (2)
-//we dispatch the release workorder to a third party, the third party would take release right after a certain period from the ticket_controller(3)
-//a hash_distributed ticket_controller (4)
-//abs_timeout on server side to do hard synchronization of failed request (no response requests), such is we can do another request without being afraid of overriding (5)
-//we need to reduce the memory orderings, binary semaphore for each of the requests in the batch does not sound, does not scale (6)
-//we can't factor in time-dilation because there is literally no instruments (7)
-//we need to do some sort of encoding + decoding schemes, we can't offload this responsibility to user-space because there are sensitive datas like timeout uri + etc. (8)
-//we can skip the encoding + decodings for now
-//we'll be working on this component for the next week
-//this is a very important component
-
-//our focus would be to not pollute the system memory-orderings-wise
-//we have a lot of other jobs to run concurrently, memory-orderings acquire release is a no-no in these situations
-//we are hoping we could push 10GB of rest request/ second, it's hard
-//this is our main way of doing external comm
-//I dont know why our client is being pushy
-//we already told them to give us a hard deadline of within 6months - a year to deploy on the mainframe
-//I dont know what's so hard with these foos about writing a Taylor Series approximations
+//alright, we'll stress test this to see if this could reach 1GB of inbound without polluting the internal memory ordering mechanisms
+//this component should suffice for extension and enough for single responsibility
+//we can't add too many features because it would hinder our future extensibility
 
 namespace dg::network_rest_frame::model{
-
-    //we'll be back tomorrow
-    //it's been an exhausting day
-    //we are on a rampage of nonstop incoming requests
 
     using ticket_id_t   = uint64_t;
     using clock_id_t    = uint64_t;
@@ -183,7 +160,7 @@ namespace dg::network_rest_frame::client{
 
     struct RestControllerInterface{
         virtual ~RestControllerInterface() noexcept = default;
-        virtual void request(std::move_iterator<model::ClientRequest *>, size_t, std::expected<std::unique_ptr<ResponseInterface>, exception_t> *) noexcept = 0;
+        virtual auto request(model::ClientRequest&&) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t> = 0;
         virtual auto batch_request(std::move_iterator<model::ClientRequest *>, size_t) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t> = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -451,8 +428,7 @@ namespace dg::network_rest_frame::client_impl1{
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
 
                 this->resp_vec[idx] = std::move(response);
-                std::atomic_thread_fence(std::memory_order_seq_cst);
-                this->atomic_smp.fetch_add(1u, std::memory_order_relaxed);
+                this->atomic_smp.fetch_add(1u, std::memory_order_release);
             }
 
             void maybedefer_memory_ordering_fetch(size_t idx, std::expected<Response, exception_t> response) noexcept{
@@ -1365,30 +1341,31 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                        ticket_timeout_manager(std::move(ticket_timeout_manager)),
                                                                                        max_consume_per_load(std::move(max_consume_per_load)){}
 
+            //this is hard to write
             void request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t sz, std::expected<std::unique_ptr<ResponseInterface>, exception_t> * response_arr) noexcept{
 
-                auto timepoint = this->expiry_factory->get_expiry(rq.timeout);
+                // auto timepoint = this->expiry_factory->get_expiry(rq.timeout);
 
-                if (!timepoint.has_value()){
-                    return std::unexpected(timepoint.error());
-                }
+                // if (!timepoint.has_value()){
+                //     return std::unexpected(timepoint.error());
+                // }
 
-                std::shared_ptr<RequestResponse> response                   = std::make_shared<RequestResponse>(timepoint.value()); //internalize allocations
-                std::expected<model::ticket_id_t, exception_t> ticket_id    = this->ticket_controller->get_ticket(response);
+                // std::shared_ptr<RequestResponse> response                   = std::make_shared<RequestResponse>(timepoint.value()); //internalize allocations
+                // std::expected<model::ticket_id_t, exception_t> ticket_id    = this->ticket_controller->get_ticket(response);
 
-                if (!ticket_id.has_value()){
-                    return std::unexpected(ticket_id.error());
-                }
+                // if (!ticket_id.has_value()){
+                //     return std::unexpected(ticket_id.error());
+                // }
 
-                auto internal_request   = InternalRequest{std::move(rq), ticket_id.value()};
-                exception_t err         = this->request_container->push(std::move(internal_request));
+                // auto internal_request   = InternalRequest{std::move(rq), ticket_id.value()};
+                // exception_t err         = this->request_container->push(std::move(internal_request));
 
-                if (dg::network_exception::is_failed(err)){
-                    this->ticket_controller->close_ticket(ticket_id.value());
-                    return std::unexpected(err);
-                }
+                // if (dg::network_exception::is_failed(err)){
+                //     this->ticket_controller->close_ticket(ticket_id.value());
+                //     return std::unexpected(err);
+                // }
 
-                return std::unique_ptr<ResponseInterface>(std::make_unique<RAIITicketResponse>(std::move(response), make_raii_ticket(ticket_id.value(), this->ticket_controller)));
+                // return std::unique_ptr<ResponseInterface>(std::make_unique<RAIITicketResponse>(std::move(response), make_raii_ticket(ticket_id.value(), this->ticket_controller)));
             }
 
             auto batch_request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
