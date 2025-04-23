@@ -76,6 +76,7 @@ namespace dg::network_rest_frame::model{
         Request request;
         ticket_id_t ticket_id;
         std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout;
+        //what to add here? security, eligibility, priority, unique request id, cached response??? this is not quantifiable. it seems that those could be solved by using other measurements
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
