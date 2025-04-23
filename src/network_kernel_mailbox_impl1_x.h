@@ -691,6 +691,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         GlobalIdentifier id;
         uint64_t segment_idx;
         uint64_t segment_sz;
+        // uint64_t murmur_hashed_value;
     };
 
     //OK
@@ -748,8 +749,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         return rs;
     }
 
-    //OK
-    static auto assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
+    static auto internal_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
 
         if (pkt.total_segment_sz != pkt.collected_segment_sz){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
