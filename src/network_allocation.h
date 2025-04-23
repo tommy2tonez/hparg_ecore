@@ -937,7 +937,7 @@ namespace dg::network_allocation{
 
             __attribute__((noinline)) void internal_dump_freebin_vec() noexcept{
 
-                if (!internal_indirect_dump_freebin_vec()){
+                if (dg::network_exception::is_failed(internal_indirect_dump_freebin_vec())){
                     internal_direct_dump_freebin_vec();
                 }
             }
