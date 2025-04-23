@@ -139,15 +139,30 @@ namespace dg::network_rest_frame::model{
 
 namespace dg::network_rest_frame::server{
 
+    struct CacheControllerInterface{
+        virtual ~CacheControllerInterface() noexcept = default;
+        virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::optional<Response> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
+        virtual auto insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
+        virtual void clear() noexcept = 0;
+        virtual auto max_consume_size() noexcept -> size_t = 0;
+    }; 
+
     struct InfiniteCacheControllerInterface{
-        virtual ~InfiniteCacheControllerInterface() noexcept = 0;
+        virtual ~InfiniteCacheControllerInterface() noexcept = default;
         virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::optional<Response> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
         virtual auto insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    struct CacheWriteExclusionControllerInterface{
+        virtual ~CacheWriteExclusionControllerInterface() noexcept = default;
+        virtual auto thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
+        virtual void clear() noexcept = 0;
+        virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
     struct InfiniteCacheWriteExclusionControllerInterface{
-        virtual ~InfiniteCacheWriteExclusionControllerInterface() noexcept = 0;
+        virtual ~InfiniteCacheWriteExclusionControllerInterface() noexcept = default;
         virtual auto thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -164,7 +179,7 @@ namespace dg::network_rest_frame::server{
 namespace dg::network_rest_frame::client{
 
     struct ResponseObserverInterface{
-        virtual ~ResponseObserverInterface() noexcept = 0;
+        virtual ~ResponseObserverInterface() noexcept = default;
         virtual void update(std::expected<Response, exception_t>) noexcept = 0;
         virtual void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t>) noexcept = 0;
         virtual void maybedeferred_memory_ordering_fetch_close(void * dirty_memory) noexcept = 0;
@@ -591,7 +606,7 @@ namespace dg::network_rest_frame::server_impl1{
                 dg::network_producer_consumer::KVDeliveryHandle<InternalCacheServerFeedArgument> * resolutor_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder; 
 
-                InfiniteCacheControllerInterface * cache_controller;
+                CacheControllerInterface * cache_controller;
 
                 void push(std::move_iterator<InternalCacheFeedArgument *> data_arr, size_t sz) noexcept{
 
@@ -638,6 +653,49 @@ namespace dg::network_rest_frame::client_impl1{
     using namespace dg::network_rest_frame::client; 
 
     //what's the clever way
+    //we are thinking of the way
+
+    //cache_controller (1)
+    //random_hash_distributed_cache_controller (2) extends 1
+    //switching_cache_controller (3) extends 2 (2)
+    //I'm telling yall that this is not for a faint of heart
+    //designing these things is like an electrical circuit
+    //it seems like we could control the concurrency point higher up but it's not
+    //every point is the lock contention point, the usage of distributed map is unlimited
+    //we are talking about the CPU efficiency and CPU resource utilization again
+    //we'll be back tmr
+
+    //the only hard parts of the code is actually this part, the request, the socket, the nosync, the filesystem, the allocations
+    //we'll talk about mirror backpropagation hints (f(x) -> y, x hints sorted by y), virtual machine data extraction + tile as an absolute unit of forward
+    //such is a tile is by itself sufficient for forwarding, self-intercoursing + taylor-approximated-sufficient
+    //every tile is sufficient to store information in a binary heap of every bits of the universe -> one random bit of the universe
+
+    //what's hard is the backpropagation hints, the rules get loosened as it backprops, and the data required to store such information is ... 
+    //we'll talk about that
+
+    class CacheController: public virtual CacheControllerInterface{
+
+    };
+
+    class DistributedCacheController: public virtual CacheControllerInterface{
+
+    };
+
+    class SwitchingCacheController: public virtual InfiniteCacheControllerInterface{
+
+    };
+
+    class CacheWriteExclusionController: public virtual CacheWriteExclusionControllerInterface{
+
+    };
+
+    class DistributedCacheWriteExclusionController: public CacheWriteExclusionControllerInterface{
+
+    };
+
+    class SwitchingCacheWriteExclusionController: public virtual InfiniteCacheWriteExclusionControllerInterface{
+
+    };
 
     class RequestResponseBase{
         
@@ -895,24 +953,34 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto push(dg::vector<model::InternalRequest>&& request) noexcept -> exception_t{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                std::binary_semaphore * releasing_smp = nullptr;
 
-                if (!this->waiting_queue.empty()){
-                    auto [pending_smp, fetching_addr] = std::move(this->waiting_queue.front());
-                    this->waiting_queue.pop_front();
-                    *fetching_addr = std::move(request);
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    pending_smp->release();
+                exception_t err = [&]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                    return dg::network_exception::SUCCESS;
+                    if (!this->waiting_queue.empty()){
+                        auto [pending_smp, fetching_addr] = std::move(this->waiting_queue.front());
+                        this->waiting_queue.pop_front();
+                        *fetching_addr  = std::move(request);
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        releasing_smp   = pending_smp;
+
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    if (this->producer_queue.size() != this->producer_queue.capacity()){
+                        dg::network_exception_handler::nothrow_log(this->producer_queue.push_back(std::move(request)));
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }();
+
+                if (releasing_smp != nullptr){
+                    releasing_smp->release();
                 }
 
-                if (this->producer_queue.size() != this->producer_queue.capacity()){
-                    dg::network_exception_handler::nothrow_log(this->producer_queue.push_back(std::move(request)));
-                    return dg::network_exception::SUCCESS;
-                }
-
-                return dg::network_exception::RESOURCE_EXHAUSTION;
+                return err;
             }
 
             auto pop() noexcept -> dg::vector<model::InternalRequest>{
@@ -1620,10 +1688,6 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             };
     };
-
-    //alright, we'll do a shared_ptr scheme to close_tickets
-    //std::unique_ptr<ticket_id_t[]>, an internalized raii_ticket_response holding a reference to a batch_close_ticket shared_ptr
-    //this is to guarantee that our ticket close is post the synchronization, thus there are no unsafe memory accesses
 
     class RestController: public virtual RestControllerInterface{
 

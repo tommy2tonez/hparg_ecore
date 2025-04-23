@@ -567,6 +567,7 @@ namespace dg::network_allocation{
     //we'll build a forward bump_allocator, and a translator (a virtual layer) to convert from backward -> forward and forward -> backward
     //so a backward allocation == forward_to_backward(backward_to_forward(backward)(mem_blk))
     //we'll keep this our backlogs
+    //we also have a request to do rational logs by using 100% trained Taylor Approximations, we dont think that is necessary, log2() should be representative and fast enough to work in most cases
 
     template <class Metadata>
     class DGStdAllocator{
