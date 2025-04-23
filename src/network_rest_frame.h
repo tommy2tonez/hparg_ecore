@@ -103,6 +103,13 @@ namespace dg::network_rest_frame::model{
         //what we know is that the integrity of the mailbox content must be guaranteed (we need to implement extra measurements in the flash_streamx)
         //duplicate response is actually not a problem, because we are using an ever-increasing request_id, the second time the request_id is referenced, it's gone, either because of the first time releasing the user's smp or got destructed before the first response hit
 
+        //request is one of the worst vulnerabilities, unsolved mystery of the universe
+        //we really dont have a way to solve this except for doing the designated_request_id
+        //we'll try to implement all of these features in 3 days, we'll move on to another component
+        //this is only for internal comm, Flask + friends should need a liaison, we'll talk about that
+        //this should be able to sat the UDP bandwidth of 1GB/s with the current tech, with minimal system-wide pollutions, we only acquire 1 smp per 1024 * 1 KB = 1MB for example, 1GB should be 1000 smps * k 
+        //this is actually Far Away by Nickleback
+
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
             reflector(request, ticket_id, dual_priority, has_unique_response, client_request_cache_id, server_abs_timeout);
@@ -132,16 +139,16 @@ namespace dg::network_rest_frame::model{
 
 namespace dg::network_rest_frame::server{
 
-    struct RequestCacheControllerInterface{
-        virtual ~RequestCacheControllerInterface() noexcept = 0;
+    struct InfiniteCacheControllerInterface{
+        virtual ~InfiniteCacheControllerInterface() noexcept = 0;
         virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::optional<Response> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
         virtual auto insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    struct CacheWriteExclusionControllerInterface{
-        virtual ~RequestHandingExclusionInterface() noexcept = 0;
-        virtual auto acquire_cachewrite_exclusion(cache_id_t * cache_id_arr, std::expected<bool, exception_t> * err) = 0;
+    struct InfiniteCacheWriteExclusionControllerInterface{
+        virtual ~InfiniteCacheWriteExclusionControllerInterface() noexcept = 0;
+        virtual auto thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -182,7 +189,7 @@ namespace dg::network_rest_frame::client{
     struct TicketControllerInterface{
         virtual ~TicketControllerInterface() noexcept = default;
         virtual void open_ticket(size_t sz, std::expected<model::ticket_id_t, exception_t> * generated_ticket_arr) noexcept = 0;
-        virtual void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** assigning_observer_arr, exception_t * exception_arr) noexcept = 0;
+        virtual void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** assigning_observer_arr, std::expected<bool, exception_t> * exception_arr) noexcept = 0;
         virtual void steal_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept = 0;
         virtual void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept = 0;
         virtual void close_ticket(model::ticket_id_t * ticket_id_arr, size_t sz) noexcept = 0;
@@ -214,8 +221,8 @@ namespace dg::network_rest_frame::server_impl1{
         private:
 
             dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map;
-            std::shared_ptr<RequestCacheControllerInterface> request_cache_controller;
-            std::shared_ptr<CacheWriteExclusionControllerInterface> cachewrite_uex_controller;
+            std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller;
+            std::shared_ptr<InfiniteCacheWriteExclusionControllerInterface> cachewrite_uex_controller;
             dg::network_kernel_mailbox::transmit_option_t transmit_opt;
             uint32_t resolve_channel;
             size_t resolve_consume_sz;
@@ -229,8 +236,8 @@ namespace dg::network_rest_frame::server_impl1{
         public:
 
             RequestResolverWorker(dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map,
-                                  std::shared_ptr<RequestCacheControllerInterface> request_cache_controller,
-                                  std::shared_ptr<CacheWriteExclusionControllerInterface> cachewrite_uex_controller,
+                                  std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller,
+                                  std::shared_ptr<InfiniteCacheWriteExclusionControllerInterface> cachewrite_uex_controller,
                                   dg::network_kernel_mailbox::transmit_option_t transmit_opt,
                                   uint32_t resolve_channel,
                                   size_t resolve_consume_sz,
@@ -410,6 +417,45 @@ namespace dg::network_rest_frame::server_impl1{
                 }
             };
 
+            struct InternalCacheMapFeedArgument{
+                cache_id_t cache_id;
+                Response response;
+            };
+
+            struct InternalCacheMapFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheMapFeedArgument>{
+
+                InfiniteCacheControllerInterface * cache_controller;
+
+                void push(std::move_iterator<InternalCacheMapFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    auto base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Response[]> response_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        cache_id_arr[i]     = base_data_arr[i].cache_id;
+                        response_id_arr[i]  = std::move(base_data_arr[i].response);
+                    }
+
+                    this->cache_controller->insert_cache(cache_id_arr.get(), std::make_move_iterator(response_id_arr.get()), sz, rs_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!rs_arr[i].has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(rs_arr[i].error()));
+                            continue;
+                        }
+
+                        if (!rs_arr[i].value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::REST_CACHEMAP_CORRUPTION));
+                            continue;
+                        }
+                    }
+
+                }
+            };
+
             struct InternalServerFeedResolutorArgument{
                 dg::network_kernel_mailbox::Address to;
                 std::optional<uint8_t> dual_priority;
@@ -482,7 +528,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             struct InternalCacheServerFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheServerFeedArgument>{
 
-                CacheWriteExclusionControllerInterface * cachewrite_uex_controller;
+                InfiniteCacheWriteExclusionControllerInterface * cachewrite_uex_controller;
                 dg::network_producer_consumer::KVDeliveryHandle<InternalServerFeedResolutorArgument> * server_resolutor_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder;
 
@@ -495,7 +541,7 @@ namespace dg::network_rest_frame::server_impl1{
                         cache_id_arr[i] = base_data_arr[i].cache_id;
                     }
 
-                    this->cachewrite_uex_controller->acquire_cachewrite_exclusion(cache_id_arr.get(), sz, cache_write_response_arr.get());
+                    this->cachewrite_uex_controller->thru(cache_id_arr.get(), sz, cache_write_response_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!cache_write_response_arr[i].has_value()){
@@ -545,7 +591,7 @@ namespace dg::network_rest_frame::server_impl1{
                 dg::network_producer_consumer::KVDeliveryHandle<InternalCacheServerFeedArgument> * resolutor_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder; 
 
-                RequestCacheControllerInterface * cache_controller;
+                InfiniteCacheControllerInterface * cache_controller;
 
                 void push(std::move_iterator<InternalCacheFeedArgument *> data_arr, size_t sz) noexcept{
 
@@ -902,7 +948,7 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            dg::unordered_unstable_map<model::ticket_id_t, std::optional<ResponseObserverInterface *>> ticket_resource_map;
+            dg::unordered_unstable_map<model::ticket_id_t, std::optional<ResponseObserverInterface *>> ticket_resource_map; //leaks
             size_t ticket_resource_map_cap;
             ticket_id_t ticket_id_counter;
             std::unique_ptr<std::mutex> mtx;
@@ -944,7 +990,7 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             }
 
-            void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** corresponding_observer_arr, exception_t * exception_arr) noexcept{
+            void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** corresponding_observer_arr, std::expected<bool, exception_t> * exception_arr) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
@@ -953,17 +999,17 @@ namespace dg::network_rest_frame::client_impl1{
                     auto map_ptr = this->ticket_resource_map.find(current_ticket_id);
 
                     if (map_ptr == this->ticket_resource_map.end()){
-                        exception_arr[i] = dg::network_exception::REST_TICKET_NOT_FOUND;
+                        exception_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
                         continue;
                     }
 
                     if (map_ptr->second.has_value()){
-                        exception_arr[i] = dg::network_exception::REST_TICKET_OBSERVER_EXISTED;
+                        exception_arr[i] = false;
                         continue;
                     }
 
                     map_ptr->second     = corresponding_observer_arr[i];
-                    exception_arr[i]    = dg::network_exception::SUCCESS;
+                    exception_arr[i]    = true;
                 }
             }
 
@@ -1644,7 +1690,6 @@ namespace dg::network_rest_frame::client_impl1{
                 private:
 
                     std::unique_ptr<RequestResponse> base;
-                    std::shared_ptr<void> ticket_resource;
 
                 public:
 
@@ -1665,7 +1710,6 @@ namespace dg::network_rest_frame::client_impl1{
                 private:
 
                     std::unique_ptr<BatchRequestResponse> base;
-                    std::shared_ptr<void> ticket_resource;
                 
                 public:
 
@@ -1686,6 +1730,7 @@ namespace dg::network_rest_frame::client_impl1{
     //this is to utilize CPU resource + CPU efficiency by running affined task
     //we'll do partial load balancing, Ive yet to know what that is
     //because I think random hash in conjunction with max_consume_size should be representative
+    //we should not be too greedy, and actually implement somewhat a load_balancer
 
     class DistributedRestController: public virtual RestControllerInterface{
 

@@ -955,6 +955,7 @@ namespace dg::network_allocation{
 
             inline auto internal_dispatch_bump_allocator_refill() noexcept -> bool{
 
+                this->internal_check_for_reset();
                 this->internal_decommission_bump_allocator();
 
                 size_t requesting_interval_sz   = this->bump_allocator_refill_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
@@ -1061,6 +1062,8 @@ namespace dg::network_allocation{
             auto internal_large_malloc(size_t user_blk_sz) noexcept -> void *{
 
                 assert(user_blk_sz > self::MAXIMUM_SMALLBIN_BLK_SZ);
+
+                this->internal_check_for_reset();
 
                 size_t pad_blk_sz                           = user_blk_sz + LARGEBIN_ALLOCATION_HEADER_SZ;
                 size_t ceil_blk_sz                          = (((pad_blk_sz - 1u) / HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * HEAP_LEAF_UNIT_ALLOCATION_SZ;
