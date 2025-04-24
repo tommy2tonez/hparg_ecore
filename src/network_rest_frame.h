@@ -141,15 +141,15 @@ namespace dg::network_rest_frame::server{
 
     struct CacheControllerInterface{
         virtual ~CacheControllerInterface() noexcept = default;
-        virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::optional<Response> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
-        virtual auto insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
+        virtual void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
+        virtual void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
         virtual void clear() noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     }; 
 
     struct InfiniteCacheControllerInterface{
         virtual ~InfiniteCacheControllerInterface() noexcept = default;
-        virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::optional<Response> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
+        virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
         virtual auto insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -423,9 +423,9 @@ namespace dg::network_rest_frame::server_impl1{
                             continue;
                         }
 
-                        auto arg = dg::network_kernel_mailbox::MailBoxArgument{.to = base_data_arr[i].to,
-                                                                               .content = std::move(serialized_response.value()),
-                                                                               .priority = base_data_arr[i].priority};
+                        auto arg = dg::network_kernel_mailbox::MailBoxArgument{.to          = base_data_arr[i].to,
+                                                                               .content     = std::move(serialized_response.value()),
+                                                                               .priority    = base_data_arr[i].priority};
 
                         dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_feeder, std::move(arg));
                     }
@@ -467,7 +467,6 @@ namespace dg::network_rest_frame::server_impl1{
                             continue;
                         }
                     }
-
                 }
             };
 
@@ -673,12 +672,139 @@ namespace dg::network_rest_frame::client_impl1{
     //what's hard is the backpropagation hints, the rules get loosened as it backprops, and the data required to store such information is ... 
     //we'll talk about that
 
+    //we dont have the manpower, so we just implement the minimum working version of everything, because it's maintainable, pluggable, and code-able
+
     class CacheController: public virtual CacheControllerInterface{
 
+        private:
+
+            dg::unordered_unstable_map<cache_id_t, Response> cache_map;
+            size_t cache_map_cap;
+            size_t referenced_size_counter;
+            size_t referenced_size_cap;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> max_consume_per_load;
+
+        public:
+
+            CacheController(dg::unordered_unstable_map<cache_id_t, Response> cache_map,
+                            size_t cache_map_cap,
+                            size_t referenced_size_counter,
+                            size_t referenced_size_cap,
+                            std::unique_ptr<std::mutex> mtx,
+                            stdx::hdi_container<size_t> max_consume_per_load) noexcept: cache_map(std::move(cache_map)),
+                                                                                        cache_map_cap(cache_map_cap),
+                                                                                        referenced_size_counter(referenced_size_counter),
+                                                                                        referenced_size_cap(referenced_size_cap),
+                                                                                        mtx(std::move(mtx)),
+                                                                                        max_consume_per_load(std::move(max_consume_per_load)){}
+
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    auto map_ptr = stdx::to_const_reference(this->cache_map).find(cache_id_arr[i]);
+
+                    if (map_ptr == this->cache_map.end()){
+                        rs_arr[i] = std::optional<Response>(std::nullopt);
+                    } else{
+                        std::expected<Response, exception_t> cpy_response = dg::network_exception::cstyle_initialize<Response>(map_ptr->second);
+                        
+                        if (!cpy_response.has_value()){
+                            rs_arr[i] = std::unexpected(cpy_response.error());
+                        } else{
+                            static_assert(std::is_nothrow_move_constructible_v<Response> && std::is_nothrow_move_assignable_v<Response>);
+                            rs_arr[i] = std::optional<Response>(std::move(cpy_resonse.value()));
+                        }
+                    }
+                }
+            }
+
+            void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                auto base_response_arr = response_arr.base(); 
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (this->cache_map.size() == this->cache_map_cap){
+                        rs_arr[i] = std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                        continue;
+                    }
+
+                    if (this->referenced_size_counter >= this->referenced_size_cap){
+                        rs_arr[i] = std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                        continue;
+                    }
+
+                    static_assert(std::is_nothrow_move_constructible_v<Response> && std::is_nothrow_move_assignable_v<Response>);
+
+                    size_t incoming_sz      = dg::network_compact_serializer::size(base_response_arr[i]);
+                    auto insert_token       = std::make_pair(cache_id_arr[i], std::move(base_response_arr[i]));
+                    auto [map_ptr, status]  = this->cache_map.insert(std::move(insert_token));
+                    rs_arr[i]               = status;
+
+                    if (status){
+                        this->referenced_size_counter += incoming_sz;
+                    }
+                }
+            }
+
+            void clear() noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                this->cache_map.clear();
+                this->referenced_size_counter = 0u;
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load.value;
+            }
     };
 
     class DistributedCacheController: public virtual CacheControllerInterface{
 
+        private:
+
+            std::unique_ptr<std::unique_ptr<CacheControllerInterface>[]> cache_controller_arr;
+            size_t pow2_cache_controller_arr_sz;
+            size_t keyvalue_feed_cap;
+            stdx::hdi_container<size_t> max_consume_per_load;
+
+        public:
+
+            DistributedCacheController(std::unique_ptr<std::unique_ptr<CacheControllerInterface>[]> cache_controller_arr,
+                                       size_t pow2_cache_controller_arr_sz,
+                                       size_t keyvalue_feed_cap,
+                                       stdx::hdi_container<size_t> max_consume_per_load) noexcept: cache_controller_arr(std::move(cache_controller_arr)),
+                                                                                                   pow2_cache_controller_arr_sz(pow2_cache_controller_arr_sz),
+                                                                                                   keyvalue_feed_cap(keyvalue_feed_cap),
+                                                                                                   max_consume_per_load(std::move(max_consume_per_load)){}
+
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
+
+            }
+
+            void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+            }
+
+            void clear() noexcept{
+
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+            }
     };
 
     class SwitchingCacheController: public virtual InfiniteCacheControllerInterface{
@@ -808,7 +934,11 @@ namespace dg::network_rest_frame::client_impl1{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 stdx::empty_noipa(dirty_memory);
-                this->atomic_smp.fetch_add(1u, std::memory_order_relaxed);
+                intmax_t old = this->atomic_smp.fetch_add(1, std::memory_order_relaxed);
+
+                if (old == 0){
+                    this->atomic_smp.notify_one():
+                }
             }
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
@@ -819,7 +949,10 @@ namespace dg::network_rest_frame::client_impl1{
                     return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
                 } 
 
-                this->atomic_smp.wait(0, std::memory_order_acquire);
+                this->atomic_smp.wait(0, std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                std::atomic_thread_fence(std::memory_order_acquire);
+
                 return dg::vector<std::expected<Response, exception_t>>(std::move(this->resp_vec));
             }
     };
