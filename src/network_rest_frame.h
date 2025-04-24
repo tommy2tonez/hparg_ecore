@@ -672,6 +672,13 @@ namespace dg::network_rest_frame::client_impl1{
     //such is a tile is by itself sufficient for forwarding, self-intercoursing + taylor-approximated-sufficient
     //every tile is sufficient to store information in a binary heap of every bits of the universe -> one random bit of the universe
 
+    //(1): mirror backpropagation (residual-self-image)
+    //assume that our hint is (f(x) -> y, x hints sorted by y), we are resolving to nothing, the complexity of the task is not decreasing
+    //assume that our hint is a set of arbitrary possibilities, f(x) -> y, x hints will somewhat sort y
+    //the problem is the parity problem, find the optimal set of hints called x1 and x2 such that x1 possibilities and x2 possibilities will best sort y if they are compile-time-deterministic-combinatorially combined
+    //we want to split x -> x1, x2 and prop that down to the binary heap 
+    //our binary heap has the base being the universe bitarray, and the root is a random temporal-predicting bit of the universe
+
     //what's hard is the backpropagation hints, the rules get loosened as it backprops, and the data required to store such information is ... 
     //we'll talk about that
 
