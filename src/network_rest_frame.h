@@ -674,34 +674,47 @@ namespace dg::network_rest_frame::client_impl1{
 
     //we dont have the manpower, so we just implement the minimum working version of everything, because it's maintainable, pluggable, and code-able
 
+    //the unit of cache is killing me, it makes the program so buggy that I dont know what to write
+    //let's assume that referenced_size is an absolute unit of max_referenced_size for now
+    //this is harder to write than most foos anticipated
+    //the insert_cache() does not equal to get_cache()
+    //yet the get_cache() guarantees to read the correct insert_cache in the infinite_cache_controller_interface
+    //the re-request is also very hard to implement, without designated request_id, we are susceptible to every kind of behavior ranging from dup-write, to no-write, to nasal-demon
+
+    //I heard you, the designated_request_id is undeniably one of the hardest technical thing we've come across in many systems
+
+    //the thing is that cache_write_exclusion_control is infinite, there exists a chance that the thru() is thruing a unique value twice (this we must specify a guaranteed window of operation to avoid such case)
+    //assume thru thru once, we can't get the cache (because cache has been switched -> loss)
+    //                       we can get the cache (-> hit)
+    //                       we get the response, failed to insert the cache (-> loss)
+
+    //in the case of thruing once, we can definitely guarantee that requests can fail for many reasons, but the successful request is guaranteed to be consistent across different designated requests, and we eliminate the socket errors by introducing more internal expected errors
+    //                             the worst expected case of many_failed_requests == one_request_transmission
+    //this is the very important technical specs in computing our trees 
+
+    //in the case of thruing more than once, we fall back to the worst case of not having the designated request_id at all, we have to reduce this chance by specifying an operatable window of operation
+    //we'll complete the components in two days
+
     class CacheController: public virtual CacheControllerInterface{
 
         private:
 
             dg::unordered_unstable_map<cache_id_t, Response> cache_map;
             size_t cache_map_cap;
-            size_t referenced_size_counter;
-            size_t referenced_size_cap;
-            std::unique_ptr<std::mutex> mtx;
-            stdx::hdi_container<size_t> max_consume_per_load;
+            size_t max_response_sz;
+            size_t max_consume_per_load;
 
         public:
 
             CacheController(dg::unordered_unstable_map<cache_id_t, Response> cache_map,
                             size_t cache_map_cap,
-                            size_t referenced_size_counter,
-                            size_t referenced_size_cap,
-                            std::unique_ptr<std::mutex> mtx,
-                            stdx::hdi_container<size_t> max_consume_per_load) noexcept: cache_map(std::move(cache_map)),
-                                                                                        cache_map_cap(cache_map_cap),
-                                                                                        referenced_size_counter(referenced_size_counter),
-                                                                                        referenced_size_cap(referenced_size_cap),
-                                                                                        mtx(std::move(mtx)),
-                                                                                        max_consume_per_load(std::move(max_consume_per_load)){}
+                            size_t max_response_sz,
+                            size_t max_consume_per_load) noexcept: cache_map(std::move(cache_map)),
+                                                                   cache_map_cap(cache_map_cap),
+                                                                   max_response_sz(max_response_sz),
+                                                                   max_consume_per_load(std::move(max_consume_per_load)){}
 
             void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
                     auto map_ptr = stdx::to_const_reference(this->cache_map).find(cache_id_arr[i]);
@@ -739,30 +752,22 @@ namespace dg::network_rest_frame::client_impl1{
                         continue;
                     }
 
-                    if (this->referenced_size_counter >= this->referenced_size_cap){
-                        rs_arr[i] = std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                    if (dg::network_compact_serializer::size(base_response_arr[i]) > this->max_response_sz){
+                        rs_arr[i] = std::unexpected(dg::network_exception::REST_CACHE_MAX_RESPONSE_SIZE_REACHED);
                         continue;
                     }
 
                     static_assert(std::is_nothrow_move_constructible_v<Response> && std::is_nothrow_move_assignable_v<Response>);
 
-                    size_t incoming_sz      = dg::network_compact_serializer::size(base_response_arr[i]);
                     auto insert_token       = std::make_pair(cache_id_arr[i], std::move(base_response_arr[i]));
                     auto [map_ptr, status]  = this->cache_map.insert(std::move(insert_token));
                     rs_arr[i]               = status;
-
-                    if (status){
-                        this->referenced_size_counter += incoming_sz;
-                    }
                 }
             }
 
             void clear() noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
                 this->cache_map.clear();
-                this->referenced_size_counter = 0u;
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -771,18 +776,235 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
-    class DistributedCacheController: public virtual CacheControllerInterface{
+    class MutexControlledCacheController: public virtual CacheControllerInterface{
 
         private:
 
-            std::unique_ptr<std::unique_ptr<CacheControllerInterface>[]> cache_controller_arr;
-            size_t pow2_cache_controller_arr_sz;
-            size_t keyvalue_feed_cap;
-            stdx::hdi_container<size_t> max_consume_per_load;
+            std::unique_ptr<CacheControllerInterface> base;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            MutexControlledCacheController(std::unique_ptr<CacheControllerInterface> base,
+                                           std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
+                                                                                      mtx(std::move(mtx)){}
+
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response, exception_t>> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->get_cache(cache_id_arr, sz, rs_arr);
+            }
+
+            void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->insert_cache(cache_id_arr, response_arr, sz, rs_arr);
+            }
+
+            void clear() noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->clear();
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
+            }
+    };
+
+    class SwitchingCacheController: public virtual InfiniteCacheControllerInterface{
+
+        private:
+
+            std::unique_ptr<CacheControllerInterface> left;
+            std::unique_ptr<CacheControllerInterface> right;
+
+            bool operating_side;
+            size_t switch_population_counter;
+            size_t switch_population_threshold; 
+            size_t getcache_feed_cap;
 
         public:
 
-            DistributedCacheController(std::unique_ptr<std::unique_ptr<CacheControllerInterface>[]> cache_controller_arr,
+            SwitchingCacheController(std::unique_ptr<CacheControllerInterface> left,
+                                     std::unique_ptr<CacheControllerInterface> right,
+
+                                     bool operating_side,
+                                     size_t switch_population_counter,
+                                     size_t switch_population_threshold,
+                                     size_t getcache_feed_cap) noexcept: left(std::move(left)),
+                                                                         right(std::move(right)),
+                                                                         operating_side(std::move(operating_side)),
+                                                                         switch_population_counter(std::move(switch_population_counter)),
+                                                                         switch_population_threshold(std::move(switch_population_threshold)),
+                                                                         getcache_feed_cap(getcache_feed_cap){}
+
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
+
+                CacheControllerInterface * major_cache_controller   = nullptr;
+                CacheControllerInterface * minor_cache_controller   = nullptr;
+
+                if (this->operating_side == false){
+                    major_cache_controller  = this->right.get();
+                    minor_cache_controller  = this->left.get();
+                }  else{
+                    major_cache_controller  = this->left.get();
+                    minor_cache_controller  = this->right.get();
+                }
+
+                major_cache_controller->get_cache(cache_id_arr, sz, rs_arr);
+
+                auto feed_resolutor                 = InternalGetCacheFeedResolutor{};
+                feed_resolutor.dst                  = minor_cache_controller; 
+
+                size_t trimmed_getcache_feed_cap    = std::min(this->getcache_feed_cap, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_getcache_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_getcache_feed_cap, feeder_mem.get())); 
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (!rs_arr[i].has_value()){
+                        continue;
+                    }
+
+                    if (rs_arr[i].value().has_value()){
+                        continue;
+                    }
+
+                    auto feed_arg       = InternalGetCacheFeedArgument{};
+                    feed_arg.cache_id   = cache_id_arr[i];
+                    feed_arg.rs         = std::next(rs_arr, i);
+
+                    dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), feed_arg);
+                }
+            }
+
+            void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }                    
+                }
+
+                Response * base_response_arr        = response_arr.base();
+                this->switch_population_counter     += sz;
+
+                if (this->switch_population_counter >= this->switch_population_threshold){
+                    this->internal_dispatch_switch();
+                    this->switch_population_counter = sz;
+                }
+
+                CacheControllerInterface * current_cache_controller = nullptr;
+
+                if (this->operating_side == false){
+                    current_cache_controller = this->left.get();
+                } else{
+                    current_cache_controller = this->right.get();
+                }
+
+                current_cache_controller->insert_cache(cache_id_arr, response_arr, sz, rs_arr);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (!rs_arr[i].has_value() || !rs_arr[i].value()){
+                        this->switch_population_counter -= 1u;
+                    }
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load.value;
+            }
+        
+        private:
+
+            struct InternalGetCacheFeedArgument{
+                cache_id_t cache_id;
+                std::expected<std::optional<Response>, exception_t> * rs;
+            };
+
+            struct InternalGetCacheFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalGetCacheFeedArgument>{
+
+                CacheControllerInterface * dst;
+
+                void push(std::move_iterator<InternalGetCacheFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    auto base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<Response>, exception_t>[]> rs_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        cache_id_arr[i] = base_data_arr[i].cache_id;
+                    }
+
+                    this->dst->get_cache(cache_id_arr.get(), sz, rs_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        static_assert(std::is_nothrow_move_assignable_v<std::expected<std::optional<Response>, exception_t>>);
+                        *base_data_arr[i].rs = std::move(rs_arr[i]);
+                    }
+                }
+            };
+
+            void internal_dispatch_switch() noexcept{
+
+                if (this->operating_side == false){
+                    this->right->clear();
+                } else{
+                    this->left->clear();
+                }
+
+                this->operating_side            = !this->operating_side;
+                this->switch_population_counter = 0u;
+            }
+    }; 
+
+    class MutexControlledInfiniteCacheController: public virtual InfiniteCacheControllerInterface{
+
+        private:
+
+            std::unique_ptr<InifiniteCacheControllerInterface> base;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            MutexControlledInfiniteCacheController(std::unique_ptr<InfiniteCacheControllerInterface> base,
+                                                   std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
+                                                                                              mtx(std::move(mtx)){}
+
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->get_cache(cache_id_arr, sz, rs_arr);
+            }
+
+            void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->insert_cache(cache_id_arr, response_arr, sz, rs_arr);
+            }            
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
+            }
+    };
+
+    class DistributedCacheController: public virtual InfiniteCacheControllerInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<InfiniteCacheControllerInterface>[]> cache_controller_arr;
+            size_t pow2_cache_controller_arr_sz;
+            size_t keyvalue_feed_cap;
+
+        public:
+
+            DistributedCacheController(std::unique_ptr<std::unique_ptr<InfiniteCacheControllerInterface>[]> cache_controller_arr,
                                        size_t pow2_cache_controller_arr_sz,
                                        size_t keyvalue_feed_cap,
                                        stdx::hdi_container<size_t> max_consume_per_load) noexcept: cache_controller_arr(std::move(cache_controller_arr)),
@@ -792,23 +1014,53 @@ namespace dg::network_rest_frame::client_impl1{
 
             void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
 
+                auto feed_resolutor                 = InternalGetCacheFeedResolutor{};
+                feed_resolutor.cache_controller_arr = this->cache_controller_arr.get();
+
+                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t partitioned_idx  = dg::network_hash::hash_reflectible(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
+
+                    auto feed_arg           = InternalGetCacheFeedArgument{};
+                    feed_arg.cache_id       = cache_id_arr[i];
+                    feed_arg.rs_ptr         = std::next(rs_arr, i);
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
+                }
             }
 
             void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
 
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                auto base_response_arr              = response_arr.base();
+
+                auto feed_resolutor                 = InternalCacheInsertFeedResolutor{};
+                feed_resolutor.cache_controller_arr = this->cache_controller_arr.get();
+
+                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t partitioned_idx  = dg::network_hash::hash_reflectible(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
+                    auto feed_arg           = InternalCacheInsertFeedArgument{.cache_id     = cache_id_arr[i],
+                                                                              .response     = std::move(base_response_arr[i]),
+                                                                              .fallback_ptr = std::next(base_response_arr, i)};
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, std::move(feed_arg));
+                }
             }
-
-            void clear() noexcept{
-
-            }
-
-            auto max_consume_size() noexcept -> size_t{
-
-            }
-    };
-
-    class SwitchingCacheController: public virtual InfiniteCacheControllerInterface{
-
     };
 
     class CacheWriteExclusionController: public virtual CacheWriteExclusionControllerInterface{
@@ -922,23 +1174,13 @@ namespace dg::network_rest_frame::client_impl1{
             }
 
             void maybedeferred_memory_ordering_fetch(size_t idx, std::expected<Response, exception_t> response) noexcept{
-                
-                //this is ..., the designated memory area of the producer is clear
-                //dg::vector<> size is const, dg::vector<> ptr is const, the logic is sound, but it is not 
-                //producer is responsible to defer the memory ordering and do 1 big std::atomic_thread_fence(std::memory_order_release) after the consume
 
                 this->resp_vec[idx] = std::move(response);
             }
 
             void maybedeferred_memory_ordering_fetch_close(size_t idx, void * dirty_memory) noexcept{
 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-                stdx::empty_noipa(dirty_memory);
-                intmax_t old = this->atomic_smp.fetch_add(1, std::memory_order_relaxed);
-
-                if (old == 0){
-                    this->atomic_smp.notify_one():
-                }
+                this->internal_maybedeferred_memory_ordering_fetch_close(idx, dirty_memory);
             }
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
@@ -954,6 +1196,17 @@ namespace dg::network_rest_frame::client_impl1{
                 std::atomic_thread_fence(std::memory_order_acquire);
 
                 return dg::vector<std::expected<Response, exception_t>>(std::move(this->resp_vec));
+            }
+
+        private:
+
+            __attribute__((noipa)) void internal_maybedeferred_memory_ordering_fetch_close(size_t idx, void * dirty_memory) noexcept{
+
+                intmax_t old = this->atomic_smp.fetch_add(1, std::memory_order_relaxed);
+
+                if (old == 0){
+                    this->atomic_smp.notify_one():
+                }
             }
     };
 
