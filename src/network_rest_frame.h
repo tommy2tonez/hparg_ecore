@@ -19,10 +19,28 @@ namespace dg::network_rest_frame::model{
 
     using ticket_id_t   = uint64_t;
     using clock_id_t    = uint64_t; 
-    using cache_id_t    = uint64_t; 
 
     static inline constexpr uint32_t INTERNAL_REQUEST_SERIALIZATION_SECRET  = 3312354321ULL;
     static inline constexpr uint32_t INTERNAL_RESPONSE_SERIALIZATION_SECRET = 3554488158ULL;
+
+    struct CacheID{
+        std::array<char, 8u> ip;
+        std::array<char, 8u> native_cache_id;
+        std::optional<std::array<char, 8u>> bucket_hint; //this is complicated, we need to increase the number of buckets in order to do bucket_hint, we only fetch 128 bytes of memory for 4 buckets, this is an extremely fast insert
+                                                         //find() is another problem, we hardly ever find this thing, it's like 1 of 16384 chance to find a cached response, so ... we only worry about the insert for now 
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(ip, native_cache_id, bucket_hint);
+        }
+
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(ip, native_cache_id, bucket_hint);
+        }
+    };
+
+    using cache_id_t    = CacheID; 
 
     struct ClientRequest{
         dg::string requestee_uri;
@@ -139,6 +157,10 @@ namespace dg::network_rest_frame::model{
 
 namespace dg::network_rest_frame::server{
 
+    //we dont want to couple the responsibility of registration + exclusivity of write 
+    //that's bad practice
+    //we rather write two distinct components to describe the logic
+
     struct CacheControllerInterface{
         virtual ~CacheControllerInterface() noexcept = default;
         virtual void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
@@ -157,16 +179,23 @@ namespace dg::network_rest_frame::server{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    struct CacheWriteExclusionControllerInterface{
-        virtual ~CacheWriteExclusionControllerInterface() noexcept = default;
-        virtual auto thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
+    struct CacheUniqueWriteControllerInterface{
+        virtual ~CacheUniqueWriteControllerInterface() noexcept = default;
+        virtual void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept = 0;
+        virtual void contains(cache_id_t * cache_id_arr, size_t sz, bool * rs_arr) noexcept = 0;
         virtual void clear() noexcept = 0;
+        virtual auto size() const noexcept -> size_t = 0;
+        virtual auto capacity() const noexcept -> size_t = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    struct InfiniteCacheWriteExclusionControllerInterface{
-        virtual ~InfiniteCacheWriteExclusionControllerInterface() noexcept = default;
-        virtual auto thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
+    //I've been thinking whether to include the response size as part of the write permissions
+    //it's extremely complicated, we dont want to do that for now
+    //
+
+    struct InfiniteCacheUniqueWriteControllerInterface{
+        virtual ~InfiniteCacheUniqueWriteControllerInterface() noexcept = default;
+        virtual void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -240,7 +269,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map;
             std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller;
-            std::shared_ptr<InfiniteCacheWriteExclusionControllerInterface> cachewrite_uex_controller;
+            std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cachewrite_uex_controller;
             dg::network_kernel_mailbox::transmit_option_t transmit_opt;
             uint32_t resolve_channel;
             size_t resolve_consume_sz;
@@ -255,7 +284,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             RequestResolverWorker(dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map,
                                   std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller,
-                                  std::shared_ptr<InfiniteCacheWriteExclusionControllerInterface> cachewrite_uex_controller,
+                                  std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cachewrite_uex_controller,
                                   dg::network_kernel_mailbox::transmit_option_t transmit_opt,
                                   uint32_t resolve_channel,
                                   size_t resolve_consume_sz,
@@ -545,7 +574,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             struct InternalCacheServerFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheServerFeedArgument>{
 
-                InfiniteCacheWriteExclusionControllerInterface * cachewrite_uex_controller;
+                InfiniteCacheUniqueWriteControllerInterface * cachewrite_uex_controller;
                 dg::network_producer_consumer::KVDeliveryHandle<InternalServerFeedResolutorArgument> * server_resolutor_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder;
 
@@ -679,6 +708,20 @@ namespace dg::network_rest_frame::client_impl1{
     //we want to split x -> x1, x2 and prop that down to the binary heap 
     //our binary heap has the base being the universe bitarray, and the root is a random temporal-predicting bit of the universe
 
+    //let's talk about the major concepts
+    //self-intercourse, x is a uint16_t tile, y is a uint8_t tile, f(x) -> y
+    //parity + dis-parity
+    //residual-self-image
+    //straightness (linearity) of projection space
+
+    //self-intercourse is a normal multi-variate projection f(x) -> y described in multi_variate_taylor_fast.py
+    //parity is the ability to split the x -> x1 and x2 such that <x1, x2> is bijectively mapped to x
+    //residual-self-image is <x1, x2>
+    //straightness (linearity) of domain space could be achieved via bleacher_search or range space sort - this is the hardest part of backpropagation, we thing that we are spending billions of dollars to work on 
+    //we are fixating the straightness of projection space as our true North
+    //this is true if we are working on normal Taylor Series
+    //requires extra mechanisms if we are not working on normal Taylor Series (a version of Taylor Series compression)
+
     //what's hard is the backpropagation hints, the rules get loosened as it backprops, and the data required to store such information is ... 
     //we'll talk about that
 
@@ -711,18 +754,69 @@ namespace dg::network_rest_frame::client_impl1{
     //its incredibly hard just to implement the get_cache + insert_cache for infinite unordered_map
     //we can literally go on for another 10000 lines of code just to talk about this
 
+    //let's see what we could do with the cache controller to allow user-configurable extension
+    //hashing techniques
+
+    //ip-hashing                -> cache_controller
+    //bucket_hint               -> random_bucket_addr
+    //incrementing_bucket_id    -> intentional bucket-chain collisions, reduce memory access pattern by 10 folds
+
+    //we stick with the uniform distribution for now, yet we must not hinder the ability to do hashing, we'll provide a constructor dependency injection
+    //clear
+    //^^^
+
+    //we literally dont have time to argue about eligibility
+    //there are 1024 ways to die a system
+    //why be cautious when you could be saving?
+    //the ip_hint and the bucket_hint would reduce the memory footprint of the map by 10 folds with correct configurations, and due-cares, this is hard
+    //we would do this a lot in our system, the bucket_hint, RAM fetch is very expensive so we must come up with a leeway to reduce the cost
+    //most of the time, we just want to use normal native_ip because the request is relatively fat, 64KB -> 128 bytes of memory fetch
+
+    //fellas, I dont have time to implement crazy things like you guys
+    //I dont even know what yall do with the implementations
+    //I just wish to have an interface, correct factory pattern, correct dependency injection and move on with my life
+
+    struct CacheNormalHasher{
+
+        constexpr auto operator()(const CacheID& cache_id) const noexcept -> size_t{
+
+            return dg::network_hash::hash_reflectible(cache_id);
+        }
+    };
+
+    struct CacheBucketHintHasher{
+
+        constexpr auto operator()(const CacheID& cache_id) const noexcept -> size_t{
+
+            if (cache_id.bucket_hint.has_value()){
+                return dg::network_hash::hash_reflectible(cache_id.bucket_hint.value());
+            } else{
+                return dg::network_hash::hash_reflectible(cache_id);
+            }
+        }
+    };
+
+    struct CacheIPHasher{
+
+        constexpr auto operator()(const CacheID& cache_id) const noexcept -> size_t{
+
+            return dg::network_hash::hash_reflectible(cache_id.ip);
+        }
+    };
+
+    template <class Hasher>
     class CacheController: public virtual CacheControllerInterface{
 
         private:
 
-            dg::unordered_unstable_map<cache_id_t, Response> cache_map;
+            dg::unordered_unstable_map<cache_id_t, Response, Hasher> cache_map;
             size_t cache_map_cap;
             size_t max_response_sz;
             size_t max_consume_per_load;
 
         public:
 
-            CacheController(dg::unordered_unstable_map<cache_id_t, Response> cache_map,
+            CacheController(dg::unordered_unstable_map<cache_id_t, Response, Hasher> cache_map,
                             size_t cache_map_cap,
                             size_t max_response_sz,
                             size_t max_consume_per_load) noexcept: cache_map(std::move(cache_map)),
@@ -876,22 +970,25 @@ namespace dg::network_rest_frame::client_impl1{
             size_t getcache_feed_cap;
             size_t insertcache_feed_cap;
 
+            size_t max_consume_per_load;
+
         public:
 
             SwitchingCacheController(std::unique_ptr<CacheControllerInterface> left,
                                      std::unique_ptr<CacheControllerInterface> right,
-
                                      bool operating_side,
                                      size_t switch_population_counter,
                                      size_t switch_population_threshold,
                                      size_t getcache_feed_cap,
-                                     size_t insertcache_feed_cap) noexcept: left(std::move(left)),
+                                     size_t insertcache_feed_cap,
+                                     size_t max_consume_per_load) noexcept: left(std::move(left)),
                                                                             right(std::move(right)),
                                                                             operating_side(std::move(operating_side)),
                                                                             switch_population_counter(std::move(switch_population_counter)),
                                                                             switch_population_threshold(std::move(switch_population_threshold)),
                                                                             getcache_feed_cap(getcache_feed_cap),
-                                                                            insertcache_feed_cap(insertcache_feed_cap){}
+                                                                            insertcache_feed_cap(insertcache_feed_cap),
+                                                                            max_consume_per_load(max_consume_per_load){}
 
             void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
 
@@ -911,7 +1008,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feed_resolutor                 = InternalGetCacheFeedResolutor{};
                 feed_resolutor.dst                  = minor_cache_controller; 
 
-                size_t trimmed_getcache_feed_cap    = std::min(this->getcache_feed_cap, sz);
+                size_t trimmed_getcache_feed_cap    = std::min(std::min(this->getcache_feed_cap, minor_cache_controller->max_consume_size()), sz);
                 size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_getcache_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_getcache_feed_cap, feeder_mem.get())); 
@@ -965,12 +1062,12 @@ namespace dg::network_rest_frame::client_impl1{
                 feed_resolutor.insert_incrementor   = &this->switch_population_counter;
                 feed_resolutor.dst                  = current_cache_controller; 
 
-                size_t trimmed_insertcache_feed_cap = std::min(this->insertcache_feed_cap, sz);
+                size_t trimmed_insertcache_feed_cap = std::min(std::min(this->insertcache_feed_cap, current_cache_controller->max_consume_size()), sz);
                 size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_insertcache_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_insertcache_feed_cap, feeder_mem.get())); 
 
-                dg::network_stack_allocation::NoExceptAllocation<bool[]> contain_status_arr(sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<bool[]> contain_status_arr(sz);
                 other_cache_controller->contains(cache_id_arr, sz, contain_status_arr.get());
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -1112,6 +1209,7 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
+    template <class Hasher>
     class DistributedCacheController: public virtual InfiniteCacheControllerInterface{
 
         private:
@@ -1145,7 +1243,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    size_t partitioned_idx  = dg::network_hash::hash_reflectible(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
+                    size_t partitioned_idx  = Hasher{}(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
 
                     auto feed_arg           = InternalGetCacheFeedArgument{};
                     feed_arg.cache_id       = cache_id_arr[i];
@@ -1175,7 +1273,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    size_t partitioned_idx  = dg::network_hash::hash_reflectible(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
+                    size_t partitioned_idx  = Hasher{}(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
                     auto feed_arg           = InternalCacheInsertFeedArgument{.cache_id     = cache_id_arr[i],
                                                                               .response     = std::move(base_response_arr[i]),
                                                                               .fallback_ptr = std::next(base_response_arr, i),
@@ -1258,16 +1356,366 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
-    class CacheWriteExclusionController: public virtual CacheWriteExclusionControllerInterface{
+    //vvv
+    //alright let's do a 30 minutes write
+    //I'm tempted to do a bloom filter, let's not micro optimize things, we are processing 128KB request / 1 entry of 32 bytes, == 1 / 4096 == 1MB -> 4GB of requests, it's not gonna dent our memory overheads 
 
+    template <class Hasher>
+    class CacheUniqueWriteController: public virtual CacheUniqueWriteControllerInterface{
+
+        private:
+
+            dg::unordered_unstable_set<cache_id_t, Hasher> cache_id_set;
+            size_t cache_id_set_cap;
+            size_t max_consume_per_load;
+
+        public:
+
+            CacheUniqueWriteController(dg::unordered_unstable_set<cache_id_t, Hasher> cache_id_set,
+                                       size_t cache_id_set_cap,
+                                       size_t max_consume_per_load) noexcept: cache_id_set(std::move(cache_id_set)),
+                                                                              cache_id_set_cap(cache_id_set_cap),
+                                                                              max_consume_per_load(max_consume_per_load){}
+
+            void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    auto set_ptr = this->cache_id_set.find(cache_id_arr[i]);
+
+                    if (set_ptr != this->cache_id_set.end()){
+                        rs_arr[i] = false; //false, found, already thru
+                        continue;
+                    }
+
+                    //unique, try to insert
+
+                    if (this->cache_id_set.size() == this->cache_id_set_cap){
+                        //cap reached, return cap exception, no_actions 
+                        rs_arr[i] = std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                        continue;
+                    }
+
+                    auto [_, status]  = this->cache_id_set.insert(cache_id_arr[i]);
+                    dg::network_exception_handler::dg_assert(status);
+                    rs_arr[i] = true; //thru, uniqueness acknowledged by cache_id_set
+                }
+            }
+
+            void contains(cache_id_t * cache_id_arr, size_t sz, bool * rs_arr) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    rs_arr[i] = this->cache_id_set.contains(cache_id_arr[i]);
+                }
+            }
+
+            void clear() noexcept{
+
+                this->cache_id_set.clear();
+            }
+
+            auto size() const noexcept -> size_t{
+
+                return this->cache_id_set.size();
+            }
+
+            auto capacity() const noexcept -> size_t{
+
+                return this->cache_id_set_cap;
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load;
+            }
     };
 
-    class DistributedCacheWriteExclusionController: public CacheWriteExclusionControllerInterface{
+    class MutexControlledCacheWriteExclusionController: public virtual CacheUniqueWriteControllerInterface{
 
+        private:
+
+            std::unique_ptr<CacheUniqueWriteControllerInterface> base;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            MutexControlledCacheWriteExclusionController(std::unique_ptr<CacheUniqueWriteControllerInterface> base,
+                                                         std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
+                                                                                                    mtx(std::move(mtx)){}
+
+            void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->thru(cache_id_arr, sz, rs_arr);
+            }
+
+            void contains(cache_id_t * cache_id_arr, size_t sz, bool * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->contains(cache_id_arr, sz, rs_arr);
+            }
+
+            void clear() noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->clear();
+            }
+
+            auto size() const noexcept -> size_t{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                return this->base->size();
+            }
+
+            auto capacity() const noexcept -> size_t{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                return this->base->capacity();
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
+            }
     };
 
-    class SwitchingCacheWriteExclusionController: public virtual InfiniteCacheWriteExclusionControllerInterface{
+    class SwitchingCacheWriteExclusionController: public virtual InfiniteCacheUniqueWriteControllerInterface{
 
+        private:
+
+            std::unique_ptr<CacheUniqueWriteControllerInterface> left_controller;
+            std::unique_ptr<CacheUniqueWriteControllerInterface> right_controller;
+
+            bool operating_side;
+            size_t switch_population_counter;
+            size_t switch_population_threshold;
+            size_t thru_feed_cap;
+            size_t max_consume_per_load;
+
+        public:
+
+            SwitchingCacheWriteExclusionController(std::unique_ptr<CacheUniqueWriteControllerInterface> left_controller,
+                                                   std::unique_ptr<CacheUniqueWriteControllerInterface> right_controller,
+                                                   bool operating_side,
+                                                   size_t switch_population_counter,
+                                                   size_t switch_population_threshold,
+                                                   size_t thru_feed_cap,
+                                                   size_t max_consume_per_load) noexcept: left_controller(std::move(left_controller)),
+                                                                                          right_controller(std::move(right_controller)),
+                                                                                          operating_side(operating_side),
+                                                                                          switch_population_counter(switch_population_counter),
+                                                                                          switch_population_threshold(switch_population_threshold),
+                                                                                          thru_feed_cap(thru_feed_cap),
+                                                                                          max_consumer_per_load(max_consumer_per_load){}
+
+            void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort():
+                    }
+                }
+
+                if (this->switch_population_counter + sz >= this->switch_population_threshold){
+                    this->internal_dispatch_switch();
+                }
+
+                CacheUniqueWriteControllerInterface * current_write_controller  = nullptr;
+                CacheUniqueWriteControllerInterface * other_write_controller    = nullptr;
+
+                if (this->operating_side == false){
+                    current_write_controller    = this->left_controller.get();
+                    other_write_controller      = this->right_controller.get();
+                } else{
+                    current_write_controller    = this->right_controller.get();
+                    other_write_controller      = this->left_controller.get();
+                }
+
+                auto feed_resolutor                 = InternalThruWriteFeedResolutor{};
+                feed_resolutor.thru_incrementor     = &this->switch_population_counter;
+                feed_resolutor.dst                  = current_write_controller;
+
+                size_t trimmed_thru_feed_cap        = std::min(std::min(this->thru_feed_cap, current_write_controller->max_consume_size()), sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_thru_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_thru_feed_cap, feeder_mem.get())); 
+
+                dg::network_stack_allocation::NoExceptRawAllocation<bool[]> contain_status_arr(sz);
+                other_write_controller->contains(cache_id_arr, sz, contain_status_arr.get());
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (contain_status_arr[i]){
+                        rs_arr[i] = false; //already thru
+                        continue;
+                    }
+
+                    auto feed_arg   = InternalThruWriteFeedArgument{.cache_id   = cache_id_arr[i],
+                                                                    .rs         = std::next(rs_arr, i)};
+
+                    dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), feed_arg);
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load;
+            }
+        
+        private:
+
+            struct InternalThruWriteFeedArgument{
+                cache_id_t cache_id;
+                std::expected<bool, exception_t> * rs;
+            };
+
+            struct InternalThruWriteFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalThruWriteFeedArgument>{
+                
+                size_t * thru_incrementor;
+                CacheUniqueWriteControllerInterface * dst;
+
+                void push(std::move_iterator<InternalThruWriteFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    auto base_data_arr = data_arr.base();
+                    dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        cache_id_arr[i] = base_data_arr[i].cache_id;
+                    }
+
+                    this->dst->thru(cache_id_arr.get(), sz, rs_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        *base_data_arr[i].rs = rs_arr[i];
+
+                        if (!rs_arr[i].has_value()){
+                            continue;
+                        }
+
+                        if (!rs_arr[i].value()){
+                            continue;
+                        }
+
+                        *this->thru_incrementor += 1;
+                    }
+                }
+            };
+
+            void internal_dispatch_switch() noexcept{
+
+                if (this->operating_side == false){
+                    this->right_controller->clear();
+                } else{
+                    this->left_controller->clear();
+                }
+
+                this->operating_side            = !this->operating_side;
+                this->switch_population_counter = 0u;
+            }
+    };
+
+    class MutexControlledInfiniteCacheWriteExclusionController: public virtual InfiniteCacheUniqueWriteControllerInterface{
+
+        private:
+
+            std::unique_ptr<InfiniteCacheUniqueWriteControllerInterface> base;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            MutexControlledInfiniteCacheWriteExclusionController(std::unique_ptr<InfiniteCacheUniqueWriteControllerInterface> base,
+                                                                 std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
+                                                                                                            mtx(std::move(mtx)){}
+
+            void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                this->base->thru(cache_id_arr, sz, rs_arr);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size():
+            }
+    };
+
+    template <class Hasher>
+    class DistributedUniqueCacheWriteController: public virtual InfiniteCacheUniqueWriteControllerInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<InfiniteCacheUniqueWriteControllerInterface>[]> base_arr;
+            size_t pow2_base_arr_sz;
+            size_t thru_keyvalue_feed_cap;
+            size_t max_consume_per_load;
+        
+        public:
+
+            DistributedUniqueCacheWriteController(std::unique_ptr<std::unique_ptr<InfiniteCacheWriteControllerInterface>[]> base_arr,
+                                                  size_t pow2_base_arr_sz) noexcept: base_arr(std::move(base_arr)),
+                                                                                     pow2_base_arr_sz(pow2_base_arr_sz){}
+
+            void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                auto feed_resolutor                     = InternalThruFeedResolutor{};
+                feed_resolutor.controller_arr           = this->base_arr.get();
+
+                size_t trimmed_thru_keyvalue_feed_cap   = std::min(this->thru_keyvalue_feed_cap, sz);
+                size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_thru_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_thru_keyvalue_feed_cap, feeder_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t partitioned_idx  = Hasher{}(cache_id_arr[i]) & (this->pow2_base_arr_sz - 1u);
+                    
+                    auto feed_arg           = InternalThruFeedArgument{};
+                    feed_arg.cache_id       = cache_id_arr[i];
+                    feed_arg.rs_ptr         = std::next(rs_arr, i);
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load;
+            }
+        
+        private:
+
+            struct InternalThruFeedArgument{
+                cache_id_t cache_id;
+                std::expected<bool, exception_t> * rs_ptr;
+            };
+
+            struct InternalThruFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalThruFeedArgument>{
+
+                std::unique_ptr<InfiniteCacheUniqueWriteControllerInterface> * controller_arr;
+
+                void push(const size_t& idx, std::move_iterator<InternalThruFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    auto base_data_arr = data_arr.base();
+                    dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        cache_id_arr[i] = base_data_arr[i].cache_id;
+                    }
+
+                    this->controller_arr[idx]->thru(cache_id_arr.get(), sz, rs_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        *base_data_arr[i].rs_ptr = rs_arr[i];
+                    }
+                }
+            };
     };
 
     class RequestResponseBase{
@@ -1386,9 +1834,7 @@ namespace dg::network_rest_frame::client_impl1{
                     return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
                 } 
 
-                this->atomic_smp.wait(0, std::memory_order_relaxed);
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-                std::atomic_thread_fence(std::memory_order_acquire);
+                this->atomic_smp.wait(0, std::memory_order_acquire);
 
                 return dg::vector<std::expected<Response, exception_t>>(std::move(this->resp_vec));
             }

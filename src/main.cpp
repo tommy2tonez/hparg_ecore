@@ -10,27 +10,31 @@
 #include <iostream>
 // #include "network_producer_consumer.h"
 // #include "network_producer_consumer.h"
-// #include "network_datastructure.h"
-// #include <bit>
-// #include <climits>
-#include <chrono>
-// #include "dense_hash_map/dense_hash_map.hpp"
-// #include <unordered_map>
-// #include "test_map.h"
-// #include "dg_dense_hash_map.h"
-// #include "network_kernel_mailbox_impl1_x.h"
-// #include <vector>
+// // #include "network_datastructure.h"
+// // #include <bit>
+// // #include <climits>
+// #include <chrono>
+// // #include "dense_hash_map/dense_hash_map.hpp"
+// // #include <unordered_map>
+// // #include "test_map.h"
+// // #include "dg_dense_hash_map.h"
+// // #include "network_kernel_mailbox_impl1_x.h"
+// // #include <vector>
+// // #include <type_traits>
+// // #include "network_datastructure.h"
+// // #include "network_fileio.h"
+// // #include "network_fileio_chksum_x.h"
+// // #include "network_host_asynchronous.h"
+// #include <stdlib.h>
+// #include <stdint.h>
 // #include <type_traits>
-// #include "network_datastructure.h"
-// #include "network_fileio.h"
-// #include "network_fileio_chksum_x.h"
-// #include "network_host_asynchronous.h"
-#include <stdlib.h>
-#include <stdint.h>
-#include <type_traits>
-#include "network_allocation.h"
+// #include "network_allocation.h"
 #include <atomic>
 
 int main(){
+
+    std::atomic_flag smp(0u);
+    // smp.test_and_set();
+    smp.wait(false); //what i'm confused is this, is wait guaranteed to return if the value changed before the wait?
 
 }
