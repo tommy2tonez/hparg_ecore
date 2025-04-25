@@ -33,8 +33,4 @@
 
 int main(){
 
-    std::atomic_flag smp(0u);
-    // smp.test_and_set();
-    smp.wait(false); //what i'm confused is this, is wait guaranteed to return if the value changed before the wait?
-
 }

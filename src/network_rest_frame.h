@@ -776,6 +776,9 @@ namespace dg::network_rest_frame::client_impl1{
     //I dont even know what yall do with the implementations
     //I just wish to have an interface, correct factory pattern, correct dependency injection and move on with my life
 
+    //the implementation is taking longer than expected
+    //we are on the timeline
+
     struct CacheNormalHasher{
 
         constexpr auto operator()(const CacheID& cache_id) const noexcept -> size_t{
