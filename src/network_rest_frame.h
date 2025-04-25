@@ -103,31 +103,6 @@ namespace dg::network_rest_frame::model{
         std::optional<cache_id_t> client_request_cache_id;
         std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout;
 
-        //what to add here? security, eligibility, priority, unique request id, cached response??? this is not quantifiable. it seems that those could be solved by using other measurements, we'll circle back to add these measurements
-        //we dont know if the security, eligibility is this guy responsibility, yet we know for sure that priority is this guy responsibility, priority needs to be able to be propped down to the mailbox with priority mail, we haven't implemented that yet
-        //unique_dedicated_request_id + cached response, such is to avoid duplicate writes from client re-requests  
-        //using that is user-optional, we'll implement that 
-        //the problem with priority is that we need to implement a binary batched AVL container to do in-order traversal + batch insert
-        //heap_pop + heap_push are very expensive in this case
-        //it's complicated
-        //the re-requests + duplicate writes are very buggy + dangerous
-        //we'll try to containerize the bugs at every tranmission level
-
-        //if we look closely, the kernel_mailbox has an unsolvable unique_mailbox_id leak
-        //the kernel_mailbox_stream_x has a blacklist leak
-        //this dude has a duplicate request problem
-        //the duplicate request could be from the user or from one of the leaks
-        //we dont really know
-        //what we know is that the integrity of the mailbox content must be guaranteed (we need to implement extra measurements in the flash_streamx)
-        //duplicate response is actually not a problem, because we are using an ever-increasing request_id, the second time the request_id is referenced, it's gone, either because of the first time releasing the user's smp or got destructed before the first response hit
-
-        //request is one of the worst vulnerabilities, unsolved mystery of the universe
-        //we really dont have a way to solve this except for doing the designated_request_id
-        //we'll try to implement all of these features in 3 days, we'll move on to another component
-        //this is only for internal comm, Flask + friends should need a liaison, we'll talk about that
-        //this should be able to sat the UDP bandwidth of 1GB/s with the current tech, with minimal system-wide pollutions, we only acquire 1 smp per 1024 * 1 KB = 1MB for example, 1GB should be 1000 smps * k 
-        //this is actually Far Away by Nickleback
-
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
             reflector(request, ticket_id, dual_priority, has_unique_response, client_request_cache_id, server_abs_timeout);
@@ -157,9 +132,9 @@ namespace dg::network_rest_frame::model{
 
 namespace dg::network_rest_frame::server{
 
-    //we dont want to couple the responsibility of registration + exclusivity of write 
-    //that's bad practice
-    //we rather write two distinct components to describe the logic
+    //the reason that we are rewriting these so many times is because each container is different from another
+    //it's real
+    //every application has to twist their own kind of container, then there is version control problems, so its best to internalize the dependencies, and make it a unit of deliverable 
 
     struct CacheControllerInterface{
         virtual ~CacheControllerInterface() noexcept = default;
@@ -174,8 +149,8 @@ namespace dg::network_rest_frame::server{
 
     struct InfiniteCacheControllerInterface{
         virtual ~InfiniteCacheControllerInterface() noexcept = default;
-        virtual auto get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
-        virtual auto insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) = 0;
+        virtual void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
+        virtual void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -188,10 +163,6 @@ namespace dg::network_rest_frame::server{
         virtual auto capacity() const noexcept -> size_t = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
-
-    //I've been thinking whether to include the response size as part of the write permissions
-    //it's extremely complicated, we dont want to do that for now
-    //
 
     struct InfiniteCacheUniqueWriteControllerInterface{
         virtual ~InfiniteCacheUniqueWriteControllerInterface() noexcept = default;
@@ -235,7 +206,7 @@ namespace dg::network_rest_frame::client{
 
     struct TicketControllerInterface{
         virtual ~TicketControllerInterface() noexcept = default;
-        virtual void open_ticket(size_t sz, std::expected<model::ticket_id_t, exception_t> * generated_ticket_arr) noexcept = 0;
+        virtual auto open_ticket(size_t sz, model::ticket_id_t * rs) noexcept -> exception_t = 0;
         virtual void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** assigning_observer_arr, std::expected<bool, exception_t> * exception_arr) noexcept = 0;
         virtual void steal_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept = 0;
         virtual void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept = 0;
@@ -682,102 +653,6 @@ namespace dg::network_rest_frame::server_impl1{
 namespace dg::network_rest_frame::client_impl1{
 
     using namespace dg::network_rest_frame::client; 
-
-    //what's the clever way
-    //we are thinking of the way
-
-    //cache_controller (1)
-    //random_hash_distributed_cache_controller (2) extends 1
-    //switching_cache_controller (3) extends 2 (2)
-    //I'm telling yall that this is not for a faint of heart
-    //designing these things is like an electrical circuit
-    //it seems like we could control the concurrency point higher up but it's not
-    //every point is the lock contention point, the usage of distributed map is unlimited
-    //we are talking about the CPU efficiency and CPU resource utilization again
-    //we'll be back tmr
-
-    //the only hard parts of the code is actually this part, the request, the socket, the nosync, the filesystem, the allocations
-    //we'll talk about mirror backpropagation hints (f(x) -> y, x hints sorted by y), virtual machine data extraction + tile as an absolute unit of forward
-    //such is a tile is by itself sufficient for forwarding, self-intercoursing + taylor-approximated-sufficient
-    //every tile is sufficient to store information in a binary heap of every bits of the universe -> one random bit of the universe
-
-    //(1): mirror backpropagation (residual-self-image)
-    //assume that our hint is (f(x) -> y, x hints sorted by y), we are resolving to nothing, the complexity of the task is not decreasing
-    //assume that our hint is a set of arbitrary possibilities, f(x) -> y, x hints will somewhat sort y
-    //the problem is the parity problem, find the optimal set of hints called x1 and x2 such that x1 possibilities and x2 possibilities will best sort y if they are compile-time-deterministic-combinatorially combined
-    //we want to split x -> x1, x2 and prop that down to the binary heap 
-    //our binary heap has the base being the universe bitarray, and the root is a random temporal-predicting bit of the universe
-
-    //let's talk about the major concepts
-    //self-intercourse, x is a uint16_t tile, y is a uint8_t tile, f(x) -> y
-    //parity + dis-parity
-    //residual-self-image
-    //straightness (linearity) of projection space
-
-    //self-intercourse is a normal multi-variate projection f(x) -> y described in multi_variate_taylor_fast.py
-    //parity is the ability to split the x -> x1 and x2 such that <x1, x2> is bijectively mapped to x
-    //residual-self-image is <x1, x2>
-    //straightness (linearity) of domain space could be achieved via bleacher_search or range space sort - this is the hardest part of backpropagation, we thing that we are spending billions of dollars to work on 
-    //we are fixating the straightness of projection space as our true North
-    //this is true if we are working on normal Taylor Series
-    //requires extra mechanisms if we are not working on normal Taylor Series (a version of Taylor Series compression)
-
-    //what's hard is the backpropagation hints, the rules get loosened as it backprops, and the data required to store such information is ... 
-    //we'll talk about that
-
-    //we dont have the manpower, so we just implement the minimum working version of everything, because it's maintainable, pluggable, and code-able
-
-    //the unit of cache is killing me, it makes the program so buggy that I dont know what to write
-    //let's assume that referenced_size is an absolute unit of max_referenced_size for now
-    //this is harder to write than most foos anticipated
-    //the insert_cache() does not equal to get_cache()
-    //yet the get_cache() guarantees to read the correct insert_cache in the infinite_cache_controller_interface
-    //the re-request is also very hard to implement, without designated request_id, we are susceptible to every kind of behavior ranging from dup-write, to no-write, to nasal-demon
-
-    //I heard you, the designated_request_id is undeniably one of the hardest technical thing we've come across in many systems
-
-    //the thing is that cache_write_exclusion_control is infinite, there exists a chance that the thru() is thruing a unique value twice (this we must specify a guaranteed window of operation to avoid such case)
-    //assume thru thru once, we can't get the cache (because cache has been switched -> loss)
-    //                       we can get the cache (-> hit)
-    //                       we get the response, failed to insert the cache (-> loss)
-
-    //in the case of thruing once, we can definitely guarantee that requests can fail for many reasons, but the successful request is guaranteed to be consistent across different designated requests, and we eliminate the socket errors by introducing more internal expected errors
-    //                             the worst expected case of many_failed_requests == one_request_transmission
-    //this is the very important technical specs in computing our trees 
-
-    //in the case of thruing more than once, we fall back to the worst case of not having the designated request_id at all, we have to reduce this chance by specifying an operatable window of operation
-    //we'll complete the components in two days
-
-    //the cached response is hard to implement, luckily, we have implemented our fast_dense_hash_map which guarantees the memory overhead to be in the confinement of the vector<>::reserve() + bucket::size()
-    //the insert + clear is super fast, we need to keep our map in 64KB range for each of the map + reasonable hashing technique + right delvrsrv_kv_deliver()
-    //we only care about the RAM BUS of the cores, we dont want to be polluting (memory ordering wises and memfetch wise), that's the sole purpose of everything: the correct host code, cuda is an entire different radix of virtues which we don't yet want to mention 
-    //its incredibly hard just to implement the get_cache + insert_cache for infinite unordered_map
-    //we can literally go on for another 10000 lines of code just to talk about this
-
-    //let's see what we could do with the cache controller to allow user-configurable extension
-    //hashing techniques
-
-    //ip-hashing                -> cache_controller
-    //bucket_hint               -> random_bucket_addr
-    //incrementing_bucket_id    -> intentional bucket-chain collisions, reduce memory access pattern by 10 folds
-
-    //we stick with the uniform distribution for now, yet we must not hinder the ability to do hashing, we'll provide a constructor dependency injection
-    //clear
-    //^^^
-
-    //we literally dont have time to argue about eligibility
-    //there are 1024 ways to die a system
-    //why be cautious when you could be saving?
-    //the ip_hint and the bucket_hint would reduce the memory footprint of the map by 10 folds with correct configurations, and due-cares, this is hard
-    //we would do this a lot in our system, the bucket_hint, RAM fetch is very expensive so we must come up with a leeway to reduce the cost
-    //most of the time, we just want to use normal native_ip because the request is relatively fat, 64KB -> 128 bytes of memory fetch
-
-    //fellas, I dont have time to implement crazy things like you guys
-    //I dont even know what yall do with the implementations
-    //I just wish to have an interface, correct factory pattern, correct dependency injection and move on with my life
-
-    //the implementation is taking longer than expected
-    //we are on the timeline
 
     struct CacheNormalHasher{
 
@@ -1359,10 +1234,6 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
-    //vvv
-    //alright let's do a 30 minutes write
-    //I'm tempted to do a bloom filter, let's not micro optimize things, we are processing 128KB request / 1 entry of 32 bytes, == 1 / 4096 == 1MB -> 4GB of requests, it's not gonna dent our memory overheads 
-
     template <class Hasher>
     class CacheUniqueWriteController: public virtual CacheUniqueWriteControllerInterface{
 
@@ -1892,11 +1763,13 @@ namespace dg::network_rest_frame::client_impl1{
 
             dg::vector<BatchRequestResponseBaseDesignatedObserver> observer_arr; 
             BatchRequestResponseBase base;
-        
+            bool response_wait_responsibility_flag;
+
         public:
 
             BatchRequestResponse(size_t resp_sz): observer_arr(resp_sz),
-                                                  base(resp_sz){
+                                                  base(resp_sz),
+                                                  response_wait_responsibility_flag(true){
 
                 for (size_t i = 0u; i < resp_sz; ++i){
                     this->observer_arr[i] = BatchRequestResponseBaseDesignatedObserver(&this->base, i);
@@ -1905,8 +1778,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             ~BatchRequestResponse() noexcept{
 
-                //this is harder than expected
-                stdx::empty_noipa(this->base->response(), this->observer_arr);
+                this->wait_response();
             }
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
@@ -1923,6 +1795,18 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return std::addressof(this->observer_arr[idx]);
             }
+
+            void release_response_wait_responsibility() noexcept{
+
+                this->response_wait_responsibility_flag = false;
+            }
+
+            void wait_response() noexcept{
+
+                if (this->response_wait_responsibility_flag){
+                    stdx::empty_noipa(this->base->response(), this->observer_arr);
+                }            
+            }
     };
 
     auto make_batch_request_response(size_t resp_sz) noexcept -> std::expected<std::unique_ptr<BatchRequestResponse>, exception_t>{
@@ -1936,17 +1820,19 @@ namespace dg::network_rest_frame::client_impl1{
 
             RequestResponseBase base;
             RequestResponseBaseObserver observer;
+            bool response_wait_responsibility_flag; 
 
         public:
 
-            RequestResponse(): base(){
+            RequestResponse(): base(),
+                               response_wait_responsibility_flag(true){
 
                 this->observer = RequestResponseBaseObserver(&this->base);
             }
 
             ~ReleaseSafeRequestResponse() noexcept{
 
-                stdx::empty_noipa(this->base->response(), this->observer);
+                this->wait_response();
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -1957,6 +1843,18 @@ namespace dg::network_rest_frame::client_impl1{
             auto get_observer() noexcept -> ResponseObserverInterface *{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
 
                 return &this->observer;
+            }
+
+            void release_response_wait_responsibility() noexcept{
+
+                this->response_wait_responsibility_flag = false;
+            }
+
+            void wait_response() noexcept{
+
+                if (this->response_wait_responsibility_flag){
+                    stdx::empty_noipa(this->base->response(), this->observer);
+                }
             }
     };
 
@@ -2064,7 +1962,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                mtx(std::move(mtx)),
                                                                                max_consume_per_load(std::move(max_consume_per_load)){}
 
-            void open_ticket(size_t sz, std::expected<model::ticket_id_t, exception_t> * out_ticket_arr) noexcept{
+            auto open_ticket(size_t sz, model::ticket_id_t * out_ticket_arr) noexcept -> exception_t{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2075,17 +1973,20 @@ namespace dg::network_rest_frame::client_impl1{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                for (size_t i = 0u; i < sz; ++i){
-                    if (this->ticket_resource_map.size() == this->ticket_resource_map_cap){
-                        out_ticket_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
-                        continue;
-                    }
+                size_t new_sz = this->ticket_resource_map.size() + sz;
 
+                if (new_sz > this->ticket_resource_map_cap){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
                     model::ticket_id_t new_ticket_id    = this->ticket_id_counter++;
                     auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<ResponseObserverInterface *>(std::nullopt)));
                     dg::network_exception_handler::dg_assert(status);
                     out_ticket_arr[i]                   = new_ticket_id;
                 }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, ResponseObserverInterface ** corresponding_observer_arr, std::expected<bool, exception_t> * exception_arr) noexcept{
@@ -2178,10 +2079,6 @@ namespace dg::network_rest_frame::client_impl1{
                 return this->max_consume_per_load.value;
             }
     };
-
-    //alright, it is advised that we spawn multiple distributed rest controller + multiple distributed ticket controller
-    //RequestContainer is an absolute unit, so we can't really change that
-    //we are expecting to do 10GB of REST request payloads per second, it's possible
 
     //this is to utilize CPU resource, not CPU efficiency, CPU efficiency is already achieved by batching ticket_id_arr, kernel has effective schedulings that render the overhead of mtx -> 1/1000 of the actual tx 
     class DistributedTicketController: public virtual TicketControllerInterface{
@@ -2719,6 +2616,17 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
+    //this is about the fastest we could ever write given the instruction set of host memory orderings
+    //timed_semaphore registration offloaded -> timeoutmanager
+    //relaxed counter -> atomic smp
+    //1 memory_order_release/ 1024 workorders
+    //no leaks
+    //correct codes, we'll talk about the practices later (we are in C fellas, we are extremely greedy people who sincerely want our code to work perfectly)
+    //supported re-requests by using designated ids
+    //bucket_hint from trusted sources to reduce memory footprint by 10 folds
+    //able to saturate 1GB - 5GB of inbound rest_requests/ second if correctly configurated 
+    //we'll post the benchs
+
     class RestController: public virtual RestControllerInterface{
 
         private:
@@ -2769,7 +2677,92 @@ namespace dg::network_rest_frame::client_impl1{
             }
 
             auto batch_request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
+                
+                //the code is not hard, yet it is extremely easy to leak resources
 
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (sz == 0u){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                model::ClientRequest * base_client_request_arr = client_request_arr.base();
+                dg::network_stack_allocation::NoExceptAllocation<model::ticket_id_t[]> ticket_id_arr(sz);
+                exception_t err = this->ticket_controller->open_ticket(sz, ticket_id_arr.get());
+
+                if (dg::network_exception::is_failed(err)){
+                    return std::unexpected(err);
+                }
+
+                auto ticket_resource_grd = stdx::resource_guard([&]() noexcept{
+                    this->ticket_controller->close_ticket(ticket_id_arr.get(), sz);
+                });
+
+                std::expected<std::unique_ptr<BatchRequestResponse>, exception_t> response = dg::network_rest_frame::client_impl1::make_batch_request_response(sz);
+
+                if (!response.has_value()){
+                    return std::unexpected(response.error());
+                }
+
+                auto response_resource_grd = stdx::resource_guard([&]() noexcept{
+                    response.value()->release_response_wait_responsibility();
+                });
+
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<ResponseObserverInterface>[]> response_observer_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> response_observer_exception_arr(sz);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    response_observer_arr[i] = response.value()->get_observer(i);
+                }
+
+                this->ticket_controller->assign_observer(ticket_id_arr.get(), sz, response_observer_arr.get(), response_observer_exception_arr.get());
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (!response_observer_exception_arr[i].has_value()){
+                        return std::unexpected(response_observer_exception_arr[i].error());
+                    }
+
+                    dg::network_exception_handler::dg_assert(response_observer_exception_arr[i].value());
+                }
+
+                dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> clockin_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> clockin_exception_arr(sz);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    clockin_arr[i] = std::make_pair(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
+                }
+
+                // this->ticket_timeout_manager->clock_in(clockin_arr.get(), sz, clockin_exception_arr.get());
+
+                // for (size_t i = 0u; i < sz; ++i){
+                //     if (dg::network_exception::is_failed(clockin_exception_arr.get())){
+                //         //this is bad
+                //         return std::unexpected(clockin_exception_arr[i]);
+                //     }
+                // }
+
+                std::expected<dg::vector<model::InternalRequest>, exception_t> pushing_container = this->internal_make_pushing_container(std::make_move_iterator(base_client_request_arr), sz);
+
+                if (!pushing_container.has_value()){
+                    return std::unexpected(pushing_container.error());
+                }
+
+                exception_t push_err = this->request_container->push(static_cast<dg::vector<model::InternalRequest>&&>(pushing_container.value()));
+
+                if (dg::network_exception::is_failed(push_err)){
+                    this->internal_rollback_client_request(std::move(pushing_container.value()), base_client_request_arr);
+                    return std::unexpected(push_err);
+                }
+
+                ticket_resource_grd->release();
+                response_resource_grd->release();
+
+                return std::unique_ptr<BatchResponseInterface>(std::move(response.value())); //
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -2779,45 +2772,72 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            class RAIITicketResponse: public virtual ResponseInterface{
-
-                private:
-
-                    std::unique_ptr<RequestResponse> base;
-
-                public:
-
-                    RaiiTicketResponse(std::unique_ptr<RequestResponse> base, 
-                                       std::shared_ptr<void> ticket_resource) noexcept: base(std::move(base)),
-                                                                                        ticket(std::move(ticket)){}
-
-                    auto response() noexcept -> std::expected<Response, exception_t>{
-
-                        auto rs                 = this->base->response();
-                        this->ticket_resource   = nullptr;
-                        return rs;
-                    }
-            };
-
-            class RAIITicketBatchResponse: public virtual BatchResponseInterface{
+            class InternalBatchResponse: public virtual BatchResponseInterface{
 
                 private:
 
                     std::unique_ptr<BatchRequestResponse> base;
-                
+                    std::unique_ptr<model::ticket_id_t[]> ticket_id_arr;
+                    size_t ticket_id_arr_sz;
+                    std::shared_ptr<TicketControllerInterface> ticket_controller;
+                    bool ticket_release_responsibility;
+
                 public:
 
-                    RAIITicketBatchResponse(std::unique_ptr<BatchRequestResponse> base,
-                                            std::shared_ptr<void> ticket_resource) noexcept: base(std::move(base)),
-                                                                                             ticket_resource(std::move(ticket_resource)){}
+                    InternalBatchResponse(std::unique_ptr<BatchRequestResponse> base,
+                                          std::unique_ptr<model::ticket_id_t[]> ticket_id_arr,
+                                          size_t ticket_id_arr_sz,
+                                          std::shared_ptr<TicketControllerInterface> ticket_controller,
+                                          bool ticket_release_responsibility) noexcept: base(std::move(base)),
+                                                                                        ticket_id_arr(std::move(ticket_id_arr)),
+                                                                                        ticket_id_arr_sz(ticket_id_arr_sz),
+                                                                                        ticket_controller(std::move(ticket_controller)),
+                                                                                        ticket_release_responsibility(ticket_release_responsibility){}
+
+                    ~InternalBatchResponse() noexcept{
+
+                        this->base->wait_response();
+                        this->release_ticket();
+                    }
 
                     auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
-                        auto rs                 = this->base->response();
-                        this->ticket_resource   = nullptr;
+                        auto rs = this->base->response();
+                        this->release_ticket();
                         return rs;
                     }
+
+                    auto response_size() const noexcept -> size_t{
+
+                        return this->base->response_size();
+                    }
+
+                    auto get_observer(size_t idx) noexcept -> ResponseObserverInterface *{
+
+                        return this->base->get_observer(idx);
+                    }
+
+                    void release_response_wait_responsibility() noexcept{
+
+                        this->base->release_response_wait_responsibility();
+                    }
+
+                private:
+
+                    __attribute__((noipa)) void release_ticket() noexcept{
+
+                        if (!this->ticket_release_responsibility){
+                            return;
+                        }
+
+                        this->ticket_controller->close_ticket(this->ticket_id_arr.get(), ticket_id_arr_sz);                        
+                        this->ticket_release_responsibility = false;
+                    }
             };
+
+            static auto internal_make_batch_response(size_t request_sz, ticket_id_t * ticket_id_arr, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::expected<std::unique_ptr<InternalBatchResponse>, exception_t>{
+
+            }
     };
 
     //we are reducing the serialization overheads of ticket_center
