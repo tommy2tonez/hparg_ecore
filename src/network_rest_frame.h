@@ -2626,6 +2626,7 @@ namespace dg::network_rest_frame::client_impl1{
     //bucket_hint from trusted sources to reduce memory footprint by 10 folds
     //able to saturate 1GB - 5GB of inbound rest_requests/ second if correctly configurated 
     //we'll post the benchs
+    //we'll be back tmr
 
     class RestController: public virtual RestControllerInterface{
 
@@ -2638,6 +2639,8 @@ namespace dg::network_rest_frame::client_impl1{
             stdx::hdi_container<size_t> max_consume_per_load;
 
         public:
+
+            using self = RestController;
 
             RestController(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
                            std::shared_ptr<RequestContainerInterface> request_container,
@@ -2703,11 +2706,13 @@ namespace dg::network_rest_frame::client_impl1{
                     this->ticket_controller->close_ticket(ticket_id_arr.get(), sz);
                 });
 
-                std::expected<std::unique_ptr<BatchRequestResponse>, exception_t> response = dg::network_rest_frame::client_impl1::make_batch_request_response(sz);
+                std::expected<std::unique_ptr<InternalBatchResponse>, exception_t> response = self::internal_make_batch_request_response(sz, ticket_id_arr.get(), this->ticket_controller);
 
                 if (!response.has_value()){
                     return std::unexpected(response.error());
                 }
+
+                ticket_resource_grd.release(); //ticket responsibility tranferred -> internal_batch_response
 
                 auto response_resource_grd = stdx::resource_guard([&]() noexcept{
                     response.value()->release_response_wait_responsibility();
@@ -2730,23 +2735,7 @@ namespace dg::network_rest_frame::client_impl1{
                     dg::network_exception_handler::dg_assert(response_observer_exception_arr[i].value());
                 }
 
-                dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> clockin_arr(sz);
-                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> clockin_exception_arr(sz);
-
-                for (size_t i = 0u; i < sz; ++i){
-                    clockin_arr[i] = std::make_pair(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
-                }
-
-                // this->ticket_timeout_manager->clock_in(clockin_arr.get(), sz, clockin_exception_arr.get());
-
-                // for (size_t i = 0u; i < sz; ++i){
-                //     if (dg::network_exception::is_failed(clockin_exception_arr.get())){
-                //         //this is bad
-                //         return std::unexpected(clockin_exception_arr[i]);
-                //     }
-                // }
-
-                std::expected<dg::vector<model::InternalRequest>, exception_t> pushing_container = this->internal_make_pushing_container(std::make_move_iterator(base_client_request_arr), sz);
+                std::expected<dg::vector<model::InternalRequest>, exception_t> pushing_container = this->internal_make_internal_request(std::make_move_iterator(base_client_request_arr), sz);
 
                 if (!pushing_container.has_value()){
                     return std::unexpected(pushing_container.error());
@@ -2755,14 +2744,32 @@ namespace dg::network_rest_frame::client_impl1{
                 exception_t push_err = this->request_container->push(static_cast<dg::vector<model::InternalRequest>&&>(pushing_container.value()));
 
                 if (dg::network_exception::is_failed(push_err)){
-                    this->internal_rollback_client_request(std::move(pushing_container.value()), base_client_request_arr);
+                    this->internal_rollback_client_request(base_client_request_arr, std::move(pushing_container.value()));
                     return std::unexpected(push_err);
                 }
 
-                ticket_resource_grd->release();
+                dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> clockin_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> clockin_exception_arr(sz);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    clockin_arr[i] = std::make_pair(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
+                }
+
+                //clock_in must be thru, this is hard, I dont know why we aren't using shared_ptr<>
+
+                this->ticket_timeout_manager->clock_in(clockin_arr.get(), sz, clockin_exception_arr.get());
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (dg::network_exception::is_failed(clockin_exception_arr[i])){
+                        //unable to fail
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(clockin_exception_arr[i]));
+                        std::abort();
+                    }
+                }
+
                 response_resource_grd->release();
 
-                return std::unique_ptr<BatchResponseInterface>(std::move(response.value())); //
+                return std::unique_ptr<BatchResponseInterface>(std::move(response.value()));
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -2835,8 +2842,78 @@ namespace dg::network_rest_frame::client_impl1{
                     }
             };
 
-            static auto internal_make_batch_response(size_t request_sz, ticket_id_t * ticket_id_arr, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::expected<std::unique_ptr<InternalBatchResponse>, exception_t>{
+            static auto internal_make_batch_request_response(size_t request_sz, ticket_id_t * ticket_id_arr, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::expected<std::unique_ptr<InternalBatchResponse>, exception_t>{
+                
+                if (request_sz == 0u){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
 
+                if (ticket_controller == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                std::expected<std::unique_ptr<BatchRequestResponse>, exception_t> base = dg::network_rest_frame::client_impl1::make_batch_request_response(request_sz);
+
+                if (!base.has_value()){
+                    return std::unexpected(base.error());
+                }
+
+                auto resource_grd = stdx::resource_guard([rptr = base.value().get()]() noexcept{
+                    rptr->release_response_wait_responsibility();
+                });
+
+                std::expected<std::unique_ptr<model::ticket_id_t[]>, exception_t> cpy_ticket_id_arr = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<ticket_id_t[]>)(request_sz);
+
+                if (!cpy_ticket_id_arr.has_value()){
+                    return std::unexpected(cpy_ticket_id_arr.error());
+                }
+
+                std::copy(ticket_id_arr, std::next(ticket_id_arr, request_sz), cpy_ticket_id_arr.value().get());
+                std::expected<std::unique_ptr<InternalBatchResponse>, exception_t> rs = dg::network_allocation::cstyle_make_unique<InternalBatchResponse>(std::move(base.value()), 
+                                                                                                                                                          std::move(cpy_ticket_id_arr.value()), 
+                                                                                                                                                          request_sz, 
+                                                                                                                                                          std::move(ticket_controller), 
+                                                                                                                                                          true);
+
+                if (!rs.has_value()){
+                    return std::unexpected(rs.error());
+                }
+
+                resource_grd->release();
+
+                return rs;
+            }
+
+            static auto internal_make_internal_request(std::move_iterator<model::ClientRequest *> request_arr, ticket_id_t * ticket_id_arr, size_t request_arr_sz) noexcept -> std::expected<dg::vector<model::InternalRequest>, exception_t>{
+
+                model::ClientRequest * base_request_arr = request_arr.base();
+                std::expected<dg::vector<model::InternalRequest>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<model::InternalRequest>>(request_arr_sz);
+
+                if (!rs.has_value()){
+                    return std::unexpected(rs.error());
+                }
+
+                for (size_t i = 0u; i < request_arr_sz; ++i){
+                    static_assert(std::is_nothrow_move_assignable_v<model::InternalRequest>);
+                    static_assert(std::is_nothrow_move_constructible_v<dg::string>);
+
+                    rs.value()[i] = InternalRequest{.request    = Request{.requestee_uri    = std::move(base_request_arr[i].requestee_uri),
+                                                                          .requestor        = std::move(base_request_arr[i].requestor),
+                                                                          .payload          = std::move(base_request_arr[i].payload)},
+
+                                                    .ticket_id  = ticket_id_arr[i]};
+                }
+
+                return rs;
+            }
+
+            static void internal_rollback_client_request(model::ClientRequest * client_request_arr, dg::vector<model::InternalRequest> internal_request_arr) noexcept{
+
+                for (size_t i = 0u; i < internal_request_arr.size(); ++i){
+                    client_request_arr[i].requestee_uri = std::move(internal_request_arr[i].request.requestee_uri);
+                    client_request_arr[i].requestor     = std::move(internal_request_arr[i].request.requestor);
+                    client_request_arr[i].payload       = std::move(internal_request_arr[i].request.payload);
+                }
             }
     };
 
