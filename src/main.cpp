@@ -33,7 +33,12 @@
 #include "stdx.h"
 #include <semaphore>
 
+union Foo{
+    alignas(64) size_t sz;
+    char pad[8];
+}; 
+
 int main(){
 
-    stdx::inplace_hdi_container<std::binary_semaphore> smp(std::in_place, 0);
+    //we have finally reached 7.0 MB of code, damn
 }

@@ -956,14 +956,28 @@ namespace stdx{
         return std::make_unique<decltype(virt_guard)>(std::move(virt_guard));
     }
 
+    static consteval auto hdi_size() noexcept -> size_t{
+
+        return std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t));
+    }
+
+    template <size_t SZ>
+    static consteval auto round_hdi_size(std::integral_constant<size_t, SZ>) noexcept -> size_t{
+
+        size_t multiplier = SZ / hdi_size() + static_cast<size_t>(SZ % hdi_size() != 0u);
+        return hdi_size() * multiplier;
+    } 
+
     template <class T>
-    struct hdi_container{
-        alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value;
+    union hdi_container{
+        alignas(stdx::hdi_size()) T value;
+        alignas(stdx::hdi_size()) char supposed_sz[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
     };
 
     template <class T>
-    struct inplace_hdi_container{
-        alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value;
+    union inplace_hdi_container{
+        alignas(stdx::hdi_size()) T value;
+        alignas(stdx::hdi_size()) char supposed_sz[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
 
         template <class ...Args>
         inplace_hdi_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>): value(std::forward<Args>(args)...){}
