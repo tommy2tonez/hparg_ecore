@@ -16,6 +16,12 @@
 //we can't add too many features because it would hinder our future extensibility
 //we'll do code review for 1-2 days, we'll move on to implement our beloved Taylor's search
 
+//we'll be back, I just read the proposal for std::hive 
+//I dont precisely know what the component does, except for being a vector, a deque son
+//vector in the sense of contiguous back insert
+//deque in the sense of a discretized range -> a block of memory, such block would refer to another block for some reasons...  
+//so basically the std is implementing our std::dense_hash_map<> with their own convention of hashing technique to leverage bucket collisions locality
+
 namespace dg::network_rest_frame::model{
 
     using ticket_id_t   = __uint128_t; //I've thought long and hard, it's better to do bitshift, because the otherwise would be breaking single responsibilities, breach of extensions
@@ -2235,6 +2241,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         exception_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
+                        continue;
                     }
 
                     auto feed_arg           = InternalAssignObserverFeedArgument{};
@@ -2263,6 +2270,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
+                        continue;
                     }
 
                     auto feed_arg               = InternalStealObserverFeedArgument{}:
@@ -2290,6 +2298,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
+                        continue;
                     }
 
                     auto feed_arg               = InternalGetObserverFeedArgument{}:
@@ -2317,6 +2326,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
+                        continue;
                     }
 
                     auto feed_arg           = InternalCloseTicketFeedArgument{};
