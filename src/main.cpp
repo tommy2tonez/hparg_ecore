@@ -30,7 +30,10 @@
 // #include <type_traits>
 // #include "network_allocation.h"
 #include <atomic>
+#include "stdx.h"
+#include <semaphore>
 
 int main(){
 
+    stdx::inplace_hdi_container<std::binary_semaphore> smp(std::in_place, 0);
 }

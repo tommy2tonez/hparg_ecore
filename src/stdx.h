@@ -961,6 +961,14 @@ namespace stdx{
         alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value;
     };
 
+    template <class T>
+    struct inplace_hdi_container{
+        alignas(std::max(std::hardware_destructive_interference_size, alignof(std::max_align_t))) T value;
+
+        template <class ...Args>
+        inplace_hdi_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>): value(std::forward<Args>(args)...){}
+    };
+
     void high_resolution_sleep(std::chrono::nanoseconds) noexcept{
 
     }

@@ -1252,18 +1252,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::vector<std::shared_ptr<semaphore_impl::binary_semaphore>> mtx_queue;
             size_t mtx_queue_cap;
             std::mutex mtx_mtx_queue;
-            stdx::hdi_container<std::atomic<intmax_t>> counter;
-            stdx::hdi_container<std::atomic<intmax_t>> wakeup_threshold;
-            stdx::hdi_container<std::atomic<size_t>> mtx_queue_sz;
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold;
+            stdx::inplace_hdi_container<std::atomic<size_t>> mtx_queue_sz;
 
         public:
 
             ComplexReactor(size_t mtx_queue_cap): mtx_queue(),
                                                   mtx_queue_cap(mtx_queue_cap), 
                                                   mtx_mtx_queue(),
-                                                  counter(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>(0)}),
-                                                  wakeup_threshold(stdx::hdi_container<std::atomic<intmax_t>>{std::atomic<intmax_t>{0}}),
-                                                  mtx_queue_sz(stdx::hdi_container<std::atomic<size_t>>{std::atomic<size_t>{0u}}){}
+                                                  counter(std::in_place_t{}, 0),
+                                                  wakeup_threshold(std::in_place_t{}, 0),
+                                                  mtx_queue_sz(std::in_place_t{}, 0u){}
 
             void increment(size_t sz) noexcept{
 

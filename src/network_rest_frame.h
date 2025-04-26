@@ -14,6 +14,7 @@
 //alright, we'll stress test this to see if this could reach 1GB of inbound without polluting the internal memory ordering mechanisms
 //this component should suffice for extension and enough for single responsibility
 //we can't add too many features because it would hinder our future extensibility
+//we'll do code review for 1-2 days, we'll move on to implement our beloved Taylor's search
 
 namespace dg::network_rest_frame::model{
 
@@ -1638,21 +1639,21 @@ namespace dg::network_rest_frame::client_impl1{
         
         private:
 
-            std::binary_semaphore smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
-            std::expected<Response, exception_t> resp;
-            std::atomic_flag is_response_invoked;
+            stdx::inplace_hdi_container<std::binary_semaphore> smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
+            stdx::inplace_hdi_container<std::expected<Response, exception_t>> resp;
+            stdx::inplace_hdi_container<bool> is_response_invoked;
 
         public:
 
-            RequestResponse() noexcept: smp(0u),
-                                        resp(std::nullopt),
-                                        is_response_invoked(false){}
+            RequestResponse() noexcept: smp(std::in_place_t{}, 0),
+                                        resp(std::in_place_t{}, std::nullopt),
+                                        is_response_invoked(std::in_place_t{}, false){}
 
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
                 //another fence
                 // std::atomic_thread_fence(std::memory_order_acquire); //this is not necessary because RequestResponse * acquisition must involve these mechanisms
-                this->resp = std::move(response_arg); //this is the undefined
+                this->resp.value = std::move(response_arg); //this is the undefined
                 this->smp.release();
             }
 
@@ -1668,14 +1669,14 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto response() noexcept -> std::expected<Response, exception_t>{
 
-                bool was_invoked = this->is_response_invoked.test_and_set(std::memory_order_relaxed);
+                bool was_invoked = std::exchange(this->is_response_invoked.value, true);
 
                 if (was_invoked){
                     return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
                 }
 
-                this->smp.acquire();
-                return std::expected<Response, exception_t>(std::move(this->resp));
+                this->smp.value.acquire();
+                return std::expected<Response, exception_t>(std::move(this->resp.value));
             }
     };
 
@@ -1711,15 +1712,15 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            std::atomic<intmax_t> atomic_smp;
-            dg::vector<std::expected<Response, exception_t>> resp_vec;
-            std::atomic_flag is_response_invoked;
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> atomic_smp;
+            dg::vector<std::expected<Response, exception_t>> resp_vec; //alright, there are hardware destructive interference issues, we dont want to talk about that yet
+            stdx::inplace_hdi_container<bool> is_response_invoked;
 
         public:
 
-            BatchRequestResponseBase(size_t resp_sz): atomic_smp(-static_cast<intmax_t>(resp_sz) + 1),
+            BatchRequestResponseBase(size_t resp_sz): atomic_smp(std::in_place_t{}, -static_cast<intmax_t>(resp_sz) + 1),
                                                       resp_vec(resp_sz),
-                                                      is_response_invoked(false){
+                                                      is_response_invoked(std::in_place_t{}, false){
 
                 if (resp_sz == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -1729,7 +1730,7 @@ namespace dg::network_rest_frame::client_impl1{
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
 
                 this->resp_vec[idx] = std::move(response);
-                this->atomic_smp.fetch_add(1u, std::memory_order_release);
+                this->atomic_smp.value.fetch_add(1u, std::memory_order_release);
             }
 
             void maybedeferred_memory_ordering_fetch(size_t idx, std::expected<Response, exception_t> response) noexcept{
@@ -1744,13 +1745,13 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
-                bool was_invoked = this->is_response_invoked.test_and_set(std::memory_order_relaxed);
+                bool was_invoked = std::exchange(this->is_response_invoked.value, true);
 
                 if (was_invoked){
                     return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
                 } 
 
-                this->atomic_smp.wait(0, std::memory_order_acquire);
+                this->atomic_smp.value.wait(0, std::memory_order_acquire);
 
                 return dg::vector<std::expected<Response, exception_t>>(std::move(this->resp_vec));
             }
@@ -1759,10 +1760,10 @@ namespace dg::network_rest_frame::client_impl1{
 
             __attribute__((noipa)) void internal_maybedeferred_memory_ordering_fetch_close(size_t idx, void * dirty_memory) noexcept{
 
-                intmax_t old = this->atomic_smp.fetch_add(1, std::memory_order_relaxed);
+                intmax_t old = this->atomic_smp.value.fetch_add(1, std::memory_order_relaxed);
 
                 if (old == 0){
-                    this->atomic_smp.notify_one():
+                    this->atomic_smp.value.notify_one():
                 }
             }
     };
