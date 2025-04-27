@@ -24,7 +24,7 @@
 // // #include "network_datastructure.h"
 // // #include "network_fileio.h"
 // // #include "network_fileio_chksum_x.h"
-// #include "network_host_asynchronous.h"
+#include "network_host_asynchronous.h"
 // #include <stdlib.h>
 // #include <stdint.h>
 // #include <type_traits>

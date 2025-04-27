@@ -428,7 +428,7 @@ namespace dg::network_host_asynchronous{
                 }
 
                 UniformLoadBalancerHeapNode * front_node                    = this->load_balance_heap.front().get();
-                std::expected<InternalHandle *, exception_t> dynamic_handle = dg::network_exception::to_cstyle_function(dg::network_allocation::std_new<InternalHandle, InternalHandle>)(InternalHandle{front_node->async_device_id, front_node, est_workload});
+                std::expected<InternalHandle *, exception_t> dynamic_handle = dg::network_exception::to_cstyle_function(dg::network_allocation::std_new_object<InternalHandle, InternalHandle>)(InternalHandle{front_node->async_device_id, front_node, est_workload});
 
                 if (!dynamic_handle.has_value()){
                     return std::unexpected(dynamic_handle.error());
@@ -454,7 +454,7 @@ namespace dg::network_host_asynchronous{
                 cur_node->current_load                  -= internal_handle->task_load;
                 this->push_up_at(cur_node->heap_idx);
 
-                dg::network_allocation::std_delete<InternalHandle>(internal_handle);
+                dg::network_allocation::std_delete_object<InternalHandle>(internal_handle);
             }
 
         private:
@@ -543,7 +543,7 @@ namespace dg::network_host_asynchronous{
 
                 InternalHandle * internal_handle = static_cast<InternalHandle *>(stdx::safe_ptr_access(handle));
                 this->load_balancer_vec[internal_handle->load_balancer_idx]->close_handle(internal_handle->load_balancer_handle);
-                dg::network_allocation::std_delete<InternalHandle>(internal_handle);
+                dg::network_allocation::std_delete_object<InternalHandle>(internal_handle);
             }
 
         private:
@@ -560,7 +560,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(load_balancer_handle.error());
                 }
 
-                std::expected<InternalHandle *, exception_t> internal_handle = dg::network_exception::to_cstyle_function(dg::network_allocation::std_new<InternalHandle, InternalHandle>)(InternalHandle{load_balancer_handle.value(), balancer_idx});
+                std::expected<InternalHandle *, exception_t> internal_handle = dg::network_exception::to_cstyle_function(dg::network_allocation::std_new_object<InternalHandle, InternalHandle>)(InternalHandle{load_balancer_handle.value(), balancer_idx});
 
                 if (!internal_handle.has_value()){
                     this->load_balancer_vec[balancer_idx]->close_handle(load_balancer_handle.value());

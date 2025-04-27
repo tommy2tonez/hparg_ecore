@@ -1004,7 +1004,7 @@ namespace stdx{
         }    
     }
 
-    template <class T, class ConsumingArgs>
+    template <class T, class ...ConsumingArgs>
     __attribute__((noipa)) auto volatile_access(T * volatile arg, ConsumingArgs&& ...args) noexcept -> T *{
 
         return arg;
