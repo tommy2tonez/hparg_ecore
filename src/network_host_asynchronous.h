@@ -276,6 +276,7 @@ namespace dg::network_host_asynchronous{
                     break;
                 }
 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 std::launder(&pending_smp)->acquire();
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 

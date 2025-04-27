@@ -2140,7 +2140,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                 //alright I dont want to talk bad about compiler
                 //but stack allocation is another beast, compiler can assume things they should not assume for unknown reasons 
-                //we must instruct a launder operation, this is a valid operation (volatile) to hinder compiler optimizations
+                //we must instruct a launder operation, this is a valid operation (gcc volatile, not clang volatile) to hinder compiler optimizations
+                //until we have found a patch, may we meet again
 
                 auto pending_smp        = std::binary_semaphore(0);
                 auto internal_request   = std::optional<dg::vector<model::InternalRequest>>{};
@@ -2162,6 +2163,7 @@ namespace dg::network_rest_frame::client_impl1{
                     break;
                 }
 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 std::launder(&pending_smp)->acquire();
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
