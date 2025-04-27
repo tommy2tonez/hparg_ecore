@@ -1003,6 +1003,12 @@ namespace stdx{
             return task(std::forward<Args>(args)...);
         }    
     }
+
+    template <class T, class ConsumingArgs>
+    __attribute__((noipa)) auto volatile_access(T * volatile arg, ConsumingArgs&& ...args) noexcept -> T *{
+
+        return arg;
+    } 
 }
 
 #endif

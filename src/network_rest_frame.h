@@ -2163,11 +2163,9 @@ namespace dg::network_rest_frame::client_impl1{
                     break;
                 }
 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-                std::launder(&pending_smp)->acquire();
-                std::atomic_signal_fence(std::memory_order_seq_cst);
+                stdx::volatile_access(&pending_smp)->acquire();
 
-                return dg::vector<model::InternalRequest>(std::move(std::launder(&internal_request)->value()));
+                return dg::vector<model::InternalRequest>(std::move(stdx::volatile_access(&internal_request, pending_smp)->value()));
             }
     };
 
