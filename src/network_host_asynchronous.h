@@ -276,8 +276,10 @@ namespace dg::network_host_asynchronous{
                     break;
                 }
 
-                pending_smp.acquire();
-                return wo;
+                std::launder(&pending_smp)->acquire();
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                return std::unique_ptr<WorkOrder>(std::move(*std::launder(&wo)));
             }
     };
 

@@ -2138,6 +2138,10 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto pop() noexcept -> dg::vector<model::InternalRequest>{
 
+                //alright I dont want to talk bad about compiler
+                //but stack allocation is another beast, compiler can assume things they should not assume for unknown reasons 
+                //we must instruct a launder operation, this is a valid operation (volatile) to hinder compiler optimizations
+
                 auto pending_smp        = std::binary_semaphore(0);
                 auto internal_request   = std::optional<dg::vector<model::InternalRequest>>{};
 
@@ -2158,10 +2162,10 @@ namespace dg::network_rest_frame::client_impl1{
                     break;
                 }
 
-                pending_smp.acquire();
+                std::launder(&pending_smp)->acquire();
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
-                return dg::vector<model::InternalRequest>(std::move(internal_request.value()));
+                return dg::vector<model::InternalRequest>(std::move(std::launder(&internal_request)->value()));
             }
     };
 

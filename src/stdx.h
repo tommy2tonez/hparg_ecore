@@ -592,9 +592,9 @@ namespace stdx{
     }
 
     template <class T>
-    inline __attribute__((always_inline)) auto to_const_reference(T&& obj) noexcept -> decltype(auto){
+    inline __attribute__((always_inline)) auto to_const_reference(T& obj) noexcept -> decltype(auto){
 
-        return std::as_const(std::forward<T>(obj));
+        return std::as_const(obj);
     }
 
     template <class Lambda>

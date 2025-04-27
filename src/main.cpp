@@ -24,7 +24,7 @@
 // // #include "network_datastructure.h"
 // // #include "network_fileio.h"
 // // #include "network_fileio_chksum_x.h"
-// // #include "network_host_asynchronous.h"
+// #include "network_host_asynchronous.h"
 // #include <stdlib.h>
 // #include <stdint.h>
 // #include <type_traits>
@@ -34,10 +34,6 @@
 #include <semaphore>
 
 int main(){
-
-    std::atomic<size_t> int_value{};
-    size_t rep{};
-
-    int_value.compare_exchange_strong(rep, rep, std::memory_order_relaxed);
+ 
     //we have finally reached 7.0 MB of code, damn
 }
