@@ -30,10 +30,14 @@
 // #include <type_traits>
 // #include "network_allocation.h"
 #include <atomic>
-#include "stdx.h"
+// #include "stdx.h"
 #include <semaphore>
 
 int main(){
 
+    std::atomic<size_t> int_value{};
+    size_t rep{};
+
+    int_value.compare_exchange_strong(rep, rep, std::memory_order_relaxed);
     //we have finally reached 7.0 MB of code, damn
 }
