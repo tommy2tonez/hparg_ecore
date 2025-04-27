@@ -2651,7 +2651,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             struct ExpiryBucket{
                 model::ticket_id_t ticket_id;
-                std::chrono::time_point<std::chrono::high_resolution_clock> abs_timeout;
+                std::chrono::time_point<std::chrono::steady_clock> abs_timeout;
             };
 
         private:
@@ -2685,7 +2685,7 @@ namespace dg::network_rest_frame::client_impl1{
                 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                auto now        = std::chrono::high_resolution_clock::now(); 
+                auto now        = std::chrono::steady_clock::now(); 
                 auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timepout > rhs.abs_timeout;};
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -2712,7 +2712,7 @@ namespace dg::network_rest_frame::client_impl1{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 ticket_arr_sz   = 0u;
-                auto now        = std::chrono::high_resolution_clock::now();
+                auto now        = std::chrono::steady_clock::now();
                 auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timepout > rhs.abs_timeout;};
 
                 while (true){
@@ -3074,13 +3074,13 @@ namespace dg::network_rest_frame::client_impl1{
         private:
 
             stdx::hdi_container<std::chrono::nanoseconds> update_dur;
-            stdx::inplace_hdi_container<std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>> last_update;
+            stdx::inplace_hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> last_update;
             std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> updating_component;
 
         public:
 
             SubscriptibleWrappedResetTrafficController(std::chrono::nanoseconds update_dur,
-                                                       std::chrono::time_point<std::chrono::high_resolution_clock> last_update,
+                                                       std::chrono::time_point<std::chrono::steady_clock> last_update,
                                                        std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> updating_component) noexcept: update_dur(stdx::hdi_container<std::chrono::nanoseconds>{update_dur}),
                                                                                                                                                  last_update(std::in_place_t{}, last_update),
                                                                                                                                                  updating_component(std::move(updating_component)){}
@@ -3089,9 +3089,9 @@ namespace dg::network_rest_frame::client_impl1{
 
                 //attempt to do atomic_cmpexch to take unique update responsibility, clock always goes forward in time
 
-                std::chrono::time_point<std::chrono::high_resolution_clock> last_update_value   = this->last_update.value.load(std::memory_order_relaxed);
-                std::chrono::time_point<std::chrono::high_resolution_clock> now                 = std::chrono::high_resolution_clock::now();
-                std::chrono::nanoseconds diff                                                   = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_update_value);
+                std::chrono::time_point<std::chrono::steady_clock> last_update_value    = this->last_update.value.load(std::memory_order_relaxed);
+                std::chrono::time_point<std::chrono::steady_clock> now                  = std::chrono::steady_clock::now();
+                std::chrono::nanoseconds diff                                           = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_update_value);
 
                 if (diff < this->update_dur.value){
                     return;
@@ -3354,11 +3354,8 @@ namespace dg::network_rest_frame::client_impl1{
                 void push(std::move_iterator<model::ticket_id_t *> ticket_id_arr, size_t ticket_id_arr_sz) noexcept{
 
                     model::ticket_id_t * base_ticket_id_arr = ticket_id_arr.base();
-
                     dg::network_stack_allocation<std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>[]> stolen_response_observer_arr(ticket_id_arr_sz);
-                    dg::network_stack_allocation<std::expected<Response, exception_t>[]> timeout_response_arr(ticket_id_arr_sz);
 
-                    std::fill(timeout_response_arr.get(), std::next(timeout_response_arr.get(), ticket_id_arr_sz), std::expected<Response, exception_t>(std::unexpected(dg::network_exception::REST_TIMEOUT))); //I dont know what this is for
                     this->ticket_controller->steal_observer(base_ticket_id_arr, ticket_id_arr_sz, stolen_response_observer_arr.get());
 
                     for (size_t i = 0u; i < ticket_id_arr_sz; ++i){
@@ -3366,7 +3363,7 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        stolen_response_observer_arr[i].value()->deferred_memory_ordering_fetch(std::move(timeout_response_arr[i]));
+                        stolen_response_observer_arr[i].value()->deferred_memory_ordering_fetch(std::unexpected(dg::network_exception::REST_TIMEOUT));
                     }
 
                     std::atomic_thread_fence(std::memory_order_release);
@@ -3634,7 +3631,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                     void release_ticket() noexcept{
 
-                        auto task = []<class ...Args>(InternalBatchResponse * self_obj) noexcept{
+                        auto task = [](InternalBatchResponse * self_obj) noexcept{
                             if (!self_obj->ticket_release_responsibility){
                                 return;
                             }
