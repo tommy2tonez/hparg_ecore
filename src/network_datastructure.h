@@ -723,7 +723,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
                 this->clear();
 
-                this->data_arr  = std::move(other.data_arr); //this is ... I dont know how to explain it...
+                this->data_arr  = std::move(other.data_arr);
                 this->off       = other.off;
                 this->sz        = other.sz;
                 this->cap       = other.cap;

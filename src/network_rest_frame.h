@@ -139,10 +139,6 @@ namespace dg::network_rest_frame::model{
 
 namespace dg::network_rest_frame::server{
 
-    //the reason that we are rewriting these so many times is because each container is different from another
-    //it's real
-    //every application has to twist their own kind of container, then there is version control problems, so its best to internalize the dependencies, and make it a unit of deliverable 
-
     struct CacheControllerInterface{
         virtual ~CacheControllerInterface() noexcept = default;
         virtual void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> *) noexcept = 0; //we'll think about making the exclusion responsibility this component responsibility later
@@ -194,7 +190,7 @@ namespace dg::network_rest_frame::client{
         virtual ~ResponseObserverInterface() noexcept = default;
         virtual void update(std::expected<Response, exception_t>) noexcept = 0;
         virtual void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t>) noexcept = 0;
-        virtual void maybedeferred_memory_ordering_fetch_close(void * dirty_memory) noexcept = 0;
+        virtual void maybedeferred_memory_ordering_fetch_close() noexcept = 0;
     };
 
     struct BatchResponseInterface{
@@ -212,12 +208,6 @@ namespace dg::network_rest_frame::client{
         virtual auto push(dg::vector<model::InternalRequest>&&) noexcept -> exception_t = 0;
         virtual auto pop() noexcept -> dg::vector<model::InternalRequest> = 0;
     };
-
-    //I have never faced a more difficult technical desicion to make this raw pointer instead of shared_ptr
-    //due to the very stingent requirement of memory orderings, this must be done
-    //I can say that there is no better way to do REST requests than to do it like this, given the instruction set
-    //Far Away is a good song
-    //I dont know what's yall fuzz with NickleBack
 
     struct TicketControllerInterface{
         virtual ~TicketControllerInterface() noexcept = default;
@@ -668,6 +658,10 @@ namespace dg::network_rest_frame::server_impl1{
 
 namespace dg::network_rest_frame::client_impl1{
 
+    //alright Evil Corp
+    //the synthetic data is something we have been working on our entire life, to make something inherently wrong sounds right
+    //why couldn't I delete something that sounds wrong?
+
     using namespace dg::network_rest_frame::client; 
 
     struct CacheNormalHasher{
@@ -914,7 +908,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feed_resolutor                 = InternalGetCacheFeedResolutor{};
                 feed_resolutor.dst                  = minor_cache_controller; 
 
-                size_t trimmed_getcache_feed_cap    = std::min(std::min(this->getcache_feed_cap, minor_cache_controller->max_consume_size()), sz);
+                size_t trimmed_getcache_feed_cap    = std::min(this->getcache_feed_cap, sz);
                 size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_getcache_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_getcache_feed_cap, feeder_mem.get())); 
@@ -1017,7 +1011,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 void push(std::move_iterator<InternalInsertCacheFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    InternalInsertCacheFeedArgument * base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<Response[]> response_arr(sz);
@@ -1197,8 +1191,7 @@ namespace dg::network_rest_frame::client_impl1{
                 for (size_t i = 0u; i < sz; ++i){
                     size_t partitioned_idx  = Hasher{}(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
                     auto feed_arg           = InternalCacheInsertFeedArgument{.cache_id     = cache_id_arr[i],
-                                                                              .response     = std::move(base_response_arr[i]),
-                                                                              .fallback_ptr = std::next(base_response_arr, i),
+                                                                              .response_ptr = std::make_move_iterator(std::next(base_response_arr, i)),
                                                                               .rs           = std::next(rs_arr, i)};
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, std::move(feed_arg));
@@ -1247,8 +1240,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             struct InternalCacheInsertFeedArgument{
                 cache_id_t cache_id;
-                Response response;
-                Response * fallback_ptr;
+                std::move_iterator<Response *> response_ptr;
                 std::expected<bool, exception_t> * rs;
             };
 
@@ -1258,15 +1250,16 @@ namespace dg::network_rest_frame::client_impl1{
 
                 void push(const size_t& idx, std::move_iterator<InternalCacheInsertFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    InternalCacheInsertFeedArgument * base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<Response[]> response_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        cache_id_arr[i] = base_data_arr[i].cache_id;
-                        response_arr[i] = std::move(base_data_arr[i].response);
+                        cache_id_arr[i]                 = base_data_arr[i].cache_id;
+                        Response * base_response_ptr    = base_arr[i].response_ptr.base();
+                        response_arr[i]                 = std::move(*base_response_ptr);
                     }
 
                     this->cache_controller_arr[idx]->insert_cache(cache_id_arr.get(), std::make_move_iterator(response_arr.get()), sz, rs_arr.get());
@@ -1275,7 +1268,8 @@ namespace dg::network_rest_frame::client_impl1{
                         *base_data_arr[i].rs = rs_arr[i];
 
                         if (!rs_arr[i].has_value()){
-                            *base_data_arr[i].fallback_ptr = std::move(response_arr[i]);
+                            Response * base_response_ptr    = base_data_arr[i].response_ptr.base();
+                            *base_response_ptr              = std::move(response_arr[i]);
                             continue;
                         }
                     }
@@ -1450,6 +1444,9 @@ namespace dg::network_rest_frame::client_impl1{
                     this->internal_dispatch_switch();
                 }
 
+                //I've been thinking long and hard about internal_dispatch_switch() because that seems like the only fuzzy point of logic
+                //the problem is that post the switch must guarantee enough room for sz, and switch population threshold is under the capcity of the calling container
+
                 CacheUniqueWriteControllerInterface * current_write_controller  = nullptr;
                 CacheUniqueWriteControllerInterface * other_write_controller    = nullptr;
 
@@ -1597,7 +1594,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 for (size_t i = 0u; i < sz; ++i){
                     size_t partitioned_idx  = Hasher{}(cache_id_arr[i]) & (this->pow2_base_arr_sz - 1u);
-                    
+
                     auto feed_arg           = InternalThruFeedArgument{};
                     feed_arg.cache_id       = cache_id_arr[i];
                     feed_arg.rs_ptr         = std::next(rs_arr, i);
@@ -1610,7 +1607,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return this->max_consume_per_load;
             }
-        
+
         private:
 
             struct InternalThruFeedArgument{
@@ -1624,7 +1621,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                 void push(const size_t& idx, std::move_iterator<InternalThruFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    InternalThruFeedArgument * base_data_arr = data_arr.base();
+
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
 
@@ -1642,7 +1640,7 @@ namespace dg::network_rest_frame::client_impl1{
     };
 
     class RequestResponseBase{
-        
+
         private:
 
             stdx::inplace_hdi_container<std::binary_semaphore> smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
@@ -1652,15 +1650,13 @@ namespace dg::network_rest_frame::client_impl1{
         public:
 
             RequestResponse() noexcept: smp(std::in_place_t{}, 0),
-                                        resp(std::in_place_t{}, std::nullopt),
+                                        resp(std::in_place_t{}, std::unexpected(dg::network_exception::REST_RESPONSE_NOT_INITIALIZED)),
                                         is_response_invoked(std::in_place_t{}, false){}
 
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
-                //another fence
-                // std::atomic_thread_fence(std::memory_order_acquire); //this is not necessary because RequestResponse * acquisition must involve these mechanisms
-                this->resp.value = std::move(response_arg); //this is the undefined
-                this->smp.release();
+                this->resp.value = std::move(response_arg);
+                this->smp.value.release();
             }
 
             void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t> response_arg) noexcept{
@@ -1668,9 +1664,9 @@ namespace dg::network_rest_frame::client_impl1{
                 this->update(std::move(response_arg));
             }
 
-            void maybedeferred_memory_ordering_fetch_close(void * dirty_memory) noexcept{
+            void maybedeferred_memory_ordering_fetch_close() noexcept{
 
-                (void) dirty_memory;
+                (void) this->smp;
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -1678,39 +1674,12 @@ namespace dg::network_rest_frame::client_impl1{
                 bool was_invoked = std::exchange(this->is_response_invoked.value, true);
 
                 if (was_invoked){
-                    return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
+                    return std::unexpected(dg::network_exception::REST_RESPONSE_DOUBLE_INVOKE);
                 }
 
                 this->smp.value.acquire();
-                return std::expected<Response, exception_t>(std::move(this->resp.value));
-            }
-    };
 
-    class RequestResponseBaseObserver: public virtual ResponseObserverInterface{
-
-        private:
-
-            RequestResponseBase * base;
-        
-        public:
-
-            RequestResponseBaseObserver() = default;
-
-            RequestResponseBaseObserver(RequestResponseBase * base) noexcept: base(base){}
-
-            void update(std::expected<Response, exception_t> resp) noexcept{
-
-                this->base->update(std::move(resp));
-            }
-
-            void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t> resp) noexcept{
-
-                this->base->maybedeferred_memory_ordering_fetch(std::move(resp));
-            }
-
-            void maybedeferred_memory_ordering_fetch_close(void * dirty_memory) noexcept{
-
-                this->base->maybedeferred_memory_ordering_fetch_close(dirty_memory);
+                return std::move(this->resp.value);
             }
     };
 
@@ -1724,16 +1693,18 @@ namespace dg::network_rest_frame::client_impl1{
 
         public:
 
-            BatchRequestResponseBase(size_t resp_sz): atomic_smp(std::in_place_t{}, -static_cast<intmax_t>(resp_sz) + 1),
-                                                      resp_vec(resp_sz),
-                                                      is_response_invoked(std::in_place_t{}, false){
-
-                if (resp_sz == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-            }
+            BatchRequestResponseBase(size_t resp_sz): atomic_smp(std::in_place_t{}, -static_cast<intmax_t>(stdx::zero_throw(resp_sz)) + 1),
+                                                      resp_vec(stdx::zero_throw(resp_sz), std::unexpected(dg::network_exception::REST_RESPONSE_NOT_INITIALIZED)),
+                                                      is_response_invoked(std::in_place_t{}, false){}
 
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->resp_vec.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //this is vector's business
+                        std::abort();
+                    }
+                }
 
                 this->resp_vec[idx] = std::move(response);
                 this->atomic_smp.value.fetch_add(1u, std::memory_order_release);
@@ -1741,12 +1712,26 @@ namespace dg::network_rest_frame::client_impl1{
 
             void maybedeferred_memory_ordering_fetch(size_t idx, std::expected<Response, exception_t> response) noexcept{
 
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->resp_vec.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //this is vector's business
+                        std::abort();
+                    }
+                }
+
                 this->resp_vec[idx] = std::move(response);
             }
 
-            void maybedeferred_memory_ordering_fetch_close(size_t idx, void * dirty_memory) noexcept{
+            void maybedeferred_memory_ordering_fetch_close(size_t idx) noexcept{
 
-                this->internal_maybedeferred_memory_ordering_fetch_close(idx, dirty_memory);
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->resp_vec.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //this is vector's business
+                        std::abort();
+                    }
+                }
+
+                this->internal_maybedeferred_memory_ordering_fetch_close(idx, static_cast<void *>(&this->resp_vec[idx]));
             }
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
@@ -1754,7 +1739,7 @@ namespace dg::network_rest_frame::client_impl1{
                 bool was_invoked = std::exchange(this->is_response_invoked.value, true);
 
                 if (was_invoked){
-                    return std::unexpected(dg::network_exception::REST_UNIQUE_RESOURCE_ACQUIRED);
+                    return std::unexpected(dg::network_exception::REST_RESPONSE_DOUBLE_INVOKE);
                 } 
 
                 this->atomic_smp.value.wait(0, std::memory_order_acquire);
@@ -1774,41 +1759,41 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
-    class BatchRequestResponseBaseDesignatedObserver: public virtual ResponseObserverInterface{
-
-        private:
-
-            BatchRequestResponseBase * base;
-            size_t idx;
-
-        public:
-
-            BatchRequestResponseBaseDesignatedObserver() = default;
-
-            BatchRequestResponseBaseDesignatedObserver(BatchRequestResponseBase * base, 
-                                                       size_t idx) noexcept: base(base),
-                                                                             idx(idx){}
-
-            void update(std::expected<Response, exception_t> response) noexcept{
-
-                this->base->update(this->idx, std::move(response));
-            }
-
-            void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t> response) noexcept{
-
-                this->base->maybedeferred_memory_ordering_fetch(this->idx, std::move(response));
-            }
-
-            void maybedeferred_memory_ordering_fetch_close(void * dirty_memory) noexcept{
-
-                this->base->maybedeferred_memory_ordering_fetch_close(this->idx, dirty_memory);
-            }
-    };
-
     //its more complicated than most foos think
     class BatchRequestResponse: public virtual BatchResponseInterface{
 
         private:
+
+            class BatchRequestResponseBaseDesignatedObserver: public virtual ResponseObserverInterface{
+
+                private:
+
+                    BatchRequestResponseBase * base;
+                    size_t idx;
+
+                public:
+
+                    BatchRequestResponseBaseDesignatedObserver() = default;
+
+                    BatchRequestResponseBaseDesignatedObserver(BatchRequestResponseBase * base, 
+                                                               size_t idx) noexcept: base(base),
+                                                                                     idx(idx){}
+
+                    void update(std::expected<Response, exception_t> response) noexcept{
+
+                        this->base->update(this->idx, std::move(response));
+                    }
+
+                    void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t> response) noexcept{
+
+                        this->base->maybedeferred_memory_ordering_fetch(this->idx, std::move(response));
+                    }
+
+                    void maybedeferred_memory_ordering_fetch_close() noexcept{
+
+                        this->base->maybedeferred_memory_ordering_fetch_close(this->idx);
+                    }
+            };
 
             dg::vector<BatchRequestResponseBaseDesignatedObserver> observer_arr; 
             BatchRequestResponseBase base;
@@ -1847,9 +1832,13 @@ namespace dg::network_rest_frame::client_impl1{
                 return this->observer_arr.size();
             }
 
-            auto get_observer(size_t idx) noexcept -> ResponseObserverInterface *{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
+            auto get_observer(size_t idx) noexcept -> std::expected<ResponseObserverInterface *, exception_t>{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
 
-                return std::addressof(this->observer_arr[idx]);
+                if (idx >= this->observer_arr.size()){
+                    return std::unexpected(dg::network_exception::OUT_OF_RANGE_ACCESS);
+                }
+
+                return static_cast<ResponseObserverInterface *>(std::addressof(this->observer_arr[idx]));
             }
 
             void release_response_wait_responsibility() noexcept{
@@ -1859,7 +1848,9 @@ namespace dg::network_rest_frame::client_impl1{
 
             void wait_response() noexcept{
 
-                if (this->response_wait_responsibility_flag){
+                bool wait_responsibility = std::exchange(this->response_wait_responsibility_flag, false); 
+
+                if (wait_responsibility){
                     stdx::empty_noipa(this->base->response(), this->observer_arr);
                 }
             }
@@ -1868,12 +1859,40 @@ namespace dg::network_rest_frame::client_impl1{
     //this is the only defined + stable way of programming, is to use factory std::unique_ptr<> construction
     auto make_batch_request_response(size_t resp_sz) noexcept -> std::expected<std::unique_ptr<BatchRequestResponse>, exception_t>{
 
-        return dg::network_allocation::cstyle_make_unique<BatchRequestResponse>(resp_sz);
+        // return dg::network_allocation::cstyle_make_unique<BatchRequestResponse>(resp_sz);
     }
 
     class RequestResponse: public virtual ResponseInterface{
 
         private:
+
+            class RequestResponseBaseObserver: public virtual ResponseObserverInterface{
+
+                private:
+
+                    RequestResponseBase * base;
+
+                public:
+
+                    RequestResponseBaseObserver() = default;
+
+                    RequestResponseBaseObserver(RequestResponseBase * base) noexcept: base(base){}
+
+                    void update(std::expected<Response, exception_t> resp) noexcept{
+
+                        this->base->update(std::move(resp));
+                    }
+
+                    void maybedeferred_memory_ordering_fetch(std::expected<Response, exception_t> resp) noexcept{
+
+                        this->base->maybedeferred_memory_ordering_fetch(std::move(resp));
+                    }
+
+                    void maybedeferred_memory_ordering_fetch_close() noexcept{
+
+                        this->base->maybedeferred_memory_ordering_fetch_close();
+                    }
+            };
 
             RequestResponseBase base;
             RequestResponseBaseObserver observer;
@@ -1906,7 +1925,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto get_observer() noexcept -> ResponseObserverInterface *{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
 
-                return &this->observer;
+                return static_cast<ResponseObserverInterface *>(&this->observer);
             }
 
             void release_response_wait_responsibility() noexcept{
@@ -1916,7 +1935,9 @@ namespace dg::network_rest_frame::client_impl1{
 
             void wait_response() noexcept{
 
-                if (this->response_wait_responsibility_flag){
+                bool wait_responsibility = std::exchange(this->response_wait_responsibility_flag, false);
+
+                if (wait_responsibility){
                     stdx::empty_noipa(this->base->response(), this->observer);
                 }
             }
@@ -1924,7 +1945,7 @@ namespace dg::network_rest_frame::client_impl1{
 
     auto make_request_response() noexcept -> std::expected<std::unique_ptr<RequestResponse>, exception_t>{
 
-        return dg::network_allocation::cstyle_make_unique<RequestResponse>();
+        // return dg::network_allocation::cstyle_make_unique<RequestResponse>();
     }
 
     class RequestContainer: public virtual RequestContainerInterface{
@@ -1960,12 +1981,12 @@ namespace dg::network_rest_frame::client_impl1{
                         return dg::network_exception::SUCCESS;
                     }
 
-                    if (this->producer_queue.size() != this->producer_queue.capacity()){
-                        dg::network_exception_handler::nothrow_log(this->producer_queue.push_back(std::move(request)));
-                        return dg::network_exception::SUCCESS;
+                    if (this->producer_queue.size() == this->producer_queue.capacity()){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
                     }
 
-                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                    dg::network_exception_handler::nothrow_log(this->producer_queue.push_back(std::move(request)));
+                    return dg::network_exception::SUCCESS;
                 }();
 
                 if (releasing_smp != nullptr){
@@ -1984,8 +2005,8 @@ namespace dg::network_rest_frame::client_impl1{
                     stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                     if (!this->producer_queue.empty()){
-                        auto rs = std::move(this->container.front());
-                        this->container.pop_front();
+                        auto rs = std::move(this->producer_queue.front());
+                        this->producer_queue.pop_front();
                         return rs;
                     }
 
@@ -1997,7 +2018,7 @@ namespace dg::network_rest_frame::client_impl1{
                     break;
                 }
 
-                pending_smp->acquire();
+                pending_smp.acquire();
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 return dg::vector<model::InternalRequest>(std::move(internal_request.value()));
@@ -2021,12 +2042,14 @@ namespace dg::network_rest_frame::client_impl1{
         }
     };
 
+    //* is too confusing and bad, we need to make it looks like a pointer container like std::shared_ptr<> or std::unique_ptr<>, we use std::add_pointer_t<>, that looks aesthetically weird yet I would want to differentiate the semantic 
+
     template <class Hasher>
     class TicketController: public virtual TicketControllerInterface{
 
         private:
 
-            dg::unordered_unstable_map<model::ticket_id_t, std::optional<ResponseObserverInterface *>, Hasher> ticket_resource_map; //leaks
+            dg::unordered_unstable_map<model::ticket_id_t, std::optional<std::add_pointer_t<ResponseObserverInterface>>, Hasher> ticket_resource_map; //leaks
             size_t ticket_resource_map_cap;
             ticket_id_t ticket_id_counter;
             std::unique_ptr<std::mutex> mtx;
@@ -2034,15 +2057,15 @@ namespace dg::network_rest_frame::client_impl1{
 
         public:
 
-            TicketController(dg::unordered_unstable_map<model::ticket_id_t, std::optional<ResponseObserverInterface *>> ticket_resource_map,
-                            size_t ticket_resource_map_cap,
-                            size_t ticket_id_counter,
-                            std::unique_ptr<std::mutex> mtx,
-                            stdx::hdi_container<size_t> max_consume_per_load): ticket_resource_map(std::move(ticket_resource_map)),
-                                                                               ticket_resource_map_cap(ticket_resource_map_cap),
-                                                                               ticket_id_counter(ticket_id_counter),
-                                                                               mtx(std::move(mtx)),
-                                                                               max_consume_per_load(std::move(max_consume_per_load)){}
+            TicketController(dg::unordered_unstable_map<model::ticket_id_t, std::optional<std::add_pointer_t<ResponseObserverInterface>>, Hasher> ticket_resource_map,
+                             size_t ticket_resource_map_cap,
+                             ticket_id_t ticket_id_counter,
+                             std::unique_ptr<std::mutex> mtx,
+                             stdx::hdi_container<size_t> max_consume_per_load): ticket_resource_map(std::move(ticket_resource_map)),
+                                                                                ticket_resource_map_cap(ticket_resource_map_cap),
+                                                                                ticket_id_counter(ticket_id_counter),
+                                                                                mtx(std::move(mtx)),
+                                                                                max_consume_per_load(std::move(max_consume_per_load)){}
 
             auto open_ticket(size_t sz, model::ticket_id_t * out_ticket_arr) noexcept -> exception_t{
 
@@ -2062,9 +2085,10 @@ namespace dg::network_rest_frame::client_impl1{
                 }
 
                 for (size_t i = 0u; i < sz; ++i){
-                    static_assert(std::is_unsigned_v<ticket_id_t>);
+                    static_assert(std::is_unsigned_v<ticket_id_t>); //
+
                     model::ticket_id_t new_ticket_id    = this->ticket_id_counter++;
-                    auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<ResponseObserverInterface *>(std::nullopt)));
+                    auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<std::add_pointer_t<ResponseObserverInterface>>(std::nullopt)));
                     dg::network_exception_handler::dg_assert(status);
                     out_ticket_arr[i]                   = new_ticket_id;
                 }
@@ -2090,12 +2114,17 @@ namespace dg::network_rest_frame::client_impl1{
                         continue;
                     }
 
+                    if (corresponding_observer_arr[i] == nullptr){
+                        exception_arr[i] = std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                        continue;
+                    }
+
                     map_ptr->second     = corresponding_observer_arr[i];
                     exception_arr[i]    = true;
                 }
             }
 
-            void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * out_observer_arr) noexcept{
+            void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * out_observer_arr) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
@@ -2109,7 +2138,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     if (!map_ptr->second.has_value()){
-                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_AVAILABLE);
+                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_FOUND);
                         continue;
                     }
 
@@ -2117,7 +2146,7 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             }
 
-            void steal_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<ResponseObserverInterface *, exception_t> * response_arr) noexcept -> exception_t{
+            void steal_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * response_arr) noexcept -> exception_t{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
@@ -2131,7 +2160,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     if (!map_ptr->second.has_value()){
-                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_AVAILABLE);
+                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_FOUND);
                         continue;
                     }
 
@@ -2163,25 +2192,28 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
-    //this is to utilize CPU resource, not CPU efficiency, CPU efficiency is already achieved by batching ticket_id_arr, kernel has effective + efficient schedulings that render the overhead of mtx -> 1/1000 of the actual tx 
+    //this is to utilize CPU resource, not CPU efficiency, CPU efficiency is already achieved by batching ticket_id_arr, kernel has effective + efficient schedulings that render the overhead of mtx -> 1/1000 of the actual tx
     class DistributedTicketController: public virtual TicketControllerInterface{
 
         private:
 
             std::unique_ptr<std::unique_ptr<TicketControllerInterface>[]> base_arr;
             size_t pow2_base_arr_sz;
+            size_t probe_arr_sz;
             size_t keyvalue_feed_cap;
             size_t minimum_discretization_sz;
-            size_t max_consume_per_load;
+            size_t max_consume_per_load; 
 
         public:
 
             DistributedTicketController(std::unique_ptr<std::unique_ptr<TicketControllerInterface>[]> base_arr,
                                         size_t pow2_base_arr_sz,
+                                        size_t probe_arr_sz,
                                         size_t keyvalue_feed_cap,
                                         size_t minimum_discretization_sz,
                                         size_t max_consume_per_load) noexcept: base_arr(std::move(base_arr)),
                                                                                pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                               probe_arr_sz(probe_arr_sz),
                                                                                keyvalue_feed_cap(keyvalue_feed_cap),
                                                                                minimum_discretization_sz(minimum_discretization_sz),
                                                                                max_consume_per_load(max_consume_per_load){}
@@ -2195,18 +2227,17 @@ namespace dg::network_rest_frame::client_impl1{
                     }
                 }
 
-                size_t tentative_discretization_sz  = sz / this->pow2_base_arr_sz;
+                size_t tentative_discretization_sz  = sz / this->probe_arr_sz;
                 size_t discretization_sz            = std::max(tentative_discretization_sz, this->minimum_discretization_sz);
                 size_t peeking_base_arr_sz          = sz / discretization_sz + static_cast<size_t>(sz % discretization_sz != 0u); 
-                size_t random_clue                  = dg::network_randomizer::randomize_int<size_t>(); 
                 size_t running_sz                   = 0u;
 
                 for (size_t i = 0u; i < peeking_base_arr_sz; ++i){
                     size_t first        = i * discretization_sz;
                     size_t last         = std::max(static_cast<size_t>((i + 1) * discretization_sz), sz);
                     size_t sub_sz       = last - first; 
-                    size_t base_arr_idx = (random_clue + i) & (this->pow2_base_arr_sz - 1u);
-
+                    size_t random_clue  = dg::network_randomizer::randomize_int<size_t>(); 
+                    size_t base_arr_idx = random_clue & (this->pow2_base_arr_sz - 1u);
                     exception_t err     = this->base_arr[base_arr_idx]->open_ticket(sub_sz, std::next(rs, first));
 
                     if (dg::network_exception::is_failed(err)){
@@ -2235,9 +2266,9 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    ticket_id_t ticket_id                   = {};
-                    size_t partitioned_idx                  = {};
-                    std::tie(ticket_id, partitioned_idx)    = this->internal_decode_ticket_id(ticket_id_arr[i]);
+                    ticket_id_t base_ticket_id                  = {};
+                    size_t partitioned_idx                      = {};
+                    std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         exception_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
@@ -2245,7 +2276,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     auto feed_arg           = InternalAssignObserverFeedArgument{};
-                    feed_arg.base_ticket_id = ticket_id;
+                    feed_arg.base_ticket_id = base_ticket_id;
                     feed_arg.observer       = assigning_observer_arr[i];
                     feed_arg.exception_ptr  = std::next(exception_arr, i);
 
@@ -2264,9 +2295,9 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    ticket_id_t ticket_id                   = {};
-                    size_t partitioned_idx                  = {};
-                    std::tie(ticket_id, partitioned_idx)    = this->internal_decode_ticket_id(ticket_id_arr[i]);
+                    ticket_id_t base_ticket_id                  = {};
+                    size_t partitioned_idx                      = {};
+                    std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
@@ -2274,7 +2305,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     auto feed_arg               = InternalStealObserverFeedArgument{}:
-                    feed_arg.base_ticket_id     = ticket_id;
+                    feed_arg.base_ticket_id     = base_ticket_id;
                     feed_arg.out_observer_ptr   = std::next(out_observer_arr, i);
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
@@ -2292,9 +2323,9 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    ticket_id_t ticket_id                   = {};
-                    size_t partitioned_idx                  = {};
-                    std::tie(ticket_id, partitioned_idx)    = this->internal_decode_ticket_id(ticket_id_arr[i]);
+                    ticket_id_t base_ticket_id                  = {};
+                    size_t partitioned_idx                      = {};
+                    std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
@@ -2302,7 +2333,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     auto feed_arg               = InternalGetObserverFeedArgument{}:
-                    feed_arg.base_ticket_id     = ticket_id;
+                    feed_arg.base_ticket_id     = base_ticket_id;
                     feed_arg.out_observer_ptr   = std::next(out_observer_arr, i);
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
@@ -2320,9 +2351,9 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    ticket_id_t ticket_id                   = {};
-                    size_t partitioned_idx                  = {};
-                    std::tie(ticket_id, partitioned_idx)    = this->internal_decode_ticket_id(ticket_id_arr[i]);
+                    ticket_id_t base_ticket_id                  = {};
+                    size_t partitioned_idx                      = {};
+                    std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
                     if (parititoned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
@@ -2330,7 +2361,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     auto feed_arg           = InternalCloseTicketFeedArgument{};
-                    feed_arg.base_ticket_id = ticket_id;
+                    feed_arg.base_ticket_id = base_ticket_id;
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
                 }
@@ -2521,7 +2552,7 @@ namespace dg::network_rest_frame::client_impl1{
                     auto [ticket_id, current_dur] = registering_arr[i];
 
                     if (current_dur > this->max_clockin_dur()){
-                        exception_arr[i] = dg::network_exception::INVALID_ARGUMENT;
+                        exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
                         continue;
                     }
 
@@ -2616,18 +2647,24 @@ namespace dg::network_rest_frame::client_impl1{
             void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 auto feed_resolutor                 = InternalClockInFeedResolutor{};
-                feed_resolutor.dst                  = this->base_arr.get(); 
+                feed_resolutor.manager_arr          = this->base_arr.get(); 
 
                 size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
                 size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
 
-                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS;);
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
                 for (size_t i = 0u; i < sz; ++i){
+                    if (registering_arr[i].second > this->max_clockin_dur()){
+                        exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
+                        continue;
+                    }
+
                     size_t hashed_value     = dg::network_hash::hash_reflectible(registering_arr[i].first);
                     size_t partitioned_idx  = hashed_value & (this->pow2_base_arr_sz - 1u);
+
                     auto feed_arg           = InternalClockInFeedArgument{};
                     feed_arg.ticket_id      = registering_arr[i].first;
                     feed_arg.dur            = registering_arr[i].second;
@@ -2674,20 +2711,20 @@ namespace dg::network_rest_frame::client_impl1{
 
             struct InternalClockInFeedResolutor{
 
-                std::unique_ptr<TicketTimeoutManagerInterface> * dst;
+                std::unique_ptr<TicketTimeoutManagerInterface> * manager_arr;
 
-                void push(const size_t& idx, std::move_iteartor<InternalClockInFeedArgument *> data_arr, size_t sz) noexcept{
+                void push(const size_t& partitioned_idx, std::move_iterator<InternalClockInFeedArgument *> data_arr, size_t sz) noexcept{
                     
-                    auto base_data_arr = data_arr.base();
+                    InternalClockInFeedArgument * base_data_arr = data_arr.base();
 
-                    dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> registering_arr(sz); //pair is not good
+                    dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> registering_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
                         registering_arr[i] = std::make_pair(base_data_arr[i].ticket_id, base_data_arr[i].dur);
                     }
 
-                    this->dst[idx]->clock_in(registering_arr.get(), sz, exception_arr.get());
+                    this->manager_arr[partitioned_idx]->clock_in(registering_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -2857,7 +2894,7 @@ namespace dg::network_rest_frame::client_impl1{
                     model::InternalResponse * base_response_arr = response_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<model::ticket_id_t[]> ticket_id_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::expected<ResponseObserverInterface *, exception_t>[]> observer_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>[]> observer_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
                         ticket_id_arr[i] = base_response_arr[i].ticket_id;
@@ -2874,13 +2911,15 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     std::atomic_thread_fence(std::memory_order_release);
+                    //we'd like to have a signal fence std::memory_order_seq_cst just for our sake of safety
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!observer_arr[i].has_value()){
                             continue;
                         }
 
-                        observer_arr[i].value()->maybedeferred_memory_ordering_fetch_close(static_cast<void *>(&base_response_arr[i].response));
+                        observer_arr[i].value()->maybedeferred_memory_ordering_fetch_close();
                     }
                 }
             };
@@ -2913,12 +2952,12 @@ namespace dg::network_rest_frame::client_impl1{
                 feed_resolutor.channel          = this->channel;
                 feed_resolutor.transmit_opt     = this->transmit_opt;
 
-                size_t trimmed_mailbox_feed_cap = std::min(this->mailbox_feed_cap, static_cast<size_t>(request_vec.size()));
+                size_t trimmed_mailbox_feed_cap = std::min(std::min(this->mailbox_feed_cap, dg::network_kernel_mailbox::max_consume_size()), static_cast<size_t>(request_vec.size()));
                 size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_cap, feeder_mem.get()));
 
-                for (auto& request: request_vec){
+                for (model::InternalRequest& request: request_vec){
                     std::expected<dg::network_kernel_mailbox::Address, exception_t> addr = dg::network_uri_encoder::extract_mailbox_addr(request.request.requestee_uri);
 
                     if (!addr.has_value()){
@@ -2941,7 +2980,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return true;
             }
-        
+
         private:
 
             struct InternalFeedResolutor{
@@ -3034,10 +3073,10 @@ namespace dg::network_rest_frame::client_impl1{
 
                     model::ticket_id_t * base_ticket_id_arr = ticket_id_arr.base();
 
-                    dg::network_stack_allocation<std::expected<ResponseObserverInterface *, exception_t>[]> stolen_response_observer_arr(ticket_id_arr_sz);
+                    dg::network_stack_allocation<std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>[]> stolen_response_observer_arr(ticket_id_arr_sz);
                     dg::network_stack_allocation<std::expected<Response, exception_t>[]> timeout_response_arr(ticket_id_arr_sz);
 
-                    std::fill(timeout_response_arr.get(), std::next(timeout_response_arr.get(), ticket_id_arr_sz), std::expected<Response, exception_t>(std::unexpected(dg::network_exception::REST_TIMEOUT)));
+                    std::fill(timeout_response_arr.get(), std::next(timeout_response_arr.get(), ticket_id_arr_sz), std::expected<Response, exception_t>(std::unexpected(dg::network_exception::REST_TIMEOUT))); //I dont know what this is for
                     this->ticket_controller->steal_observer(base_ticket_id_arr, ticket_id_arr_sz, stolen_response_observer_arr.get());
 
                     for (size_t i = 0u; i < ticket_id_arr_sz; ++i){
@@ -3049,13 +3088,15 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     std::atomic_thread_fence(std::memory_order_release);
+                    //we'd like to have a signal fence std::memory_order_seq_cst just for our sake of safety
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
 
                     for (size_t i = 0u; i < ticket_id_arr_sz; ++i){
                         if (!stolen_response_observer_arr[i].has_value()){
                             continue;
                         }
 
-                        stolen_response_observer_arr[i].value()->maybedeferred_memory_ordering_fetch_close(static_cast<void *>(&timeout_response_arr[i]));
+                        stolen_response_observer_arr[i].value()->maybedeferred_memory_ordering_fetch_close();
                     }
                 }
             };
@@ -3072,6 +3113,11 @@ namespace dg::network_rest_frame::client_impl1{
     //able to saturate 1GB - 5GB of inbound rest_requests/ second if correctly configurated 
     //we'll post the benchs
     //we'll be back tmr
+
+    //this is the base for our pagination implementation of requests
+    //its like a movie player
+    //we have a vector of client request (timeranges)
+    //client request is running out, we refill our waiting pool of outbound request + inbound response
 
     class RestController: public virtual RestControllerInterface{
 
@@ -3155,7 +3201,13 @@ namespace dg::network_rest_frame::client_impl1{
                 dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> response_observer_exception_arr(sz);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    response_observer_arr[i] = response.value()->get_observer(i); //get response listening observers
+                    std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> observer = response.value()->get_observer(i); 
+
+                    if (!observer.has_value()){
+                        return std::unexpected(observer.error()); //failed to get observers, close_tickets by response + release wait responsibility of response + deallocate response resources
+                    }
+
+                    response_observer_arr[i] = observer.value(); //get response listening observers
                 }
 
                 this->ticket_controller->assign_observer(ticket_id_arr.get(), sz, response_observer_arr.get(), response_observer_exception_arr.get()); //bind observers -> ticket_controller to listen for responses
@@ -3177,7 +3229,7 @@ namespace dg::network_rest_frame::client_impl1{
                     clockin_arr[i] = std::make_pair(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
 
                     if (base_client_request_arr[i].client_timeout_dur > max_timeout_dur){
-                        return std::unexpected(dg::network_exception::REST_INVALID_TIMEOUT_ARGUMENT); //failed to meet timeout preconds, close tickets by response + release_wait_responsbiility of response + deallocate response resources
+                        return std::unexpected(dg::network_exception::REST_INVALID_TIMEOUT); //failed to meet timeout preconds, close tickets by response + release_wait_responsbiility of response + deallocate response resources
                     }
                 }
 
@@ -3200,7 +3252,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (dg::network_exception::is_failed(clockin_exception_arr[i])){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(clockin_exception_arr[i]));
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(clockin_exception_arr[i])); //unable to fail, resource leaks + deadlock otherwise, very dangerous, rather terminate
                         std::abort();
                     }
                 }
@@ -3229,7 +3281,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                 public:
 
-                    //defer construction -> factory
+                    //defer construction -> factory, all deferred constructions are marked as noexcept to avoid leaks, such is malloc() -> inplace -> return, fails can only happen at malloc 
+
                     InternalBatchResponse(std::unique_ptr<BatchRequestResponse> base,
                                           std::unique_ptr<model::ticket_id_t[]> ticket_id_arr,
                                           size_t ticket_id_arr_sz,
@@ -3258,7 +3311,7 @@ namespace dg::network_rest_frame::client_impl1{
                         return this->base->response_size();
                     }
 
-                    auto get_observer(size_t idx) noexcept -> ResponseObserverInterface *{
+                    auto get_observer(size_t idx) noexcept -> std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>{
 
                         return this->base->get_observer(idx);
                     }
@@ -3281,7 +3334,7 @@ namespace dg::network_rest_frame::client_impl1{
                             return;
                         }
 
-                        this->ticket_controller->close_ticket(this->ticket_id_arr.get(), ticket_id_arr_sz);                        
+                        this->ticket_controller->close_ticket(this->ticket_id_arr.get(), this->ticket_id_arr_sz);                        
                         this->ticket_release_responsibility = false;
                     }
             };
@@ -3296,7 +3349,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                     InternalSingleResponse(std::unique_ptr<BatchResponseInterface> base) noexcept: base(std::move(base)){}
 
-                    auto response() -> std::expected<Response, exception_t>{
+                    auto response() noexcept -> std::expected<Response, exception_t>{
 
                         auto rs = this->base->response();
 
@@ -3311,12 +3364,13 @@ namespace dg::network_rest_frame::client_impl1{
                             }
                         }
 
+                        static_assert(std::is_nothrow_move_constructible_v<Response>);
                         return std::expected<Response, exception_t>(std::move(rs->front()));
                     }
             };
 
             static auto internal_make_batch_request_response(size_t request_sz, ticket_id_t * ticket_id_arr, std::shared_ptr<TicketControllerInterface> ticket_controller) noexcept -> std::expected<std::unique_ptr<InternalBatchResponse>, exception_t>{
-                
+
                 if (request_sz == 0u){
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
@@ -3335,7 +3389,7 @@ namespace dg::network_rest_frame::client_impl1{
                     rptr->release_response_wait_responsibility();
                 });
 
-                std::expected<std::unique_ptr<model::ticket_id_t[]>, exception_t> cpy_ticket_id_arr = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<ticket_id_t[]>)(request_sz);
+                std::expected<std::unique_ptr<model::ticket_id_t[]>, exception_t> cpy_ticket_id_arr = dg::network_allocation::cstyle_make_unique<ticket_id_t[]>(request_sz);
 
                 if (!cpy_ticket_id_arr.has_value()){
                     return std::unexpected(cpy_ticket_id_arr.error());
@@ -3357,10 +3411,15 @@ namespace dg::network_rest_frame::client_impl1{
                 return rs;
             }
 
+            static auto internal_make_single_response(std::unique_ptr<BatchResponseInterface>&& base) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
+
+                return dg::network_exception::cstyle_make_unique<InternalSingleResponse>(static_cast<std::unique_ptr<BatchResponseInterface>&&>(base));
+            }
+
             static auto internal_make_internal_request(std::move_iterator<model::ClientRequest *> request_arr, ticket_id_t * ticket_id_arr, size_t request_arr_sz) noexcept -> std::expected<dg::vector<model::InternalRequest>, exception_t>{
 
-                model::ClientRequest * base_request_arr = request_arr.base();
-                std::expected<dg::vector<model::InternalRequest>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<model::InternalRequest>>(request_arr_sz);
+                model::ClientRequest * base_request_arr                             = request_arr.base();
+                std::expected<dg::vector<model::InternalRequest>, exception_t> rs   = dg::network_exception::cstyle_initialize<dg::vector<model::InternalRequest>>(request_arr_sz);
 
                 if (!rs.has_value()){
                     return std::unexpected(rs.error());
@@ -3380,18 +3439,13 @@ namespace dg::network_rest_frame::client_impl1{
                 return rs;
             }
 
-            static void internal_rollback_client_request(model::ClientRequest * client_request_arr, dg::vector<model::InternalRequest> internal_request_arr) noexcept{
+            static void internal_rollback_client_request(model::ClientRequest * client_request_arr, dg::vector<model::InternalRequest>&& internal_request_arr) noexcept{
 
                 for (size_t i = 0u; i < internal_request_arr.size(); ++i){
                     client_request_arr[i].requestee_uri = std::move(internal_request_arr[i].request.requestee_uri);
                     client_request_arr[i].requestor     = std::move(internal_request_arr[i].request.requestor);
                     client_request_arr[i].payload       = std::move(internal_request_arr[i].request.payload);
                 }
-            }
-
-            static auto internal_make_single_response(std::unique_ptr<BatchResponseInterface>&& base) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
-
-                return dg::network_exception::cstyle_make_unique<InternalSingleResponse>(static_cast<std::unique_ptr<BatchResponseInterface>&&>(base));
             }
     };
 
