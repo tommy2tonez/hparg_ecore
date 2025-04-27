@@ -592,9 +592,9 @@ namespace stdx{
     }
 
     template <class T>
-    inline __attribute__((always_inline)) auto to_const_reference(T& obj) noexcept -> const T&{
+    inline __attribute__((always_inline)) auto to_const_reference(T&& obj) noexcept -> decltype(auto){
 
-        return static_cast<const T&>(obj);
+        return std::as_const(std::forward<T>(obj));
     }
 
     template <class Lambda>
@@ -910,14 +910,15 @@ namespace stdx{
 
         private:
 
-            static inline T obj{};
-        
+            using self = singleton;
+            static inline T * volatile obj = new T(); //this is the most important global access operation
+
         public:
 
             static inline auto get() noexcept -> T&{
-                
+
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                return obj;
+                return *self::obj;
             }
     };
 
@@ -971,13 +972,13 @@ namespace stdx{
     template <class T>
     union hdi_container{
         alignas(stdx::hdi_size()) T value;
-        alignas(stdx::hdi_size()) char supposed_sz[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
+        alignas(stdx::hdi_size()) char shape[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
     };
 
     template <class T>
     union inplace_hdi_container{
         alignas(stdx::hdi_size()) T value;
-        alignas(stdx::hdi_size()) char supposed_sz[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
+        alignas(stdx::hdi_size()) char shape[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
 
         template <class ...Args>
         inplace_hdi_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>): value(std::forward<Args>(args)...){}
@@ -991,6 +992,16 @@ namespace stdx{
     __attribute__((noipa)) void empty_noipa(Args&& ...args) noexcept{
 
         (((void) args), ...);
+    }
+
+    template <class Task, class ...Args>
+    __attribute__((noipa)) auto noipa_do_task(Task&& task, Args&& ...args) noexcept(std::is_nothrow_invocable_v<Task&&, Args&&...>) -> decltype(auto){
+
+        if constexpr(std::is_same_v<decltype(task(std::forward<Args>(args)...)), void>){
+            task(std::forward<Args>(args)...);
+        } else{
+            return task(std::forward<Args>(args)...);
+        }    
     }
 }
 

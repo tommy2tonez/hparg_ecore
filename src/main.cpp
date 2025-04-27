@@ -33,11 +33,6 @@
 #include "stdx.h"
 #include <semaphore>
 
-union Foo{
-    alignas(64) size_t sz;
-    char pad[8];
-}; 
-
 int main(){
 
     //we have finally reached 7.0 MB of code, damn
