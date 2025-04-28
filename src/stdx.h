@@ -1018,6 +1018,10 @@ namespace stdx{
         return arg;
     }
 
+    //this is used as a last resort to access the immediate containee, not their dependencies, we'll mess with the compiler escape analysis very badly
+    //these hacks are immediate patches, not to be used in production, including the usage of launder<>    
+    //one special case for launder is producer consumer queue, where we offload the restrictness of access -> the callee, such voids all the bad accesses thru the intermediate containees
+
     template <class T>
     struct volatile_container{
 
@@ -1042,7 +1046,7 @@ namespace stdx{
                 std::destroy_at(volatiled_ptr);
             }
 
-            inline auto operator ->() noexcept -> T *{
+            inline auto value() noexcept -> T *{
 
                 return stdx::volatile_access(std::launder(reinterpret_cast<T *>(&this->s)));
             } 
