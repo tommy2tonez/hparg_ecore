@@ -17,6 +17,7 @@
 #include "network_raii_x.h"
 #include <stdfloat>
 #include <immintrin.h>
+#include <utility>
 
 namespace stdx{
 
@@ -1004,11 +1005,37 @@ namespace stdx{
         }    
     }
 
-    template <class T, class ...ConsumingArgs>
-    __attribute__((noipa)) auto volatile_access(T * volatile arg, ConsumingArgs&& ...args) noexcept -> T *{
+    //this is a very dangerous yet languagely accurate
+    //we taint the value of arg and returns a pointer that could be of any values (restrictness has not been tainted, maybe ...)
+    //what happens to the point and the arg value thereafter is ... in the mercy of the compiler
+    //how do we make this official, by using a volatile container, such is every operation must be through the volatile container to be defined
+    //this is hard
 
+    template <class T, class ...ConsumingArgs>
+    __attribute__((noipa)) auto volatile_access(T * volatile arg, ConsumingArgs& ...consuming_args) noexcept -> T *{
+
+        (((void) consuming_args), ...);
         return arg;
-    } 
+    }
+
+    template <class T>
+    struct volatile_container{
+
+        private:
+            
+            T value;
+
+        public:
+
+            template <class ...Args>
+            volatile_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>): value(std::forward<Args>(args)...){}
+
+            template <class ...ConsumingArgs>
+            inline auto access(ConsumingArgs& ...args) noexcept -> T *{
+
+                return stdx::volatile_access(&this->value, args...);
+            } 
+    };
 }
 
 #endif

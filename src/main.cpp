@@ -24,16 +24,67 @@
 // // #include "network_datastructure.h"
 // // #include "network_fileio.h"
 // // #include "network_fileio_chksum_x.h"
-#include "network_host_asynchronous.h"
+// #include "network_host_asynchronous.h"
 // #include <stdlib.h>
 // #include <stdint.h>
 // #include <type_traits>
 // #include "network_allocation.h"
 #include <atomic>
-// #include "stdx.h"
+#include "stdx.h"
 #include <semaphore>
 
-int main(){
+#include <cassert>
+#include <cstddef>
+#include <new>
  
-    //we have finally reached 7.0 MB of code, damn
+struct Base
+{
+    virtual int transmogrify();
+};
+ 
+struct Derived : Base
+{
+    int transmogrify() override
+    {
+        new(this) Base;
+        return 2;
+    }
+};
+ 
+int Base::transmogrify()
+{
+    new(this) Derived;
+    return 1;
+}
+ 
+static_assert(sizeof(Derived) == sizeof(Base));
+ 
+int main()
+{
+    // Case 1: the new object failed to be transparently replaceable because
+    // it is a base subobject but the old object is a complete object.
+    Base base;
+    int n = base.transmogrify(); //2
+    // int m = base.transmogrify(); // undefined behavior
+    Base * upbase = stdx::volatile_access(&base); 
+    int m = upbase->transmogrify(); //1
+    Base * upupbase = stdx::volatile_access(upbase);
+    int x = upupbase->transmogrify(); //2
+    int y = stdx::volatile_access(&base)->transmogrify(); // 1
+
+    assert(m + n + x + y == 6);
+ 
+    // Case 2: access to a new object whose storage is provided
+    // by a byte array through a pointer to the array.
+    struct Y { int z; };
+    alignas(Y) std::byte s[sizeof(Y)];
+    Y* q = new(&s) Y{2};
+    const int f = reinterpret_cast<Y*>(&s)->z; // Class member access is undefined
+                                               // behavior: reinterpret_cast<Y*>(&s)
+                                               // has value "pointer to s" and does
+                                               // not point to a Y object
+    const int g = q->z; // OK
+    const int h = stdx::volatile_access(reinterpret_cast<Y*>(&s))->z; // OK
+ 
+    [](...){}(f, g, h); // evokes [[maybe_unused]] effect
 }
