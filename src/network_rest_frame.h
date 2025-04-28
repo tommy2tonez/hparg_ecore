@@ -320,7 +320,7 @@ namespace dg::network_rest_frame::server_impl1{
                         rs_arr[i] = std::optional<Response>(std::nullopt);
                     } else{
                         std::expected<Response, exception_t> cpy_response = dg::network_exception::cstyle_initialize<Response>(map_ptr->second);
-                        
+
                         if (!cpy_response.has_value()){
                             rs_arr[i] = std::unexpected(cpy_response.error());
                         } else{
@@ -1432,7 +1432,7 @@ namespace dg::network_rest_frame::server_impl1{
                 size_t modulo_value = random_value & (this->pow2_chance_sz - 1u); 
 
                 if (modulo_value == 0u){
-                    return this->base->thru(incoming_sz * pow2_chance_sz);
+                    return this->base->thru(incoming_sz * this->pow2_chance_sz);
                 } else{
                     size_t nxt_incoming_sz = this->base->thru_size() + incoming_sz + this->nothru_window_sz;
 
@@ -1611,7 +1611,7 @@ namespace dg::network_rest_frame::server_impl1{
                 server_fetch_feed_resolutor.mailbox_prep_feeder             = mailbox_prep_feeder.get();
                 server_fetch_feed_resolutor.cache_map_feeder                = cache_map_insert_feeder.get();
 
-                size_t trimmed_server_feed_cap                              = std::min(this->server_fetch_feed_cap, recv_buf_sz);
+                size_t trimmed_server_feed_cap                              = std::min(std::min(this->server_fetch_feed_cap, this->get_server_feed_native_cap()), recv_buf_sz);
                 size_t server_feeder_allocation_cost                        = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&server_fetch_feed_resolutor, trimmed_server_fetch_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> server_feeder_mem(server_feeder_allocation_cost);
                 auto server_feeder                                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&server_fetch_feed_resolutor, trimmed_server_fetch_feed_cap, server_feeder_mem.get()));
@@ -1757,7 +1757,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             struct InternalMailBoxPrepArgument{
                 dg::network_kernel_mailbox::Address to;
-                Response response;
+                InternalResponse response;
                 std::optional<uint8_t> priority;
             };
 
@@ -1770,7 +1770,7 @@ namespace dg::network_rest_frame::server_impl1{
                     auto base_data_arr = data_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<dg::string, exception_t> serialized_response = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::serialize<dg::string, Response>)(base_data_arr[i].response, model::INTERNAL_RESPONSE_SERIALIZATION_SECRET);
+                        std::expected<dg::string, exception_t> serialized_response = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::serialize<dg::string, InternalResponse>)(base_data_arr[i].response, model::INTERNAL_RESPONSE_SERIALIZATION_SECRET);
 
                         if (!serialized_response.has_value()){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(serialized_response.error()));
@@ -1800,15 +1800,15 @@ namespace dg::network_rest_frame::server_impl1{
                     auto base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<Response[]> response_id_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Response[]> response_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        cache_id_arr[i]     = base_data_arr[i].cache_id;
-                        response_id_arr[i]  = std::move(base_data_arr[i].response);
+                        cache_id_arr[i] = base_data_arr[i].cache_id;
+                        response_arr[i] = std::move(base_data_arr[i].response);
                     }
 
-                    this->cache_controller->insert_cache(cache_id_arr.get(), std::make_move_iterator(response_id_arr.get()), sz, rs_arr.get());
+                    this->cache_controller->insert_cache(cache_id_arr.get(), std::make_move_iterator(response_arr.get()), sz, rs_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!rs_arr[i].has_value()){
@@ -1817,7 +1817,7 @@ namespace dg::network_rest_frame::server_impl1{
                         }
 
                         if (!rs_arr[i].value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::REST_CACHEMAP_CORRUPTION));
+                            dg::network_log_stackdump::error_fast_optional("REST_CACHEMAP BAD INSERT");
                             continue;
                         }
                     }
@@ -1836,7 +1836,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                 dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> * request_handler_map;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder;
-                dg::network_producer_consumer::DeliveryHandle<InternalCacheMapInserterArgument> * cache_map_feeder;
+                dg::network_producer_consumer::DeliveryHandle<InternalCacheMapFeedArgument> * cache_map_feeder;
 
                 void push(const std::string_view& local_uri_path, std::move_iterator<InternalServerFeedResolutorArgument *> data_arr, size_t sz) noexcept{
 
@@ -1857,21 +1857,31 @@ namespace dg::network_rest_frame::server_impl1{
                         }
                     }
 
+                    //get the responses for the requests, this cannot fail, so there is no std::expected<Response, exception_t>
+                    //a fail of this request could denote a unique_write good resource leak, not bad leak
+                    //the contract of worst case == that of one normal request signal remains 
+
                     map_ptr->second->handle(std::make_move_iterator(request_arr.get()), sz, response_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
-                        if (data_arr[i].cache_write_id.has_value()){
+
+                        //attempt to write the cache if there is a designated cache_id, if cache_write is failed, it is a silent fail
+                        //we are still honoring the contract of all fails == one normal request signal fail 
+
+                        if (base_data_arr[i].cache_write_id.has_value()){
                             std::expected<Response, exception_t> cpy_response_arr = dg::network_exception::cstyle_initialize<Response>(response_arr[i]);
 
                             if (!cpy_response_arr.has_value()){
                                 dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(cpy_response_arr.error()));
                             } else{
-                                auto cache_mapfeed_arg = InternalCacheMapFeedArgument{.cache_id = base_data_arr[i].cache_write_id,
+                                auto cache_mapfeed_arg = InternalCacheMapFeedArgument{.cache_id = base_data_arr[i].cache_write_id.value(),
                                                                                       .response = std::move(cpy_response_arr.value())}; 
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->cache_map_feeder, std::move(cache_mapfeed_arg));
                             }
                         }
+
+                        //returns the result to the user
 
                         auto response   = model::InternalResponse{.response   = std::move(response_arr[i]),
                                                                   .ticket_id  = base_data_arr[i].ticket_id}; 
@@ -1894,15 +1904,33 @@ namespace dg::network_rest_frame::server_impl1{
                 Request request;
             };
 
+            //attempts to thru the traffic
+            //at traffic light, there are two scenerios
+            //it is already cachewrite_uex_controller->thru and it is not already cachewrite_uex_controller->thru
+            //if it is the former, then it must be in crack of read_cache -> now (and this is susceptible to unique_write traffic leaks)
+
+            //at the read cache, it might or might not denote the thruness of unique_write, the writing might be <in progress> so we have another crack there
+            //the chance is slim, we return a bad signal if that happens, yet the integrity of unique_write for dedicated id remains 
+
+            //our imagination (only stable interface) is that we'd retry 10 times for a particular request, and we wont stop until we get a success from the server and out the request, so the slim chance is just one of the chances of failed requests
+            //if we got a success, that success is the sole and only success
+            //if we got all fails, that means the request is thru at most once
+            //this interface is so important that we would depend our entire company future on this particular feature
+            //alright, I admit I dont want to make this more complicated than it already is to communicate something far away
+
+            //attempts to get cache write to the designated cache_id
+            //
+
             struct InternalCacheServerFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheServerFeedArgument>{
 
                 InfiniteCacheUniqueWriteControllerInterface * cachewrite_uex_controller;
                 CacheUniqueWriteTrafficControllerInterface * cachewrite_tfx_controller;
-
                 dg::network_producer_consumer::KVDeliveryHandle<InternalServerFeedResolutorArgument> * server_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder;
 
                 void push(std::move_iterator<InternalCacheServerFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    auto base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> cache_write_response_arr(sz);
@@ -1913,8 +1941,10 @@ namespace dg::network_rest_frame::server_impl1{
 
                     exception_t thru_status = this->cachewrite_tfx_controller->thru(sz); //if it is already uex_controller->thru, we got a leak, its interval leak, the crack between the read_cache and the thru, if it is not thru, then we are logically correct 
 
+                    //not thru, returns bad signal
+
                     if (dg::network_exception::is_failed(thru_status)){
-                        for (size_t i = 0u; i < sz; ++I){
+                        for (size_t i = 0u; i < sz; ++i){
                             auto response = model::InternalResponse{.response   = std::unexpected(thru_status),
                                                                     .ticket_id  = base_data_arr[i]->ticket_id};
 
@@ -1928,38 +1958,49 @@ namespace dg::network_rest_frame::server_impl1{
                         return;
                     } 
 
+                    //thru, attempts to get the unique write 
+
                     this->cachewrite_uex_controller->thru(cache_id_arr.get(), sz, cache_write_response_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
+                        //internal server error, can't read the thruness
+                        //we need to somewhat generalize our external error interface ... this is too confusing even for me
+
                         if (!cache_write_response_arr[i].has_value()){
-                            auto response = model::InternalResponse{.response   = std::unexpected(cache_write_response_arr[i].error()),
+                            auto response = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_INTERNAL_SERVER_ERROR),
                                                                     .ticket_id  = base_data_arr[i]->ticket_id};
-                            
+
                             auto prep_arg   = InternalMailBoxPrepArgument{.to               = base_data_arr[i].to,
                                                                           .response         = std::move(response),
                                                                           .dual_priority    = base_data_arr[i].dual_priority};
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
-                        } else{
-                            if (!cache_write_response_arr[i].value()){
-                                auto response   = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_BAD_CACHE_WRITE), //
-                                                                          .ticket_id  = base_data_arr[i]->ticket_id};
-
-                                auto prep_arg   = InternalMailBoxPrepArgument{.to               = base_data_arr[i].to,
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = base_data_arr[i].dual_priority};
-                                
-                                dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
-                            } else{
-                                auto arg    = InternalServerFeedResolutorArgument{.to               = base_data_arr[i].to,
-                                                                                  .dual_priority    = base_data_arr[i].dual_priority,
-                                                                                  .cache_write_id   = base_data_arr[i].cache_id,
-                                                                                  .ticket_id        = base_data_arr[i].ticket_id,
-                                                                                  .request          = std::move(base_data_arr[i].request)};
-
-                                dg::network_producer_consumer::delvrsrv_kv_deliver(this->server_feeder, base_data_arr[i].local_uri_path, std::move(arg));
-                            }   
+                            continue;
                         }
+
+                        //somebody else gets the cache_write, we aren't unique...
+
+                        if (!cache_write_response_arr[i].value()){
+                            auto response   = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_BAD_CACHE_UNIQUE_WRITE),
+                                                                        .ticket_id  = base_data_arr[i]->ticket_id};
+
+                            auto prep_arg   = InternalMailBoxPrepArgument{.to               = base_data_arr[i].to,
+                                                                            .response       = std::move(response),
+                                                                            .dual_priority  = base_data_arr[i].dual_priority};
+
+                            dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
+                            continue;
+                        }
+
+                        //we have the cache_write right, we'd make sure to dispatch this to the server feed resolutor to get a response and cache the response
+
+                        auto arg    = InternalServerFeedResolutorArgument{.to               = base_data_arr[i].to,
+                                                                          .dual_priority    = base_data_arr[i].dual_priority,
+                                                                          .cache_write_id   = base_data_arr[i].cache_id,
+                                                                          .ticket_id        = base_data_arr[i].ticket_id,
+                                                                          .request          = std::move(base_data_arr[i].request)};
+
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(this->server_feeder, base_data_arr[i].local_uri_path, std::move(arg));
                     }
                 }
             };
@@ -1973,11 +2014,15 @@ namespace dg::network_rest_frame::server_impl1{
                 Request request;
             };
 
+            //attempt to read cache
+            //failed to read cache          -> return exception -> user, denotes internal unrecoverable errors
+            //read cache success has entry  -> return cached data -> user
+            //read cache success no entry   -> forward to cache_server_feed_resolutor to dispatch a unique cache write 
+
             struct InternalCacheFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheFeedArgument>{
 
-                dg::network_producer_consumer::KVDeliveryHandle<InternalCacheServerFeedArgument> * cache_server_feeder;
+                dg::network_producer_consumer::DeliveryHandle<InternalCacheServerFeedArgument> * cache_server_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepArgument> * mailbox_prep_feeder; 
-
                 CacheControllerInterface * cache_controller;
 
                 void push(std::move_iterator<InternalCacheFeedArgument *> data_arr, size_t sz) noexcept{
@@ -1985,7 +2030,7 @@ namespace dg::network_rest_frame::server_impl1{
                     auto base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::optional<Response>[]> response_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<Response>, exception_t>[]> response_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
                         cache_id_arr[i] = base_data_arr[i].cache_id;                        
@@ -1994,31 +2039,58 @@ namespace dg::network_rest_frame::server_impl1{
                     this->cache_controller->get_cache(cache_id_arr.get(), sz, response_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
-                        if (response_arr[i].has_value()){
-                            auto response = model::InternalResponse{.response   = std::move(response_arr[i].value()),
+                        if (!response_arr[i].has_value()){
+                            auto response   = model::InternalResponse{.response     = std::unexpected(dg::network_exception::REST_INTERNAL_SERVER_ERROR),
+                                                                      .ticket_id    = base_data_arr[i].ticket_id};
+
+                            auto prep_arg   = InternalMailBoxPrepArgument{.to               = base_data_arr[i].to,
+                                                                          .response         = std::move(response),
+                                                                          .dual_priority    = base_data_arr[i].dual_priority};
+
+                            dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
+                            continue;
+                        }
+
+                        if (response_arr[i].value().has_value()){
+                            auto response = model::InternalResponse{.response   = std::move(response_arr[i].value().value()),
                                                                     .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepArgument{.to               = base_data_arr[i].to,
                                                                           .response         = std::move(response),
                                                                           .dual_priority    = base_data_arr[i].dual_priority};
-                            
+
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
-                        } else{
-
-                            auto arg    = InternalCacheServerFeedArgument{.to               = base_data_arr[i].to,
-                                                                          .local_uri_path   = base_data_arr[i].local_uri_path,
-                                                                          .dual_priority    = base_data_arr[i].dual_priority,
-                                                                          .cache_id         = base_data_arr[i].cache_id,
-                                                                          .ticket_id        = base_data_arr[i].ticket_id,
-                                                                          .request          = std::move(base_data_arr[i].request)};
-
-                            dg::network_producer_consumer::delvrsrv_kv_deliver(this->cache_server_feeder, base_data_arr[i].local_uri_path, std::move(arg));
+                            continue;
                         }
+
+                        auto feed_arg    = InternalCacheServerFeedArgument{.to               = base_data_arr[i].to,
+                                                                           .local_uri_path   = base_data_arr[i].local_uri_path,
+                                                                           .dual_priority    = base_data_arr[i].dual_priority,
+                                                                           .cache_id         = base_data_arr[i].cache_id,
+                                                                           .ticket_id        = base_data_arr[i].ticket_id,
+                                                                           .request          = std::move(base_data_arr[i].request)};
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->cache_server_feeder, std::move(feed_arg));
                     }
                 }
             };
+
+            auto get_server_feed_native_cap() const noexcept -> size_t{
+
+                if (this->request_handler_map.size() == 0u){
+                    return 0u;
+                }
+
+                size_t rs = std::numeric_limits<size_t>::max();
+
+                for (const auto& handler_pair: this->request_handler_map){
+                    rs = std::min(handler_pair.second->max_consume_size());
+                }
+
+                return rs;
+            }
     };
-} 
+}
 
 namespace dg::network_rest_frame::client_impl1{
 
