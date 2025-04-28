@@ -11,16 +11,8 @@
 #include "stdx.h"
 #include "network_kernel_mailbox.h"
 
-//alright, we'll stress test this to see if this could reach 1GB of inbound without polluting the internal memory ordering mechanisms
-//this component should suffice for extension and enough for single responsibility
-//we can't add too many features because it would hinder our future extensibility
-//we'll do code review for 1-2 days, we'll move on to implement our beloved Taylor's search
-
-//we'll be back, I just read the proposal for std::hive 
-//I dont precisely know what the component does, except for being a vector, a deque son
-//vector in the sense of contiguous back insert
-//deque in the sense of a discretized range -> a block of memory, such block would refer to another block for some reasons...  
-//so basically the std is implementing our std::dense_hash_map<> with their own convention of hashing technique to leverage bucket collisions locality
+//alright, today we are working on the memory footprints + bucket_hint of every map possible
+//we are creating | allowing configurations for what we called intentional bucket shared_ids to reduce the insert memory footprints 
 
 namespace dg::network_rest_frame::model{
 
