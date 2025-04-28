@@ -246,7 +246,6 @@ namespace dg::network_rest_frame::server_impl1{
 
     using namespace dg::network_rest_frame::server; 
 
-
     struct CacheNormalHasher{
 
         constexpr auto operator()(const CacheID& cache_id) const noexcept -> size_t{
@@ -2081,33 +2080,9 @@ namespace dg::network_rest_frame::server_impl1{
 
 namespace dg::network_rest_frame::client_impl1{
 
-    //we'll implement the Taylor's search, be patient, this is very tough to implement on cuda
-
-    //we are talking about another entire different programming styles + practices
-    //one thing we know for sure, we cant trust cuda
-    //all important operations must be operated on host, and every backprop + update must have their internal mechanisms of clamping the values
-    //we implement our own accelerated linear algebra, we have repeated operations, which we will attempt to find fuzzy representation of projection space by running math_approx + calibrate
-
-    //fine allocations (could be further improved)
-    //we have our top-tier filesystem (alright not to be too proud, it's running extremely slow, yet very high accuracy, RAM-accurate)
-    //reasonable socket protocol (need to pad requests to actually achieve low latency high thruput)
-    //OK unified memory address (we need to improve our locking routines)
-    //no synchronization compute
-    //OK tiles (memregions + friends)
-    //top-tier security line (unif_dist symmetric encoder)
-
-    //what we are missing is ... a backpropagation search (this is still Stone Aged technology, we yet to know a better way than to do search ...)
-    //a multi-precision library on cuda (this is very important to achieve 10 ** 18 decimal accuracy of projection space)
-    //a Taylor Series patterns database
-    //each of those tasks would take 1 year of non-stop working to accurately implement (yeah its hard)
-    //we'll see about our timeline later
-    //it's gonna be hard to be a trillionaire Mom
-    //we'll be there
+    //
 
     using namespace dg::network_rest_frame::client; 
-
-    //we'll offload the responsibility of noipa -> stdx
-    //we do lambdas for now
 
     class RequestResponseBase{
 
@@ -2512,7 +2487,33 @@ namespace dg::network_rest_frame::client_impl1{
                     break;
                 }
 
-                stdx::volatile_access(&pending_smp)->acquire();
+                stdx::volatile_access(&pending_smp)->acquire(); //taints the value of pending_smp (good for stack deallocation), returns a binary semaphore out in the wild
+
+                //taints the value of internal_request(good for stack deallocation) and consumes the pending_smp value
+                //which renders this operation after the previous volatile access, returns a std::optional<> out in the wild
+                //the volatile access is NOT encouraged to be used if not knowing exactly what this does
+
+                //this goes for the std::pow2_cyclic_queue<>
+                //think about the pow2_cyclic_queue for a second
+
+                //every access to the queue is guaranteed to be defined, we aren't talking about the restriction of access of the containee's class members or the containee reference by itself
+                //the pow2_cyclic_queue's only defined usage is push() and pop() in and out of the production queue
+                //because the pop() transfer the restriction of access -> the callee, and forever detached from the returning result, puff... out
+
+                //if we are to look at the lifetime of the containee
+                //containee from the user -> the production queue, transfer the restriction of access -> the production queue upon SUCCESS
+                //so there is no corrupted memory operation performed by compiler (the production queue holds unique reference to the containee, assume all logics were accurate up to the transfer point)
+                //containee from production queue -> user, transfer the restriction of access from the production queue -> callee upon SUCCESS
+                //there is no corrupted memory operation performed by compiler
+
+                //poof by contradiction: assume there are memory corruptions, compiler must be wrongly assuming the values of the containees at the consumption point, such logic is inferred from another "internal pointer" of value, which is fenced out by std::launder() or violates the restrictness stated above
+                //                       assume there will be memory corruptions not originated from the consuming variable, (x = container->pop()), this violates the precond restriction of access stated above 
+
+                //launder is only good for restriction transferring, this is the only defined usage of launder without being afraid of invoking undefined behaviors, period.
+                //the restriction is not only for the containee, but also every logically touchable memory_regions inferred from the containee
+                //alright, this now sounds very confusing, we wont go there yet
+                //our compiler is not perfect, neither are the implementors
+                //we have our own ways of semanticalizing everything, we are literally on our own if we are to use C++ compilers
 
                 return dg::vector<model::InternalRequest>(std::move(stdx::volatile_access(&internal_request, pending_smp)->value()));
             }
