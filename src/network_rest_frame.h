@@ -11,9 +11,6 @@
 #include "stdx.h"
 #include "network_kernel_mailbox.h"
 
-//alright, today we are working on the memory footprints + bucket_hint of every map possible
-//we are creating | allowing configurations for what we called intentional bucket shared_ids to reduce the insert memory footprints 
-
 namespace dg::network_rest_frame::model{
 
     using ticket_id_t   = __uint128_t; //I've thought long and hard, it's better to do bitshift, because the otherwise would be breaking single responsibilities, breach of extensions
@@ -244,11 +241,6 @@ namespace dg::network_rest_frame::client{
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 }
-
-//t = sqrt(2h/g), horizontal speed is irrelevant in vaccum, maybe ... not in the realistic scenerio when we need to factor in drag
-//s = 1/2at^2
-//this is harder to write than you could imagine
-//nothing compared to cuda language, we'll be there
 
 namespace dg::network_rest_frame::server_impl1{
 
@@ -1909,6 +1901,9 @@ namespace dg::network_rest_frame::server_impl1{
             //if we got all fails, that means the request is thru at most once
             //this interface is so important that we would depend our entire company future on this particular feature
             //alright, I admit I dont want to make this more complicated than it already is to communicate something far away
+
+            //we are really hopeful that this massive parallel logit density miner (working on 1 << 20 -> 1 << 30 parallel compute units) would work out well 
+            //we dont have time to actually make it human-understandable, we are just "pre-planning" our "detailed" plan and just push things thru as fast as possible
 
             //attempts to get cache write to the designated cache_id
             //
