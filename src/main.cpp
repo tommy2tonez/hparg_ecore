@@ -63,16 +63,11 @@ int main()
 {
     // Case 1: the new object failed to be transparently replaceable because
     // it is a base subobject but the old object is a complete object.
-    Base base;
-    int n = base.transmogrify(); //2
+    stdx::volatile_container<Base> base(std::in_place_t{});
+    int n = base->transmogrify();
     // int m = base.transmogrify(); // undefined behavior
-    Base * upbase = stdx::volatile_access(&base); 
-    int m = upbase->transmogrify(); //1
-    Base * upupbase = stdx::volatile_access(upbase);
-    int x = upupbase->transmogrify(); //2
-    int y = stdx::volatile_access(&base)->transmogrify(); // 1
-
-    assert(m + n + x + y == 6);
+    int m = base->transmogrify(); // OK
+    assert(m + n == 3);
  
     // Case 2: access to a new object whose storage is provided
     // by a byte array through a pointer to the array.
@@ -84,7 +79,7 @@ int main()
                                                // has value "pointer to s" and does
                                                // not point to a Y object
     const int g = q->z; // OK
-    const int h = stdx::volatile_access(reinterpret_cast<Y*>(&s))->z; // OK
+    const int h = std::launder(reinterpret_cast<Y*>(&s))->z; // OK
  
     [](...){}(f, g, h); // evokes [[maybe_unused]] effect
 }

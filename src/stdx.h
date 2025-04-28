@@ -1022,18 +1022,29 @@ namespace stdx{
     struct volatile_container{
 
         private:
-            
-            T value;
 
+            alignas(T) std::byte s[sizeof(T)]; //we have a major bug of destruction, the compiler does not taint the value of this even if it is marked as tained by volatile_access
+                                               //the only way to make this works is to use inplace_container, std::byte
+                                               //there is no such thing that makes me feel headache as overcoming compiler escape analysis + restrictness of access (we can compromise the bugs at every access level of the object)
         public:
 
             template <class ...Args>
-            volatile_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>): value(std::forward<Args>(args)...){}
+            volatile_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>){
 
-            template <class ...ConsumingArgs>
-            inline auto access(ConsumingArgs& ...args) noexcept -> T *{
+                new (&this->s) T(std::forward<Args>(args)...);
+            }
 
-                return stdx::volatile_access(&this->value, args...);
+            ~volatile_container() noexcept(std::is_nothrow_destructible_v<T>){
+
+                T * laundered_ptr   = std::launder(reinterpret_cast<T *>(&this->s));
+                T * volatiled_ptr   = stdx::volatile_access(laundered_ptr); 
+
+                std::destroy_at(volatiled_ptr);
+            }
+
+            inline auto operator ->() noexcept -> T *{
+
+                return stdx::volatile_access(std::launder(reinterpret_cast<T *>(&this->s)));
             } 
     };
 }
