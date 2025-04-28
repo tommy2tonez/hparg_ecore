@@ -26,9 +26,27 @@
 //bucket_hint must be <temporally grouped>, such reduces the memory footprint by at least 10, at most 20 folds
 //this is hard!!!
 
-//we are processing 100.000 requests/ second, with adaptive binary_semaphore from the mailbox_container
+//we usually do something called 8K page (distributed_map -> distributed_map -> ... -> map)
+//which forms a radix tree of outdegree == 256 (this is uint8_t virtual_addr_t or uint16_t virtual_addr_t)
+//we try to kv_feed or "radix_sort" the tree, and leverage the L1 cache (operating context) to achieve the no-miss cache mapfetch
+//we can't really depend on the natural unif dist to make the locality thing happens, its ... hard
+//we do something called bucket_hint, such is intentional bucket_region and bucket_id collisions
+//our speed are mostly limited by the cache map fetch, it's a decades old problem
+
+//we are trying our best to implement a fast kv_feed of 256 MM keyvalue feeds/ second
+//we are at a quarter of the speed, ...
+
+//we are processing 100.000 requests/ load, with adaptive binary_semaphore from the mailbox_container
+//potentially 10 MM requests/ second with each request == 8KB
+//if we are setting the smp release number correctly (we must be able to adapt, I dont really know the implementations, this requires at least a month of careful human tuning, we'll provide an abstraction to do so, not an implementation)
+//there is currently not a public implementation that is capable of doing 10 MM requests/ second
+//this is our main comm, so we must strip all of heavy weight components to achieve full speed
+//an abstraction layer like Flask will be implemented as a liaison
+
 //the memory orderings/ second is 1/1000s of the one by one approach
 //we'll be talking numbers, it's hard
+
+//
 
 namespace dg::network_rest_frame::model{
 
@@ -41,17 +59,17 @@ namespace dg::network_rest_frame::model{
     struct CacheID{
         std::array<char, 8u> ip;
         std::array<char, 8u> native_cache_id;
-        std::optional<std::array<char, 8u>> bucket_hint; //this is complicated, we need to increase the number of buckets in order to do bucket_hint, we only fetch 128 bytes of memory for 4 buckets, this is an extremely fast insert
+        // std::optional<std::array<char, 8u>> bucket_hint; //this is complicated, we need to increase the number of buckets in order to do bucket_hint, we only fetch 128 bytes of memory for 4 buckets, this is an extremely fast insert
                                                          //find() is another problem, we hardly ever find this thing, it's like 1 of 16384 chance to find a cached response, so ... we only worry about the insert for now 
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(ip, native_cache_id, bucket_hint);
+            reflector(ip, native_cache_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(ip, native_cache_id, bucket_hint);
+            reflector(ip, native_cache_id);
         }
     };
 
@@ -277,11 +295,11 @@ namespace dg::network_rest_frame::server_impl1{
 
         constexpr auto operator()(const CacheID& cache_id) const noexcept -> size_t{
 
-            if (cache_id.bucket_hint.has_value()){
-                return dg::network_hash::hash_reflectible(cache_id.bucket_hint.value());
-            } else{
-                return dg::network_hash::hash_reflectible(cache_id);
-            }
+            // if (cache_id.bucket_hint.has_value()){
+            //     return dg::network_hash::hash_reflectible(cache_id.bucket_hint.value());
+            // } else{
+            return dg::network_hash::hash_reflectible(cache_id);
+            // }
         }
     };
 
@@ -402,7 +420,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             std::unique_ptr<CacheControllerInterface> base;
             std::unique_ptr<std::mutex> mtx;
-        
+
         public:
 
             MutexControlledCacheController(std::unique_ptr<CacheControllerInterface> base,
@@ -548,6 +566,15 @@ namespace dg::network_rest_frame::server_impl1{
                     this->internal_dispatch_switch();
                 }
 
+                //this is the most confusing logic of programming
+                //assume internal_dispatch_switch is not triggered
+                //we are in a normal state of infinite unordered_map
+                
+                //assume internal_dispatch_switch is triggered, we guarantee at least (this->switch_population_threshold - sz) of immediate previous records, and snap the state into a correct state upon exit 
+                //we also guarantee that post switch capacity should suffice for <sz>
+
+                //we don't worry about what happens next, the two state propagations are the things that we worry about
+
                 CacheControllerInterface * current_cache_controller = nullptr;
                 CacheControllerInterface * other_cache_controller   = nullptr;
 
@@ -653,7 +680,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                 void push(std::move_iterator<InternalGetCacheFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    InternalGetCacheFeedArgument * base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<Response>, exception_t>[]> rs_arr(sz);
@@ -761,10 +788,8 @@ namespace dg::network_rest_frame::server_impl1{
 
                 for (size_t i = 0u; i < sz; ++i){
                     size_t partitioned_idx  = Hasher{}(cache_id_arr[i]) & (this->pow2_cache_controller_arr_sz - 1u);
-
-                    auto feed_arg           = InternalGetCacheFeedArgument{};
-                    feed_arg.cache_id       = cache_id_arr[i];
-                    feed_arg.rs_ptr         = std::next(rs_arr, i);
+                    auto feed_arg           = InternalGetCacheFeedArgument{.cache_id    = cache_id_arr[i],
+                                                                           .rs_ptr      = std::next(rs_arr, i)};
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
                 }
@@ -822,7 +847,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                 void push(const size_t& idx, std::move_iterator<InternalGetCacheFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    InternalGetCacheFeedArgument * base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<Response>, exception_t>[]> rs_arr(sz);
@@ -859,7 +884,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                     for (size_t i = 0u; i < sz; ++i){
                         cache_id_arr[i]                 = base_data_arr[i].cache_id;
-                        Response * base_response_ptr    = base_arr[i].response_ptr.base();
+                        Response * base_response_ptr    = base_data_arr[i].response_ptr.base();
                         response_arr[i]                 = std::move(*base_response_ptr);
                     }
 
@@ -871,7 +896,6 @@ namespace dg::network_rest_frame::server_impl1{
                         if (!rs_arr[i].has_value()){
                             Response * base_response_ptr    = base_data_arr[i].response_ptr.base();
                             *base_response_ptr              = std::move(response_arr[i]);
-                            continue;
                         }
                     }
                 }
@@ -1045,9 +1069,6 @@ namespace dg::network_rest_frame::server_impl1{
                     this->internal_dispatch_switch();
                 }
 
-                //I've been thinking long and hard about internal_dispatch_switch() because that seems like the only fuzzy point of logic
-                //the problem is that post the switch must guarantee enough room for sz, and switch population threshold is under the capcity of the calling container
-
                 CacheUniqueWriteControllerInterface * current_write_controller  = nullptr;
                 CacheUniqueWriteControllerInterface * other_write_controller    = nullptr;
 
@@ -1088,7 +1109,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                 return this->max_consume_per_load;
             }
-        
+
         private:
 
             struct InternalThruWriteFeedArgument{
@@ -1097,13 +1118,14 @@ namespace dg::network_rest_frame::server_impl1{
             };
 
             struct InternalThruWriteFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalThruWriteFeedArgument>{
-                
+
                 size_t * thru_incrementor;
                 CacheUniqueWriteControllerInterface * dst;
 
                 void push(std::move_iterator<InternalThruWriteFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    InternalThruWriteFeedArgument * base_data_arr = data_arr.base();
+
                     dg::network_stack_allocation::NoExceptAllocation<cache_id_t[]> cache_id_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> rs_arr(sz);
 
@@ -1180,8 +1202,12 @@ namespace dg::network_rest_frame::server_impl1{
         public:
 
             DistributedUniqueCacheWriteController(std::unique_ptr<std::unique_ptr<InfiniteCacheWriteControllerInterface>[]> base_arr,
-                                                  size_t pow2_base_arr_sz) noexcept: base_arr(std::move(base_arr)),
-                                                                                     pow2_base_arr_sz(pow2_base_arr_sz){}
+                                                  size_t pow2_base_arr_sz,
+                                                  size_t thru_keyvalue_feed_cap,
+                                                  size_t max_consume_per_load) noexcept: base_arr(std::move(base_arr)),
+                                                                                         pow2_base_arr_sz(pow2_base_arr_sz),
+                                                                                         thru_keyvalue_feed_cap(thru_keyvalue_feed_cap),
+                                                                                         max_consume_per_load(max_consume_per_load){}
 
             void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
 
@@ -1337,7 +1363,7 @@ namespace dg::network_rest_frame::server_impl1{
             auto thru_size() const noexcept -> size_t{
 
                 atomic_block_pragma_0_t blk = this->block_ctrl.value.load(std::memory_order_relaxed);
-                AtomicBlock semantic_blk    = self::read_pragma_0_block(then_block);
+                AtomicBlock semantic_blk    = self::read_pragma_0_block(blk);
 
                 return semantic_blk.thru_counter;
             }
@@ -3059,7 +3085,7 @@ namespace dg::network_rest_frame::client_impl1{
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
                 auto now        = std::chrono::steady_clock::now(); 
-                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timepout > rhs.abs_timeout;};
+                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timeout > rhs.abs_timeout;};
 
                 for (size_t i = 0u; i < sz; ++i){
                     auto [ticket_id, current_dur] = registering_arr[i];
@@ -3086,7 +3112,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 ticket_arr_sz   = 0u;
                 auto now        = std::chrono::steady_clock::now();
-                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timepout > rhs.abs_timeout;};
+                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timeout > rhs.abs_timeout;};
 
                 while (true){
                     if (ticket_arr_sz == ticket_arr_cap){
