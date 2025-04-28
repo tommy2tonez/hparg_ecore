@@ -46,7 +46,9 @@
 //the memory orderings/ second is 1/1000s of the one by one approach
 //we'll be talking numbers, it's hard
 
-//
+//atomic_mutex: 0.036838s
+//atomic_spin_mutex: 0.059827s (this)
+//mutex: 0.073922s
 
 namespace dg::network_rest_frame::model{
 
