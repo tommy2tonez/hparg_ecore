@@ -11,6 +11,25 @@
 #include "stdx.h"
 #include "network_kernel_mailbox.h"
 
+//we can easily process 1 MM of inbound request/ second
+//each 64 KB
+//totalling 64 GB of inbound requests content/ second
+
+//clients are asking for memory footprint of unordered map
+//let's see
+//we have 8 concurrent working workers accessing 1024 concurrent unordered map
+//the lock contention is low
+
+//each unordered_map (our unordered_map) insert is back_insert
+//so we can bring + leverage the cache fetch to our advantage (we need to be considerate about the structures sizes, the only problem in distributed system is the RAM fetch + memory ordering problems, a branch or a polymorphic dispatch's not gonna dent the performance, this is the most important note)
+//the other problem is the bucket hint problem
+//bucket_hint must be <temporally grouped>, such reduces the memory footprint by at least 10, at most 20 folds
+//this is hard!!!
+
+//we are processing 100.000 requests/ second, with adaptive binary_semaphore from the mailbox_container
+//the memory orderings/ second is 1/1000s of the one by one approach
+//we'll be talking numbers, it's hard
+
 namespace dg::network_rest_frame::model{
 
     using ticket_id_t   = __uint128_t; //I've thought long and hard, it's better to do bitshift, because the otherwise would be breaking single responsibilities, breach of extensions
@@ -2532,7 +2551,7 @@ namespace dg::network_rest_frame::client_impl1{
         constexpr auto operator()(const ticket_id_t& ticket_id) const noexcept -> size_t{
 
             static_assert(std::is_unsigned_v<ticket_id_t>);
-            return ticket_id;
+            return ticket_id & std::numeric_limits<size_t>::max();
         }
     };
 
