@@ -299,6 +299,7 @@ namespace dg::network_rest_frame::server_impl1{
     //exec pipeline (CPU + branch prediction styles)
     //cuda-search
     //multi-precision cuda lib
+    //we are literally just trying to do Google Search in an arbitrary space
 
     //clear
     template <class Hasher>
@@ -1062,7 +1063,7 @@ namespace dg::network_rest_frame::server_impl1{
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort():
+                        std::abort();
                     }
                 }
 
@@ -1192,7 +1193,8 @@ namespace dg::network_rest_frame::server_impl1{
 
             auto max_consume_size() noexcept -> size_t{
 
-                return this->base->max_consume_size():
+                //
+                return this->base->max_consume_size();
             }
     };
 
@@ -1334,7 +1336,7 @@ namespace dg::network_rest_frame::server_impl1{
             using self = CacheUniqueWriteTrafficController;
 
             CacheUniqueWriteTrafficController(size_t thru_cap) noexcept: thru_counter(std::in_place_t{}, self::make_pragma_0_block(AtomicBlock{0u, 0u})),
-                                                                         thru_cap(stdx::hdi_containter<size_t>{thru_cap}){}
+                                                                         thru_cap(stdx::hdi_container<size_t>{thru_cap}){}
 
             auto thru(size_t incoming_sz) noexcept -> std::expected<bool, exception_t>{
 
@@ -1664,7 +1666,7 @@ namespace dg::network_rest_frame::server_impl1{
                 size_t trimmed_mailbox_prep_feed_cap                        = std::min(this->mailbox_prep_feed_cap, recv_buf_sz);
                 size_t mailbox_prep_feeder_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailbox_prep_feed_resolutor, trimmed_mailbox_prep_feed_cap);
                 dg::network_stack_allocation::NoExceptAllocation<char[]> mailbox_prep_feeder_mem(mailbox_prep_feeder_allocation_cost);
-                auto mailbox_prep_feeder                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mailbox_prep_feed_resolutor, tirmmed_mailbox_prep_feed_cap, mailbox_prep_feeder_mem.get())); 
+                auto mailbox_prep_feeder                                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mailbox_prep_feed_resolutor, trimmed_mailbox_prep_feed_cap, mailbox_prep_feeder_mem.get())); 
 
                 //---
 
@@ -2078,7 +2080,7 @@ namespace dg::network_rest_frame::server_impl1{
                     if (dg::network_exception::is_failed(thru_status)){
                         for (size_t i = 0u; i < sz; ++i){
                             auto response = model::InternalResponse{.response   = std::unexpected(thru_status),
-                                                                    .ticket_id  = base_data_arr[i]->ticket_id};
+                                                                    .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
                                                                               .response         = std::move(response),
@@ -2100,7 +2102,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                         if (!cache_write_response_arr[i].has_value()){
                             auto response = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_INTERNAL_SERVER_ERROR),
-                                                                    .ticket_id  = base_data_arr[i]->ticket_id};
+                                                                    .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
                                                                               .response         = std::move(response),
@@ -2114,7 +2116,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                         if (!cache_write_response_arr[i].value()){
                             auto response   = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_BAD_CACHE_UNIQUE_WRITE),
-                                                                        .ticket_id  = base_data_arr[i]->ticket_id};
+                                                                        .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
                                                                             .response       = std::move(response),
@@ -2247,9 +2249,9 @@ namespace dg::network_rest_frame::client_impl1{
 
         public:
 
-            RequestResponse() noexcept: smp(std::in_place_t{}, false),
-                                        resp(std::in_place_t{}, std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
-                                        is_response_invoked(std::in_place_t{}, false){}
+            RequestResponseBase() noexcept: smp(std::in_place_t{}, false),
+                                            resp(std::in_place_t{}, std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
+                                            is_response_invoked(std::in_place_t{}, false){}
 
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
@@ -2345,6 +2347,11 @@ namespace dg::network_rest_frame::client_impl1{
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
+
+                    if (!response.has_value() && response.error() == dg::network_exception::EXPECTED_NOT_INITIALIZED){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 this->resp_vec[idx] = std::move(response);
@@ -2362,6 +2369,11 @@ namespace dg::network_rest_frame::client_impl1{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (idx >= this->resp_vec.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+
+                    if (!response.has_value() && response.error() == dg::network_exception::EXPECTED_NOT_INITIALIZED){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                         std::abort();
                     }
@@ -2487,7 +2499,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
-                auto rs = this->base->response();
+                auto rs = this->base.response();
                 this->release_response_wait_responsibility();
 
                 return rs;
@@ -2517,7 +2529,7 @@ namespace dg::network_rest_frame::client_impl1{
                 bool wait_responsibility = std::exchange(this->response_wait_responsibility_flag, false); 
 
                 if (wait_responsibility){
-                    stdx::empty_noipa(this->base->response(), this->observer_arr);
+                    stdx::empty_noipa(this->base.response(), this->observer_arr);
                 }
             }
     };
@@ -2976,7 +2988,7 @@ namespace dg::network_rest_frame::client_impl1{
                     size_t partitioned_idx                      = {};
                     std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
-                    if (parititoned_idx >= this->pow2_base_arr_sz){
+                    if (partitioned_idx >= this->pow2_base_arr_sz){
                         exception_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
                         continue;
                     }
@@ -3005,7 +3017,7 @@ namespace dg::network_rest_frame::client_impl1{
                     size_t partitioned_idx                      = {};
                     std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
-                    if (parititoned_idx >= this->pow2_base_arr_sz){
+                    if (partitioned_idx >= this->pow2_base_arr_sz){
                         out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
                         continue;
                     }
@@ -4155,7 +4167,7 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            std::unique_ptr<std::unique_ptr<RestControllerInterface>>[]> rest_controller_arr;
+            std::unique_ptr<std::unique_ptr<RestControllerInterface>[]> rest_controller_arr;
             size_t pow2_rest_controller_arr_sz;
             stdx::hdi_container<size_t> max_consume_per_load;
 

@@ -36,7 +36,8 @@
 #include <cassert>
 #include <cstddef>
 #include <new>
- 
+#include "network_rest_frame.h"
+
 struct Base
 {
     virtual int transmogrify();
