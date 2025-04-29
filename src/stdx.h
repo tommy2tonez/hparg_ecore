@@ -319,10 +319,10 @@ namespace stdx{
                                            std::mutex>; 
 
     template <class Lock>
-    class xlock_guard{};
+    class xlock_guard_base{};
 
     template <>
-    class xlock_guard<std::atomic_flag>{
+    class xlock_guard_base<std::atomic_flag>{
 
         private:
 
@@ -330,9 +330,9 @@ namespace stdx{
 
         public:
 
-            using self = xlock_guard;
+            using self = xlock_guard_base;
 
-            inline __attribute__((always_inline)) xlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
+            inline __attribute__((always_inline)) xlock_guard_base(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
                 while (!try_lock(*this->mtx)){}
 
@@ -343,10 +343,10 @@ namespace stdx{
                 }       
            }
 
-            xlock_guard(const self&) = delete;
-            xlock_guard(self&&) = delete;
+            xlock_guard_base(const self&) = delete;
+            xlock_guard_base(self&&) = delete;
 
-            inline __attribute__((always_inline)) ~xlock_guard() noexcept{
+            inline __attribute__((always_inline)) ~xlock_guard_base() noexcept{
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -360,7 +360,7 @@ namespace stdx{
     };
 
     template <>
-    class xlock_guard<std::mutex>{
+    class xlock_guard_base<std::mutex>{
 
         private:
 
@@ -368,9 +368,9 @@ namespace stdx{
 
         public:
 
-            using self = xlock_guard;
+            using self = xlock_guard_base;
 
-            inline __attribute__((always_inline)) xlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
+            inline __attribute__((always_inline)) xlock_guard_base(std::mutex& mtx) noexcept: mtx(&mtx){
 
                 this->mtx->lock();
 
@@ -381,10 +381,10 @@ namespace stdx{
                 }       
             }
 
-            xlock_guard(const self&) = delete;
-            xlock_guard(self&&) = delete;
+            xlock_guard_base(const self&) = delete;
+            xlock_guard_base(self&&) = delete;
 
-            inline __attribute__((always_inline)) ~xlock_guard() noexcept{
+            inline __attribute__((always_inline)) ~xlock_guard_base() noexcept{
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -398,6 +398,24 @@ namespace stdx{
             self& operator =(const self&) = delete;
             self& operator =(self&&) = delete;
     };
+
+    template <class Lock>
+    struct xlock_guard_chooser{};
+
+    template <>
+    struct xlock_guard_chooser<std::atomic_flag>{
+        using type = xlock_guard_base<std::atomic_flag>;
+    };
+
+    template <>
+    struct xlock_guard_chooser<std::mutex>{
+        using type = std::lock_guard<std::mutex>;
+    };
+
+    template <class Lock>
+    using xlock_guard = typename xlock_guard_chooser<Lock>::type;
+
+    //we rather use std::lock_guard for max compatibility
 
     template <class Lock>
     class unlock_guard{};
