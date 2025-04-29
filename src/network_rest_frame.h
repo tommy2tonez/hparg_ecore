@@ -2613,8 +2613,10 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
+    //
     auto make_request_response() noexcept -> std::expected<std::unique_ptr<RequestResponse>, exception_t>{
 
+        return {};
         // return dg::network_allocation::cstyle_make_unique<RequestResponse>();
     }
 
@@ -2742,8 +2744,6 @@ namespace dg::network_rest_frame::client_impl1{
             return ticket_id & std::numeric_limits<size_t>::max();
         }
     };
-
-    //* is too confusing and bad, we need to make it looks like a pointer container like std::shared_ptr<> or std::unique_ptr<>, we use std::add_pointer_t<>, that looks aesthetically weird yet I would want to differentiate the semantic 
 
     //clear
     template <class Hasher>
@@ -3210,7 +3210,7 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
-    //
+    //clear
     class TicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
 
         public:
@@ -3240,7 +3240,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                              max_dur(std::move(max_dur)),
                                                                                              max_consume_per_load(std::move(max_consume_per_load)){}
 
-            void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void clock_in(ClockInArgument * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -3255,7 +3255,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timeout > rhs.abs_timeout;};
 
                 for (size_t i = 0u; i < sz; ++i){
-                    auto [ticket_id, current_dur] = registering_arr[i];
+                    auto [ticket_id, current_dur] = std::make_pair(registering_arr[i].clocked_in_ticket, registering_arr[i].expiry_dur);
 
                     if (current_dur > this->max_clockin_dur()){
                         exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
@@ -3318,7 +3318,7 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
-    //
+    //clear
     class DistributedTicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
 
         private:
@@ -3350,7 +3350,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                    drain_peek_cap_per_container(drain_peek_cap_per_container),
                                                                                    max_consume_per_load(max_consume_per_load){}
 
-            void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void clock_in(ClockInArgument * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 auto feed_resolutor                 = InternalClockInFeedResolutor{};
                 feed_resolutor.manager_arr          = this->base_arr.get(); 
@@ -3363,17 +3363,17 @@ namespace dg::network_rest_frame::client_impl1{
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (registering_arr[i].second > this->max_clockin_dur()){
+                    if (registering_arr[i].expiry_dur > this->max_clockin_dur()){
                         exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
                         continue;
                     }
 
-                    size_t hashed_value     = dg::network_hash::hash_reflectible(registering_arr[i].first);
+                    size_t hashed_value     = dg::network_hash::hash_reflectible(registering_arr[i].clocked_in_ticket);
                     size_t partitioned_idx  = hashed_value & (this->pow2_base_arr_sz - 1u);
 
                     auto feed_arg           = InternalClockInFeedArgument{};
-                    feed_arg.ticket_id      = registering_arr[i].first;
-                    feed_arg.dur            = registering_arr[i].second;
+                    feed_arg.ticket_id      = registering_arr[i].clocked_in_ticket;
+                    feed_arg.dur            = registering_arr[i].expiry_dur;
                     feed_arg.exception_ptr  = std::next(exception_arr, i); 
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
@@ -3423,11 +3423,12 @@ namespace dg::network_rest_frame::client_impl1{
                     
                     InternalClockInFeedArgument * base_data_arr = data_arr.base();
 
-                    dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> registering_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<ClockInArgument[]> registering_arr(sz);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        registering_arr[i] = std::make_pair(base_data_arr[i].ticket_id, base_data_arr[i].dur);
+                        registering_arr[i] = ClockInArgument{.clocked_in_ticket = base_data_arr[i].ticket_id, 
+                                                             .expiry_dur        = base_data_arr[i].dur};
                     }
 
                     this->manager_arr[partitioned_idx]->clock_in(registering_arr.get(), sz, exception_arr.get());
@@ -3477,6 +3478,7 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
+    //clear
     class ExhaustionControlledTicketTimeoutManager: public virtual TicketTimeoutManagerInterface{
 
         private:
@@ -3490,7 +3492,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                      std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) noexcept: base(std::move(base)),
                                                                                                                                                        infretry_device(std::move(infretry_device)){}
 
-            void clock_in(std::pair<model::ticket_id_t, std::chrono::nanoseconds> * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void clock_in(ClockInArgument * registering_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 auto first_registering_ptr          = registering_arr;
                 auto last_registering_ptr           = std::next(first_registering_ptr, sz);
@@ -3538,6 +3540,7 @@ namespace dg::network_rest_frame::client_impl1{
             }
     };
 
+    //clear
     class InBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -3562,8 +3565,8 @@ namespace dg::network_rest_frame::client_impl1{
 
             bool run_one_epoch() noexcept{
 
-                size_t buf_arr_cap                          = this->recv_consume_sz;
-                size_t buf_arr_sz                           = {};
+                size_t buf_arr_cap  = this->recv_consume_sz;
+                size_t buf_arr_sz   = {};
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(buf_arr_cap); 
                 dg::network_kernel_mailbox::recv(this->channel, buf_arr.get(), buf_arr_sz, buf_arr_cap);
 
@@ -3576,7 +3579,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_ticket_controller_feed_cap, feeder_mem.get())); 
 
                 for (size_t i = 0u; i < buf_arr_sz; ++i){
-                    std::expected<model::InternalResponse, exception_t> response = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize<model::InternalResponse, dg::string>(buf_arr[i], model::INTERNAL_RESPONSE_SERIALIZATION_SECRET));
+                    std::expected<model::InternalResponse, exception_t> response = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize<model::InternalResponse, dg::string>)(buf_arr[i], model::INTERNAL_RESPONSE_SERIALIZATION_SECRET);
 
                     if (!response.has_value()){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(response.error()));
@@ -3610,10 +3613,11 @@ namespace dg::network_rest_frame::client_impl1{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (!observer_arr[i].has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::REST_BAD_RESPONSE));
                             continue;
                         }
 
-                        observer_arr[i].value()->deferred_memory_ordering_fetch(std::move(base_response_arr[i].response));
+                        stdx::safe_ptr_access(observer_arr[i].value())->deferred_memory_ordering_fetch(std::move(base_response_arr[i].response)); //declare expectations
                     }
 
                     std::atomic_thread_fence(std::memory_order_release);
@@ -3625,12 +3629,13 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        observer_arr[i].value()->deferred_memory_ordering_fetch_close();
+                        stdx::safe_ptr_access(observer_arr[i].value())->deferred_memory_ordering_fetch_close();
                     }
                 }
             };
     };
 
+    //clear
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -3689,7 +3694,7 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            struct InternalFeedResolutor{
+            struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<dg::network_kernel_mailbox::MailBoxArgument>{
 
                 uint32_t channel;
                 dg::network_kernel_mailbox::transmit_option_t transmit_opt;
@@ -3708,23 +3713,7 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
-    //this is probably the best part and also the worst part
-    //best part in the sense that we dont have real_time scheduling
-    //worst part in the sense that we dont have real_time scheduling
-
-    //our uncertainty is probably 5 milliseconds/ check, which is fairly latencied out
-    //the other mailbox problem can be solved with large inbounds, probably by streaming padded data to push small data through with low latency
-    //we dont have a solution to this problem
-
-    //let's see what we want
-    //99% of the time, low latency path is the success path, high latency part is the failed paths (not recving response)
-    //for the success path, there is literally no waiting, we push data directly to dg::vector<> -> consumed by worker -> mailbox -> recv_mailbox -> get_data -> fetch
-
-    //for the failed paths
-    //usually we set timeout for 10ms - 100ms to recv response
-    //the uncertainty of this component decreases in such case
-    //so that is no longer an issue
-
+    //clear
     class ExpiryWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -3740,7 +3729,7 @@ namespace dg::network_rest_frame::client_impl1{
             ExpiryWorker(std::shared_ptr<TicketControllerInterface> ticket_controller,
                          std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager,
                          size_t timeout_consume_sz,
-                         size_t ticketcontroller_observer_steal_sz,
+                         size_t ticketcontroller_observer_steal_cap,
                          size_t busy_timeout_consume_sz) noexcept: ticket_controller(std::move(ticket_controller)),
                                                                    ticket_timeout_manager(std::move(ticket_timeout_manager)),
                                                                    timeout_consume_sz(timeout_consume_sz),
@@ -3787,7 +3776,7 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        stolen_response_observer_arr[i].value()->deferred_memory_ordering_fetch(std::unexpected(dg::network_exception::REST_TIMEOUT));
+                        stdx::safe_ptr_access(stolen_response_observer_arr[i].value())->deferred_memory_ordering_fetch(std::unexpected(dg::network_exception::REST_TIMEOUT));
                     }
 
                     std::atomic_thread_fence(std::memory_order_release);
@@ -3799,7 +3788,7 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        stolen_response_observer_arr[i].value()->deferred_memory_ordering_fetch_close();
+                        stdx::safe_ptr_access(stolen_response_observer_arr[i].value())->deferred_memory_ordering_fetch_close();
                     }
                 }
             };
