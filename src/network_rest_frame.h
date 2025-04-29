@@ -1605,6 +1605,17 @@ namespace dg::network_rest_frame::server_impl1{
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> recv_buf_arr(recv_buf_cap);
                 dg::network_kernel_mailbox::recv(this->resolve_channel, recv_buf_arr.get(), recv_buf_sz, recv_buf_cap);
 
+                auto badmailbox_feed_resolutor                              = InternalResponseFeedResolutor{};
+                badmailbox_feed_resolutor.mailbox_channel                   = this->response_channel;
+                badmailbox_feed_resolutor.transmit_opt                      = this->transmit_opt; //
+
+                size_t trimmed_badmailbox_feed_cap                          = std::min(std::min(this->mailbox_feed_cap, dg::network_kernel_mailbox::max_consume_size()), recv_buf_sz);
+                size_t badmailbox_feeder_allocation_cost                    = dg::network_producer_consumer::delvrsrv_allocation_cost(&badmailbox_feed_resolutor, trimmed_badmailbox_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> badmailbox_feeder_mem(badmailbox_feeder_allocation_cost);
+                auto badmailbox_feeder                                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&badmailbox_feed_resolutor, trimmed_badmailbox_feed_cap, badmailbox_feeder_mem.get())); 
+
+                //
+
                 auto mailbox_feed_resolutor                                 = InternalResponseFeedResolutor{}; 
                 mailbox_feed_resolutor.mailbox_channel                      = this->response_channel;
                 mailbox_feed_resolutor.transmit_opt                         = this->transmit_opt;
@@ -1618,6 +1629,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                 auto mailbox_prep_feed_resolutor                            = InternalMailBoxPrepFeedResolutor{};
                 mailbox_prep_feed_resolutor.mailbox_feeder                  = mailbox_feeder.get();
+                mailbox_prep_feed_resolutor.badmailbox_feeder               = badmailbox_feeder.get();
 
                 size_t trimmed_mailbox_prep_feed_cap                        = std::min(this->mailbox_prep_feed_cap, recv_buf_sz);
                 size_t mailbox_prep_feeder_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailbox_prep_feed_resolutor, trimmed_mailbox_prep_feed_cap);
@@ -1767,21 +1779,77 @@ namespace dg::network_rest_frame::server_impl1{
         
         private:
 
-            struct InternalResponseFeedResolutor: dg::network_producer_consumer::ConsumerInterface<dg::network_kernel_mailbox::MailBoxArgument>{
+            struct ResponseFeedArgument{
+                MailBoxArgument mailbox_arg;
+                dg::network_exception::ExceptionHandlerInterface * error_callback;
+            };
+
+            struct InternalResponseFeedResolutor: dg::network_producer_consumer::ConsumerInterface<ResponseFeedArgument>{
 
                 uint32_t mailbox_channel;
                 dg::network_kernel_mailbox::transmit_option_t transmit_opt;
 
-                void push(std::move_iterator<MailBoxArgument *> mailbox_arr, size_t sz) noexcept{
+                void push(std::move_iterator<ResponseFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    ResponseFeedArgument * base_data_arr = data_arr.base();
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_kernel_mailbox::send(this->mailbox_channel, mailbox_arr, sz, exception_arr.get(), this->transmit_opt);
+                    dg::network_stack_allocation::NoExceptAllocation<MailBoxArgument[]> mailbox_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        mailbox_arr[i] = std::move(base_data_arr[i].mailbox_arg);
+                    }
+
+                    dg::network_kernel_mailbox::send(this->mailbox_channel, std::make_move_iterator(mailbox_arr.get()), sz, exception_arr.get(), this->transmit_opt);
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                            if (base_data_arr[i].error_callback != nullptr){
+                                base_data_arr[i].error_callback->update(exception_arr[i]);                            
+                            } else{
+                                dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                            }
                         }
                     }
+                }
+            };
+
+            //we are introducing a struct that is not one of the resolutors
+
+            struct FailedResponseFeedExceptionHandler: dg::network_exception::ExceptionHandlerInterface{
+
+                dg::network_kernel_mailbox::Address to;
+                ticket_id_t ticket_id;
+                std::optional<uint8_t> priority;
+                dg::network_producer_consumer::DeliveryHandle<dg::network_kernel_mailbox::ResponseFeedArgument> * mailbox_feeder; 
+
+                void update(exception_t err) noexcept{
+
+                    if (dg::network_exception::is_success(err)){
+                        return;
+                    }
+
+                    //what errors are constituted as retransmittable errors
+                    //do we care or we don't for the sake of best programming practices + future extensibility
+
+                    auto response       = InternalResponse{.response  = std::unexpected(err),
+                                                           .ticket_id = this->ticket_id};
+
+                    std::expected<dg::string, exception_t> serialized_response = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::serialize<dg::string, InternalResponse>)(response, model::INTERNAL_RESPONSE_SERIALIZATION_SECRET);
+
+                    if (!serialized_response.has_value()){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(serialized_response.error()));
+                        continue;
+                    }
+
+                    auto mailbox_arg    = dg::network_kernel_mailbox::MailBoxArgument{.to       = this->to,
+                                                                                      .content  = std::move(serialized_response.value()),
+                                                                                      .priority = this->priority};
+
+                    auto resp_feed_arg  = ResponseFeedArgument{.mailbox_arg     = std::move(mailbox_arg),
+                                                               .error_callback  = nullptr};
+
+                    dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_feeder, std::move(resp_feed_arg));
                 }
             };
 
@@ -1793,11 +1861,24 @@ namespace dg::network_rest_frame::server_impl1{
 
             struct InternalMailBoxPrepFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalMailBoxPrepArgument>{
 
-                dg::network_producer_consumer::DeliveryHandle<dg::network_kernel_mailbox::MailBoxArgument> * mailbox_feeder;
+                dg::network_producer_consumer::DeliveryHandle<dg::network_kernel_mailbox::ResponseFeedArgument> * mailbox_feeder;
+                dg::network_producer_consumer::DeliveryHandle<dg::network_kernel_mailbox::ResponseFeedArgument> * bad_mailbox_feeder;
 
                 void push(std::move_iterator<InternalMailBoxPrepArgument *> data_arr, size_t sz) noexcept{
 
-                    auto base_data_arr = data_arr.base();
+                    //what could possibily go wrong, max response size reached, bad response format, bad response for IP, we dont know
+                    //we must have the ExceptionHandlerInterface to re-transmit the error to the user to notify the user of the errors
+
+                    InternalMailBoxPrepArgument * base_data_arr = data_arr.base();
+                    dg::network_stack_allocation::NoExceptAllocation<FailedResponseFeedExceptionHandler[]> exception_handler_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        exception_handler_arr[i]                = FailedResponseFeedExceptionHandler{};
+                        exception_handler_arr[i].to             = base_data_arr[i].to;
+                        exception_handler_arr[i].ticket_id      = base_data_arr[i].response.ticket_id;
+                        exception_handler_arr[i].priority       = base_data_arr[i].priority;
+                        exception_handler_arr[i].mailbox_feeder = this->bad_mailbox_feeder; //bad_mailbox_feeder invoke_lifetime is only within the scope of this function call, we have to delvrsrv_clear all possible invokes of bad_mailbox_feeder upon exit, it's harder than most foos think, we need to aggregate at least feed_cap to make a dispatch
+                    }
 
                     for (size_t i = 0u; i < sz; ++i){
                         std::expected<dg::string, exception_t> serialized_response = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::serialize<dg::string, InternalResponse>)(base_data_arr[i].response, model::INTERNAL_RESPONSE_SERIALIZATION_SECRET);
@@ -1807,12 +1888,20 @@ namespace dg::network_rest_frame::server_impl1{
                             continue;
                         }
 
-                        auto arg = dg::network_kernel_mailbox::MailBoxArgument{.to          = base_data_arr[i].to,
-                                                                               .content     = std::move(serialized_response.value()),
-                                                                               .priority    = base_data_arr[i].priority};
+                        auto mailbox_arg = dg::network_kernel_mailbox::MailBoxArgument{.to          = base_data_arr[i].to,
+                                                                                       .content     = std::move(serialized_response.value()),
+                                                                                       .priority    = base_data_arr[i].priority};
 
-                        dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_feeder, std::move(arg));
+                        auto response_feed_arg  = ResponseFeedArgument{.mailbox_arg     = std::move(mailbox_arg),
+                                                                       .error_callback  = static_cast<dg::network_exception::ExceptionHandlerInterface *>(&exception_handler_arr[i])};
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_feeder, std::move(response_feed_arg));
                     }
+
+                    dg::network_producer_consumer::delvrsrv_clear(this->mailbox_feeder); //this is not sanitized, yet I have found a better way to not increase more assumptions of this would fulfill the contract of releasing the exception_handler_arr and the bad_mailbox_feeder, until we have found another reason to extend, we'd like to keep it this way
+                                                                                         //this guarantees: bad_mailbox_feeder lifetime is propagated from the caller of this function -> the callee exception_handler, such is every invoke push() should be in the lifetime of the bad_mailbox_feeder
+                                                                                         //this guarantees: exception_handler_arr reference is out once cleared
+                                                                                         //the sole reason we are programming in C is L1 cache, if yall foos are talking about dynamic memory or L2 or L3 fetch, yall should be programming Java or Python
                 }
             };
 
