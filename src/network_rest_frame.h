@@ -2813,6 +2813,26 @@ namespace dg::network_rest_frame::client_impl1{
 
     //it's gonna be a bumpy road, but we are theoretical people, we have the logics in our hands, we'll be there
 
+    //our fellows + clients are very aggresive
+    //they asked for immediate results
+    //I explained that each of the correctly implemented mentioned functions is worth at least $10BB...
+
+    //cuda multiprecision
+    //cuda Taylor Series search
+    //ACID storage engine (atomic buffer fences)
+    //ingestion accelerator
+    //branch-prediction-liked training styles
+    //cuda aided Taylor Series search (navigation_system)
+    //Taylor Series enumerated infinite patterns database (sqrt, sin, cos, etc.)
+    //logit density miner
+    //bid-ask system
+
+    //alright, this is just the training phase
+
+    //then there comes ... the synthetic data ...
+    //is it on Virtual Machine? or is it automated synthetically generated hard NP problem (hard to the current model, not the next model)
+    //either way, we need massive compute power
+
     //clear
     class ResponseObserverRelSafeWrapper{
 
