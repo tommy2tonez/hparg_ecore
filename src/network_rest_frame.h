@@ -9,7 +9,10 @@
 #include <chrono>
 #include "network_exception.h"
 #include "stdx.h"
-#include "network_kernel_mailbox.h"
+#include "network_log.h"
+#include "network_compact_serializer.h"
+
+// #include "network_kernel_mailbox.h"
 
 //one more round of review
 
@@ -236,7 +239,7 @@ namespace dg::network_rest_frame::client{
         virtual auto max_consume_size() noexcept -> size_t = 0; 
     };
 
-    struct TicketTimeoutManangerInterface{
+    struct TicketTimeoutManagerInterface{
         virtual ~TicketTimeoutManagerInterface() noexcept = default;
         virtual void clock_in(ClockInArgument * clockin_arr, size_t sz, exception_t * exception_arr) noexcept = 0;
         virtual void get_expired_ticket(model::ticket_id_t * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept = 0;
@@ -335,7 +338,7 @@ namespace dg::network_rest_frame::server_impl1{
                             rs_arr[i] = std::unexpected(cpy_response.error());
                         } else{
                             static_assert(std::is_nothrow_move_constructible_v<Response> && std::is_nothrow_move_assignable_v<Response>);
-                            rs_arr[i] = std::optional<Response>(std::move(cpy_resonse.value()));
+                            rs_arr[i] = std::optional<Response>(std::move(cpy_response.value()));
                         }
                     }
                 }
@@ -400,7 +403,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             auto max_consume_size() noexcept -> size_t{
 
-                return this->max_consume_per_load.value;
+                return this->max_consume_per_load;
             }
     };
 
@@ -418,7 +421,7 @@ namespace dg::network_rest_frame::server_impl1{
                                            std::unique_ptr<std::mutex> mtx) noexcept: base(std::move(base)),
                                                                                       mtx(std::move(mtx)){}
 
-            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response, exception_t>> * rs_arr) noexcept{
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * rs_arr) noexcept{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
                 this->base->get_cache(cache_id_arr, sz, rs_arr);
@@ -612,7 +615,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             auto max_consume_size() noexcept -> size_t{
 
-                return this->max_consume_per_load.value;
+                return this->max_consume_per_load;
             }
 
         private:
@@ -1095,7 +1098,7 @@ namespace dg::network_rest_frame::server_impl1{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_thru_feed_cap, feeder_mem.get())); 
 
-                dg::network_stack_allocation::NoExceptRawAllocation<bool[]> contain_status_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<bool[]> contain_status_arr(sz);
                 other_write_controller->contains(cache_id_arr, sz, contain_status_arr.get());
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -1334,7 +1337,7 @@ namespace dg::network_rest_frame::server_impl1{
 
             using self = CacheUniqueWriteTrafficController;
 
-            CacheUniqueWriteTrafficController(size_t thru_cap) noexcept: thru_counter(std::in_place_t{}, self::make_pragma_0_block(AtomicBlock{0u, 0u})),
+            CacheUniqueWriteTrafficController(size_t thru_cap) noexcept: block_ctrl(std::in_place_t{}, self::make_pragma_0_block(AtomicBlock{0u, 0u})),
                                                                          thru_cap(stdx::hdi_container<size_t>{thru_cap}){}
 
             auto thru(size_t incoming_sz) noexcept -> std::expected<bool, exception_t>{
@@ -2592,7 +2595,7 @@ namespace dg::network_rest_frame::client_impl1{
             RequestResponse& operator =(const RequestResponse&) = delete;
             RequestResponse& operator =(RequestResponse&&) = delete;
 
-            ~ReleaseSafeRequestResponse() noexcept{
+            ~RequestResponse() noexcept{
 
                 this->wait_response();
             }
@@ -3064,7 +3067,7 @@ namespace dg::network_rest_frame::client_impl1{
                         continue;
                     }
 
-                    auto feed_arg               = InternalStealObserverFeedArgument{}:
+                    auto feed_arg               = InternalStealObserverFeedArgument{};
                     feed_arg.base_ticket_id     = base_ticket_id;
                     feed_arg.out_observer_ptr   = std::next(out_observer_arr, i);
 
@@ -3087,15 +3090,17 @@ namespace dg::network_rest_frame::client_impl1{
                     size_t partitioned_idx                      = {};
                     std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
 
-                    if (parititoned_idx >= this->pow2_base_arr_sz){
-                        out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
-                        continue;
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (partitioned_idx >= this->pow2_base_arr_sz){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //we are very unforgiving about the inverse operation, because it hints a serious corruption has occurred
+                            continue;
+                        }
                     }
 
-                    auto feed_arg           = InternalCloseTicketFeedArgument{};
-                    feed_arg.base_ticket_id = base_ticket_id;
+                    // auto feed_arg           = InternalCloseTicketFeedArgument{};
+                    // feed_arg.base_ticket_id = base_ticket_id;
 
-                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, base_ticket_id);
                 }
             }
 
@@ -3185,25 +3190,25 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             };
 
-            struct InternalCloseTicketFeedArgument{
-                ticket_id_t base_ticket_id;
-            };
+            // struct InternalCloseTicketFeedArgument{
+            //     ticket_id_t base_ticket_id;
+            // };
 
             struct InternalCloseTicketFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, ticket_id_t>{
 
                 std::unique_ptr<TicketControllerInterface> * controller_arr;
 
-                void push(const size_t& partitioned_idx, std::move_iterator<InternalCloseTicketFeedArgument *> data_arr, size_t sz) noexcept{
+                void push(const size_t& partitioned_idx, std::move_iterator<ticket_id_t *> data_arr, size_t sz) noexcept{
 
-                    InternalCloseTicketFeedArgument * base_data_arr = data_arr.base();
+                    // InternalCloseTicketFeedArgument * base_data_arr = data_arr.base();
 
-                    dg::network_stack_allocation::NoExceptAllocation<ticket_id_t[]> ticket_id_arr(sz);
+                    // dg::network_stack_allocation::NoExceptAllocation<ticket_id_t[]> ticket_id_arr(sz);
 
-                    for (size_t i = 0u; i < sz; ++i){
-                        ticket_id_arr[i] = base_data_arr[i].base_ticket_id;
-                    }
+                    // for (size_t i = 0u; i < sz; ++i){
+                        // ticket_id_arr[i] = base_data_arr[i].base_ticket_id;
+                    // }
 
-                    this->controller_arr[partitioned_idx]->close_ticket(ticket_id_arr.get(), sz);
+                    this->controller_arr[partitioned_idx]->close_ticket(data_arr.base(), sz);
                 }
             };
     };
@@ -3702,7 +3707,7 @@ namespace dg::network_rest_frame::client_impl1{
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     dg::network_kernel_mailbox::send(mailbox_arg, sz, exception_arr.get(), this->transmit_opt);
 
-                    for (size_t i = 0u; i < sz; ++I){
+                    for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
                         }
@@ -3916,7 +3921,7 @@ namespace dg::network_rest_frame::client_impl1{
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> clockin_exception_arr(sz);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    clockin_arr[i] = std::make_pair(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
+                    clockin_arr[i] = ClockInArgument(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
 
                     if (base_client_request_arr[i].client_timeout_dur > max_timeout_dur){
                         return std::unexpected(dg::network_exception::REST_INVALID_TIMEOUT); //failed to meet timeout preconds, close tickets by response + release_wait_responsbiility of response + deallocate response resources

@@ -21,8 +21,9 @@
 
 namespace dg::network_compact_serializer::constants{
 
-    static constexpr auto endianness                            = std::endian::little;
-    static constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED    = true;
+    static constexpr auto endianness                                = std::endian::little;
+    static constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED        = true;
+    static constexpr bool DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT = true;
 }
 
 namespace dg::network_compact_serializer::types{
@@ -574,10 +575,21 @@ namespace dg::network_compact_serializer::archive{
             
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
-            
+
+            //we are very tempted to do a clear operation as hinted by other programmers as bugs, we'll add this feature as optional
+            //yet if they invoked deserialization on an unempty container, it is already a bug (all kinds of bugs ranging from leak bugs to memory corruption bugs to memory exhaustion bugs, to etc)
+            //it's very super complicated to add a clear operation, we've yet to want to do so, we rather make a new container, put to the new container and do a move operation
+            //every deserialization to an unempty container is already undefined
+            //this is precisely why this is called compact serializer, we dont want to add features that wont be used
+
             auto sz         = types::size_type{};
             auto isrter     = network_compact_serializer::utility::get_inserter<base_type>();
-            this->put(buf, sz); 
+            this->put(buf, sz);
+
+            if constexpr(dg::network_compact_serializer::constants::DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT){
+                data.clear();
+            }
+
             data.reserve(sz);
 
             for (size_t i = 0; i < sz; ++i){
@@ -686,6 +698,11 @@ namespace dg::network_compact_serializer::archive{
             auto sz         = types::size_type{};
             auto isrter     = network_compact_serializer::utility::get_inserter<base_type>();
             this->put(buf, buf_sz, sz); 
+
+            if constexpr(dg::network_compact_serializer::constants::DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT){
+                data.clear();
+            }
+
             data.reserve(sz);
 
             for (size_t i = 0; i < sz; ++i){
