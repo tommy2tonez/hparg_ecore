@@ -232,7 +232,6 @@ namespace dg::network_rest_frame::client{
         virtual auto open_ticket(size_t sz, model::ticket_id_t * rs) noexcept -> exception_t = 0;
         virtual void assign_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::add_pointer_t<ResponseObserverInterface> * assigning_observer_arr, std::expected<bool, exception_t> * exception_arr) noexcept = 0;
         virtual void steal_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * out_observer_arr) noexcept = 0;
-        virtual void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * out_observer_arr) noexcept = 0;
         virtual void close_ticket(model::ticket_id_t * ticket_id_arr, size_t sz) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0; 
     };
@@ -2288,7 +2287,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return std::move(this->resp.value);
             }
-        
+
         private:
 
             void internal_deferred_memory_ordering_fetch_close(void * dirty_memory) noexcept{
@@ -2758,12 +2757,76 @@ namespace dg::network_rest_frame::client_impl1{
     };
 
     //clear
+    //we cant really do responseobserverinterface RAII if we dont change the semantics
+    //TicketController takes unique acquisition of ResponseOberverInterface * as if it is std::unique_ptr<ResponseObserverInterface>
+    //and is responsibile for releasing the response_observer_interface upon close
+    //I'm tired of why this is not shared_ptr<> which is supposedly the version of this (we are talking about 1 std::memory_order_release + 1 std::memory_order_relaxed for every WO, which is bad)
+    //                         nor unique_ptr<> because the uniqueness is transferred to -> callee, and the uniqueness of releasing is transferred -> this component
+
+    //we are introducing a new responsibility to this component, which is the responsibility of releasing the pointer, we'll attempt to do so by introducing a value wrapper, called ResponseObserverRelSafeWrapper
+
+    //Client is literally asking for a Google_Map for our Taylor coordinate finding mission
+    //imagine our <instrument> is an address on the Google Map
+    //every "projectile" operation is an <inching_in_the_direction> towards the true Taylor coodinate in an arbitrary space
+
+    //I've thought long and hard, navigation is the minimum equivalent logic of every neural network training
+    //such is if we are doing research in the navigation direction, and we are really good at it, we'll end up in the right place and never a wrong place, because the navigation logic is interconvertible to every other logic of network training
+
+    //clear
+    class ResponseObserverRelSafeWrapper{
+
+        private:
+
+            std::add_pointer_t<ResponseObserverInterface> response_observer;
+
+        public:
+
+            ResponseObserverRelSafeWrapper() = default;
+            ResponseObserverRelSafeWrapper(std::add_pointer_t<ResponseObserverInterface> response_observer): response_observer(response_observer){}
+            ResponseObserverRelSafeWrapper(const ResponseObserverRelSafeWrapper&) = delete;
+            ResponseObserverRelSafeWrapper(ResponseObserverRelSafeWrapper&& other) noexcept: response_observer(std::exchange(other.response_observer, nullptr)){}
+
+            ~ResponseObserverRelSafeWrapper() noexcept{
+
+                if (this->response_observer != nullptr){
+                    this->response_observer->update(std::unexpected(dg::network_exception::REST_OTHER_ERROR));
+                }
+            }
+
+            ResponseObserverRelSafeWrapper& operator =(const ResponseObserverRelSafeWrapper&) = delete;
+
+            ResponseObserverRelSafeWrapper& operator =(ResponseObserverRelSafeWrapper&& other) noexcept{
+
+                if (std::addressof(other) == this){
+                    return *this;
+                }
+
+                if (this->response_observer != nullptr){
+                    this->response_observer->update(std::unexpected(dg::network_exception::REST_OTHER_ERROR));
+                }
+
+                this->response_observer = std::exchange(other.response_observer, nullptr);
+                return *this;
+            }
+
+            auto get() noexcept -> std::add_pointer_t<ResponseObserverInterface>{
+
+                return this->response_observer;
+            }
+
+            void release() noexcept{
+
+                this->response_observer = nullptr;
+            }     
+    };
+
+    //clear
     template <class Hasher>
     class TicketController: public virtual TicketControllerInterface{
 
         private:
 
-            dg::unordered_unstable_map<model::ticket_id_t, std::optional<std::add_pointer_t<ResponseObserverInterface>>, Hasher> ticket_resource_map; //leaks
+            dg::unordered_unstable_map<model::ticket_id_t, std::optional<ResponseObserverRelSafeWrapper>, Hasher> ticket_resource_map;
             size_t ticket_resource_map_cap;
             model::ticket_id_t ticket_id_counter;
             std::unique_ptr<std::mutex> mtx;
@@ -2771,7 +2834,7 @@ namespace dg::network_rest_frame::client_impl1{
 
         public:
 
-            TicketController(dg::unordered_unstable_map<model::ticket_id_t, std::optional<std::add_pointer_t<ResponseObserverInterface>>, Hasher> ticket_resource_map,
+            TicketController(dg::unordered_unstable_map<model::ticket_id_t, std::optional<ResponseObserverRelSafeWrapper>, Hasher> ticket_resource_map,
                              size_t ticket_resource_map_cap,
                              model::ticket_id_t ticket_id_counter,
                              std::unique_ptr<std::mutex> mtx,
@@ -2802,7 +2865,7 @@ namespace dg::network_rest_frame::client_impl1{
                     static_assert(std::is_unsigned_v<ticket_id_t>); //
 
                     model::ticket_id_t new_ticket_id    = this->ticket_id_counter++;
-                    auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<std::add_pointer_t<ResponseObserverInterface>>(std::nullopt)));
+                    auto [map_ptr, status]              = this->ticket_resource_map.insert(std::make_pair(new_ticket_id, std::optional<ResponseObserverRelSafeWrapper>(std::nullopt)));
                     dg::network_exception_handler::dg_assert(status);
                     out_ticket_arr[i]                   = new_ticket_id;
                 }
@@ -2834,30 +2897,8 @@ namespace dg::network_rest_frame::client_impl1{
                         continue;
                     }
 
-                    map_ptr->second     = corresponding_observer_arr[i];
+                    map_ptr->second     = ResponseObserverRelSafeWrapper(corresponding_observer_arr[i]);
                     exception_arr[i]    = true;
-                }
-            }
-
-            void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * out_observer_arr) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                for (size_t i = 0u; i < sz; ++i){
-                    model::ticket_id_t current_ticket_id = ticket_id_arr[i];
-                    auto map_ptr = this->ticket_resource_map.find(current_ticket_id);
-
-                    if (map_ptr == this->ticket_resource_map.end()){
-                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
-                        continue;
-                    }
-
-                    if (!map_ptr->second.has_value()){
-                        response_arr[i] = std::unexpected(dg::network_exception::REST_TICKET_OBSERVER_NOT_FOUND);
-                        continue;
-                    }
-
-                    response_arr[i] = map_ptr->second.value();
                 }
             }
 
@@ -2879,7 +2920,8 @@ namespace dg::network_rest_frame::client_impl1{
                         continue;
                     }
 
-                    response_arr[i] = map_ptr->second.value();
+                    response_arr[i] = map_ptr->second.value().get();
+                    map_ptr->second.value().release();
                     map_ptr->second = std::nullopt;
                 }
             }
@@ -3030,34 +3072,6 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             }
 
-            void get_observer(model::ticket_id_t * ticket_id_arr, size_t sz, std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * out_observer_arr) noexcept{
-
-                auto feed_resolutor                 = InternalGetObserverFeedResolutor{};
-                feed_resolutor.controller_arr       = this->base_arr.get();
-
-                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
-                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
-
-                for (size_t i = 0u; i < sz; ++i){
-                    ticket_id_t base_ticket_id                  = {};
-                    size_t partitioned_idx                      = {};
-                    std::tie(base_ticket_id, partitioned_idx)   = this->internal_decode_ticket_id(ticket_id_arr[i]);
-
-                    if (parititoned_idx >= this->pow2_base_arr_sz){
-                        out_observer_arr = std::unexpected(dg::network_exception::REST_TICKET_NOT_FOUND);
-                        continue;
-                    }
-
-                    auto feed_arg               = InternalGetObserverFeedArgument{}:
-                    feed_arg.base_ticket_id     = base_ticket_id;
-                    feed_arg.out_observer_ptr   = std::next(out_observer_arr, i);
-
-                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
-                }
-            }
-
             void close_ticket(model::ticket_id_t * ticket_id_arr, size_t sz) noexcept{
 
                 auto feed_resolutor                 = InternalCloseTicketFeedResolutor{};
@@ -3167,34 +3181,6 @@ namespace dg::network_rest_frame::client_impl1{
 
                     for (size_t i = 0u; i < sz; ++i){
                         *base_data_arr[i].out_observer_ptr = stealing_observer_arr[i];
-                    }
-                }
-            };
-
-            struct InternalGetObserverFeedArgument{
-                ticket_id_t base_ticket_id;
-                std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t> * out_observer_ptr;
-            };
-
-            struct InternalGetObserverFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalGetObserverFeedArgument>{
-
-                std::unique_ptr<TicketControllerInterface> * controller_arr;
-
-                void push(const size_t& partitioned_idx, std::move_iterator<InternalGetObserverFeedArgument *> data_arr, size_t sz) noexcept{
-
-                    InternalGetObserverFeedArgument * base_data_arr = data_arr.base();
-
-                    dg::network_stack_allocation::NoExceptAllocation<ticket_id_t[]> ticket_id_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>[]> getting_observer_arr(sz);
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        ticket_id_arr[i] = base_data_arr[i].base_ticket_id;
-                    }
-
-                    this->controller_arr[partitioned_idx]->get_observer(ticket_id_arr.get(), sz, getting_observer_arr.get());
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        *base_data_arr[i].out_observer_arr = getting_observer_arr[i];
                     }
                 }
             };
