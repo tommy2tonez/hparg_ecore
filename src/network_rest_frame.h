@@ -138,6 +138,16 @@ namespace dg::network_rest_frame::model{
 
 namespace dg::network_rest_frame::server{
 
+    //semantic containers (structs)
+    //semantic converters (logic processing - logic components, CacheController, UI Frame interaction + etc.)
+
+    //Mark_Sweep
+    //GC: deferred free
+
+    //Heap Allocation:
+    //Page Allocation
+    //Actual Heap Management Allocation
+
     using namespace dg::network_rest_frame::model; //using namespace is not a good practice, yet it is only applied to this scope of usage ...
                                                    //we wont have bugs if we are being careful
 
@@ -590,7 +600,7 @@ namespace dg::network_rest_frame::server_impl1{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
                 auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_insertcache_feed_cap, feeder_mem.get())); 
 
-                dg::network_stack_allocation::NoExceptRawAllocation<bool[]> contain_status_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<bool[]> contain_status_arr(sz);
                 other_cache_controller->contains(cache_id_arr, sz, contain_status_arr.get());
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -2075,7 +2085,16 @@ namespace dg::network_rest_frame::server_impl1{
                         cache_id_arr[i] = base_data_arr[i].cache_id;
                     }
 
-                    exception_t thru_status = this->cachewrite_tfx_controller->thru(sz); //if it is already uex_controller->thru, we got a leak, its interval leak, the crack between the read_cache and the thru, if it is not thru, then we are logically correct 
+                    std::expected<bool, exception_t> thru_naive_status = this->cachewrite_tfx_controller->thru(sz); //if it is already uex_controller->thru, we got a leak, its interval leak, the crack between the read_cache and the thru, if it is not thru, then we are logically correct 
+                    exception_t thru_status = {}; 
+
+                    if (!thru_naive_status.has_value()){
+                        thru_status = thru_naive_status.error();
+                    } else{
+                        if (!thru_naive_status.value()){
+                            thru_status = dg::network_exception::REST_CACHE_LIMIT_REACHED;
+                        }
+                    }
 
                     //not thru, returns bad signal
 
@@ -2246,19 +2265,19 @@ namespace dg::network_rest_frame::client_impl1{
         private:
 
             stdx::inplace_hdi_container<std::atomic_flag> smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
-            stdx::inplace_hdi_container<std::expected<Response, exception_t>> resp;
+            std::expected<Response, exception_t> resp;
             stdx::inplace_hdi_container<bool> is_response_invoked;
 
         public:
 
             RequestResponseBase() noexcept: smp(std::in_place_t{}, false),
-                                            resp(std::in_place_t{}, std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
+                                            resp(std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
                                             is_response_invoked(std::in_place_t{}, false){}
 
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
-                this->resp.value    = std::move(response_arg);
-                bool old            = this->smp.value.test_and_set(std::memory_order_release);
+                this->resp  = std::move(response_arg);
+                bool old    = this->smp.value.test_and_set(std::memory_order_release);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (old != false){
@@ -2270,12 +2289,12 @@ namespace dg::network_rest_frame::client_impl1{
 
             void deferred_memory_ordering_fetch(std::expected<Response, exception_t> response_arg) noexcept{
 
-                this->resp.value = std::move(response_arg);
+                this->resp = std::move(response_arg);
             }
 
             void deferred_memory_ordering_fetch_close() noexcept{
 
-                this->internal_deferred_memory_ordering_fetch_close(static_cast<void *>(&this->resp.value)); //not necessary, I'd love to have noipa, I dont know what to do otherwise
+                this->internal_deferred_memory_ordering_fetch_close(static_cast<void *>(&this->resp)); //not necessary, I'd love to have noipa, I dont know what to do otherwise
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -2288,7 +2307,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 this->smp.value.wait(false, std::memory_order_acquire);
 
-                return std::move(this->resp.value);
+                return std::expected<Response, exception_t>(std::move(this->resp));
             }
 
         private:
@@ -2774,6 +2793,25 @@ namespace dg::network_rest_frame::client_impl1{
 
     //I've thought long and hard, navigation is the minimum equivalent logic of every neural network training
     //such is if we are doing research in the navigation direction, and we are really good at it, we'll end up in the right place and never a wrong place, because the navigation logic is interconvertible to every other logic of network training
+    //this component should be OK, we'll move on to implement other components, especially the Google Map navigation + Google Search
+
+    //we proved the Floyed algorithm
+    //we proved the Bellman Ford algorithm
+
+    //we proved the Dijkstra algorithm
+    //assume that we have a priority queue of unexpanded node, the current path to the current non-expanded node is the shortest path
+    //proof, in the current queue, it is the shortest path, every unsigned edges -> the other paths would not be shorter than the peek path
+    //       compared to other expanded nodes, assume there exists a shorter path including the expanded node Node1 -> Node2 -> Node3 -> current
+    //       according to the logic Node1 Node2 Node3 path < current, and Node2 is adjecent to Node1 and is expanded by Node1, so it must be invoked before current, and Node3 is adjecent to Node 2 and is expanded by Node2, so it must be invoked before current
+    //       proof by contradiction, there is no shorter path than the current path   
+
+    //we proved the A* algorithm
+
+    //what preciesly is Taylor Search navigation??? 
+    //we have our instrument space (the comparing space) and our arbitrary space (being leaf logits space, the compared space)
+    //Trino == const data query extraction
+
+    //it's gonna be a bumpy road, but we are theoretical people, we have the logics in our hands, we'll be there
 
     //clear
     class ResponseObserverRelSafeWrapper{
@@ -3093,7 +3131,7 @@ namespace dg::network_rest_frame::client_impl1{
                     if constexpr(DEBUG_MODE_FLAG){
                         if (partitioned_idx >= this->pow2_base_arr_sz){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION)); //we are very unforgiving about the inverse operation, because it hints a serious corruption has occurred
-                            continue;
+                            std::abort();
                         }
                     }
 
@@ -3770,7 +3808,7 @@ namespace dg::network_rest_frame::client_impl1{
                 void push(std::move_iterator<model::ticket_id_t *> ticket_id_arr, size_t ticket_id_arr_sz) noexcept{
 
                     model::ticket_id_t * base_ticket_id_arr = ticket_id_arr.base();
-                    dg::network_stack_allocation<std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>[]> stolen_response_observer_arr(ticket_id_arr_sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::add_pointer_t<ResponseObserverInterface>, exception_t>[]> stolen_response_observer_arr(ticket_id_arr_sz);
 
                     this->ticket_controller->steal_observer(base_ticket_id_arr, ticket_id_arr_sz, stolen_response_observer_arr.get());
 
@@ -3917,11 +3955,12 @@ namespace dg::network_rest_frame::client_impl1{
 
                 std::chrono::nanoseconds max_timeout_dur = this->ticket_timeout_manager->max_clockin_dur(); 
 
-                dg::network_stack_allocation::NoExceptAllocation<std::pair<model::ticket_id_t, std::chrono::nanoseconds>[]> clockin_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<ClockInArgument[]> clockin_arr(sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> clockin_exception_arr(sz);
 
                 for (size_t i = 0u; i < sz; ++i){
-                    clockin_arr[i] = ClockInArgument(ticket_id_arr[i], base_client_request_arr[i].client_timeout_dur);
+                    clockin_arr[i] = ClockInArgument{.clocked_in_ticket = ticket_id_arr[i], 
+                                                     .expiry_dur        = base_client_request_arr[i].client_timeout_dur};
 
                     if (base_client_request_arr[i].client_timeout_dur > max_timeout_dur){
                         return std::unexpected(dg::network_exception::REST_INVALID_TIMEOUT); //failed to meet timeout preconds, close tickets by response + release_wait_responsbiility of response + deallocate response resources
@@ -4175,15 +4214,15 @@ namespace dg::network_rest_frame::client_impl1{
                 size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
                 size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
 
-                this->rest_controller_vec[idx]->request(request_arr, request_arr_sz, response_arr);
+                this->rest_controller_arr[idx]->request(request_arr, request_arr_sz, response_arr);
             }
 
-            auto batch_request(std::move_iterator<model::ClientRequest *> request_arr, size_t request_arr_sz) -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
+            auto batch_request(std::move_iterator<model::ClientRequest *> request_arr, size_t request_arr_sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
 
                 size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
                 size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
 
-                return this->rest_controller_vec[idx]->request(request_arr, request_arr_sz);
+                return this->rest_controller_arr[idx]->request(request_arr, request_arr_sz);
             }
 
             auto max_consume_size() noexcept -> size_t{
