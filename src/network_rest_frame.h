@@ -43,6 +43,15 @@ namespace dg::network_rest_frame::model{
 
     using cache_id_t    = CacheID; 
 
+    //
+    struct RequestID{
+        std::array<char, 8u> ip;
+        uint8_t factory_id;
+        uint64_t native_request_id; 
+    };
+
+    using request_id_t = RequestID;
+
     struct ClientRequest{
         dg::string requestee_uri;
         dg::string requestor;
@@ -50,17 +59,17 @@ namespace dg::network_rest_frame::model{
 
         std::chrono::nanoseconds client_timeout_dur;
         std::optional<uint8_t> dual_priority;
-        std::optional<ticket_id_t> designated_request_id;
         std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout; //this is hard to solve, we can be stucked in a pipe and actually stay there forever, abs_timeout only works for post the transaction, which is already too late, I dont know of the way to do this correctly
+        std::optional<request_id_t> designated_request_id; 
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(requestee_uri, requestor, payload, client_timeout_dur, dual_priority, designated_request_id, server_abs_timeout);
+            reflector(requestee_uri, requestor, payload, client_timeout_dur, dual_priority, server_abs_timeout, designated_request_id);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(requestee_uri, requestor, payload, client_timeout_dur, dual_priority, designated_request_id, server_abs_timeout);
+            reflector(requestee_uri, requestor, payload, client_timeout_dur, dual_priority, server_abs_timeout, designated_request_id);
         }
     };
 
@@ -217,6 +226,11 @@ namespace dg::network_rest_frame::client{
 
     using namespace dg::network_rest_frame::model;
 
+    struct RequestIDGeneratorInterface{
+        virtual ~RequestIDGeneratorInterface() noexcept = default;
+        virtual auto get(size_t, RequestID *) noexcept -> exception_t = 0;
+    };
+
     struct ResponseObserverInterface{
         virtual ~ResponseObserverInterface() noexcept = default;
         virtual void update(std::expected<Response, exception_t>) noexcept = 0;
@@ -262,6 +276,7 @@ namespace dg::network_rest_frame::client{
         virtual ~RestControllerInterface() noexcept = default;
         virtual auto request(model::ClientRequest&&) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t> = 0;
         virtual auto batch_request(std::move_iterator<model::ClientRequest *>, size_t) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t> = 0;
+        virtual auto get_designated_request_id(size_t, RequestID *) noexcept -> exception_t = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 }
@@ -314,6 +329,9 @@ namespace dg::network_rest_frame::server_impl1{
     //we are literally just trying to do Google Search in an arbitrary space
 
     //clear
+    //we'll probably do filesystem cache, which is a ... database (we wont be there YET), because we think that all of our tile operations are on filessytem 
+    //we have PLENTY of RAM to store these guys 
+
     template <class Hasher>
     class CacheController: public virtual CacheControllerInterface{
 
@@ -1778,9 +1796,9 @@ namespace dg::network_rest_frame::server_impl1{
                         continue;
                     }
 
-                    auto map_ptr = this->request_handler.find(resource_path.value());
+                    auto map_ptr = this->request_handler_map.find(resource_path.value());
 
-                    if (map_ptr == this->request_handle.end()){
+                    if (map_ptr == this->request_handler_map.end()){
                         auto response   = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_INVALID_URI), 
                                                                   .ticket_id  = request->ticket_id};
 
@@ -2047,26 +2065,6 @@ namespace dg::network_rest_frame::server_impl1{
                 Request request;
             };
 
-            //attempts to thru the traffic
-            //at traffic light, there are two scenerios
-            //it is already cachewrite_uex_controller->thru and it is not already cachewrite_uex_controller->thru
-            //if it is the former, then it must be in crack of read_cache -> now (and this is susceptible to unique_write traffic leaks)
-
-            //at the read cache, it might or might not denote the thruness of unique_write, the writing might be <in progress> so we have another crack there
-            //the chance is slim, we return a bad signal if that happens, yet the integrity of unique_write for dedicated id remains 
-
-            //our imagination (only stable interface) is that we'd retry 10 times for a particular request, and we wont stop until we get a success from the server and out the request, so the slim chance is just one of the chances of failed requests
-            //if we got a success, that success is the sole and only success
-            //if we got all fails, that means the request is thru at most once
-            //this interface is so important that we would depend our entire company future on this particular feature
-            //alright, I admit I dont want to make this more complicated than it already is to communicate something far away
-
-            //we are really hopeful that this massive parallel logit density miner (working on 1 << 20 -> 1 << 30 parallel compute units) would work out well 
-            //we dont have time to actually make it human-understandable, we are just "pre-planning" our "detailed" plan and just push things thru as fast as possible
-
-            //attempts to get cache write to the designated cache_id
-            //
-
             struct InternalCacheServerFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheServerFeedArgument>{
 
                 InfiniteCacheUniqueWriteControllerInterface * cachewrite_uex_controller;
@@ -2169,16 +2167,11 @@ namespace dg::network_rest_frame::server_impl1{
                 Request request;
             };
 
-            //attempt to read cache
-            //failed to read cache          -> return exception -> user, denotes internal unrecoverable errors
-            //read cache success has entry  -> return cached data -> user
-            //read cache success no entry   -> forward to cache_server_feed_resolutor to dispatch a unique cache write 
-
             struct InternalCacheFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalCacheFeedArgument>{
 
                 dg::network_producer_consumer::DeliveryHandle<InternalCacheServerFeedArgument> * cache_server_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepFeedArgument> * mailbox_prep_feeder; 
-                CacheControllerInterface * cache_controller;
+                InfiniteCacheControllerInterface * cache_controller;
 
                 void push(std::move_iterator<InternalCacheFeedArgument *> data_arr, size_t sz) noexcept{
 
@@ -2258,6 +2251,20 @@ namespace dg::network_rest_frame::client_impl1{
     //
 
     using namespace dg::network_rest_frame::client; 
+
+    //attempt to demote request id numerical range -> cache_id, we dont want to be "forcy" of the semantic space of request_id and the semantic space of cache_id
+    //the user of this function is incremental or random native_request_id
+    static inline auto coerce_request_id_to_cache_id(RequestID request_id) noexcept -> CacheID{
+
+        CacheID rs                          = {};
+        rs.ip                               = request_id.ip;
+        uint64_t unsigned_native_cache_id   = (static_cast<uint64_t>(request_id.native_request_id) << (sizeof(uint8_t) * CHAR_BIT)) | request_id.factory_id;
+
+        static_assert(dg::network_trivial_serializer::size(std::array<char, 8u>{}.size()) == dg::network_trivial_serializer::size(uint64_t{}));
+        dg::network_trivial_serializer::serialize_into(rs.native_cache_id.data(), unsigned_native_cache_id);
+
+        return rs;
+    }
 
     //clear
     class RequestResponseBase{
@@ -2779,59 +2786,6 @@ namespace dg::network_rest_frame::client_impl1{
     };
 
     //clear
-    //we cant really do responseobserverinterface RAII if we dont change the semantics
-    //TicketController takes unique acquisition of ResponseOberverInterface * as if it is std::unique_ptr<ResponseObserverInterface>
-    //and is responsibile for releasing the response_observer_interface upon close
-    //I'm tired of why this is not shared_ptr<> which is supposedly the version of this (we are talking about 1 std::memory_order_release + 1 std::memory_order_relaxed for every WO, which is bad)
-    //                         nor unique_ptr<> because the uniqueness is transferred to -> callee, and the uniqueness of releasing is transferred -> this component
-
-    //we are introducing a new responsibility to this component, which is the responsibility of releasing the pointer, we'll attempt to do so by introducing a value wrapper, called ResponseObserverRelSafeWrapper
-
-    //Client is literally asking for a Google_Map for our Taylor coordinate finding mission
-    //imagine our <instrument> is an address on the Google Map
-    //every "projectile" operation is an <inching_in_the_direction> towards the true Taylor coodinate in an arbitrary space
-
-    //I've thought long and hard, navigation is the minimum equivalent logic of every neural network training
-    //such is if we are doing research in the navigation direction, and we are really good at it, we'll end up in the right place and never a wrong place, because the navigation logic is interconvertible to every other logic of network training
-    //this component should be OK, we'll move on to implement other components, especially the Google Map navigation + Google Search
-
-    //we proved the Floyed algorithm
-    //we proved the Bellman Ford algorithm
-
-    //we proved the Dijkstra algorithm
-    //assume that we have a priority queue of unexpanded node, the current path to the current non-expanded node is the shortest path
-    //proof, in the current queue, it is the shortest path, every unsigned edges -> the other paths would not be shorter than the peek path
-    //       compared to other expanded nodes, assume there exists a shorter path including the expanded node Node1 -> Node2 -> Node3 -> current
-    //       according to the logic Node1 Node2 Node3 path < current, and Node2 is adjecent to Node1 and is expanded by Node1, so it must be invoked before current, and Node3 is adjecent to Node 2 and is expanded by Node2, so it must be invoked before current
-    //       proof by contradiction, there is no shorter path than the current path   
-
-    //we proved the A* algorithm
-
-    //what preciesly is Taylor Search navigation??? 
-    //we have our instrument space (the comparing space) and our arbitrary space (being leaf logits space, the compared space)
-    //Trino == const data query extraction
-
-    //it's gonna be a bumpy road, but we are theoretical people, we have the logics in our hands, we'll be there
-
-    //our fellows + clients are very aggresive
-    //they asked for immediate results
-    //I explained that each of the correctly implemented mentioned functions is worth at least $10BB...
-
-    //cuda multiprecision
-    //cuda Taylor Series search
-    //ACID storage engine (atomic buffer fences)
-    //ingestion accelerator
-    //branch-prediction-liked training styles
-    //cuda aided Taylor Series search (navigation_system)
-    //Taylor Series enumerated infinite patterns database (sqrt, sin, cos, etc.)
-    //logit density miner
-    //bid-ask system
-
-    //alright, this is just the training phase
-
-    //then there comes ... the synthetic data ...
-    //is it on Virtual Machine? or is it automated synthetically generated hard NP problem (hard to the current model, not the next model)
-    //either way, we need massive compute power
 
     //clear
     class ResponseObserverRelSafeWrapper{
@@ -3476,7 +3430,7 @@ namespace dg::network_rest_frame::client_impl1{
                 exception_t * exception_ptr;
             };
 
-            struct InternalClockInFeedResolutor{
+            struct InternalClockInFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalClockInFeedArgument>{
 
                 std::unique_ptr<TicketTimeoutManagerInterface> * manager_arr;
 
@@ -3598,6 +3552,38 @@ namespace dg::network_rest_frame::client_impl1{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->base->max_consume_size();
+            }
+    };
+
+    //clear
+    class IncrementingRequestIDGenerator: public virtual RequestIDGeneratorInterface{
+
+        private:
+
+            std::array<char, 8u> ip;
+            uint8_t ip_factory_id;
+            stdx::inplace_hdi_container<std::atomic<uint64_t>> id_counter;
+
+        public:
+
+            IncrementingRequestIDGenerator(std::array<char, 8u> ip,
+                                           uint8_t ip_factory_id,
+                                           uint64_t id_counter) noexcept: ip(ip),
+                                                                          ip_factory_id(ip_factory_id),
+                                                                          id_counter(std::in_place_t{}, id_counter){}
+
+            auto get(size_t ticket_sz, RequestID * output_request_id_arr) noexcept -> exception_t{
+
+                uint64_t start_id   = this->id_counter.value.fetch_add(ticket_sz, std::memory_order_relaxed);
+                uint64_t current_id = start_id;
+
+                for (size_t i = 0u; i < ticket_sz; ++i){
+                    output_request_id_arr[i] = RequestID{.ip                = this->ip,
+                                                         .factory_id        = this->ip_factory_id,
+                                                         .native_request_id = current_id++};
+                }
+
+                return dg::network_exception::SUCCESS;
             }
     };
 
@@ -3855,23 +3841,7 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
-    //this is about the fastest we could ever write given the instruction set of host memory orderings
-    //timed_semaphore registration offloaded -> timeoutmanager
-    //relaxed counter -> atomic smp
-    //1 memory_order_release/ 1024 workorders
-    //no leaks
-    //correct codes, we'll talk about the practices later (we are in C fellas, we are extremely greedy people who sincerely want our code to work perfectly)
-    //supported re-requests by using designated ids
-    //bucket_hint from trusted sources to reduce memory footprint by 10 folds
-    //able to saturate 1GB - 5GB of inbound rest_requests/ second if correctly configurated 
-    //we'll post the benchs
-    //we'll be back tmr
-
-    //this is the base for our pagination implementation of requests
-    //its like a movie player
-    //we have a vector of client request (timeranges)
-    //client request is running out, we refill our waiting pool of outbound request + inbound response
-
+    //clear
     class RestController: public virtual RestControllerInterface{
 
         private:
@@ -3880,6 +3850,7 @@ namespace dg::network_rest_frame::client_impl1{
             std::shared_ptr<RequestContainerInterface> request_container;
             std::shared_ptr<TicketControllerInterface> ticket_controller;
             std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager;
+            std::unique_ptr<RequestIDGeneratorInterface> request_id_generator;
             stdx::hdi_container<size_t> max_consume_per_load;
 
         public:
@@ -3890,10 +3861,12 @@ namespace dg::network_rest_frame::client_impl1{
                            std::shared_ptr<RequestContainerInterface> request_container,
                            std::shared_ptr<TicketControllerInterface> ticket_controller,
                            std::shared_ptr<TicketTimeoutManagerInterface> ticket_timeout_manager,
+                           std::unique_ptr<RequestIDGeneratorInterface> request_id_generator,
                            stdx::hdi_container<size_t> max_consume_per_load) noexcept: daemon_vec(std::move(daemon_vec)),
                                                                                        request_container(std::move(request_container)),
                                                                                        ticket_controller(std::move(ticket_controller)),
                                                                                        ticket_timeout_manager(std::move(ticket_timeout_manager)),
+                                                                                       request_id_generator(std::move(request_id_generator)),
                                                                                        max_consume_per_load(std::move(max_consume_per_load)){}
 
             void request(model::ClientRequest&& client_request) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
@@ -3914,12 +3887,10 @@ namespace dg::network_rest_frame::client_impl1{
             auto batch_request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
 
                 //the code is not hard, yet it is extremely easy to leak resources
+                //let's not abort for external interfaces
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (sz > this->max_consume_size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
+                if (sz > this->max_consume_size()){
+                    return std::unexpected(dg::network_exception::MAX_CONSUME_SIZE_EXCEEDED);
                 }
 
                 if (sz == 0u){
@@ -4015,6 +3986,15 @@ namespace dg::network_rest_frame::client_impl1{
 
                 return std::unique_ptr<BatchResponseInterface>(std::move(response.value()));
             }
+
+            auto get_designated_request_id(size_t request_id_sz, RequestID * out_request_id_arr) noexcept -> exception_t{
+
+                if (request_id_sz > this->max_consume_size()){
+                    return dg::network_exception::MAX_CONSUME_SIZE_EXCEEDED;
+                }
+
+                return this->request_id_generator(request_id_sz, out_request_id_arr);
+            } 
 
             auto max_consume_size() noexcept -> size_t{
 
@@ -4191,7 +4171,12 @@ namespace dg::network_rest_frame::client_impl1{
                                                                           .requestor        = std::move(base_request_arr[i].requestor),
                                                                           .payload          = std::move(base_request_arr[i].payload)},
 
-                                                    .ticket_id  = ticket_id_arr[i]};
+                                                    .ticket_id                  = ticket_id_arr[i],
+                                                    .dual_priority              = base_request_arr[i].dual_priority,
+                                                    .has_unique_response        = base_request_arr[i].designated_request_id.has_value(),
+                                                    .client_request_cache_id    = base_request_arr[i].designated_request_id.has_value() ? std::optional<cache_id_t>(coerce_request_id_to_cache_id(base_request_arr[i].designated_request_id.value()))
+                                                                                                                                        : std::optional<cache_id_t>(std::nullopt),
+                                                    .server_abs_timeout         = base_request_arr[i].server_abs_timeout};
                 }
 
                 return rs;
@@ -4213,6 +4198,9 @@ namespace dg::network_rest_frame::client_impl1{
     //because I think random hash in conjunction with max_consume_size should be representative
     //we should not be too greedy, and actually implement somewhat a load_balancer
 
+    //this is hard to solve
+    //alright fellas, I'll be back, I'm off to solving 100 leetcode problems today + tmr
+
     class DistributedRestController: public virtual RestControllerInterface{
 
         private:
@@ -4229,20 +4217,39 @@ namespace dg::network_rest_frame::client_impl1{
                                                                                                   pow2_rest_controller_arr_sz(pow2_rest_controller_arr_sz),
                                                                                                   max_consume_per_load(std::move(max_consume_per_load)){} 
 
-            void request(std::move_iterator<model::ClientRequest *> request_arr, size_t request_arr_sz, std::expected<std::unique_ptr<ResponseInterface>, exception_t> * response_arr) noexcept{
+            auto request(model::ClientRequest&& request) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t>{
 
                 size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
                 size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
 
-                this->rest_controller_arr[idx]->request(request_arr, request_arr_sz, response_arr);
+                return this->rest_controller_arr[idx]->request(static_cast<model::ClientRequest&&>(request));
             }
 
             auto batch_request(std::move_iterator<model::ClientRequest *> request_arr, size_t request_arr_sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t>{
 
+                if (request_arr_sz > this->max_consume_size()){
+                    return std::unexpected(dg::network_exception::MAX_CONSUME_SIZE_EXCEEDED);
+                }
+
                 size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
                 size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
 
-                return this->rest_controller_arr[idx]->request(request_arr, request_arr_sz);
+                return this->rest_controller_arr[idx]->batch_request(request_arr, request_arr_sz);
+            }
+
+            //let's not overcomplicate, such is request_id is just a unique identifier for a Request, and does not hold another special bookkept semantic meaning or special dispatch 
+            //we can't really implement a feature that is not going to be used, and actually slow down the code, it's often bad design, this is bad design the fact that we are asking the question
+
+            auto get_designated_request_id(size_t request_id_sz, RequestID * out_request_id_arr) noexcept -> exception_t{
+
+                if (request_id_sz > this->max_consume_size()){
+                    return dg::network_exception::MAX_CONSUME_SIZE_EXCEEDED;
+                }
+
+                size_t random_clue  = dg::network_randomizer::randomize_int<size_t>();
+                size_t idx          = random_clue & (this->pow2_rest_controller_arr_sz - 1u);
+
+                return this->rest_controller_arr[idx]->get_designated_request_id(request_id_sz, out_request_id_arr);
             }
 
             auto max_consume_size() noexcept -> size_t{
