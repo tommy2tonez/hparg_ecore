@@ -100,6 +100,25 @@ namespace dg::network_host_asynchronous{
             virtual auto exec(std::unique_ptr<WorkOrder>, size_t est_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t> = 0;
     };
 
+    class RadixerInterface{
+
+        public:
+
+            static inline constexpr uint8_t RAM_HEAVY   = 0u;
+            static inline constexpr uint8_t CPU_HEAVY   = 1u;
+
+            virtual ~RadixerInterface() noexcept = default;
+            virtual auto radix(size_t est_cpu_flops, size_t est_ram_flops) noexcept ->  uint8_t = 0;
+    };
+
+    class XLoadBalancedAsyncDeviceXInterface{
+
+        public:
+
+            virtual ~XLoadBalancedAsyncDeviceXInterface() noexcept = default;
+            virtual auto exec(std::unique_ptr<WorkOrder>, size_t est_cpu_flops, size_t est_ram_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t> = 0;
+    };
+
     template <class Lambda>
     class LambdaWrappedWorkOrder: public virtual WorkOrder{
 
@@ -626,6 +645,43 @@ namespace dg::network_host_asynchronous{
             }
     };
 
+    //100%
+
+    class XLoadBalancedAsyncDeviceX: public virtual XLoadBalancedAsyncDeviceXInterface{
+
+        private:
+
+            std::unique_ptr<RadixerInterface> radixer;
+            std::unique_ptr<LoadBalancedAsyncDeviceXInterface> ram_heavy_async_device;
+            std::unique_ptr<LoadBalancedAsyncDeviceXInterface> cpu_heavy_async_device;
+        
+        public:
+
+            XLoadBalancedAsyncDeviceX(std::unique_ptr<RadixerInterface> radixer,
+                                      std::unique_ptr<LoadBalancedAsyncDeviceXInterface> ram_heavy_async_device,
+                                      std::unique_ptr<LoadBalancedAsyncDeviceXInterface> cpu_heavy_async_device) noexcept: radixer(std::move(radixer)),
+                                                                                                                           ram_heavy_async_device(std::move(ram_heavy_async_device)),
+                                                                                                                           cpu_heavy_async_device(std::move(cpu_heavy_async_device)){}
+
+            auto exec(std::unique_ptr<WorkOrder> work_order, size_t est_cpu_flops, size_t est_ram_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t>{
+
+                uint8_t dispatch_code = this->radixer->radix(est_cpu_flops, est_ram_flops);
+
+                if (dispatch_code == RadixerInterface::RAM_HEAVY){
+                    return this->ram_heavy_async_device->exec(std::move(work_order), est_ram_flops);
+                } else if (dispatch_code == RadixerInterface::CPU_HEAVY){
+                    return this->cpu_heavy_async_device->exec(std::move(work_order), est_cpu_flops);
+                } else {
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+            }
+    };
+
     class MemorySafeSynchronizer{
 
         private:
@@ -742,6 +798,36 @@ namespace dg::network_host_asynchronous{
 
     //this is a small component < 1000 lines yet a very crucial backbone component for our forwarding + backwarding tiles
     //we are relying on this to be consistent, do hot + cold dispatch, keep all CPUs running
+
+    //we haven't considered RAM flops which is a fairly important piece of performance constraint
+    //the time it takes for a worker to complete is
+    //total_in_queue_ram / RAM_BUS_RATE * ram_usage(worker) 
+    //this is actually a leetcode hard problem
+
+    //let's see what we are trying to optimize
+    //we want to complete a task ASAP
+    //we want to maximize CPU thruput + RAM thruput
+
+    //is completing a task ASAP == maximizing CPU thruput + RAM thruput? 
+
+    //it is a two very different thing
+
+    //the problem is that we are missing a variable, which would heavily hinder our future architect if we are to walk down this road
+    //the CPU flops variable is an affined, detached variable
+    //the RAM flops is a global, unified variable
+
+    //this is hard!
+    //the problem is that when we are reaching the RAM saturations (or it is considered, RAM_HEAVY, there should be dedicated workers to exactly pull the RAM)
+    //and the other tasks CPU_HEAVY should be distributed like how we are doing things now  
+
+    //we dont really want to change the interface
+    //so we'd do an extension
+    //to add another variable, called ram_flops
+    //and we would want to radix a task as CPU heavy or RAM_HEAVY based on the cpu_flops/ ram_flops ratio
+    //and we'd move from there
+
+    //the heap order is maintained (is it???) for every inbound work order
+
     //in order for that to happen, we can control our "virtuous" dispatches, keep the compute size to be < certain sizes
     //we aren't really waiting, so there is no synchronization overheads
     //we are in the nosync business of logit density mining
