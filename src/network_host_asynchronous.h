@@ -116,7 +116,7 @@ namespace dg::network_host_asynchronous{
         public:
 
             virtual ~XLoadBalancedAsyncDeviceXInterface() noexcept = default;
-            virtual auto exec(std::unique_ptr<WorkOrder>, size_t est_cpu_flops, size_t est_ram_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t> = 0;
+            virtual auto exec(std::unique_ptr<WorkOrder>, size_t est_cpu_flops, size_t est_ram_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t> = 0; //10MB/ dispatch or 1MB/ dispatch (this unit is very important, that's why we need the help of tiles)
     };
 
     template <class Lambda>
@@ -231,6 +231,14 @@ namespace dg::network_host_asynchronous{
                                std::unique_ptr<std::mutex> mtx) noexcept: wo_vec(std::move(wo_vec)),
                                                                           waiting_vec(std::move(waiting_vec)),
                                                                           mtx(std::move(mtx)){}
+
+            ~WorkOrderContainer() noexcept{
+
+                if (!this->wo_vec.empty()){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+            }
 
             auto push(std::unique_ptr<WorkOrder> wo) noexcept -> exception_t{
 
@@ -654,7 +662,7 @@ namespace dg::network_host_asynchronous{
             std::unique_ptr<RadixerInterface> radixer;
             std::unique_ptr<LoadBalancedAsyncDeviceXInterface> ram_heavy_async_device;
             std::unique_ptr<LoadBalancedAsyncDeviceXInterface> cpu_heavy_async_device;
-        
+
         public:
 
             XLoadBalancedAsyncDeviceX(std::unique_ptr<RadixerInterface> radixer,
@@ -665,10 +673,15 @@ namespace dg::network_host_asynchronous{
 
             auto exec(std::unique_ptr<WorkOrder> work_order, size_t est_cpu_flops, size_t est_ram_flops) noexcept -> std::expected<std::unique_ptr<Synchronizable>, exception_t>{
 
+                if (work_order == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
                 uint8_t dispatch_code = this->radixer->radix(est_cpu_flops, est_ram_flops);
 
                 if (dispatch_code == RadixerInterface::RAM_HEAVY){
-                    return this->ram_heavy_async_device->exec(std::move(work_order), est_ram_flops);
+                    return this->ram_heavy_async_device->exec(std::move(work_order), est_ram_flops); //I was thinking for ram heavy async device to pull 80% RAM (by limiting the number of concurrent workers), leave the 20% to the cpu_heavy_async_device, to buffer the RAM -> CPU caches to do linear or combinatorial heavy operations
+                                                                                                     //this is the acceptable approach, we dont really have other ways to manage a global variable such as RAM
                 } else if (dispatch_code == RadixerInterface::CPU_HEAVY){
                     return this->cpu_heavy_async_device->exec(std::move(work_order), est_cpu_flops);
                 } else {
@@ -714,7 +727,7 @@ namespace dg::network_host_asynchronous{
                 this->synchronizable_vec.push_back(std::move(syncable));
                 return dg::network_exception::SUCCESS;
             }
-            
+
             inline __attribute__((always_inline)) auto addsync(std::unique_ptr<Synchronizable> syncable) noexcept -> exception_t{
 
                 stdx::seq_cst_guard seqcst_tx; //making sure addsync is not reordered if compiler is to see addsync, make this a compiler thread fence for all the results that this addsync could affect, alright, the results that addsync could affect is limited to the immediate calling function due to limitations
