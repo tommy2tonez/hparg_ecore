@@ -126,10 +126,15 @@ namespace dg::network_host_asynchronous{
         private:
 
             std::shared_ptr<WorkOrder> base;
-        
+
         public:
 
-            SharedWrappedWorkOrder(std::shared_ptr<WorkOrder> base) noexcept: base(std::move(base)){}
+            SharedWrappedWorkOrder(std::shared_ptr<WorkOrder> base): base(std::move(base)){
+
+                if (this->base == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
 
             void run() noexcept{
 
@@ -145,10 +150,6 @@ namespace dg::network_host_asynchronous{
 
     auto to_unique_workorder(std::shared_ptr<WorkOrder> base) -> std::unique_ptr<WorkOrder>{
 
-        if (base == nullptr){
-            dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-        }
-
         return dg::network_allocation::make_unique<SharedWrappedWorkOrder>(std::move(base)); //unique because the usage scope is that it is only referenced by the async_consumer, shared_ptr<> to avoid that we lose data in case of exceptions, we arent doing std::unique_ptr<>&&, there are certain language limitations  
     }
 
@@ -156,35 +157,20 @@ namespace dg::network_host_asynchronous{
 
         private:
 
-            std::unique_ptr<std::binary_semaphore> smp; //should be unique, we are the last guy holding the reference to binary_semaphore in all cases
-            bool is_synced;
+            std::binary_semaphore smp;
+            bool synchronization_responsibility_flag;
 
         public:
 
-            TaskSynchronizer(std::unique_ptr<std::binary_semaphore> smp) noexcept: smp(std::move(smp)),
-                                                                                   is_synced(false){
-                assert(this->smp != nullptr);
-            }
+            //this is bad practice
+
+            TaskSynchronizer() noexcept: smp(0),
+                                         synchronization_responsibility_flag(true){}
 
             TaskSynchronizer(const TaskSynchronizer&) = delete;
             TaskSynchronizer& operator =(const TaskSynchronizer&) = delete;
-
-            TaskSynchronizer(TaskSynchronizer&& other) noexcept: smp(std::move(other.smp)),
-                                                                 is_synced(other.is_synced){
-
-                other.is_synced = true;
-            }
-
-            TaskSynchronizer& operator =(TaskSynchronizer&& other) noexcept{
-
-                if (this != std::addressof(other)){
-                    this->smp       = std::move(other.smp);
-                    this->is_synced = other.is_synced;
-                    other.is_synced = true;
-                }
-
-                return *this;
-            }
+            TaskSynchronizer(TaskSynchronizer&& other) = delete;
+            TaskSynchronizer& operator =(TaskSynchronizer&& other) = delete;
 
             ~TaskSynchronizer() noexcept{
 
@@ -193,10 +179,21 @@ namespace dg::network_host_asynchronous{
 
             void sync() noexcept{
 
-                if (!this->is_synced){
-                    this->smp->acquire();
-                    this->is_synced = true;
+                bool responsibility_flag = std::exchange(this->synchronization_responsibility_flag, false);
+
+                if (responsibility_flag){
+                    this->smp.acquire();
                 }
+            }
+
+            auto get_observer() noexcept -> std::binary_semaphore *{
+
+                return &this->smp;
+            } 
+
+            void release() noexcept{
+
+                this->synchronization_responsibility_flag = false;
             }
     };
 
@@ -341,20 +338,22 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto expected_mtx_uptr  = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<std::binary_semaphore, std::ptrdiff_t>)(std::ptrdiff_t{0});
+                auto rs = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<TaskSynchronizer>)();
 
-                if (!expected_mtx_uptr.has_value()){
-                    return std::unexpected(expected_mtx_uptr.error());
+                if (!rs.has_value()){
+                    return std::unexpected(rs.error());
                 }
 
-                auto mtx_uptr           = std::move(expected_mtx_uptr.value());
-                auto mtx_reference      = mtx_uptr.get(); 
+                auto rs_grd             = stdx::resource_guard([&]() noexcept{
+                    rs.value()->release();
+                });
 
-                auto task               = [mtx_reference, work_order_arg = std::move(work_order)]() noexcept{
+                auto smp_reference      = rs.value()->get_observer(); 
+                auto task               = [smp_reference, work_order_arg = std::move(work_order)]() noexcept{
                     work_order_arg->run();
                     //better safe than sorry
                     std::atomic_signal_fence(std::memory_order_seq_cst);
-                    mtx_reference->release();
+                    smp_reference->release();
                 };
 
                 auto virtual_task       = dg::network_exception::to_cstyle_function(make_virtual_work_order<decltype(task)>)(std::move(task));
@@ -369,13 +368,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(async_err);
                 }
 
-                auto rs = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<TaskSynchronizer, decltype(mtx_uptr)>)(std::move(mtx_uptr));
-
-                if (!rs.has_value()){
-                    //alright, we dont allow this to happen, this is critical error, we dont know what to tell the users !!!
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(rs.error()));
-                    std::abort();
-                }
+                rs_grd.release();
 
                 return std::unique_ptr<Synchronizable>(std::move(rs.value()));
             }
@@ -633,22 +626,6 @@ namespace dg::network_host_asynchronous{
             }
     };
 
-    //alright, this is the very hard myth, such is if the compiler cant see your memory orderings, they only instruct a hardware instruction, compiler has absolutely no knowledge about where, what, variables, pointer optimizations they should make in accordance to the memory ordering
-    //alright, this is hard
-
-    //if the calling function taints the argument variables, and the compiler can't see the calling functions, the argument variables are safe
-    //if the calling function taints the argument variables, and the compiler can the the calling functions, the argument variables are safe thanks to the memory orderings
-
-    //in that sense, std::atomic_signal_fence(std::memory_order_seq_cst) only applies to the content of the calling function
-
-    //this means that a correctly implemented + defined function is a function that behaves as if there is no memory ordering, the only allowed ordering is the implicit ordering based on the arguments or the return result
-    //this is a very important note
-    //sequential consistency only applies to two might-be concurrent functions, if a function is not concurrent, there is no need for sequential consistency
-    //if the program is misbehaved if there is a reordering of a-two-has-to-be-successive-cant-be-proved-by-compiler-concurrent functions, we must emit a sequential consistency signal to the compiler
-    //this is the only correct guide that we must adhere to 
-
-    //why do we implement this memory_safe_synchronizer again? because the arguments that passed in std::unique_ptr<WorkOrder> might not taint the variables that std::unique_ptr<Synchronizable> protects, there are proofs of misimplementations, we dont go there yet 
-
     class MemorySafeSynchronizer{
 
         private:
@@ -762,6 +739,12 @@ namespace dg::network_host_asynchronous{
                 this->pointer_set.clear();
             }
     };
+
+    //this is a small component < 1000 lines yet a very crucial backbone component for our forwarding + backwarding tiles
+    //we are relying on this to be consistent, do hot + cold dispatch, keep all CPUs running
+    //in order for that to happen, we can control our "virtuous" dispatches, keep the compute size to be < certain sizes
+    //we aren't really waiting, so there is no synchronization overheads
+    //we are in the nosync business of logit density mining
 }
 
 #endif

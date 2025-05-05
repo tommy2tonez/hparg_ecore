@@ -51,18 +51,8 @@ namespace dg::network_fileio_chksum_x{
     static inline constexpr size_t DG_LEAST_DIRECTIO_BLK_SZ                 = dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ;
 
     static inline constexpr bool HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT    = false; //this is only used as the last resort for increasing true positive or decreasing false positive
-    static inline constexpr bool FILE_HEADER_MAP_SZ                         = size_t{1} << 20;  
+    static inline constexpr bool FILE_HEADER_MAP_SZ                         = 256;  
     static inline constexpr uint32_t HASH_SECRET                            = 4228045292ULL;
-
-    auto raw_fp_to_array(const char * fp) noexcept -> std::array<char, MAX_FILE_PATH_SZ>{
-
-        std::string_view sv(fp);
-        size_t new_sz = std::min(MAX_FILE_PATH_SZ, static_cast<size_t>(sv.size()));
-        std::array<char, MAX_FILE_PATH_SZ> rs{};
-        std::copy(fp, std::next(fp, new_sz), rs.data());
-
-        return rs; 
-    }
 
     struct FileHeaderMapBucket{
         std::array<char, MAX_FILE_PATH_SZ> fp;
@@ -80,7 +70,7 @@ namespace dg::network_fileio_chksum_x{
         }
     };
 
-    template <class T>
+    template <class T, class MapSize>
     class DistributedFileHeaderMap{
 
         public:
@@ -89,62 +79,65 @@ namespace dg::network_fileio_chksum_x{
                 return std::nullopt;
             }
 
-            static void push(...) noexcept{}
+            static void put(...) noexcept{}
     };
 
-    template <>
-    class DistributedFileHeaderMap<std::integral_constant<bool, true>>{
+    template <size_t MAP_SZ>
+    class DistributedFileHeaderMap<std::integral_constant<bool, true>, std::integral_constant<size_t, MAP_SZ>>{
 
         private:
 
-            using bucket_loader_t   = dg::network_datastructure::atomic_loader::reflectible_relaxed_loader<FileHeaderMapBucket>; //we got bad feedbacks about this, alright, it's bad, yet I have run numbers for 1024 entries + 1M bucket slots, chances is low
-            using self              = DistributedFileHeaderMap;
+            struct Bucket{
+                dg::network_datastructure::unordered_map_variants::unordered_node_map<std::string, FileHeader> fileheader_map;
+                std::mutex mtx;
+            };
 
-            static inline std::unique_ptr<bucket_loader_t[]> bucket_array = []{
-                
-                auto rs = std::make_unique<bucket_loader_t[]>(FILE_HEADER_MAP_SZ);
+            using self = DistributedFileHeaderMap;
 
-                for (size_t i = 0u; i < FILE_HEADER_MAP_SZ; ++i){
-                    rs[i].dump(FileHeaderMapBucket{{}, {}, false});
-                }
+            static inline std::unique_ptr<Bucket[]> bucket_array = []{
 
-                return rs;
+                return std::make_unique<Bucket[]>(MAP_SZ);
             }();
 
         public:
 
             static auto read(const char * fp) noexcept -> std::optional<FileHeader>{
 
-                stdx::seq_cst_guard seqcst_tx; //we are placing a seqcst_tx to avoid global variable access error, unlikely
+                std::string_view fp_key = std::string_view(fp);
+                size_t hashed_value     = dg::network_hash::murmur_hash(fp_key.data(), fp_key.size());
+                size_t bucket_idx       = hashed_value % MAP_SZ;
+                auto& bucket_ptr        = self::bucket_array[bucket_idx];
 
-                std::array<char, MAX_FILE_PATH_SZ> char_fp  = raw_fp_to_array(fp);
-                size_t hashed_value                         = dg::network_hash::hash_reflectible(char_fp);
-                size_t idx                                  = hashed_value % FILE_HEADER_MAP_SZ;
-                FileHeaderMapBucket bucket                  = self::bucket_array[idx].load();
+                stdx::xlock_guard<std::mutex> lck_grd(bucket_ptr.mtx);
 
-                if (!bucket.is_initialized){
+                auto map_ptr            = bucket_ptr.fileheader_map.find(fp_key);
+
+                if (map_ptr == bucket_ptr.fileheader_map.end()){
                     return std::nullopt;
                 }
 
-                if (bucket.fp != char_fp){
-                    return std::nullopt;
-                }
-
-                return bucket.file_header;
+                return map_ptr->second;
             }
 
-            static void push(const char * fp, FileHeader header) noexcept{
+            static auto put(const char * fp, FileHeader header) noexcept -> exception_t{
 
-                stdx::seq_cst_guard seqcst_tx; //we are placing a seqcst_tx to avoid global variable access error, unlikely
+                std::string_view fp_key = std::string_view(fp);
+                size_t hashed_value     = dg::network_hash::murmur_hash(fp_key.data(), fp_key.size());
+                size_t bucket_idx       = hashed_value % MAP_SZ;
+                auto& bucket_ptr        = self::bucket_array[bucket_idx];
 
-                std::array<char, MAX_FILE_PATH_SZ> char_fp  = raw_fp_to_array(fp);
-                size_t hashed_value                         = dg::network_hash::hash_reflectible(char_fp);
-                size_t idx                                  = hashed_value % FILE_HEADER_MAP_SZ;
+                stdx::xlock_guard<std::mutex> lck_grd(bucket_ptr.mtx);
 
-                self::bucket_array[idx].dump(FileHeaderMapBucket{char_fp, header, true});
+                try{
+                    bucket_ptr.fileheader_map[fp_key] = header;
+                    return dg::network_exception::SUCCESS;
+                } catch (...){
+                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                }
             }
     };
 
+    using file_header_map_t = DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>, std::integral_constant<size_t, FILE_HEADER_MAP_SZ>>; 
 
     auto dg_internal_get_metadata_fp(const char * fp) noexcept -> std::expected<std::filesystem::path, exception_t>{
 
@@ -333,7 +326,7 @@ namespace dg::network_fileio_chksum_x{
         file_create_guard.release();
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::push(fp, header);
+            file_header_map_t::put(fp, header);
         }
 
         return dg::network_exception::SUCCESS;
@@ -397,7 +390,7 @@ namespace dg::network_fileio_chksum_x{
         }
         
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            std::optional<FileHeader> fh = DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::read(fp);
+            std::optional<FileHeader> fh = file_header_map_t::read(fp);
 
             if (!fh.has_value() || !dg::network_trivial_serializer::reflectible_is_equal(fh.value(), header.value())){
                 return dg::network_exception::CORRUPTED_FILE;
@@ -442,7 +435,7 @@ namespace dg::network_fileio_chksum_x{
         }
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            std::optional<FileHeader> fh = DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::read(fp);
+            std::optional<FileHeader> fh = file_header_map_t::read(fp);
 
             if (!fh.has_value() || !dg::network_trivial_serializer::reflectible_is_equal(fh.value(), header.value())){
                 return dg::network_exception::CORRUPTED_FILE;
@@ -504,7 +497,7 @@ namespace dg::network_fileio_chksum_x{
         }
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::push(fp, header);
+            file_header_map_t::put(fp, header);
         }
 
         return dg::network_exception::SUCCESS;
@@ -542,7 +535,7 @@ namespace dg::network_fileio_chksum_x{
         }
 
         if constexpr(HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT){
-            DistributedFileHeaderMap<std::integral_constant<bool, HAS_DISTRIBUTED_FILE_HEADER_MAP_SUPPORT>>::push(fp, header);
+            file_header_map_t::put(fp, header);
         }
        
         return dg::network_exception::SUCCESS;

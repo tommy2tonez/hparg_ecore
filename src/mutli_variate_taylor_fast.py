@@ -6,6 +6,14 @@ import random
 from typing import Protocol
 import sys
 
+#new operations
+
+#2sum
+#3sum
+#4sum
+
+#
+
 def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: float = 0.000001) -> float:
 
     if derivative_order == 0:
