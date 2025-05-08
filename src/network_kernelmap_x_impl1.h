@@ -37,10 +37,10 @@ namespace dg::network_kernelmap_x_impl1::model{
 
     struct ReferenceMemoryNode: MemoryNode{
         size_t reference;
-        std::chrono::nanoseconds last_modified;
+        std::chrono::time_point<std::chrono::steady_clock> last_modified;
     };
 
-    struct HeapNode: MemoryNode{
+    struct HeapNode: ReferenceMemoryNode{
         size_t idx;
     };
 
@@ -48,6 +48,7 @@ namespace dg::network_kernelmap_x_impl1::model{
         HeapNode * node;
         char * mapped_region;
         size_t off;
+        fsys_ptr_t fsys_ptr; 
 
         inline auto ptr() const noexcept -> void *{
 
@@ -104,7 +105,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
         constexpr auto operator()(const HeapNode& lhs, const HeapNode& rhs) const noexcept -> bool{
 
-            return std::make_tuple(lhs.reference, lhs.last_modified.count()) < std::make_tuple(rhs.reference, rhs.last_modified.count()); 
+            return std::make_tuple(lhs.reference, lhs.last_modified) < std::make_tuple(rhs.reference, rhs.last_modified); 
         } 
     };
 
@@ -219,7 +220,10 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             auto remap_try(MapResource resource, fsys_ptr_t ptr) noexcept -> std::expected<std::optional<MapResource>, exception_t>{
 
                 if (dg::memult::ptrcmp_equal(dg::memult::region(ptr, this->memregion_sz.value), resource.fsys_ptr)){
-                    return std::optional<MapResource>(MapResource{resource.node, resource.mapped_region, dg::memult::region_offset(ptr, this->memregion_sz.value)});
+                    return std::optional<MapResource>(MapResource{.node             = resource.node, 
+                                                                  .mapped_region    = resource.mapped_region, 
+                                                                  .off              = dg::memult::region_offset(ptr, this->memregion_sz.value),
+                                                                  .fsys_ptr         = resource.fsys_ptr});
                 }
 
                 return std::optional<MapResource>(std::nullopt);
@@ -277,57 +281,113 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 size_t ptr_offset       = dg::memult::region_offset(ptr, this->memregion_sz.value);
                 auto dict_ptr           = this->allocation_dict.find(ptr_region);
 
+                //found cache_map
+                //cache map entry guarantees that the page is valid, increment + update mofidication time return MapResource 
+
                 if (dict_ptr != this->allocation_dict.end()){
-                    HeapNode * found_node = dict_ptr->second;
-                    found_node->reference += 1;
-                    found_node->last_modified = stdx::unix_timestamp();
+                    HeapNode * found_node       = dict_ptr->second;
+                    found_node->reference       += 1;
+                    found_node->last_modified   = std::chrono::steady_clock::now();
+
                     heap_push_down_at(found_node->idx);
-                    return MapResource{found_node, found_node->cptr.get(), ptr_offset};
+
+                    return MapResource{.node            = found_node, 
+                                       .mapped_region   = found_node->cptr.get(), 
+                                       .off             = ptr_offset,
+                                       .fsys_ptr        = ptr_region};
                 }
+
+                //did not find the associated cache page, the page is in the file system
 
                 HeapNode * cand = this->priority_queue[0].get();
 
                 if (cand->fsys_ptr != NULL_FSYS_PTR){
-                    if (cand->reference == 0u){
-                        exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region, this->memregion_sz.value);
-
-                        if (dg::network_exception::is_failed(err)){
-                            return std::unexpected(err);
-                        }
-
-                        fsys_ptr_t removing_region = cand->fsys_ptr;
-                        this->fsys_loader->unload(*cand);
-                        this->allocation_dict.erase(removing_region);
-                        this->allocation_dict.insert(std::make_pair(ptr_region, cand));
-                        std::swap(static_cast<MemoryNode&>(*cand), this->tmp_space);
-                        cand->reference += 1;
-                        cand->last_modified = stdx::unix_timestamp();
-                        this->heap_push_down_at(0u);
-
-                        return MapResource{cand, cand->cptr.get(), ptr_offset};
+                    if (cand->reference != 0u){
+                        return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION); //OK
                     }
 
-                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                    //load into the memory node, memory node is guaranteed to be empty
+                    exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region, this->memregion_sz.value);
+
+                    if (dg::network_exception::is_failed(err)){
+                        return std::unexpected(err); //OK, no actions on internal states, returns unexpected(err);
+                    }
+
+                    //data is loaded
+                    //we'll try to make the tx atomic
+
+                    //--confusing--
+                    fsys_ptr_t removing_region = cand->fsys_ptr;
+                    this->fsys_loader->unload(*cand); //unload the cache page
+                    size_t rm_sz = this->allocation_dict.erase(removing_region); //evict the cache page from the allocation dict
+
+                    //at this point, in the perspective of cand, we are in a valid state as if the cache page (or fsys_ptr) was never loaded, this is a perfect inverse operation
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (rm_sz != 1u){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    //the current top node is associated with the ptr_region, do cache page registration
+                    auto [_, status] = this->allocation_dict.insert(std::make_pair(ptr_region, cand));
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!status){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    //this is the buggy part (we'll attempt to swap the resource of tmp_space and cand, new tmp_space is guaranteed to be empty, and cand to represents the tmp_space)
+                    //this only works if <cptr[], mem_sz> is not a problem to other problems, this is a bad assumption
+                    std::swap(static_cast<MemoryNode&>(*cand), this->tmp_space);
+                    //--end-of-confusing--
+
+                    cand->reference += 1;
+                    cand->last_modified = std::chrono::steady_clock::now();
+
+                    this->heap_push_down_at(0u);
+
+                    return MapResource{.node            = cand, 
+                                       .mapped_region   = cand->cptr.get(), 
+                                       .off             = ptr_offset,
+                                       .fsys_ptr        = ptr_region};
                 }
 
                 exception_t err = this->fsys_loader->load(*cand, ptr_region, this->memregion_sz.value);
 
                 if (dg::network_exception::is_failed(err)){
-                    return std::unexpected(err);
+                    return std::unexpected(err); //OK, cand internal state atomicity is guaranteed by the callee
                 }
 
-                this->allocation_dict.insert(std::make_pair(ptr_region, cand));
+                //attempt to register ptr_region -> cand
+                auto [_, status] = this->allocation_dict.insert(std::make_pair(ptr_region, cand));
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!status){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
                 cand->reference += 1;
-                cand->last_modified = stdx::unix_timestamp();
+                cand->last_modified = std::chrono::steady_clock::now();
+
                 this->heap_push_down_at(0u);
 
-                return MapResource{cand, cand->cptr.get(), ptr_offset};
+                return MapResource{.node            = cand, 
+                                   .mapped_region   = cand->cptr.get(), 
+                                   .off             = ptr_offset,
+                                   .fsys_ptr        = ptr_region};
             }
 
             void internal_unmap(MapResource map_resource) noexcept{
 
-                map_resource.node->reference -= 1;
-                map_resource.node->last_modified = stdx::unix_timestamp();
+                map_resource.node->reference        -= 1;
+                map_resource.node->last_modified    = std::chrono::steady_clock::now();
+
                 heap_push_up_at(map_resource.node->idx);
             } 
     };
@@ -385,7 +445,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return std::unexpected(resource.error());
                 }
 
-                return ConcurrentMapResource{resource.value(), map_id.value()};
+                return ConcurrentMapResource{.resource  = resource.value(), 
+                                             .map_id    = map_id.value()};
             }
 
             auto remap_try(ConcurrentMapResource map_resource, fsys_ptr_t ptr) noexcept -> std::expected<std::optional<ConcurrentMapResource>, exception_t>{
@@ -410,7 +471,8 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     return std::optional<ConcurrentMapResource>(std::nullopt);
                 }
 
-                return std::optional<ConcurrentMapResource>(ConcurrentMapResource{remap_resource.value().value(), map_id.value()});
+                return std::optional<ConcurrentMapResource>(ConcurrentMapResource{.resource = remap_resource.value().value(), 
+                                                                                  .map_id   = map_id.value()});
             }
 
             void unmap(ConcurrentMapResource map_resource) noexcept{
@@ -418,6 +480,12 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 map_table[map_resource.map_id]->unmap(map_resource.resource);
             }
     };
+
+    //OK
+    //----
+    //we'll need to do accurate concurrent_mapping to increase performance
+    //each page should be 10MB to avoid overheads
+    //we'll be dispatching tons of tile on a page to avoid page_fault 
 
     struct Factory{
 
@@ -461,7 +529,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 node.cptr           = off_sptr(memblk, i * memregion_sz);
                 node.fsys_ptr       = NULL_FSYS_PTR;
                 node.reference      = 0u;
-                node.last_modified  = stdx::unix_timestamp();
+                node.last_modified  = std::chrono::steady_clock::now();
                 priority_queue.push_back(std::make_unique<HeapNode>(std::move(node)));
             }
 
@@ -470,7 +538,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             tmp.cptr            = off_sptr(memblk, memory_node_count * memregion_sz);
             tmp.fsys_ptr        = NULL_FSYS_PTR;
             tmp.reference       = 0u;
-            tmp.last_modified   = stdx::unix_timestamp(); 
+            tmp.last_modified   = std::chrono::steady_clock::now(); 
             auto lck            = std::make_unique<Lock>();
 
             return std::make_unique<Map>(std::move(priority_queue), std::move(allocation_dict), spawn_fsys_loader(alias_map, memregion_sz), std::move(tmp), std::move(lck), memregion_sz);

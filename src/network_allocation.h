@@ -1694,6 +1694,12 @@ namespace dg::network_allocation{
 
         return std::make_unique<T>(std::forward<Args>(args)...);
     }
+
+    template <class T, class ...Args>
+    auto make_shared(Args&& ...args) -> decltype(auto){
+
+        return std::make_shared<T>(std::forward<Args>(args)...);
+    }
 }
 
 #endif

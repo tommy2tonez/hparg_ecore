@@ -161,6 +161,68 @@ namespace dg::network_host_asynchronous{
             }
     };
 
+    class FinitePoolLinearWorkOrderContainer: public virtual WorkOrder{
+
+        private:
+
+            dg::vector<std::unique_ptr<WorkOrder>> wo_container; 
+
+        public:
+
+            FinitePoolLinearWorkOrderContainer(size_t cap): wo_container(){
+
+                this->wo_container.reserve(cap);
+            }
+
+            auto add(std::unique_ptr<WorkOrder>&& wo) noexcept -> exception_t{
+
+                if (this->wo_container.size() == this->wo_container.capacity()){
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                this->wo_container.push_back(std::move(wo));
+                return dg::network_exception::SUCCESS;
+            }
+            
+            auto size() const noexcept -> size_t{
+
+                return this->wo_container.size();
+            }
+
+            auto get(size_t idx) noexcept -> std::unique_ptr<WorkOrder>&{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->wo_container.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                return this->wo_container[idx];
+            }
+
+            void clear() noexcept{
+
+                this->wo_container.clear();
+            }
+
+            void run() noexcept{
+
+                for (auto& wo: this->wo_container){
+                    wo->run();
+                }
+            }            
+    };
+
+    auto make_virtual_workorder_sequential_container(size_t sz) -> std::expected<std::unique_ptr<FinitePoolLinearWorkOrderContainer>, exception_t>{
+
+        try{
+            return dg::network_allocation::make_unique<FinitePoolLinearWorkOrderContainer>(sz);
+        } catch (...){
+            return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+        }
+    }
+
     template <class Lambda>
     auto make_virtual_work_order(Lambda lambda) -> std::unique_ptr<WorkOrder>{
 
@@ -365,7 +427,7 @@ namespace dg::network_host_asynchronous{
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto rs = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<TaskSynchronizer>)();
+                auto rs = dg::network_exception::to_cstyle_function(dg::network_allocation::make_unique<TaskSynchronizer>)(); //
 
                 if (!rs.has_value()){
                     return std::unexpected(rs.error());
@@ -375,21 +437,21 @@ namespace dg::network_host_asynchronous{
                     rs.value()->release();
                 });
 
-                auto smp_reference      = rs.value()->get_observer(); 
-                auto task               = [smp_reference, work_order_arg = std::move(work_order)]() noexcept{
+                auto smp_reference      = rs.value()->get_observer();  //
+                auto task               = [smp_reference, work_order_arg = std::move(work_order)]() noexcept{ //
                     work_order_arg->run();
                     //better safe than sorry
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     smp_reference->release();
                 };
 
-                auto virtual_task       = dg::network_exception::to_cstyle_function(make_virtual_work_order<decltype(task)>)(std::move(task));
+                auto virtual_task       = dg::network_exception::to_cstyle_function(make_virtual_work_order<decltype(task)>)(std::move(task)); //
 
                 if (!virtual_task.has_value()){
                     return std::unexpected(virtual_task.error());
                 }
 
-                exception_t async_err   = this->async_device->exec(std::move(virtual_task.value()));
+                exception_t async_err   = this->async_device->exec(std::move(virtual_task.value())); //
 
                 if (dg::network_exception::is_failed(async_err)){
                     return std::unexpected(async_err);
@@ -397,7 +459,7 @@ namespace dg::network_host_asynchronous{
 
                 rs_grd.release();
 
-                return std::unique_ptr<Synchronizable>(std::move(rs.value()));
+                return std::unique_ptr<Synchronizable>(std::move(rs.value())); //
             }
     };
 
@@ -615,9 +677,13 @@ namespace dg::network_host_asynchronous{
                 if (!load_balance_handle.has_value()){
                     return std::unexpected(load_balance_handle.error());
                 }
- 
-                async_device_id_t async_device_id = this->load_balancer->get_async_device_id(load_balance_handle.value());
-                auto map_ptr = this->async_device_map.find(async_device_id);
+
+                auto load_balance_handle_grd        = stdx::resource_guard([&]() noexcept{
+                    this->load_balancer->close_handle(load_balance_handle.value());
+                });
+
+                async_device_id_t async_device_id   = this->load_balancer->get_async_device_id(load_balance_handle.value());
+                auto map_ptr                        = this->async_device_map.find(async_device_id);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (map_ptr == this->async_device_map.end()){
@@ -638,22 +704,41 @@ namespace dg::network_host_asynchronous{
                 auto virtual_task = dg::network_exception::to_cstyle_function(make_virtual_work_order<decltype(task)>)(std::move(task));
 
                 if (!virtual_task.has_value()){
-                    this->load_balancer->close_handle(load_balance_handle.value());
                     return std::unexpected(virtual_task.error());                    
                 }
 
                 std::expected<std::unique_ptr<Synchronizable>, exception_t> syncer = map_ptr->second->exec(std::move(virtual_task.value()));
 
                 if (!syncer.has_value()){
-                    this->load_balancer->close_handle(load_balance_handle.value());
                     return std::unexpected(syncer.error());
                 }
+
+                load_balance_handle_grd.release();
 
                 return syncer;
             }
     };
 
     //100%
+
+    //the problem is that we want to use this asynchronous device as much as possible (literally)
+    //because we could abstract the compute or the RAM fetch without being afraid of affecting the system
+    //we have a "proven" component to maximize certain things 
+    //we have thought very long and hard, the est_cpu_flops + est_ram_flops are the minimum yet sufficient variables to dispatch asynchronous workorders
+
+    //cpu flops is somewhat an affined variable (if we are not talking about inter-comm like relaxed cmpexch + memory orderings + friends)
+    //ram flops is somewhat a global variable
+
+    //we admit that this is an acceptable approach, not an all round approach
+    //because most of the time, we are either dispatching O(n) cpu_flops + O(n) ram flops
+    //                          or we are dispatching O(n^2) cpu flops  + O(n) ram flops
+
+    //the latter is CPU bound, the former is RAM bound
+    //we'd want to have a RAM boundaries for the two type of workers
+
+    //RAM_HEAVY pulling 50% and CPU_HEAVY pulling another 50%
+    //we'd attempt to bottleneck that by using hyperthreading (to limit compute) or the # of working cores 
+    //this is very important
 
     class XLoadBalancedAsyncDeviceX: public virtual XLoadBalancedAsyncDeviceXInterface{
 

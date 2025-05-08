@@ -4204,7 +4204,7 @@ namespace dg::network_rest_frame::client_impl1{
     //we have solved 1/3 of the leetcode 100
     //we'll definitely be back with the fling, it's complicated, very
 
-    //we'll move on to implement other things that make this work, we'll "rearrange" things by making a semantic converter so it could be "compatible" to "legacy people"
+    //we'll move on to implement other things that make this worked, we'll "rearrange" things by making a semantic converter so it could be "compatible" to "legacy people"
     //for now, this is the minimum viable product, we have done a good job at implementing the protocol (we dont really care abt security or POST or whatever, because we know that is BS, not future proof, the only safe comm is symmetric encoding comm, which is pairwise populated before running the program)
 
     class DistributedRestController: public virtual RestControllerInterface{

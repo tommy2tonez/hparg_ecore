@@ -989,9 +989,8 @@ namespace stdx{
     } 
 
     template <class T>
-    union hdi_container{
-        alignas(stdx::hdi_size()) T value;
-        alignas(stdx::hdi_size()) char shape[round_hdi_size(std::integral_constant<size_t, sizeof(T)>{})];
+    struct hdi_container{
+        T value;
     };
 
     template <class T>

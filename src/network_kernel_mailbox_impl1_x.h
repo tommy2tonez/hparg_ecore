@@ -39,12 +39,13 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
             //alright, people would argue that this is hardware_destructive_interference_sz, for best practices, I agree
 
-            stdx::hdi_container<std::atomic<size_t>> count;
-            stdx::hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> since;
+            stdx::inplace_hdi_container<std::atomic<size_t>> count;
+            stdx::inplace_hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> since;
 
         public:
 
-            AtomicMeter() = default;
+            AtomicMeter() noexcept: count(std::in_place_t{}, 0u),
+                                    since(std::in_place_t{}, std::chrono::steady_clock::now()){};
 
             void tick(size_t incoming_sz) noexcept{
 
@@ -668,6 +669,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     static inline constexpr size_t DEFAULT_KEYVALUE_FEED_SIZE               = size_t{1} << 10; 
     static inline constexpr size_t DEFAULT_KEY_FEED_SIZE                    = size_t{1} << 8;
     static inline constexpr uint32_t PACKET_SEGMENT_SERIALIZATION_SECRET    = 3036322422ULL; //we randomize the secret within the uint32_t range to make sure that we dont have internal corruptions
+    static inline constexpr uint32_t PACKET_INTEGRITY_SECRET                = 2203221141ULL;
 
     //OK
     struct GlobalIdentifier{
@@ -691,7 +693,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         GlobalIdentifier id;
         uint64_t segment_idx;
         uint64_t segment_sz;
-        // uint64_t murmur_hashed_value;
+
+        uint64_t mm_integrity_value;
+        bool has_mm_integrity_value;
     };
 
     //OK
@@ -704,11 +708,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<dg::string, exception_t>{
 
-        using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t>;
+        using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t, uint64_t, bool>;
+
         size_t header_sz    = dg::network_compact_serializer::integrity_size(header_t{});
         size_t old_sz       = segment.buf.size();
         size_t new_sz       = old_sz + header_sz;
-        auto header         = header_t{segment.id, segment.segment_idx, segment.segment_sz};
+        auto header         = header_t{segment.id, segment.segment_idx, segment.segment_sz, segment.mm_integrity_value, segment.has_mm_integrity_value};
 
         try{
             segment.buf.resize(new_sz);
@@ -722,7 +727,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     static auto deserialize_packet_segment(dg::string&& buf) noexcept -> std::expected<PacketSegment, exception_t>{
 
-        using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t>;
+        using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t, uint64_t, bool>;
+
         size_t header_sz    = dg::network_compact_serializer::integrity_size(header_t{});
         size_t buf_sz       = buf.size();
         auto header         = header_t{}; 
@@ -744,11 +750,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         PacketSegment rs    = {};
         rs.buf              = std::move(buf);
-        std::tie(rs.id, rs.segment_idx, rs.segment_sz) = header;
+        std::tie(rs.id, rs.segment_idx, rs.segment_sz, rs.mm_integrity_value, mm.has_mm_integrity_value) = header;
 
         return rs;
     }
 
+    //OK
     static auto internal_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
 
         if (pkt.total_segment_sz != pkt.collected_segment_sz){
@@ -783,6 +790,32 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         for (size_t i = 0u; i < pkt.total_segment_sz; ++i){
             out_it = std::copy(pkt.data[i].buf.begin(), pkt.data[i].buf.end(), out_it);
+        }
+
+        return rs;
+    }
+
+    //OK
+    static auto internal_integrity_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
+
+        if (pkt.data.size() == 0u){
+            return internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
+        }
+
+        uint64_t mm_integrity_value                 = pkt.data.front().mm_integrity_value;
+        bool has_mm_integrity_value                 = pkt.data.front().has_mm_integrity_value;
+        std::expected<dg::string, exception_t> rs   = internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
+
+        if (!rs.has_value()){
+            return rs;
+        }
+
+        if (has_mm_integrity_value){
+            uint64_t integrity_value = dg::network_hash::murmur_hash(rs->data(), rs->size(), PACKET_INTEGRITY_SECRET);
+
+            if (mm_integrity_value != integrity_value){
+                return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED);
+            }
         }
 
         return rs;
@@ -1210,25 +1243,29 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     };
 
     //OK, version control by internalizing dependencies, we wont have version control problems
+    //the complex reactor will try to subscribe -> the smp_queue serialized access state, and notify most of the times (not all of the time if the threshold is reached)
+
     class ComplexReactor{
 
         private:
 
-            dg::vector<std::shared_ptr<dg_binary_semaphore>> mtx_queue;
-            size_t mtx_queue_cap;
-            std::mutex mtx_mtx_queue;
-            stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
-            stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold;
-            stdx::inplace_hdi_container<std::atomic<size_t>> mtx_queue_sz;
+            dg::vector<std::shared_ptr<dg_binary_semaphore>> smp_queue; //smp_queue serialized access state
+            size_t smp_queue_cap; //const states
+            std::mutex mtx_smp_queue; //smp_queue serialized access state 
+
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> counter; //counter states 
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold; //mostly_const (preinitialized)
+
+            stdx::inplace_hdi_container<std::atomic<size_t>> smp_queue_sz; //smp_queue serialized access states
 
         public:
 
-            ComplexReactor(size_t mtx_queue_cap): mtx_queue(),
-                                                  mtx_queue_cap(mtx_queue_cap), 
-                                                  mtx_mtx_queue(),
+            ComplexReactor(size_t smp_queue_cap): smp_queue(),
+                                                  smp_queue_cap(smp_queue_cap), 
+                                                  mtx_smp_queue(),
                                                   counter(std::in_place_t{}, 0),
                                                   wakeup_threshold(std::in_place_t{}, 0),
-                                                  mtx_queue_sz(std::in_place_t{}, 0u){}
+                                                  smp_queue_sz(std::in_place_t{}, 0u){}
 
             void increment(size_t sz) noexcept{
 
@@ -1246,31 +1283,22 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
 
                     std::atomic_signal_fence(std::memory_order_seq_cst);
-                    size_t current_queue_sz = this->mtx_queue_sz.value.load(std::memory_order_relaxed);
+                    size_t current_queue_sz = this->smp_queue_sz.value.load(std::memory_order_relaxed);
 
                     if (current_queue_sz == 0u){
                         return;
                     }
 
-                    bool try_lock_rs = this->mtx_mtx_queue.try_lock(); 
+                    bool try_lock_rs = this->mtx_smp_queue.try_lock(); 
 
                     if (!try_lock_rs){
                         stdx::lock_yield(FAILED_LOCK_SLEEP);
                         continue;
                     }
 
-                    {
-                        stdx::seq_cst_guard seqcst_tx;
-                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
+                    this->unsafe_notify_subscribers();
+                    this->mtx_smp_queue.unlock();
 
-                        for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            dg::network_exception_handler::err_log(this->mtx_queue[i]->release());
-                        }
-
-                        this->mtx_queue.clear();
-                    }
-
-                    this->mtx_mtx_queue.unlock();
                     return;
                 }
             }
@@ -1299,35 +1327,31 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
 
                 if (current >= expected){
-                    return;
+                    return; //OK
                 }
 
-                std::shared_ptr<dg_binary_semaphore> spinning_mtx = std::make_shared<dg_binary_semaphore>(0);
+                std::shared_ptr<dg_binary_semaphore> spinning_smp = dg::network_allocation::make_shared<dg_binary_semaphore>(0);
 
                 uint8_t action = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_mtx_queue);
+                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_smp_queue);
 
-                    if (this->mtx_queue.size() == this->mtx_queue_cap){
-                        return ACTION_NO;
+                    //register the subscriber to the queue
+                    //hope that the subscriber will be notified if a certain threshold is reached, not guaranteed 
+                    //let's see where the notifications are
+                    //alright, wait is very complicated to implement, the problem we are facing is the unit problem
+                    //I'm telling yall that the unit in host_asynchronous can be solved, yet the unit problem in the mailbox or UDP 8K cannot be solved
+                    //this is an entire different radix of things, our entire system only point of compromision is THIS
+
+                    exception_t register_err    = this->unsafe_register_subscriber(spinning_smp);
+                    
+                    if (dg::network_exception::is_failed(register_err)){
+                        return ACTION_NO; //OK
                     }
 
-                    this->mtx_queue.push_back(spinning_mtx);
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    this->mtx_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); 
+                    intmax_t new_current        = this->counter.value.load(std::memory_order_relaxed); 
 
                     if (new_current >= expected){
-                        std::atomic_signal_fence(std::memory_order_seq_cst);
-                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
-                        std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                        for (size_t i = 0u; i < this->mtx_queue.size(); ++i){
-                            dg::network_exception_handler::err_log(this->mtx_queue[i]->release());
-                        }
-
-                        this->mtx_queue.clear();
+                        this->unsafe_notify_subscribers();
                     }
 
                     return ACTION_ACQUIRE;
@@ -1336,12 +1360,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 switch (action){
                     case ACTION_NO:
                     {
+                        std::this_thread::sleep_for(waiting_time);
                         break;
                     }
                     case ACTION_ACQUIRE:
                     {
-                        dg::network_exception_handler::err_log(spinning_mtx->try_acquire_for(waiting_time));
-                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        std::expected<bool, exception_t> smp_err = spinning_smp->try_acquire_for(waiting_time);
+
+                        if (!smp_err.has_value()){
+                            dg::network_log_stackdump::error(dg::network_exception::verbose(smp_err.error()));
+                        }
+
                         break;
                     }
                     default:
@@ -1354,6 +1383,39 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         }
                     }
                 }
+            }
+
+        private:
+
+            auto unsafe_register_subscriber(std::shared_ptr<dg_binary_semaphore> smp) noexcept -> exception_t{
+
+                if (smp == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                if (this->smp_queue.size() == this->smp_queue_cap){
+                    return dg::network_exception::QUEUE_FULL;
+                }
+
+                this->smp_queue.push_back(std::move(smp));
+                stdx::seq_cst_guard seqcst_tx;
+                this->smp_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
+            }
+
+            void unsafe_notify_subscribers() noexcept{
+
+                stdx::seq_cst_guard seqcst_tx;
+                size_t old_sz = this->smp_queue_sz.value.exchange(0u, std::memory_order_relaxed);
+
+                for (size_t i = 0u; i < old_sz; ++i){ //we are inferring the sz read to establish implicit memory ordering
+                    exception_t smp_err = this->smp_queue[i]->release();
+
+                    if (dg::network_exception::is_failed(smp_err)){
+                        dg::network_log_stackdump::error(dg::network_exception::verbose(smp_err));
+                    }
+                }
+
+                this->smp_queue.clear();
             }
     };
 
@@ -1446,7 +1508,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         continue;
                     }
 
-                    if (map_ptr->second < now){
+                    if (map_ptr->second <= now){
                         exception_arr[i] = dg::network_exception::SOCKET_STREAM_TIMEOUT;
                         continue;                        
                     }
@@ -1458,8 +1520,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->thru_sz_per_load.value;
-            }
-        
+            }        
     };
 
     //OK
@@ -1753,14 +1814,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             std::unique_ptr<PacketIDGeneratorInterface> packet_id_gen;
             const size_t segment_bsz_pow2_exponent;
             const size_t pow2_max_stream_bsz;
+            bool has_mm_integrity;
 
         public:
 
             Packetizer(std::unique_ptr<PacketIDGeneratorInterface> packet_id_gen,
                        size_t segment_bsz_pow2_exponent,
-                       size_t pow2_max_stream_bsz) noexcept: packet_id_gen(std::move(packet_id_gen)),
-                                                             segment_bsz_pow2_exponent(segment_bsz_pow2_exponent),
-                                                             pow2_max_stream_bsz(pow2_max_stream_bsz){}
+                       size_t pow2_max_stream_bsz,
+                       bool has_mm_integrity) noexcept: packet_id_gen(std::move(packet_id_gen)),
+                                                        segment_bsz_pow2_exponent(segment_bsz_pow2_exponent),
+                                                        pow2_max_stream_bsz(pow2_max_stream_bsz),
+                                                        has_mm_integrity(has_mm_integrity){}
 
             auto packetize(dg::string&& buf) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t>{
 
@@ -1782,26 +1846,32 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 GlobalIdentifier pkt_stream_id = this->packet_id_gen->get_id();
 
                 if (segment_sz == 0u){
-                    PacketSegment segment   = {};
-                    segment.buf             = {};
-                    segment.id              = pkt_stream_id;
-                    segment.segment_idx     = 0u; //this is logically incorrect, we are not protected by range bro anymore
-                    segment.segment_sz      = 0u;
-                    rs.value()[0]           = std::move(segment);
+                    PacketSegment segment           = {};
+                    segment.buf                     = {};
+                    segment.id                      = pkt_stream_id;
+                    segment.segment_idx             = 0u; //this is logically incorrect, we are not protected by range bro anymore
+                    segment.segment_sz              = 0u;
+                    segment.mm_integrity_value      = this->integrity_encode(segment.buf, this->has_mm_integrity);
+                    segment.has_mm_integrity_value  = this->has_mm_integrity;
+                    rs.value()[0]                   = std::move(segment);
 
                     return rs;
                 }
 
                 if (segment_sz == 1u){ //premature very useful optimization, effectively skip 1 buffer iteration
-                    PacketSegment segment   = {};
-                    segment.buf             = std::move(buf);
-                    segment.id              = pkt_stream_id;
-                    segment.segment_idx     = 0u;
-                    segment.segment_sz      = 1u;
-                    rs.value()[0]           = std::move(segment);
+                    PacketSegment segment           = {};
+                    segment.buf                     = std::move(buf);
+                    segment.id                      = pkt_stream_id;
+                    segment.segment_idx             = 0u;
+                    segment.segment_sz              = 1u;
+                    segment.mm_integrity_value      = this->integrity_encode(segment.buf, this->has_mm_integrity);
+                    segment.has_mm_integrity_value  = this->has_mm_integrity;
+                    rs.value()[0]                   = std::move(segment);
 
                     return rs;
                 }
+
+                uint64_t integrity_value = this->integrity_encode(buf, this->has_mm_integrity); 
 
                 for (size_t i = 0u; i < segment_sz; ++i){
                     size_t first                                    = segment_bsz * i;
@@ -1810,7 +1880,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     segment.id                                      = pkt_stream_id;
                     segment.segment_idx                             = i;
                     segment.segment_sz                              = segment_sz;
-
+                    segment.mm_integrity_value                      = integrity_value;
+                    segment.has_mm_integrity_value                  = this->has_mm_integrity;
                     std::expected<dg::string, exception_t> app_buf  = dg::network_exception::cstyle_initialize<dg::string>((last - first), 0); 
 
                     if (!app_buf.has_value()){
@@ -1839,6 +1910,18 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             auto max_segment_count() const noexcept -> size_t{
 
                 return std::max(size_t{1}, this->pow2_max_stream_bsz >> this->segment_bsz_pow2_exponent);
+            }
+        
+        private:
+
+            template <class ...Args>
+            auto integrity_encode(const std::basic_string<Args...>& buf, bool has_integrity_encode) noexcept -> uint64_t{
+
+                if (!has_integrity_encode){
+                    return 0u;
+                }
+
+                return dg::network_hash::murmur_hash(buf.data(), buf.size(), PACKET_INTEGRITY_SECRET);
             }
     };
 
@@ -3048,7 +3131,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (assembled_arr[i].has_value()){
-                            std::expected<dg::string, exception_t> buf = assembled_packet_to_buffer(static_cast<AssembledPacket&&>(assembled_arr[i].value())); 
+                            std::expected<dg::string, exception_t> buf = internal_integrity_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(assembled_arr[i].value())); 
 
                             if (!buf.has_value()){
                                 dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(buf.error()));
@@ -3389,7 +3472,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         static auto get_packetizer(Address factory_addr, 
                                    size_t segment_bsz,
-                                   size_t max_packet_bsz) -> std::unique_ptr<PacketizerInterface>{
+                                   size_t max_packet_bsz,
+                                   bool has_integrity_transmit) -> std::unique_ptr<PacketizerInterface>{
 
             const size_t MIN_SEGMENT_BYTE_SZ    = size_t{1};
             const size_t MAX_SEGMENT_BYTE_SZ    = size_t{1} << 30;  
@@ -3414,7 +3498,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             return std::make_unique<Packetizer>(get_random_packet_id_generator(factory_addr),
                                                 stdx::ulog2(segment_bsz),
-                                                max_packet_bsz);
+                                                max_packet_bsz,
+                                                has_integrity_transmit);
         }  
 
         static auto get_entrance_controller(size_t queue_cap,
@@ -3930,6 +4015,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         Address factory_addr;
         uint32_t packetizer_segment_bsz;
         uint32_t packetizer_max_bsz;
+        bool packetizer_has_integrity_transmit;
 
         uint32_t gate_controller_ato_component_sz;
         uint32_t gate_controller_ato_map_capacity;
@@ -3997,7 +4083,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             static auto make_packetizer(Config config) -> std::unique_ptr<PacketizerInterface>{
 
-                return ComponentFactory::get_packetizer(config.factory_addr, config.packetizer_segment_bsz, config.packetizer_max_bsz);
+                return ComponentFactory::get_packetizer(config.factory_addr, config.packetizer_segment_bsz, config.packetizer_max_bsz, config.packetizer_has_integrity_transmit);
             }
 
             static auto make_ato_gate_controller(Config config) -> std::unique_ptr<InBoundGateInterface>{
