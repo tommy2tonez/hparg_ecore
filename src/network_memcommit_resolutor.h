@@ -104,15 +104,8 @@ namespace dg::network_memcommit_resolutor{
     //  - minimize cpu flops (preferably spinlocks whenever possible + skip to next)
     //  - minimize waiting
 
-    //I was not kidding when I said there was a client willing to buy this for $BB if we are building the framework correctly
-    //in the sense that it is 90% accurate to the maximum optimizability, and readability 
-
-    //we'd want to regionize such that all the data members in the region fits in the cache page of running CPU
-    //we'd want to have cache temporal locality as much as possible
-    //this is a hard task
-
-    //the thing is that it's insanely complicated just to do forwarding + backing tiles on-time, so this is like the black-magic for most foos, I understand ...
-    //let's build this correctly then we'll talk about maintainability
+    //I was schooled by some 3rd grade kids on the internet, that was funny
+    //we'll be working on the leetcode for few more days before we are back
 
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
@@ -1678,7 +1671,7 @@ namespace dg::network_memcommit_resolutor{
 
                 for (size_t i = 0u; i < sz; ++i){
                     std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst); 
-                    
+
                     if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){ //optimizables
                         dg::network_log_stackdump::error_fast_optional("BAD TILE PING OPERATION");
                         continue;
