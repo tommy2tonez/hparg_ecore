@@ -107,6 +107,12 @@ namespace dg::network_memcommit_resolutor{
     //I was schooled by some 3rd grade kids on the internet, that was funny
     //we'll be working on the leetcode for few more days before we are back
 
+    //the 100 leetcode problems are very crucial for our development
+    //we'll roll out the massive parallel computing engine in roughly 4 months - 1 year
+    //it's gonna including search + navigation + tile operations + two sum + three sum + four sum
+    //we'll be the firsts (probably not) to dominate the logit density mining industry
+    //we'll build a frequent patterns + finite patterns + infinite patterns + feedback system
+
     struct UnifiedMemoryIPRetrieverInterface{
         virtual ~UnifiedMemoryIPRetrieverInterface() noexcept = default;
         virtual auto ip(uma_ptr_t) noexcept -> std::expected<Address, exception_t> = 0;
