@@ -6,7 +6,6 @@
 #include <type_traits>
 #include <atomic>
 #include <limits.h>
-#include "network_log.h" 
 #include "network_segcheck_bound.h"
 #include "network_exception.h"
 #include <mutex>
@@ -15,6 +14,9 @@
 #include "network_pointer.h"
 
 namespace dg::network_memlock_proxyspin{
+
+    //we are moving to a new std where the caller has to take care of the memory orderings + friends, and this is only for relaxed operations 
+    //we have too many instances where inlinability would hinder the fences so badly, we wonder if we ever need the memory ordering at the callee at all
 
     static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = false;
 
@@ -135,7 +137,7 @@ namespace dg::network_memlock_proxyspin{
                 proxy_id_t cur_proxy    = controller::proxy_id(cur);
                 lock_state_t nxt        = controller::make(cur_proxy, controller::REFERENCE_ACQUIRED_VALUE);
                 
-                if (!lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_acq_rel)){
+                if (!lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_relaxed)){
                     return std::nullopt;
                 }
 
@@ -155,19 +157,19 @@ namespace dg::network_memlock_proxyspin{
                 };
 
                 stdx::eventloop_spin_expbackoff(lambda);
-                std::atomic_thread_fence(std::memory_order_acquire);
+                // std::atomic_thread_fence(std::memory_order_acquire);
 
                 return rs;
             }
 
             static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id) noexcept{
                 
-                lck_table[table_idx].exchange(controller::make(new_proxy_id, controller::REFERENCE_EMPTY_VALUE), std::memory_order_release);
+                lck_table[table_idx].exchange(controller::make(new_proxy_id, controller::REFERENCE_EMPTY_VALUE), std::memory_order_relaxed);
             }
             
             static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id, const increase_reference_tag){
 
-                lck_table[table_idx].exchange(controller::make(new_proxy_id, 1), std::memory_order_release);
+                lck_table[table_idx].exchange(controller::make(new_proxy_id, 1), std::memory_order_relaxed);
             }
 
             static auto internal_reference_try(size_t table_idx, proxy_id_t expected_proxy_id) noexcept -> bool{
@@ -183,7 +185,7 @@ namespace dg::network_memlock_proxyspin{
                 }
 
                 lock_state_t nxt    = controller::make(expected_proxy_id, controller::refcount(cur) + 1);
-                bool rs             = lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_acq_rel);
+                bool rs             = lck_table[table_idx].compare_exchange_weak(cur, nxt, std::memory_order_relaxed);
 
                 return rs;
             }
@@ -206,12 +208,11 @@ namespace dg::network_memlock_proxyspin{
                 };
 
                 stdx::eventloop_spin_expbackoff(lambda);
-                std::atomic_thread_fence(std::memory_order_acquire);
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].fetchSub(1u, std::memory_order_release);
+                lck_table[table_idx].fetchSub(1u, std::memory_order_relaxed);
             }
 
         public:

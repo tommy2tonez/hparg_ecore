@@ -296,6 +296,7 @@ namespace dg::network_allocation{
             }
     };
 
+    template <class Hasher>
     class MultiThreadUniformHeapAllocator: public virtual HeapAllocatorInterface,
                                            public virtual GCInterface{
 
@@ -305,22 +306,25 @@ namespace dg::network_allocation{
             size_t malloc_vectorization_sz;
             size_t free_vectorization_sz;
             size_t heap_allocator_pow2_exp_base_sz; //let me think of how to split this 
+            Hasher hasher;
 
         public:
 
             MultiThreadUniformHeapAllocator(std::vector<std::unique_ptr<SemiAutoGCHeapAllocator>> allocator_vec,
                                             size_t malloc_vectorization_sz,
                                             size_t free_vectorization_sz,
-                                            size_t heap_allocator_pow2_exp_base_sz) noexcept: allocator_vec(std::move(allocator_vec)),
-                                                                                              malloc_vectorization_sz(malloc_vectorization_sz),
-                                                                                              free_vectorization_sz(free_vectorization_sz),
-                                                                                              heap_allocator_pow2_exp_base_sz(heap_allocator_pow2_exp_base_sz){}
+                                            size_t heap_allocator_pow2_exp_base_sz,
+                                            Hasher hasher) noexcept: allocator_vec(std::move(allocator_vec)),
+                                                                     malloc_vectorization_sz(malloc_vectorization_sz),
+                                                                     free_vectorization_sz(free_vectorization_sz),
+                                                                     heap_allocator_pow2_exp_base_sz(heap_allocator_pow2_exp_base_sz),
+                                                                     hasher(std::move(hasher)){}
 
             void alloc(size_t * blk_arr, size_t blk_arr_sz, std::optional<interval_type> * rs) noexcept{
 
                 assert(stdx::is_pow2(allocator_vec.size()));
 
-                size_t allocator_idx                = dg::network_concurrency::this_thread_idx() & (this->allocator_vec.size() - 1u);
+                size_t allocator_idx                = this->hasher(dg::network_concurrency::this_thread_idx()) & (this->allocator_vec.size() - 1u);
                 auto internal_resolutor             = InternalMallocFeedResolutor{};
                 internal_resolutor.dst              = &this->allocator_vec[allocator_idx];
                 internal_resolutor.allocation_off   = allocator_idx << this->heap_allocator_pow2_exp_base_sz; 
@@ -593,7 +597,7 @@ namespace dg::network_allocation{
             std::vector<Allocation> freebin_vec;
             size_t freebin_vec_cap;
 
-            std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator; //we have to defer std::free for the reason that this operation must be noblock, we offload the responsibility to an intermediate container
+            std::shared_ptr<HeapAllocatorInterface> heap_allocator; //we have to defer std::free for the reason that this operation must be noblock, we offload the responsibility to an intermediate container
             std::shared_ptr<DeferDeallocationContainerInterface> defer_deallocation_offloader; //is there a way to make this optional?
 
             std::chrono::time_point<std::chrono::high_resolution_clock> last_flush;
@@ -630,7 +634,7 @@ namespace dg::network_allocation{
                            std::vector<Allocation> freebin_vec,
                            size_t freebin_vec_cap, 
 
-                           std::shared_ptr<MultiThreadUniformHeapAllocator> heap_allocator,
+                           std::shared_ptr<HeapAllocatorInterface> heap_allocator,
                            std::shared_ptr<DeferDeallocationContainerInterface> defer_deallocation_offloader,
 
                            std::chrono::time_point<std::chrono::high_resolution_clock> last_flush,
@@ -676,6 +680,27 @@ namespace dg::network_allocation{
                 //blk_sz <= sizeof(uint32_t) => uint16_t read of latter + 0 cmp, this is the sound solution
                 //this means we need to demote blk_sz > uint32_t, we have to specify this in our Metadata
 
+                //this is very fast
+                //we will need to do memory dereference optimization (inheritance is truly a nightmare...)
+                //we have to keep the practices of component designs + actual performance of C functions only (functions are heavily optimized by legacy people) 
+                //when we are optimizing for codes
+
+                //we need to analyze the branches hit
+                //the branches compute (preferably a i < sz cmp for loop)
+                //the fast path
+                //the slow path
+                //the memory dereferencing overheads
+                //the code size (to allow compilers to do aggressive optimization)
+                
+                //for the code size, we'd want to reduce the code size by marking a branch unlikely or __force_noinline__
+                //for the memory dereferencing, we'd want to do inheritance or static storage (static storage is truly a magic for hot_code)
+                //slow_path == internal_careful_malloc, internal_bump_allocate (maybe not)
+                //fast_path == binary graycode
+
+                //this heap allocation code is the most important lowlevel code that we will ever have to write, unless you are writing a virtual machine
+                //the problem with vector is that it is slow
+                //we have experienced deque, vector + array + static array benchmarks, the answer is that static array outperforms most of these guys, followed by deque then vector (I dont really know why)
+
                 if (this->malloc_chk_interval_counter % PUNCTUAL_CHECK_INTERVAL_SZ == 0u || Metadata::compile_time_demote_blk_sz(blk_sz) > self::MAXIMUM_SMALLBIN_BLK_SZ) [[unlikely]]{
                     return this->internal_careful_malloc(blk_sz);
                 } else [[likely]]{
@@ -690,6 +715,7 @@ namespace dg::network_allocation{
                         auto& smallbin_vec          = this->smallbin_reuse_table[actual_table_idx];
                         void * rs                   = smallbin_vec.back().user_ptr;
                         smallbin_vec.pop_back();
+
                         this->smallbin_avail_bitset ^= static_cast<uint64_t>(smallbin_vec.empty()) << actual_table_idx;
 
                         return rs;
@@ -1331,7 +1357,8 @@ namespace dg::network_allocation{
     //DEFAULT_ALIGNMENT_SZ should SUFFICE
 
     static inline constexpr size_t DEFAULT_ALIGNMENT_SZ = concurrent_dg_std_allocator_t::ALIGNMENT_SZ; 
-    using alignment_header_t = uint32_t;
+    using alignment_header_t        = uint32_t;
+    using xalign_metadata_size_t    = uint32_t;
 
     static inline auto dg_align(void * ptr, uintptr_t alignment_sz) noexcept -> void *{
 
@@ -1377,7 +1404,7 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        const size_t max_fwd_sz = alignment + (sizeof(alignment_header_t) - 1u);  
+        const size_t max_fwd_sz = alignment + (sizeof(alignment_header_t) - 1u);
 
         if (max_fwd_sz > std::numeric_limits<alignment_header_t>::max()){
             return nullptr;
@@ -1387,8 +1414,7 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        size_t align_fwd_sz = alignment - 1u;
-        size_t adj_blk_sz   = blk_sz + align_fwd_sz + sizeof(alignment_header_t);
+        size_t adj_blk_sz   = blk_sz + max_fwd_sz;
         void * ptr          = allocation_resource_obj::get().allocator->malloc(adj_blk_sz);
 
         if (ptr == nullptr){
@@ -1418,10 +1444,12 @@ namespace dg::network_allocation{
         allocation_resource_obj::get().allocator->free(org_ptr); 
     }
 
+    //we'd want to keep the blk_sz -> uint32_t, we'll allow the configuration
+
     struct XAlignMetadata{
         alignment_header_t difference;
-        size_t blk_sz; 
-        
+        xalign_metadata_size_t blk_sz; 
+
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(difference, blk_sz);
@@ -1441,7 +1469,7 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        const size_t max_fwd_sz = alignment + (METADATA_SZ - 1u);
+        const size_t max_fwd_sz = alignment + (METADATA_SZ - 1u); //const prop METADATA_SZ + (alignemnt - 1u)
 
         if (max_fwd_sz > std::numeric_limits<alignment_header_t>::max()){
             return nullptr;
@@ -1451,19 +1479,19 @@ namespace dg::network_allocation{
             return nullptr;
         }
 
-        size_t align_fwd_sz = alignment - 1u;
-        size_t adj_blk_sz   = blk_sz + align_fwd_sz + METADATA_SZ;
+        size_t adj_blk_sz   = blk_sz + max_fwd_sz;
         void * ptr          = allocation_resource_obj::get().allocator->malloc(adj_blk_sz);
 
         if (ptr == nullptr){
             return nullptr;
         }
 
-        void * aligned_ptr              = dg::network_allocation::dg_align(std::next(static_cast<char *>(ptr), METADATA_SZ), alignment);
+        void * aligned_ptr              = dg::network_allocation::dg_align(std::next(static_cast<char *>(ptr), METADATA_SZ), alignment); //forward METADATA_SZ to reserve the METADATA_SZ, align the alignment (guaranteed to fit because we have extra ALIGMENT_SZ - 1u)
         alignment_header_t difference   = std::distance(static_cast<char *>(ptr), static_cast<char *>(aligned_ptr));
         void * metadata_header_addr     = std::prev(static_cast<char *>(aligned_ptr), METADATA_SZ);
 
-        dg::network_trivial_serializer::serialize_into(static_cast<char *>(metadata_header_addr), XAlignMetadata{difference, blk_sz});
+        dg::network_trivial_serializer::serialize_into(static_cast<char *>(metadata_header_addr), XAlignMetadata{.difference    = difference, 
+                                                                                                                 .blk_sz        = stdx::wrap_safe_integer_cast(blk_sz)});
 
         return aligned_ptr;
     }

@@ -235,8 +235,6 @@ namespace dg::network_memcommit_resolutor{
     //instead of communicating errors by stack unwinding, we'll log the errors on the tiles, and associate tiles' user_id -> the log message, push that to the database
     //this is because of the detaching nature of tile forwarding + backwarding, the ultimate reading-error-users are the tiles
     //we'll be rich Mom
-    //I know I've been procastinating
-    //I just like you guys, I dont have a faintest clue except for moving forwards 
 
     class ForwardPingBlkrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 

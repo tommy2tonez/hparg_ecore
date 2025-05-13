@@ -13,15 +13,13 @@
 #include <mutex>
 #include "network_exception.h"
 #include "network_segcheck_bound.h"
-#include "network_std_container.h"
 #include "stdx.h"
 #include <cstdlib>
 #include "network_raii_x.h"
 #include <optional>
-#include <immintrin.h>
 
 namespace dg::network_memlock{
-    
+
     template <class T>
     struct MemoryLockInterface{
 
@@ -31,9 +29,9 @@ namespace dg::network_memlock{
         using ptr_t         = typename T1::ptr_t;
         
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto acquire_try(typename T1::ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+        static auto acquire_try(typename T1::ptr_t ptr) noexcept -> bool{
 
-            return T::acquire_try(ptr, success);
+            return T::acquire_try(ptr);
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
@@ -81,7 +79,7 @@ namespace dg::network_memlock{
         using ptr_t         = typename T1::ptr_t;
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto reference_try(typename T1::ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+        static auto reference_try(typename T1::ptr_t ptr) noexcept -> bool{
 
             return T::reference_try(ptr);
         }
@@ -124,8 +122,10 @@ namespace dg::network_memlock{
 
             inline __attribute__((always_inline)) lock_guard(const dg::network_memlock::MemoryLockInterface<T>,
                                                              typename dg::network_memlock::MemoryLockInterface<T>::ptr_t<> ptr) noexcept: ptr(ptr){
-
+                
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 dg::network_memlock::MemoryLockInterface<T>::acquire_wait(this->ptr);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -142,7 +142,9 @@ namespace dg::network_memlock{
                     std::atomic_thread_fence(std::memory_order_release);
                 }
 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 dg::network_memlock::MemoryLockInterface<T>::acquire_release(this->ptr);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
             lock_guard(const self&) = delete;
@@ -176,7 +178,7 @@ namespace dg::network_memlock{
     };
 
     template <class T>
-    auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr, std::memory_order success = std::memory_order_seq_cst) noexcept{
+    auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
 
         using memlock_ins   = dg::network_memlock::MemoryRegionLockInterface<T>;
         using lock_ptr_t    = typename memlock_ins::ptr_t<>;
@@ -194,7 +196,7 @@ namespace dg::network_memlock{
             return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>());
         }
 
-        if (memlock_ins::acquire_try(ptr_region, success)){
+        if (memlock_ins::acquire_try(ptr_region)){
             resource_ins::get().insert(ptr_region);
             return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>(ptr_region, std::move(destructor)));
         }
@@ -203,12 +205,12 @@ namespace dg::network_memlock{
     }
 
     template <class T>
-    auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr, std::memory_order success = std::memory_order_seq_cst) noexcept{
+    auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
 
-        decltype(recursive_trylock_guard(lock_ins, ptr, success)) rs{}; 
+        decltype(recursive_trylock_guard(lock_ins, ptr)) rs{}; 
 
         auto lambda = [&]() noexcept{
-            rs = recursive_trylock_guard(lock_ins, ptr, success);
+            rs = recursive_trylock_guard(lock_ins, ptr);
             return static_cast<bool>(rs);
         };
 
@@ -217,16 +219,16 @@ namespace dg::network_memlock{
     }
 
     template <class T, class ...Args>
-    auto recursive_trylock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, std::memory_order success, Args... args) noexcept{
+    auto recursive_trylock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
 
         using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
-        using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}, success));
+        using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}));
 
         auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...};
         auto resource_arr       = std::array<lock_resource_t, sizeof...(Args)>{};
 
         for (size_t i = 0u; i < sizeof...(Args); ++i){
-            resource_arr[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i], success);
+            resource_arr[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
 
             if (!static_cast<bool>(resource_arr[i])){
                 return std::optional<std::array<lock_resource_t, sizeof...(Args)>>(std::nullopt);
@@ -237,12 +239,12 @@ namespace dg::network_memlock{
     }
 
     template <class T, class ...Args>
-    auto recursive_lock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, std::memory_order success, Args... args) noexcept{
+    auto recursive_lock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
 
-        decltype(recursive_trylock_guard_many(lock_ins, success, args...)) rs{};
+        decltype(recursive_trylock_guard_many(lock_ins, args...)) rs{};
 
         auto lambda = [&]() noexcept{
-            rs = recursive_trylock_guard_many(lock_ins, success, args...);
+            rs = recursive_trylock_guard_many(lock_ins, args...);
             return static_cast<bool>(rs);
         };
 
@@ -262,7 +264,11 @@ namespace dg::network_memlock{
             using self = recursive_lock_guard_many_x;
             
             inline __attribute__((always_inline)) recursive_lock_guard_many_x(const dg::network_memlock::MemoryRegionLockInterface<T> ins,
-                                                                              Args... args) noexcept: resource(recursive_lock_guard_many(ins, std::memory_order_relaxed, args...)){
+                                                                              Args... args) noexcept{
+
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                this->resource = recursive_lock_guard_many(ins, std::memory_order_relaxed, args...);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
                     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -277,7 +283,11 @@ namespace dg::network_memlock{
                     std::atomic_thread_fence(std::memory_order_seq_cst);
                 } else{
                     std::atomic_thread_fence(std::memory_order_release);
-                }       
+                }
+
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                this->resource = std::nullopt;
+                std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
             recursive_lock_guard_many_x(const self&) = delete;
@@ -295,11 +305,37 @@ namespace dg::network_memlock_impl1{
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
     struct AtomicFlagLock{}; 
 
+    //I was trying to get the hinge of lock + schedules
+    //I was proving the notify + nodeadlocks
+
+    //it is the problem of having at least 1 guy to continue the process after release
+    //what does that even mean?
+
+    //assume notify()
+    //assume another guy got in the way before notify() + got the lock -> OK
+
+    //assume notify() is notifying a list of subscribed subscribers
+    //notify() -> subscriber, not triggered because of false -> OK, another guy got in the way
+    //notify() -> subscriber, triggered because of true, guy is spinning loop -> OK, another guy got in the way (cmpexch_strong is precisely for this)
+    //                                                   guy is not spinning loop -> OK, we got in 
+
+    //notify() -> no_subscriber -> next guy's gonna read false -> OK, another guy got in the way
+    //                          -> next guy's gonna read true -> OK, the lucky guy got in the way
+
+    //is there a possiblity of wait() deadlock
+    //no, why?
+
+    //we need to look at the very important hinge, the last notify() and the wait() invoke
+    //if the wait() is sequenced before the notify(), it is subscribed, then we are guaranteed to have 1 guy to continue the process (as explained above)
+    //if the wait() is sequenced after the notify(), then we are guaranteed to read true, as unblocked by the notifier
+
+    //this is a very important note
+
     template <class ID, size_t MEMREGION_SZ, class PtrT>
     struct AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
         
         public:
-            
+
             using ptr_t = PtrT; 
 
         private:
@@ -316,24 +352,32 @@ namespace dg::network_memlock_impl1{
                 return dg::memult::distance(region_first, ptr) / MEMREGION_SZ;
             }
 
-            static auto internal_acquire_try(size_t table_idx, std::memory_order success) noexcept -> bool{
+            static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
-                return stdx::try_lock(lck_table[table_idx], success);
+                return lck_table[table_idx].value.test_and_set(std::memory_order_relaxed) == false;
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
 
                 auto lambda = [&]() noexcept{
-                    return stdx::try_lock(lck_table[table_idx]);
+                    return lck_table[table_idx].value.test_and_set(std::memory_order_relaxed) == false;
                 };
 
-                stdx::eventloop_spin_expbackoff(lambda);
-                std::atomic_thread_fence(std::memory_order_acquire);
+                while (true){
+                    bool is_success = stdx::eventloop_spin_expbackoff(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+
+                    if (is_success){
+                        return;
+                    }
+
+                    lck_table[table_idx].value.wait(true, std::memory_order_relaxed);
+                }
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].value.clear(std::memory_order_release);
+                lck_table[table_idx].value.clear(std::memory_order_relaxed);
+                lck_table[table_idx].value.notify_one();
             }
 
         public:
@@ -373,9 +417,9 @@ namespace dg::network_memlock_impl1{
                 return MEMREGION_SZ;
             }
 
-            static auto acquire_try(ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
-                
-                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)), success);
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
+
+                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
@@ -463,7 +507,7 @@ namespace dg::network_memlock_impl1{
                 return MEMREGION_SZ;
             }
 
-            static auto acquire_try(ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return lck_table[memregion_slot(segcheck_ins::access(ptr))].value.try_lock(); //mutex is a sufficient memory barrier
             }
@@ -472,7 +516,7 @@ namespace dg::network_memlock_impl1{
 
                 lck_table[memregion_slot(segcheck_ins::access(ptr))].value.lock();
             }
-            
+
             static void acquire_release(ptr_t ptr) noexcept{
 
                 lck_table[memregion_slot(segcheck_ins::access(ptr))].value.unlock();
@@ -522,10 +566,10 @@ namespace dg::network_memlock_impl1{
                 return dg::memult::distance(region_first, ptr) / MEMREGION_SZ;
             }
 
-            static auto internal_acquire_try(size_t table_idx, std::memory_order success) noexcept -> bool{
-                
+            static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
+
                 atomic_lock_t expected = MEMREGION_EMP_STATE;
-                bool rs = lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, success);
+                bool rs = lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE);
 
                 return rs;
             } 
@@ -538,15 +582,14 @@ namespace dg::network_memlock_impl1{
                 };
 
                 stdx::eventloop_spin_expbackoff(lambda);
-                std::atomic_thread_fence(std::memory_order_acquire);
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].value.exchange(MEMREGION_EMP_STATE, std::memory_order_release);
+                lck_table[table_idx].value.exchange(MEMREGION_EMP_STATE, std::memory_order_relaxed);
             }
 
-            static auto internal_reference_try(size_t table_idx, std::memory_order success) noexcept -> bool{
+            static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
                 atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
 
@@ -555,7 +598,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 atomic_lock_t nxt_state  = cur_state + 1;
-                bool rs = lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, success);
+                bool rs = lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
 
                 return rs;
             }
@@ -575,7 +618,7 @@ namespace dg::network_memlock_impl1{
 
             static void internal_reference_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].value.fetch_sub(1, std::memory_order_release);
+                lck_table[table_idx].value.fetch_sub(1, std::memory_order_relaxed);
             }
 
         public:
@@ -620,9 +663,9 @@ namespace dg::network_memlock_impl1{
                 return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
             }
 
-            static auto acquire_try(ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
-                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)), success);
+                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
@@ -800,7 +843,7 @@ namespace dg::network_memlock_impl1{
                 return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
             }
 
-            static auto acquire_try(ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+            static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
             }
@@ -830,7 +873,7 @@ namespace dg::network_memlock_impl1{
                 acquire_wait(new_ptr);
             }
 
-            static auto reference_try(ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+            static auto reference_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)));
             }

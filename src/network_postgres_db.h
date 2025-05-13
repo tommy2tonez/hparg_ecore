@@ -15,10 +15,10 @@
 #include <functional>
 #include <algorithm>
 #include <utility>
-#include <pqxx/cursor>
-#include <pqxx/transaction>
-#include <pqxx/nontransaction>
-#include <pqxx/pqxx>
+// #include <pqxx/cursor>
+// #include <pqxx/transaction>
+// #include <pqxx/nontransaction>
+// #include <pqxx/pqxx>
 #include <format>
 #include <random>
 #include <string_view>
@@ -315,10 +315,10 @@ namespace dg::network_postgres_db{
 
     struct CommitableInterface{
         virtual ~CommitableInterface() noexcept = default;
-        virtual void commit(pqxx::work&) = 0;
+        // virtual void commit(pqxx::work&) = 0;
     };
 
-    inline std::unique_ptr<pqxx::connection> pq_conn; //-if performance problem arises - change -> atomic_shared_ptr or multiple instance approach 
+    // inline std::unique_ptr<pqxx::connection> pq_conn; //-if performance problem arises - change -> atomic_shared_ptr or multiple instance approach 
     inline std::mutex mtx;
 
     template <class Lambda>
@@ -334,251 +334,251 @@ namespace dg::network_postgres_db{
             
             CommitableWrapper(Lambda lambda) noexcept(std::is_nothrow_constructible_v<Lambda>): lambda(std::move(lambda)){}
 
-            void commit(pqxx::work& transaction_handle) noexcept{
+            // void commit(pqxx::work& transaction_handle) noexcept{
 
-                return lambda(transaction_handle);
-            }
+            //     return lambda(transaction_handle);
+            // }
     };
 
     void init(const dg::string& pq_conn_arg){
         
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
-        pq_conn = std::make_unique<pqxx::connection>(pq_conn_arg.c_str());
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // pq_conn = std::make_unique<pqxx::connection>(pq_conn_arg.c_str());
     }
 
     void deinit() noexcept{
 
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
-        pq_conn = nullptr;
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // pq_conn = nullptr;
     }
 
     auto get_heartbeat() noexcept -> bool{
         
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
-        if (!pq_conn){
-            return false;
-        }
+        // if (!pq_conn){
+        //     return false;
+        // }
 
-        auto lambda = [&]{
-            pqxx::work transaction_handle{*pq_conn};
-            dg::string heartbeat_payload = utility::randomize_string(model::HEARTBEAT_PAYLOAD_MAX_LENGTH);
-            dg::string encoded_payload   = utility::quote(utility::encode_sql(heartbeat_payload));
-            dg::string inject_query      = utility::query_format("INSERT INTO HeartBeat(payload) VALUES({})", encoded_payload);
+        // auto lambda = [&]{
+        //     pqxx::work transaction_handle{*pq_conn};
+        //     dg::string heartbeat_payload = utility::randomize_string(model::HEARTBEAT_PAYLOAD_MAX_LENGTH);
+        //     dg::string encoded_payload   = utility::quote(utility::encode_sql(heartbeat_payload));
+        //     dg::string inject_query      = utility::query_format("INSERT INTO HeartBeat(payload) VALUES({})", encoded_payload);
 
-            transaction_handle.exec(inject_query.c_str()).no_rows();
-            transaction_handle.commit();
+        //     transaction_handle.exec(inject_query.c_str()).no_rows();
+        //     transaction_handle.commit();
             
-            dg::string get_query = utility::query_format("SELECT * FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
-            auto rs = transaction_handle.exec(get_query.c_str());
-            rs.one_row();
-            rs.for_each([&](std::string_view entry_id, std::string_view encoded_payload){
-                if (heartbeat_payload != utility::decode_sql(stdx::to_basicstr_convertible(encoded_payload))){
-                    dg::network_exception::throw_exception(dg::network_exception::POSTGRES_CORRUPTION);
-                }
-            });
-            dg::string del_query = utility::query_format("DELETE FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
-            transaction_handle.exec(del_query.c_str()).no_rows();
-            transaction_handle.commit();
-            transaction_handle.exec(get_query.c_str()).no_rows();
-        };
+        //     dg::string get_query = utility::query_format("SELECT * FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
+        //     auto rs = transaction_handle.exec(get_query.c_str());
+        //     rs.one_row();
+        //     rs.for_each([&](std::string_view entry_id, std::string_view encoded_payload){
+        //         if (heartbeat_payload != utility::decode_sql(stdx::to_basicstr_convertible(encoded_payload))){
+        //             dg::network_exception::throw_exception(dg::network_exception::POSTGRES_CORRUPTION);
+        //         }
+        //     });
+        //     dg::string del_query = utility::query_format("DELETE FROM HeartBeat WHERE HeartBeat.payload = {}", encoded_payload);
+        //     transaction_handle.exec(del_query.c_str()).no_rows();
+        //     transaction_handle.commit();
+        //     transaction_handle.exec(get_query.c_str()).no_rows();
+        // };
 
-        exception_t err = dg::network_exception::to_cstyle_function(lambda)();
-        return dg::network_exception::is_success(err); //need to be more descriptive + handle internal corruption - internal corruption could bleed
+        // exception_t err = dg::network_exception::to_cstyle_function(lambda)();
+        // return dg::network_exception::is_success(err); //need to be more descriptive + handle internal corruption - internal corruption could bleed
     }
 
     auto get_user_by_id(const dg::string& id) noexcept -> std::expected<model::UserEntry, exception_t>{
 
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
-        if (!pq_conn){
-            return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
-        }
+        // if (!pq_conn){
+        //     return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
+        // }
 
-        if (std::clamp(id.size(), model::USER_ID_MIN_LENGTH, model::USER_ID_MAX_LENGTH) != id.size()){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (std::clamp(id.size(), model::USER_ID_MIN_LENGTH, model::USER_ID_MAX_LENGTH) != id.size()){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        auto lambda = [&]{
-            pqxx::nontransaction transaction_handle{*pq_conn};
-            dg::string query = utility::query_format("SELECT * FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
-            model::UserEntry user{};
-            auto rs = transaction_handle.exec(query.c_str());
-            rs.one_row();
-            rs.for_each([&](std::string_view entry_id, std::string_view id, std::string_view clearance, std::string_view salt, std::string_view verifiable){
-                user.entry_id       = stdx::to_basicstr_convertible(entry_id);
-                user.id             = utility::decode_sql(stdx::to_basicstr_convertible(id));
-                user.clearance      = utility::decode_sql(stdx::to_basicstr_convertible(clearance));
-                user.salt           = utility::decode_sql(stdx::to_basicstr_convertible(salt));
-                user.verifiable     = utility::decode_sql(stdx::to_basicstr_convertible(verifiable));
-            });
+        // auto lambda = [&]{
+        //     pqxx::nontransaction transaction_handle{*pq_conn};
+        //     dg::string query = utility::query_format("SELECT * FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
+        //     model::UserEntry user{};
+        //     auto rs = transaction_handle.exec(query.c_str());
+        //     rs.one_row();
+        //     rs.for_each([&](std::string_view entry_id, std::string_view id, std::string_view clearance, std::string_view salt, std::string_view verifiable){
+        //         user.entry_id       = stdx::to_basicstr_convertible(entry_id);
+        //         user.id             = utility::decode_sql(stdx::to_basicstr_convertible(id));
+        //         user.clearance      = utility::decode_sql(stdx::to_basicstr_convertible(clearance));
+        //         user.salt           = utility::decode_sql(stdx::to_basicstr_convertible(salt));
+        //         user.verifiable     = utility::decode_sql(stdx::to_basicstr_convertible(verifiable));
+        //     });
 
-            return user;
-        };
+        //     return user;
+        // };
 
-        return dg::network_exception::to_cstyle_function(lambda)();
+        // return dg::network_exception::to_cstyle_function(lambda)();
     }
     
     auto get_systemlog(const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::SystemLogEntry>, exception_t>{
 
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
-        if (!pq_conn){
-            return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
-        }
+        // if (!pq_conn){
+        //     return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
+        // }
 
-        if (std::clamp(kind.size(), model::SYSTEMLOG_KIND_MIN_LENGTH, model::SYSTEMLOG_KIND_MAX_LENGTH) != kind.size()){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (std::clamp(kind.size(), model::SYSTEMLOG_KIND_MIN_LENGTH, model::SYSTEMLOG_KIND_MAX_LENGTH) != kind.size()){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        if (limit > constants::QUERY_LIMIT){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (limit > constants::QUERY_LIMIT){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        auto lambda = [&]{
-            pqxx::nontransaction transaction_handle{*pq_conn};
-            auto query      = utility::query_format("SELECT * FROM SystemLog \
-                                                     WHERE SystemLog.kind = {} \ 
-                                                           AND SystemLog.timestamp >= {} AND SystemLog.timestamp < {} \
-                                                     LIMIT {}", utility::quote(utility::encode_sql(kind)), utility::quote(utility::encode_timestamp(fr)), utility::quote(utility::encode_timestamp(to)), limit);
+        // auto lambda = [&]{
+        //     pqxx::nontransaction transaction_handle{*pq_conn};
+        //     auto query      = utility::query_format("SELECT * FROM SystemLog \
+        //                                              WHERE SystemLog.kind = {} \ 
+        //                                                    AND SystemLog.timestamp >= {} AND SystemLog.timestamp < {} \
+        //                                              LIMIT {}", utility::quote(utility::encode_sql(kind)), utility::quote(utility::encode_timestamp(fr)), utility::quote(utility::encode_timestamp(to)), limit);
 
-            auto log_vec    = dg::vector<model::SystemLogEntry>{};
-            auto rs         = transaction_handle.exec(query.c_str());
-            rs.for_each([&](std::string_view entry_id, std::string_view content, std::string_view kind, std::string_view timestamp){
-                model::SystemLogEntry entry{};
-                entry.entry_id  = stdx::to_basicstr_convertible(entry_id);
-                entry.content   = utility::decode_sql(stdx::to_basicstr_convertible(content));
-                entry.kind      = utility::decode_sql(stdx::to_basicstr_convertible(kind));
-                entry.timestamp = utility::decode_timestamp(stdx::to_basicstr_convertible(timestamp));
-                log_vec.push_back(std::move(entry));
-            });
+        //     auto log_vec    = dg::vector<model::SystemLogEntry>{};
+        //     auto rs         = transaction_handle.exec(query.c_str());
+        //     rs.for_each([&](std::string_view entry_id, std::string_view content, std::string_view kind, std::string_view timestamp){
+        //         model::SystemLogEntry entry{};
+        //         entry.entry_id  = stdx::to_basicstr_convertible(entry_id);
+        //         entry.content   = utility::decode_sql(stdx::to_basicstr_convertible(content));
+        //         entry.kind      = utility::decode_sql(stdx::to_basicstr_convertible(kind));
+        //         entry.timestamp = utility::decode_timestamp(stdx::to_basicstr_convertible(timestamp));
+        //         log_vec.push_back(std::move(entry));
+        //     });
 
-            return log_vec;
-        };
+        //     return log_vec;
+        // };
 
-        return dg::network_exception::to_cstyle_function(lambda)();
+        // return dg::network_exception::to_cstyle_function(lambda)();
     }
 
     auto get_userlog(const dg::string&  user_id, const dg::string& kind, std::chrono::nanoseconds fr, std::chrono::nanoseconds to, size_t limit) noexcept -> std::expected<dg::vector<model::UserLogEntry>, exception_t>{
 
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
-        if (!pq_conn){
-            return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
-        }
+        // if (!pq_conn){
+        //     return std::unexpected(dg::network_exception::POSTGRES_NOT_INITIALIZED);
+        // }
 
-        if (std::clamp(user_id.size(), model::USERLOG_USER_ID_MIN_LENGTH, model::USERLOG_USER_ID_MAX_LENGTH) != user_id.size()){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (std::clamp(user_id.size(), model::USERLOG_USER_ID_MIN_LENGTH, model::USERLOG_USER_ID_MAX_LENGTH) != user_id.size()){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        if (std::clamp(kind.size(), model::USERLOG_KIND_MIN_LENGTH, model::USERLOG_KIND_MAX_LENGTH) != kind.size()){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (std::clamp(kind.size(), model::USERLOG_KIND_MIN_LENGTH, model::USERLOG_KIND_MAX_LENGTH) != kind.size()){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        if (limit > constants::QUERY_LIMIT){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (limit > constants::QUERY_LIMIT){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
 
-        auto lambda = [&]{
-            pqxx::nontransaction transaction_handle{*pq_conn};
-            auto query      = utility::query_format("SELECT * From UserLog \
-                                                     WHERE UserLog.user_id = {} \
-                                                           AND UserLog.kind = {} \
-                                                           AND UserLog.timestamp >= {} AND UserLog.timestamp < {} \
-                                                     LIMIT {}", utility::quote(utility::encode_sql(user_id)), 
-                                                                utility::quote(utility::encode_sql(kind)), 
-                                                                utility::quote(utility::encode_timestamp(fr)), 
-                                                                utility::quote(utility::encode_timestamp(to)),
-                                                                limit);
-            auto log_vec    = dg::vector<model::UserLogEntry>{};
-            auto rs         = transaction_handle.exec(query.c_str());
-            rs.for_each([&](std::string_view entry_id, std::string_view content, std::string_view kind, std::string_view user_id, std::string_view timestamp){
-                model::UserLogEntry entry{};
-                entry.entry_id  = stdx::to_basicstr_convertible(entry_id);
-                entry.content   = utility::decode_sql(stdx::to_basicstr_convertible(content));
-                entry.kind      = utility::decode_sql(stdx::to_basicstr_convertible(kind));
-                entry.user_id   = utility::decode_sql(stdx::to_basicstr_convertible(user_id));
-                entry.timestamp = utility::decode_timestamp(stdx::to_basicstr_convertible(timestamp));
-                log_vec.push_back(std::move(entry));
-            });
+        // auto lambda = [&]{
+        //     pqxx::nontransaction transaction_handle{*pq_conn};
+        //     auto query      = utility::query_format("SELECT * From UserLog \
+        //                                              WHERE UserLog.user_id = {} \
+        //                                                    AND UserLog.kind = {} \
+        //                                                    AND UserLog.timestamp >= {} AND UserLog.timestamp < {} \
+        //                                              LIMIT {}", utility::quote(utility::encode_sql(user_id)), 
+        //                                                         utility::quote(utility::encode_sql(kind)), 
+        //                                                         utility::quote(utility::encode_timestamp(fr)), 
+        //                                                         utility::quote(utility::encode_timestamp(to)),
+        //                                                         limit);
+        //     auto log_vec    = dg::vector<model::UserLogEntry>{};
+        //     auto rs         = transaction_handle.exec(query.c_str());
+        //     rs.for_each([&](std::string_view entry_id, std::string_view content, std::string_view kind, std::string_view user_id, std::string_view timestamp){
+        //         model::UserLogEntry entry{};
+        //         entry.entry_id  = stdx::to_basicstr_convertible(entry_id);
+        //         entry.content   = utility::decode_sql(stdx::to_basicstr_convertible(content));
+        //         entry.kind      = utility::decode_sql(stdx::to_basicstr_convertible(kind));
+        //         entry.user_id   = utility::decode_sql(stdx::to_basicstr_convertible(user_id));
+        //         entry.timestamp = utility::decode_timestamp(stdx::to_basicstr_convertible(timestamp));
+        //         log_vec.push_back(std::move(entry));
+        //     });
 
-            return log_vec;
-        };
+        //     return log_vec;
+        // };
 
-        return dg::network_exception::to_cstyle_function(lambda)();
+        // return dg::network_exception::to_cstyle_function(lambda)();
     }
 
     auto make_commitable_create_systemlog(const model::SystemLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
-        auto lambda = [=](pqxx::work& transaction_handle){
-            dg::string query = utility::query_format("INSERT INTO SystemLog(content, kind, timestamp) VALUES({}, {}, {})", utility::quote(utility::encode_sql(log.content)), 
-                                                                                                                             utility::quote(utility::encode_sql(log.kind)), 
-                                                                                                                             utility::quote(utility::encode_timestamp(log.timestamp)));
-            transaction_handle.exec(query.c_str()).no_rows();
-        };
+        // auto lambda = [=](pqxx::work& transaction_handle){
+        //     dg::string query = utility::query_format("INSERT INTO SystemLog(content, kind, timestamp) VALUES({}, {}, {})", utility::quote(utility::encode_sql(log.content)), 
+        //                                                                                                                      utility::quote(utility::encode_sql(log.kind)), 
+        //                                                                                                                      utility::quote(utility::encode_timestamp(log.timestamp)));
+        //     transaction_handle.exec(query.c_str()).no_rows();
+        // };
 
-        return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
+        // return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
     };
 
     auto make_commitable_create_userlog(const model::UserLog& log) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
-        auto lambda = [=](pqxx::work& transaction_handle){
-            dg::string query = utility::query_format("INSERT INTO UserLog(content, kind, user_id, timestamp) VALUES({}, {}, {}, {})", utility::quote(utility::encode_sql(log.content)),
-                                                                                                                                        utility::quote(utility::encode_sql(log.kind)),
-                                                                                                                                        utility::quote(utility::encode_sql(log.user_id)),
-                                                                                                                                        utility::quote(utility::encode_timestamp(log.timestamp)));
-            transaction_handle.exec(query.c_str()).no_rows();
-        };
+        // auto lambda = [=](pqxx::work& transaction_handle){
+        //     dg::string query = utility::query_format("INSERT INTO UserLog(content, kind, user_id, timestamp) VALUES({}, {}, {}, {})", utility::quote(utility::encode_sql(log.content)),
+        //                                                                                                                                 utility::quote(utility::encode_sql(log.kind)),
+        //                                                                                                                                 utility::quote(utility::encode_sql(log.user_id)),
+        //                                                                                                                                 utility::quote(utility::encode_timestamp(log.timestamp)));
+        //     transaction_handle.exec(query.c_str()).no_rows();
+        // };
 
-        return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
+        // return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
     }
     
     auto make_commitable_create_user(const model::User& user) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
-        auto lambda = [=](pqxx::work& transaction_handle){
-            dg::string query = utility::query_format("INSERT INTO User(id, clearance, salt, verifiable) VALUES({}, {})", utility::quote(utility::encode_sql(user.id)), 
-                                                                                                                           utility::quote(utility::encode_sql(user.clearance)),
-                                                                                                                           utility::quote(utility::encode_sql(user.salt)),
-                                                                                                                           utility::quote(utility::encode_sql(user.verifiable)));
-            transaction_handle.exec(query.c_str()).no_rows();
-        };
+        // auto lambda = [=](pqxx::work& transaction_handle){
+        //     dg::string query = utility::query_format("INSERT INTO User(id, clearance, salt, verifiable) VALUES({}, {})", utility::quote(utility::encode_sql(user.id)), 
+        //                                                                                                                    utility::quote(utility::encode_sql(user.clearance)),
+        //                                                                                                                    utility::quote(utility::encode_sql(user.salt)),
+        //                                                                                                                    utility::quote(utility::encode_sql(user.verifiable)));
+        //     transaction_handle.exec(query.c_str()).no_rows();
+        // };
 
-        return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
+        // return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
     }
 
     auto make_commitable_delete_user_by_id(const dg::string& id) noexcept -> std::expected<std::unique_ptr<CommitableInterface>, exception_t>{
 
-        if (std::clamp(id.size(), model::USER_ID_MIN_LENGTH, model::USER_ID_MAX_LENGTH) != id.size()){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-        }
+        // if (std::clamp(id.size(), model::USER_ID_MIN_LENGTH, model::USER_ID_MAX_LENGTH) != id.size()){
+        //     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+        // }
                 
-        auto lambda = [=](pqxx::work& transaction_handle){
-            dg::string query = utility::query_format("DELETE FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
-            transaction_handle.exec(query.c_str()).no_rows();
-        };
+        // auto lambda = [=](pqxx::work& transaction_handle){
+        //     dg::string query = utility::query_format("DELETE FROM User WHERE User.id = {}", utility::quote(utility::encode_sql(id)));
+        //     transaction_handle.exec(query.c_str()).no_rows();
+        // };
 
-        return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
+        // return std::make_unique<CommitableWrapper<decltype(lambda)>>(std::move(lambda));
     }
 
     auto commit(dg::vector<std::unique_ptr<CommitableInterface>> commitables) noexcept -> exception_t{
 
-        stdx::xlock_guard<std::mutex> lck_grd(mtx);
+        // stdx::xlock_guard<std::mutex> lck_grd(mtx);
 
-        if (!pq_conn){
-            return dg::network_exception::POSTGRES_NOT_INITIALIZED;
-        }
+        // if (!pq_conn){
+        //     return dg::network_exception::POSTGRES_NOT_INITIALIZED;
+        // }
 
-        auto lambda = [&]{
-            pqxx::work work{*pq_conn};
+        // auto lambda = [&]{
+        //     pqxx::work work{*pq_conn};
 
-            for (auto& commitable: commitables){
-                commitable->commit(work);
-             }
+        //     for (auto& commitable: commitables){
+        //         commitable->commit(work);
+        //      }
 
-             work.commit();
-        };
+        //      work.commit();
+        // };
 
-        return dg::network_exception::to_cstyle_function(lambda)();
+        // return dg::network_exception::to_cstyle_function(lambda)();
     }
 }
 

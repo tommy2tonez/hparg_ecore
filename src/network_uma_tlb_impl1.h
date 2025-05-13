@@ -289,20 +289,23 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                     return false;
                 }
 
-                {
-                    stdx::memtransaction_guard transaction_grd;
-                    device_id_t stealee_id = potential_stealee_id.value();
+                //mem tx payload begin
+                std::atomic_thread_fence(std::memory_order_acquire);
+                device_id_t stealee_id = potential_stealee_id.value();
 
-                    if (stealee_id != stealer_id){
-                        vma_ptr_t dst   = translation_table::translate(stealer_id, host_region);
-                        vma_ptr_t src   = translation_table::translate(stealee_id, host_region);
-                        size_t cpy_sz   = MEMREGION_SZ;
-                        memcopy_device::memcpy(dst, src, cpy_sz);
-                    }
+                if (stealee_id != stealer_id){
+                    vma_ptr_t dst   = translation_table::translate(stealer_id, host_region);
+                    vma_ptr_t src   = translation_table::translate(stealee_id, host_region);
+                    size_t cpy_sz   = MEMREGION_SZ;
+                    memcopy_device::memcpy(dst, src, cpy_sz);
                 }
 
+                std::atomic_thread_fence(std::memory_order_release);
+                //mem tx payload end
+
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{});
+                uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{}); //make sure to release this post the payload, by calling the signal_fence_seq_cst
+
                 return true;
             }
 
@@ -356,7 +359,21 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                 }
             }
 
+            //what is the problem with THIS
+            //vma_ptr_t is written, compiler cant prove that vma_ptr_t is related to device_id + host_ptr, vma_ptr_t is now not updated
+            //it seems like a seq_cst block problem
+
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
+
+                // std::atomic_thread_fence(std::memory_order_release);
+                // std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                //we are not doing memmory safe operations
+                //because this is a reference operation, which does not guarantee anything except for returning the pointer, another serialization instruction is not this component responsibility
+                //this is an accepted answer, because if this component is doing locks + releases operation, then the memory ordering is this guy responsibility, it is actually still not this guy responsibility, but the lock_guard responsibility
+                //we have been working on this problem for the longest time EVER
+                //I'm telling you that this is harder to split than we think
+                //if we are to put a memory ordering here, it's entirely wrong
 
                 uma_proxy_lock::reference_release(host_ptr);
             }
