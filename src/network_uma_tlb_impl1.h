@@ -283,6 +283,8 @@ namespace dg::network_uma_tlb_impl1::exclusive{
             static auto steal_try(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept -> bool{
 
                 uma_ptr_t host_region = memregion(host_ptr);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
                 std::optional<device_id_t> potential_stealee_id = uma_proxy_lock::acquire_try(host_region);  
 
                 if (!potential_stealee_id.has_value()){
@@ -305,6 +307,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{}); //make sure to release this post the payload, by calling the signal_fence_seq_cst
+                std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 return true;
             }
@@ -358,10 +361,6 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                     }
                 }
             }
-
-            //what is the problem with THIS
-            //vma_ptr_t is written, compiler cant prove that vma_ptr_t is related to device_id + host_ptr, vma_ptr_t is now not updated
-            //it seems like a seq_cst block problem
 
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
 

@@ -57,15 +57,16 @@ namespace dg::network_memcommit_factory{
         uma_ptr_t requestee;
         uma_ptr_t requestor;
         operatable_id_t operatable_id;
+        std::optional<uma_ptr_t> notifying_addr;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(requestee, requestor, operatable_id);
+            reflector(requestee, requestor, operatable_id, notifying_addr);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(requestee, requestor, operatable_id);
+            reflector(requestee, requestor, operatable_id, notifying_addr);
         }
     };
 
@@ -73,15 +74,16 @@ namespace dg::network_memcommit_factory{
         uma_ptr_t requestee;
         uma_ptr_t requestor;
         operatable_id_t operatable_id;
+        std::optional<uma_ptr_t> notifying_addr;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(requestee, requestor, operatable_id);
+            reflector(requestee, requestor, operatable_id, notifying_addr);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(requestee, requestor, operatable_id);
+            reflector(requestee, requestor, operatable_id, notifying_addr);
         }
     };
 
@@ -115,22 +117,22 @@ namespace dg::network_memcommit_factory{
         }
     };
 
-    struct SignalAggregationEvent{
-        uma_ptr_t dst;
-        uma_ptr_t signalee;
-        uma_ptr_t signaler;
-        memory_event_kind_t event_kind;
-        operatable_id_t operatable_id;
+    struct VirtualSignalAggregationEvent{
+        // uma_ptr_t dst;
+        // uma_ptr_t signalee;
+        // uma_ptr_t signaler;
+        // memory_event_kind_t event_kind;
+        // operatable_id_t operatable_id;
 
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(dst, signalee, signaler, event_kind, operatable_id);
-        }
+        // template <class Reflector>
+        // constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        //     reflector(dst, signalee, signaler, event_kind, operatable_id);
+        // }
 
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(dst, signalee, signaler, event_kind, operatable_id);
-        }
+        // template <class Reflector>
+        // constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        //     reflector(dst, signalee, signaler, event_kind, operatable_id);
+        // }
     };
 
     static inline constexpr size_t VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5; 
@@ -182,10 +184,37 @@ namespace dg::network_memcommit_factory{
         return BackwardDoSignalEvent{dst, operatable_id};
     }
 
-    constexpr auto make_event_sigagg_signal(uma_ptr_t dst, uma_ptr_t signalee, uma_ptr_t signaler, memory_event_kind_t event_kind, operatable_id_t operatable_id) noexcept -> SignalAggregationEvent{
-        
-        return SignalAggregationEvent{dst, signalee, signaler, event_kind, operatable_id};
+    //
+
+    constexpr auto make_sigagg_forward_ping_signal() noexcept -> SignalAggregationEvent{
+
     }
+
+    constexpr auto make_sigagg_forward_pong_signal() noexcept -> SignalAggregationEvent{
+
+    }
+
+    constexpr auto make_sigagg_forward_pong_request() noexcept -> SignalAggregationEvent{
+
+    }
+
+    constexpr auto make_sigagg_forward_pingpong_request() noexcept -> SignalAggregationEvent{
+
+    }
+
+    constexpr auto make_sigagg_forward_do_signal() noexcept -> SignalAggregationEvent{
+
+    }
+
+    constexpr auto make_sigagg_backward_do_signal() noexcept -> SignalAggregationEvent{
+
+    }
+
+    constexpr auto virtualize_sigagg(...) noexcept -> VirtualSignalAggregationEvent{
+
+    }
+
+    //
 
     constexpr auto virtualize_event(ForwardPingSignalEvent event) noexcept -> VirtualEvent{
         

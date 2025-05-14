@@ -35,7 +35,7 @@ namespace dg::network_memlock{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto acquire_wait(typename T1::ptr_t ptr) noexcept{
+        static void acquire_wait(typename T1::ptr_t ptr) noexcept{
 
             T::acquire_wait(ptr);
         } 
@@ -326,14 +326,30 @@ namespace dg::network_memlock_impl1{
     //no, why?
 
     //we need to look at the very important hinge, the last notify() and the wait() invoke
+
     //if the wait() is sequenced before the notify(), it is subscribed, then we are guaranteed to have 1 guy to continue the process (as explained above)
+    //can we prove that the wait() will be woken (in the case of tentatively_freed_lock) if it is sequenced before the notify()?
+
+    //if it is sequenced before the notify, then it is guaranteeing the subscriber list to be >= 1
+    //<the not having a next guy to continue the process> (tentatively_freed_lock) only happens when the subscriber list == 0, which means the wait() has been woken
+    //so there is no such case of tentatively_freed_lock + not_woke_already_subscribed
+
+    //this is complicated 
+
     //if the wait() is sequenced after the notify(), then we are guaranteed to read true, as unblocked by the notifier
 
     //this is a very important note
 
+    //due to technical constraints of UMA proxyspin locks (we cant find a clean implementation of that)
+    //we would want to reduce the lock contention by making the memlock_region_sz == uma_region_sz
+    //recall that we are not actually processing the WO
+    //we are offloading that -> the asynchronous devices
+    //so the pros of acquiring different parts of a region is not actually a quantifiable plus  
+    //we dont want to excuse our implementation, yet we'd invest our time in improving the UMA proxy spinlock implementation should there be usecases
+
     template <class ID, size_t MEMREGION_SZ, class PtrT>
     struct AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
-        
+
         public:
 
             using ptr_t = PtrT; 
@@ -613,7 +629,6 @@ namespace dg::network_memlock_impl1{
                 };
 
                 stdx::eventloop_spin_expbackoff(lambda);
-                std::atomic_thread_fence(std::memory_order_acquire);
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{
@@ -769,12 +784,12 @@ namespace dg::network_memlock_impl1{
                 return true;
             }
 
-            static auto internal_acquire_wait(size_t table_idx) noexcept{
+            static void internal_acquire_wait(size_t table_idx) noexcept{
 
                 while (!internal_acquire_try(table_idx)){}
             }
 
-            static auto internal_acquire_release(size_t table_idx) noexcept{
+            static void internal_acquire_release(size_t table_idx) noexcept{
 
                 stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
                 lck_table[table_idx].refcount = REFERENCE_EMPTY_STATE;
@@ -848,7 +863,7 @@ namespace dg::network_memlock_impl1{
                 return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
             }
 
-            static auto acquire_wait(ptr_t ptr) noexcept{
+            static void acquire_wait(ptr_t ptr) noexcept{
 
                 internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
             }

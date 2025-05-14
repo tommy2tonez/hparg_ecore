@@ -318,6 +318,113 @@ namespace stdx{
                                            std::atomic_flag,
                                            std::mutex>; 
 
+    template <class Lambda>
+    inline void eventloop_spin_expbackoff(Lambda&& lambda) noexcept(noexcept(lambda())){
+
+        const size_t BASE                   = 2u;
+        const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
+        size_t current_sequential_pause     = 1u;
+
+        while (true){
+            if (lambda()){
+                return;
+            }
+
+            for (size_t i = 0u; i < current_sequential_pause; ++i){
+                _mm_pause();
+            }
+
+            current_sequential_pause = std::min(MAX_SEQUENTIAL_PAUSE, current_sequential_pause * BASE);
+        }
+    }
+
+    template <class Lambda>
+    inline bool eventloop_spin_expbackoff(Lambda&& lambda, size_t spin_sz) noexcept(noexcept(lambda())){
+
+        const size_t BASE                   = 2u;
+        const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
+        size_t current_sequential_pause     = 1u;
+
+        for (size_t i = 0u; i < spin_sz; ++i){
+            if (lambda()){
+                return true;
+            }
+
+            for (size_t i = 0u; i < current_sequential_pause; ++i){
+                _mm_pause();
+            }
+
+            current_sequential_pause = std::min(MAX_SEQUENTIAL_PAUSE, current_sequential_pause * BASE);
+        }
+
+        return false;
+    }
+
+    inline __attribute__((always_inline)) bool atomic_flag_memsafe_try_lock(std::atomic_flag * volatile mtx) noexcept{
+
+        //fencing the before transaction, this is very important
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+
+        bool is_success = mtx->test_and_set(std::memory_order_relaxed) == false;
+
+        if (!is_success){
+            return false;
+        }
+
+        //the test_and_set is guaranteed to be sequenced before this line, because there is a branch inferring the relaxed operation
+
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_acquire);
+        }
+    } 
+
+    inline __attribute__((always_inline)) void atomic_flag_memsafe_lock(std::atomic_flag * volatile mtx) noexcept{
+
+        //fencing the before transaction, this is very important
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+
+        auto job = [&]() noexcept{
+            return mtx->test_and_set(std::memory_order_relaxed) == false;
+        };
+
+        if (!job()){ //fast_path
+            while (true){
+                if (eventloop_spin_expbackoff(job, SPINLOCK_SIZE_MAGIC_VALUE)){
+                    break;
+                }
+
+                mtx->wait(true, std::memory_order_relaxed); //slow path
+            }
+        }
+
+        //the test_and_set is guaranteed to be sequenced before this line, because there is a branch inferring the relaxed operation
+
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_acquire);
+        }
+    }
+
+    inline __attribute__((always_inline)) void atomic_flag_memsafe_unlock(std::atomic_flag * volatile mtx) noexcept{
+        
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_release);
+        }
+
+        //ok, memory-wise OK
+        //we are to make sure that the relaxed operation is sequenced after this, 
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        mtx->clear(std::memory_order_relaxed);
+        mtx->notify_one(); //we are to notify, notify is guaranteed to be sequenced after clear, 
+        std::atomic_signal_fence(std::memory_order_seq_cst); //we are to guard the transaction of clear + notify one
+    }
+
     template <class Lock>
     class xlock_guard_base{};
 
@@ -334,15 +441,7 @@ namespace stdx{
 
             inline __attribute__((always_inline)) xlock_guard_base(std::atomic_flag& mtx) noexcept: mtx(&mtx){
 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                while (!try_lock(*this->mtx)){}
-
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                }       
+                atomic_flag_memsafe_lock(this->mtx);
            }
 
             xlock_guard_base(const self&) = delete;
@@ -350,12 +449,7 @@ namespace stdx{
 
             inline __attribute__((always_inline)) ~xlock_guard_base() noexcept{
 
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                }
-
-                this->mtx->clear(std::memory_order_release);
-                std::atomic_signal_fence(std::memory_order_seq_cst);
+                atomic_flag_memsafe_unlock(this->mtx);
             }
 
             self& operator =(const self&) = delete;
@@ -375,15 +469,7 @@ namespace stdx{
 
             inline __attribute__((always_inline)) xlock_guard_base(std::mutex& mtx) noexcept: mtx(&mtx){
 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->mtx->lock();
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                } 
             }
 
             xlock_guard_base(const self&) = delete;
@@ -391,15 +477,7 @@ namespace stdx{
 
             inline __attribute__((always_inline)) ~xlock_guard_base() noexcept{
 
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_release);
-                }                       
-
-                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->mtx->unlock();
-                std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
             self& operator =(const self&) = delete;
@@ -438,31 +516,14 @@ namespace stdx{
 
             using self = unlock_guard; 
 
-            inline __attribute__((always_inline)) unlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){
-
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                }                   
-            }
+            inline __attribute__((always_inline)) unlock_guard(std::mutex& mtx) noexcept: mtx(&mtx){}
 
             unlock_guard(const self&) = delete;
             unlock_guard(self&&) = delete;
 
             inline __attribute__((always_inline)) ~unlock_guard() noexcept{
-                
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_release);
-                }                       
 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->mtx->unlock();
-                std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
             self& operator =(const self&) = delete;
@@ -480,29 +541,14 @@ namespace stdx{
 
             using self = unlock_guard; 
 
-            inline __attribute__((always_inline)) unlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){
-
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                }
-            }
+            inline __attribute__((always_inline)) unlock_guard(std::atomic_flag& mtx) noexcept: mtx(&mtx){}
 
             unlock_guard(const self&) = delete;
             unlock_guard(self&&) = delete;
 
             inline __attribute__((always_inline)) ~unlock_guard() noexcept{
 
-                if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-                    std::atomic_thread_fence(std::memory_order_seq_cst);
-                } else{
-                    std::atomic_thread_fence(std::memory_order_release);
-                }    
-
-                this->mtx->clear();
+                atomic_flag_memsafe_unlock(this->mtx);
             }
 
             self& operator =(const self&) = delete;
@@ -627,26 +673,6 @@ namespace stdx{
     inline __attribute__((always_inline)) auto to_const_reference(T& obj) noexcept -> decltype(auto){
 
         return std::as_const(obj);
-    }
-
-    template <class Lambda>
-    inline __attribute__((always_inline)) void eventloop_spin_expbackoff(Lambda&& lambda) noexcept(noexcept(lambda())){
-
-        const size_t BASE                   = 2u;
-        const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
-        size_t current_sequential_pause     = 1u;
-
-        while (true){
-            if (lambda()){
-                return;
-            }
-
-            for (size_t i = 0u; i < current_sequential_pause; ++i){
-                _mm_pause();
-            }
-
-            current_sequential_pause = std::min(MAX_SEQUENTIAL_PAUSE, current_sequential_pause * BASE);
-        }
     }
 
     template <class Destructor>
