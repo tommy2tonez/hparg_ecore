@@ -219,7 +219,7 @@ namespace dg::network_mempress_collector{
                     }
 
                     std::copy(std::make_move_iterator(std::next(base_event_arr, first)), std::make_move_iterator(std::next(base_event_arr, last)), vec->begin());
-                    std::expected<bool, exception_t> push_err = {};
+                    std::expected<bool, exception_t> push_err = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
 
                     auto task = []() noexcept{
                         push_err = this->warehouse->push(std::move(vec.value()));                       

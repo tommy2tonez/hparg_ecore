@@ -70,6 +70,10 @@ namespace dg::network_memcommit_resolutor{
     //we dont know what direction we would head next in the future
     //if we've come up with a better approach, we'll invent another tile type for that
 
+    //I dont know how we made it here, it's very incredible
+    //I am very proud of us
+    //we are missing a search implementation + a cuda multiprecision lib + a Taylor infinite pattern, finite pattern, frequent pattern database + a navigation system + a CPU-liked external pipeline (to check forward + backward tile integrity) + an ACID neural network storage and we should be locked and loaded
+
     template <class T>
     struct Request{
         Address requestee;
