@@ -35,7 +35,7 @@ namespace dg::network_mempress_collector{
 
     struct BonsaiFrequencierInterface{
         virtual ~BonsaiFrequencierInterface() noexcept = default;
-        virtual void tick() noexcept = 0;
+        virtual void frequencize(uint32_t) noexcept = 0;
     };
 
     class MemoryRangePress: public virtual RangePressInterface{
@@ -127,6 +127,39 @@ namespace dg::network_mempress_collector{
     //CompetitiveTryCollector should suffice for most of the cases that require ASAP notification (without temporal)
     //and ClockCollector would prune the minor cases (the absolute worst cases)
 
+    class WareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
+
+        private:
+
+            std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse;
+
+        public:
+
+            WareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse): warehouse(std::move(warehouse)){}
+
+            void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept[
+
+            ]
+    };
+
+    class ExhaustionControlledWareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
+
+        private:
+
+            std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse;
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device;
+        
+        public:
+
+            ExhaustionControlledWareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+                                                   std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) noexcept: warehouse(std::move(warehouse)),
+                                                                                                                                                     infretry_device(std::move(infretry_device)){}
+
+            void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept{
+
+            }
+    };
+
     class TryCollector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -136,6 +169,7 @@ namespace dg::network_mempress_collector{
             std::shared_ptr<BonsaiFrequencierInterface> frequencizer;
             const size_t collect_cap;
             const size_t delivery_cap;
+            const uint32_t scan_frequency;
 
         public:
 
@@ -143,15 +177,17 @@ namespace dg::network_mempress_collector{
                          std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
                          std::shared_ptr<BonsaiFrequencierInterface> frequencizer,
                          size_t collect_cap,
-                         size_t delivery_cap) noexcept: range_press(std::move(range_press)),
-                                                        consumer(std::move(consumer)),
-                                                        frequencizer(std::move(frequencizer)),
-                                                        collect_cap(collect_cap),
-                                                        delivery_cap(delivery_cap){}
+                         size_t delivery_cap,
+                         uint32_t scan_frequency) noexcept: range_press(std::move(range_press)),
+                                                            consumer(std::move(consumer)),
+                                                            frequencizer(std::move(frequencizer)),
+                                                            collect_cap(collect_cap),
+                                                            delivery_cap(delivery_cap),
+                                                            scan_frequency(scan_frequency){}
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->tick();
+                this->frequencizer->frequencize(this->scan_frequency);
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
@@ -183,6 +219,7 @@ namespace dg::network_mempress_collector{
             std::vector<size_t> suffix_array;
             const size_t collect_cap;
             const size_t delivery_cap;
+            const uint32_t scan_frequency;
 
         public:
 
@@ -191,12 +228,14 @@ namespace dg::network_mempress_collector{
                                     std::shared_ptr<BonsaiFrequencierInterface> frequencizer,
                                     std::vector<size_t> suffix_array,
                                     size_t collect_cap,
-                                    size_t delivery_cap) noexcept: range_press(std::move(range_press)),
-                                                                   consumer(std::move(consumer)),
-                                                                   frequencizer(std::move(frequencizer)),
-                                                                   suffix_array(std::move(suffix_array)),
-                                                                   collect_cap(collect_cap),
-                                                                   delivery_cap(delivery_cap){}
+                                    size_t delivery_cap,
+                                    uint32_t scan_frequency) noexcept: range_press(std::move(range_press)),
+                                                                       consumer(std::move(consumer)),
+                                                                       frequencizer(std::move(frequencizer)),
+                                                                       suffix_array(std::move(suffix_array)),
+                                                                       collect_cap(collect_cap),
+                                                                       delivery_cap(delivery_cap),
+                                                                       scan_frequency(scan_frequency){}
             
             auto run_one_epoch() noexcept -> bool{
 
@@ -204,7 +243,7 @@ namespace dg::network_mempress_collector{
                 //1 -> log2 == 0
                 //iterable_sz == [0, 0 + 1)
 
-                this->frequencizer->tick();
+                this->frequencizer->tick(this->scan_frequency);
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -266,6 +305,7 @@ namespace dg::network_mempress_collector{
             const size_t ticking_clock_resolution;
             const size_t collect_cap;
             const size_t delivery_cap;
+            const uint32_t scan_frequency;
 
         public:
 
@@ -275,17 +315,19 @@ namespace dg::network_mempress_collector{
                            std::vector<ClockData> clock_data_table,
                            size_t ticking_clock_resolution,
                            size_t collect_cap,
-                           size_t delivery_cap) noexcept: range_press(std::move(range_press)),
-                                                          consumer(std::move(consumer)),
-                                                          frequencizer(std::move(frequencizer)),
-                                                          clock_data_table(std::move(clock_data_table)),
-                                                          ticking_clock_resolution(ticking_clock_resolution),
-                                                          collect_cap(collect_cap),
-                                                          delivery_cap(delivery_cap){}
+                           size_t delivery_cap,
+                           uint32_t scan_frequency) noexcept: range_press(std::move(range_press)),
+                                                              consumer(std::move(consumer)),
+                                                              frequencizer(std::move(frequencizer)),
+                                                              clock_data_table(std::move(clock_data_table)),
+                                                              ticking_clock_resolution(ticking_clock_resolution),
+                                                              collect_cap(collect_cap),
+                                                              delivery_cap(delivery_cap),
+                                                              scan_frequency(scan_frequency){}
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->tick();
+                this->frequencizer->frequencize(this->scan_frequency);
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -337,6 +379,7 @@ namespace dg::network_mempress_collector{
             const size_t ticking_clock_resolution;
             const size_t collect_cap;
             const size_t delivery_cap;
+            const uint32_t scan_frequency;
 
         public:
 
@@ -346,17 +389,19 @@ namespace dg::network_mempress_collector{
                               std::vector<ClockData> clock_data_table,
                               size_t ticking_clock_resolution,
                               size_t collect_cap,
-                              size_t delivery_cap) noexcept: range_press(std::move(range_press)),
-                                                             consumer(std::move(consumer)),
-                                                             frequencizer(std::move(frequencizer)),
-                                                             clock_data_table(std::move(clock_data_table)),
-                                                             ticking_clock_resolution(ticking_clock_resolution),
-                                                             collect_cap(collect_cap),
-                                                             delivery_cap(delivery_cap){}
+                              size_t delivery_cap,
+                              uint32_t scan_frequency) noexcept: range_press(std::move(range_press)),
+                                                                 consumer(std::move(consumer)),
+                                                                 frequencizer(std::move(frequencizer)),
+                                                                 clock_data_table(std::move(clock_data_table)),
+                                                                 ticking_clock_resolution(ticking_clock_resolution),
+                                                                 collect_cap(collect_cap),
+                                                                 delivery_cap(delivery_cap),
+                                                                 scan_frequency(scan_frequency){}
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->tick();
+                this->frequencizer->frequencize(this->scan_frequency);
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -411,7 +456,7 @@ namespace dg::network_mempress_collector{
             const size_t ticking_clock_resolution;
             const size_t collect_cap;
             const size_t delivery_cap;
-        
+            const uint32_t scan_frequency;
         
         public:
 
@@ -421,17 +466,19 @@ namespace dg::network_mempress_collector{
                                          std::vector<ClockSuffixData> clock_data_table,
                                          size_t ticking_clock_resolution,
                                          size_t collect_cap,
-                                         size_t delivery_cap) noexcept: range_press(std::move(range_press)),
-                                                                        consumer(std::move(consumer)),
-                                                                        frequencizer(std::move(frequencizer)),
-                                                                        clock_data_table(std::move(clock_data_table)),
-                                                                        ticking_clock_resolution(ticking_clock_resolution),
-                                                                        collect_cap(collect_cap),
-                                                                        delivery_cap(delivery_cap){}
+                                         size_t delivery_cap,
+                                         uint32_t scan_frequency) noexcept: range_press(std::move(range_press)),
+                                                                            consumer(std::move(consumer)),
+                                                                            frequencizer(std::move(frequencizer)),
+                                                                            clock_data_table(std::move(clock_data_table)),
+                                                                            ticking_clock_resolution(ticking_clock_resolution),
+                                                                            collect_cap(collect_cap),
+                                                                            delivery_cap(delivery_cap),
+                                                                            scan_frequency(scan_frequency){}
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->tick();
+                this->frequencizer->frequencize(this->scan_frequency);
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -499,6 +546,7 @@ namespace dg::network_mempress_collector{
             std::vector<RevolutionData> revolution_table;
             const size_t collect_cap;
             const size_t delivery_cap;
+            const uint32_t scan_frequency;
 
         public:
 
@@ -507,16 +555,18 @@ namespace dg::network_mempress_collector{
                                 std::shared_ptr<BonsaiFrequencierInterface> frequencizer,
                                 std::vector<RevolutionData> revolution_table,
                                 size_t collect_cap,
-                                size_t delivery_cap) noexcept: range_press(std::move(range_press)),
-                                                               consumer(std::move(consumer)),
-                                                               frequencizer(std::move(frequencizer)),
-                                                               revolution_table(std::move(revolution_table)),
-                                                               collect_cap(collect_cap),
-                                                               delivery_cap(delivery_cap){}
+                                size_t delivery_cap,
+                                uint32_t scan_frequency) noexcept: range_press(std::move(range_press)),
+                                                                   consumer(std::move(consumer)),
+                                                                   frequencizer(std::move(frequencizer)),
+                                                                   revolution_table(std::move(revolution_table)),
+                                                                   collect_cap(collect_cap),
+                                                                   delivery_cap(delivery_cap),
+                                                                   scan_frequency(scan_frequency){}
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->tick();
+                this->frequencizer->frequencize(this->scan_frequency);
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);

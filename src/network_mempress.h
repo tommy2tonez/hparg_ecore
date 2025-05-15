@@ -110,7 +110,7 @@ namespace dg::network_mempress{
                 std::copy(event, std::next(event, app_sz), std::next(this->region_vec[bucket_idx].event_container.begin(), old_sz));
 
                 std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, event_sz), dg::network_exception::RESOURCE_EXHAUSTION);
+                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, event_sz), dg::network_exception::QUEUE_FULL);
             }
 
             auto try_collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
@@ -168,6 +168,77 @@ namespace dg::network_mempress{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->_submit_cap;
+            }
+    };
+
+    class ExhaustionControlledMemoryPress: public virtual MemoryPressInterface{
+
+        private:
+
+            std::unique_ptr<MemoryPressInterface> base;
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
+        
+        public:
+
+            ExhaustionControlledMemoryPress(std::unique_ptr<MemoryPressInterface> base,
+                                            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
+                                                                                                                                       executor(std::move(executor)){}
+
+            auto first() const noexcept -> uma_ptr_t{
+
+                return this->base->first();
+            }
+
+            auto last() const noexcept -> uma_ptr_t{
+
+                return this->base->last();
+            }
+
+            auto memregion_size() const noexcept -> size_t{
+
+                return this->base->memregion_size();
+            }
+
+            void push(uma_ptr_t region, event_t * event_arr, size_t event_arr_sz, exception_t * exception_arr) noexcept{
+
+                event_t * event_arr_first           = event_arr;
+                event_t * event_arr_last            = std::next(event_arr, event_arr_sz);
+                exception_t * exception_arr_first   = exception_arr;
+                exception_t * exception_arr_last    = std::next(event_arr, event_arr_sz); 
+                size_t sliding_window_sz            = event_arr_sz; 
+
+                auto task = [&, this]() noexcept{
+                    this->base->push(region, event_arr_first, sliding_window_sz, exception_arr_first);
+
+                    exception_t * first_retriable_ptr   = std::find(exception_arr_first, exception_arr_last, dg::network_exception::QUEUE_FULL);
+                    exception_t * last_retriable_ptr    = std::find_if(first_retriable_ptr, exception_arr_last, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
+
+                    size_t relative_offset_sz           = std::distance(exception_arr_first, first_retriable_ptr);
+                    sliding_window_sz                   = std::distance(first_retriable_ptr, last_retriable_ptr);
+
+                    std::advance(event_arr_first, relative_offset_sz);
+                    std::advance(exception_arr_first, relative_offset_sz)
+
+                    return event_arr_first == event_arr_last;
+                };
+
+                dg::network_concurrency_infretry_x::ExecutableWrapper virtual_task(task);
+                this->executor->exec(virtual_task);
+            }
+
+            auto try_collect(uma_ptr_t region, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept -> bool{
+
+                return this->base->try_collect(region, event_arr, event_arr_sz, event_arr_cap);
+            }
+
+            void collect(uma_ptr_t region, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept{
+
+                this->base->collect(region, event_arr, event_arr_sz, event_arr_cap);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
             }
     };
 
