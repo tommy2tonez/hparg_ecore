@@ -355,11 +355,17 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                while (true){
-                    if (auto rs = map_try(device_id, host_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
-                        return rs;
-                    }
-                }
+                vma_ptr_t rs    = {};
+                auto job        = [&]() noexcept{
+                    rs = map_try(device_id, host_ptr);
+                    return rs != dg::ptr_limits<vma_ptr_t>::null_value();
+                };
+                stdx::eventloop_spin_expbackoff(job); //we'll be back to add the wait features, I have yet to prove that this could be done cleanly
+                                                      //can we generalize that the notify at every possible point would hinder this from freed lock + forever wait() ?
+                                                      //we'll write the proof later + implement a readable version
+                                                      //the problem with these implementations is that we dont want to introduce complexities, because it could be solved by using other measurements, like memregion locks or whatever
+                                                      //we can't really write a software if we keep introducing complexities, it's gonna blow up (the logic) at some point
+                return rs;
             }
 
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{

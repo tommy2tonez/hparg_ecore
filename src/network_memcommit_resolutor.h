@@ -291,7 +291,7 @@ namespace dg::network_memcommit_resolutor{
 
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingSignalEvent>{
 
-                dg::network_producer_consuemr::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * data_arr, size_t sz) noexcept{
 
@@ -929,12 +929,13 @@ namespace dg::network_memcommit_resolutor{
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(ptr);
 
                                 if (!signal_smph_addr.has_value()){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));    
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id, signal_smph_addr));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), descendant, ptr, 
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_pingpong_request, 
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg_1           = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), descendant, ptr,
+                                                                                                                                                                                   expected_ops_id, signal_smph_addr));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg_1));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -1043,12 +1044,13 @@ namespace dg::network_memcommit_resolutor{
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(ptr);
 
                                 if (!signal_smph_addr.has_value()){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id, signal_smph_addr));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));    
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), descendant, ptr, 
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_pingpong_request, 
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), descendant, ptr,
+                                                                                                                                                                                   expected_ops_id, signal_smph_addr));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -1303,10 +1305,13 @@ namespace dg::network_memcommit_resolutor{
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(ptr);
 
                                 if (!signal_smph_addr.has_value()){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));    
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id, signal_smph_addr));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), descendant, ptr, dg::network_memcommit_factory::event_kind_forward_pingpong_request, expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), descendant, ptr,
+                                                                                                                                                                                   expected_ops_id, signal_smph_addr)); 
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -1415,10 +1420,13 @@ namespace dg::network_memcommit_resolutor{
                                 uma_ptr_t descendant    = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(ptr);
 
                                 if (!signal_smph_addr.has_value()){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, ptr, expected_ops_id, signal_smph_addr));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));                                        
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), descendant, ptr, dg::network_memcommit_factory::event_kind_forward_pingpong_request, expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), descendant, ptr,
+                                                                                                                                                                                   expected_ops_id, signal_smph_addr));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -1790,9 +1798,10 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestee                         = event_arr[i].requestee;
                         uma_ptr_t requestor                         = event_arr[i].requestor;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
                         set_operatable_id_t current_ops_id          = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(requestee);
-                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_leaf_signal_smph_addr_nothrow(requestee);
+                        // std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_leaf_signal_smph_addr_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1813,9 +1822,9 @@ namespace dg::network_memcommit_resolutor{
                                     //the problem is here ...
                                     //this is a very hard task, I'm not even kidding
 
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), requestor, requestee,
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_do_signal, 
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -1903,9 +1912,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestee                         = event_arr[i].requestee;
                         uma_ptr_t requestor                         = event_arr[i].requestor;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
-                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_immu_signal_smph_addr_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -1923,9 +1932,9 @@ namespace dg::network_memcommit_resolutor{
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), requestor, requestee,
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_do_signal,
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -2013,9 +2022,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestee                         = event_arr[i].requestee;
                         uma_ptr_t requestor                         = event_arr[i].requestor;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(requestee);
-                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_blkr_signal_smph_addr_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2030,7 +2039,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_blkr_push_observer_nothrow(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_blkr_push_observer_nothrow(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2043,9 +2052,9 @@ namespace dg::network_memcommit_resolutor{
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), requestor, requestee,
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_do_signal,
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -2133,9 +2142,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestee                         = event_arr[i].requestee;
                         uma_ptr_t requestor                         = event_arr[i].requestor;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_rstr_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_rstr_operatable_memevent_id_nothrow(requestee);
-                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_rstr_signal_smph_addr_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2150,7 +2159,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_push_observer_nothrow(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_push_observer_nothrow(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2163,9 +2172,9 @@ namespace dg::network_memcommit_resolutor{
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), requestor, requestee,
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_do_signal,
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -2253,9 +2262,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestee                         = event_arr[i].requestee;
                         uma_ptr_t requestor                         = event_arr[i].requestor;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(requestee);
-                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_mono_signal_smph_addr_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2270,7 +2279,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_mono_push_observer_nothrow(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_mono_push_observer_nothrow(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2283,9 +2292,9 @@ namespace dg::network_memcommit_resolutor{
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), requestor, requestee,
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_do_signal,
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -2373,9 +2382,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t requestee                         = event_arr[i].requestee;
                         uma_ptr_t requestor                         = event_arr[i].requestor;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr; 
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(requestee);
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(requestee);
-                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_pair_signal_smph_addr_nothrow(requestee); 
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2390,7 +2399,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_pair_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_pair_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2403,9 +2412,9 @@ namespace dg::network_memcommit_resolutor{
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));                                     
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_sigagg_request(signal_smph_addr.value(), requestor, requestee,
-                                                                                                                                                                       dg::network_memcommit_factory::event_kind_forward_do_signal,
-                                                                                                                                                                       expected_ops_id));
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
@@ -2494,11 +2503,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2513,7 +2523,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_uacm_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_uacm_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2522,7 +2532,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -2604,11 +2623,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_pacm_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2623,7 +2643,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_pacm_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_pacm_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2632,7 +2652,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -2714,11 +2743,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2733,7 +2763,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_crit_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_crit_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2742,7 +2772,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::devlrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -2844,11 +2883,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr; 
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2863,7 +2903,7 @@ namespace dg::network_memcommit_resolutor{
                                    break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_extndst_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_extndst_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2872,7 +2912,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -2964,11 +3013,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -2983,7 +3033,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_msgrfwd_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_msgrfwd_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -2992,7 +3042,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -3074,11 +3133,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr; 
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3093,7 +3153,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_msgrbwd_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_msgrbwd_push_observer(requestee, requestor, signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -3102,7 +3162,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -3461,11 +3530,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee                     = event_arr[i].requestee;
-                        uma_ptr_t requestor                     = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id         = event_arr[i].operatable_id;
-                        init_status_t init_status               = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
-                        set_operatable_id_t current_ops_id      = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
+                        set_operatable_id_t current_ops_id          = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3479,7 +3549,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -3561,11 +3640,12 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3579,7 +3659,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -3661,11 +3750,15 @@ namespace dg::network_memcommit_resolutor{
                     stdx::seq_cst_guard tx_grd;
 
                     for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee             = event_arr[i].requestee;
-                        uma_ptr_t requestor             = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id = event_arr[i].operatable_id;
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(requestee);
+                        uma_ptr_t requestee                             = event_arr[i].requestee;
+                        uma_ptr_t requestor                             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id                 = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> pong_signal_smph_addr  = event_arr[i].notify_addr;
+
+                        init_status_t init_status                       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id                  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(requestee);
+                        std::optional<uma_ptr_t> ping_signal_smph_addr  = dg::network_tile_member_getsetter::get_blkr_signal_smph_addr_nothrow(requestee);
+                        uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -3680,7 +3773,7 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_tile_member_getsetter::controller_blkr_push_observer(requestee, requestor);
+                                dg::network_tile_member_getsetter::controller_blkr_push_observer(requestee, requestor, pong_signal_smph_addr);
                                 break;
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
@@ -3689,7 +3782,16 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id)));
+                                if (!pong_signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(pong_signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 break;
                             }
                             default:
@@ -3717,8 +3819,17 @@ namespace dg::network_memcommit_resolutor{
                                     break;
                                 }
 
-                                uma_ptr_t descendant = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(requestee);
-                                dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id)));
+                                if (!ping_signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, requestee, expected_ops_id, ping_signal_smph_addr));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(ping_signal_smph_addr.value(), descendant, requestee,
+                                                                                                                                                                                   expected_ops_id, ping_signal_smph_addr));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
                                 dg::network_tile_member_getsetter::set_blkr_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
@@ -3736,6 +3847,8 @@ namespace dg::network_memcommit_resolutor{
                 }
             };
     };
+
+    //
 
     class ForwardPingPongRstrRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
 
