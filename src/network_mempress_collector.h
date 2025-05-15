@@ -127,36 +127,118 @@ namespace dg::network_mempress_collector{
     //CompetitiveTryCollector should suffice for most of the cases that require ASAP notification (without temporal)
     //and ClockCollector would prune the minor cases (the absolute worst cases)
 
+    //
     class WareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
         private:
 
             std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse;
+            size_t warehouse_ingestion_sz; 
 
         public:
 
-            WareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse): warehouse(std::move(warehouse)){}
+            WareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+                               size_t warehouse_ingestion_sz): warehouse(std::move(warehouse)),
+                                                               warehouse_ingestion_sz(warehouse_ingestion_sz){}
 
             void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept[
 
+                event_t * base_event_arr                = event_arr.base();
+                size_t trimmed_warehouse_ingestion_sz   = std::min(this->warehouse_ingestion_sz, this->warehouse->max_consume_size());
+                size_t discretization_sz                = trimmed_warehouse_ingestion_sz;
+                size_t iterable_sz                      = event_arr_sz / discretization_sz + size_t{event_arr_sz % discretization_sz != 0u};  
+
+                for (size_t i = 0u; i < iterable_sz; ++i){
+                    size_t first    = i * discretization_sz;
+                    size_t last     = std::min((i + 1) * discretization_sz, event_arr_sz);
+                    size_t vec_sz   = last - first; 
+
+                    std::expected<dg::vector<event_t>, exception_t> vec = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(vec_sz);
+
+                    if (!vec.has_value()){
+                        //leaks
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(vec.error()));
+                        continue;
+                    }
+
+                    std::copy(std::make_move_iterator(std::next(base_event_arr, first)), std::make_move_iterator(std::next(base_event_arr, last)), vec->begin());
+                    std::expected<bool, exception_t> push_err = this->warehouse->push(std::move(vec.value()));
+
+                    if (!push_err.has_value()){
+                        //leaks
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(push_err.error()));
+                        continue;
+                    }
+
+                    if (!push_err.value()){
+                        //leaks;
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::QUEUE_FULL));
+                        continue;
+                    }
+                }
             ]
     };
 
-    class ExhaustionControlledWareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
+    class WareHouseExhaustionControlledConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
         private:
 
             std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device;
-        
+            size_t warehouse_ingestion_sz;
+
         public:
 
-            ExhaustionControlledWareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
-                                                   std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) noexcept: warehouse(std::move(warehouse)),
-                                                                                                                                                     infretry_device(std::move(infretry_device)){}
+            WareHouseExhaustionControlledConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+                                                   std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device,
+                                                   size_t warehouse_ingestion_sz) noexcept: warehouse(std::move(warehouse)),
+                                                                                            infretry_device(std::move(infretry_device)),
+                                                                                            warehouse_ingestion_sz(warehouse_ingestion_sz){}
 
             void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept{
 
+                //we probably retry 1 time, 2 times or inf times
+                //we dont know, that's why we need abstractions
+
+                event_t * base_event_arr                = event_arr.base();
+                size_t trimmed_warehouse_ingestion_sz   = std::min(this->warehouse_ingestion_sz, this->warehouse->max_consume_size());
+                size_t discretization_sz                = trimmed_warehouse_ingestion_sz;
+                size_t iterable_sz                      = event_arr_sz / discretization_sz + size_t{event_arr_sz % discretization_sz != 0u};
+
+                for (size_t i = 0u; i < iterable_sz; ++i){
+                    size_t first    = i * discretization_sz;
+                    size_t last     = std::min((i + 1) * discretization_sz, event_arr_sz);
+                    size_t vec_sz   = last - first;
+
+                    std::expected<dg::vector<event_t>, exception_t> vec = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(vec_sz);
+
+                    if (!vec.has_value()){
+                        //leaks
+                        dg::network_log_stackdump::error(dg::network_exception::verbose(vec.error())); //serious error
+                        continue;
+                    }
+
+                    std::copy(std::make_move_iterator(std::next(base_event_arr, first)), std::make_move_iterator(std::next(base_event_arr, last)), vec->begin());
+                    std::expected<bool, exception_t> push_err = {};
+
+                    auto task = []() noexcept{
+                        push_err = this->warehouse->push(std::move(vec.value()));                       
+                        return !push_err.has_value() || push_err.value() == true;
+                    };
+
+                    dg::network_concurrency_infretry_x::ExecutableWrapper virtual_task(task);
+                    this->infretry_device->exec(virtual_task);
+
+                    if (!push_err.has_value()){
+                        dg::network_log_stackdump::error(dg::network_exception::verbose(push_err.error())); //serious error
+                        continue;
+                    }
+
+                    if (!push_err.value()){
+                        dg::network_log_stackdump::error(dg::network_exception::verbose(push_err.error())); //serious error
+                        continue;
+                    }
+                }
             }
     };
 
