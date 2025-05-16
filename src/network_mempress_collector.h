@@ -235,7 +235,7 @@ namespace dg::network_mempress_collector{
                     }
 
                     if (!push_err.value()){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(push_err.error())); //serious error
+                        dg::network_log_stackdump::error(dg::network_exception::verbose(dg::network_exception::QUEUE_FULL)); //serious error
                         continue;
                     }
                 }

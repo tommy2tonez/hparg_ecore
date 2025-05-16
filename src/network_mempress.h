@@ -37,10 +37,11 @@ namespace dg::network_mempress{
     };
 
     template <class lock_t>
-    struct alignas(std::max(alignof(std::max_align_t), std::hardware_destructive_interference_size)) RegionBucket{
+    struct RegionBucket{
         std::vector<event_t> event_container;
         size_t event_container_cap;
-        lock_t lck;
+        std::unique_ptr<lock_t> lck;
+        stdx::inplace_hdi_container<std::atomic<bool>> is_empty_concurrent_var;
     };
 
     template <class lock_t>
@@ -99,7 +100,7 @@ namespace dg::network_mempress{
                     }
                 }
 
-                stdx::xlock_guard<lock_t> lck_grd(this->region_vec[bucket_idx].lck);
+                stdx::xlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 size_t old_sz   = this->region_vec[bucket_idx].event_container.size();
                 size_t app_cap  = this->region_vec[bucket_idx].event_container_cap - old_sz;
@@ -111,6 +112,8 @@ namespace dg::network_mempress{
 
                 std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
                 std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, event_sz), dg::network_exception::QUEUE_FULL);
+
+                this->update_concurrent_is_empty(bucket_idx);
             }
 
             auto try_collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
@@ -124,11 +127,19 @@ namespace dg::network_mempress{
                     }
                 }
 
-                if (!stdx::try_lock(this->region_vec[bucket_idx].lck)){
+                bool local_is_empty = this->region_vec[bucket_idx].is_empty_concurrent_var.value.load(std::memory_order_relaxed);
+
+                if (local_is_empty){
                     return false;
                 }
 
-                stdx::unlock_guard<lock_t> lck_grd(this->region_vec[bucket_idx].lck);
+                //sequenced after the is_empty, does not need a fence
+
+                if (!stdx::try_lock(*this->region_vec[bucket_idx].lck)){
+                    return false;
+                }
+
+                stdx::unlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 dst_sz              = std::min(dst_cap, static_cast<size_t>(this->region_vec[bucket_idx].event_container.size()));
                 size_t rem_sz       = this->region_vec[bucket_idx].event_container.size() - dst_sz;
@@ -136,8 +147,9 @@ namespace dg::network_mempress{
                 auto opit_first     = std::next(this->region_vec[bucket_idx].event_container.begin(), rem_sz); 
                 auto opit_last      = this->region_vec[bucket_idx].event_container.end();
 
-                std::copy(opit_first, opit_last, dst);
-                this->region_vec[bucket_idx].event_container.erase(opit_first, opit_last);
+                std::copy(std::make_move_iterator(opit_first), std::make_move_iterator(opit_last), dst);
+                this->region_vec[bucket_idx].event_container.resize(rem_sz);
+                this->update_concurrent_is_empty(bucket_idx);
 
                 return true;
             }
@@ -153,7 +165,7 @@ namespace dg::network_mempress{
                     }
                 }
 
-                stdx::xlock_guard<lock_t> lck_grd(this->region_vec[bucket_idx].lck);
+                stdx::xlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 dst_sz              = std::min(dst_cap, static_cast<size_t>(this->region_vec[bucket_idx].event_container.size()));
                 size_t rem_sz       = this->region_vec[bucket_idx].event_container.size() - dst_sz;
@@ -161,13 +173,24 @@ namespace dg::network_mempress{
                 auto opit_first     = std::next(this->region_vec[bucket_idx].event_container.begin(), rem_sz); 
                 auto opit_last      = this->region_vec[bucket_idx].event_container.end();
 
-                std::copy(opit_first, opit_last, dst);
-                this->region_vec[bucket_idx].event_container.erase(opit_first, opit_last);
+                std::copy(std::make_move_iterator(opit_first), std::make_move_iterator(opit_last), dst);
+                this->region_vec[bucket_idx].event_container.resize(rem_sz);
+                this->update_concurrent_is_empty(bucket_idx);
             }
 
             auto max_consume_size() noexcept -> size_t{
 
                 return this->_submit_cap;
+            }
+        
+        private:
+
+            void update_concurrent_is_empty(size_t bucket_idx) noexcept{
+
+                stdx::seq_cst_guard tx_grd;
+
+                RegionBucket<lock_t>& bucket = this->region_vec[bucket_idx];
+                bucket.is_empty_concurrent_var.value.exchange(bucket.event_container.empty(), std::memory_order_relaxed); //is this expensive ??? people are trying to collect, we are introducing serialization @ the variable
             }
     };
 

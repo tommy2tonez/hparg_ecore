@@ -167,15 +167,15 @@ namespace dg::network_mempress_dispatch_warehouse{
             size_t suffix_array_sz;
             stdx::inplace_hdi_container<uint64_t> state;
 
-            static inline constexpr size_t STATE_BIT_CAP = sizeof(uint64_t) * CHAR_BIT;
-
         public:
+
+            static inline constexpr size_t STATE_BIT_CAP = sizeof(uint64_t) * CHAR_BIT;
 
             NiceClassRoom(size_t bucket_bit_sz,
                           size_t suffix_array_sz): bucket_bit_sz(bucket_bit_sz),
                                                    suffix_array_sz(suffix_array_sz),
                                                    state(std::in_place_t{}, 0u){
-                
+
                 size_t required_bit_sz = bucket_bit_sz * suffix_array_sz;  
 
                 if (required_bit_sz > STATE_BIT_CAP){
