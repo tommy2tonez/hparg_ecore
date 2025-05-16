@@ -97,51 +97,44 @@ namespace dg::network_mempress_collector{
             }
     };
 
-    //let's see whats going on
+    //let's try to be realistic
+    //we have 256 concurrent memory_press_region
+    //we are scanning 1 microsecond/ region
+    //=> 1000 cmpexch/millisecond
 
-    //we have consumer
-    //we have range_press
-    //we are trying to try_collect the memregions as fast as possible
-    //if it is not successfully try_collected, we are fine, it's being operated on by other guys (either the producer or consumer 50% 50%, we dont really know)
-    //the problem is the immediate ConsumerInterface<event_t>
-    //we are having lock contention problem at the point of ConsumerInterface<event_t>
-    //we are context switching + polluting all the cache fetch of the up-to-point memregions
-    //we'll attempt to solve that by using a bouncing container
-    //alright, this is now the question of dynamic memory allocations or stack_allocations whether vector + friends are better (in terms of polluting RAM), we'll be talking about that
-    //the problem with stack is that it is already IN_CACHE, so we dont have the problem of polluting RAM, yet the problem of wasting CPU flops
+    //=> 1.000.000 cmpexch per second (this is fairly expensive)
+    //=> 256.000.000 cmpexch per second (this is very expensive)
+    //to my understanding, it is possible in modern atomic arch of CPUs (Intel moved to all atomics in 2022, so it's not surprising that cores across different NUMA clusters can scale linearly with the atomic_relaxed operations)
 
-    //we'll implement a frequencizer, this is a fancy name to meet a frequency requirement without reading the update interval literally every nanoseconds
-    //we implement a first version of "prioritized" collector
-    //by leveraging pivot + reverse levelwise tree traversal
+    //now think very clearly
+    //we have semaphore tile to increase locality of dispatch, the contention at the semaphore region is very high
+    //we'd want to increase the scanning frequency for the semaphore regions (-> 1ms or 100us per scan, accumulating roughly 1024 -> 16K pingpong + ping + pong + forward + backward signals)
+    //everything is OK up to this point
 
-    //0 -> 1
-    //0 -> 3
-    //0 -> 7
-    //0 -> 15
+    //we'd want to offload this to the warehouse, connected to another connector -> the resolutor -> the mempress again (this cycle is literally endless in the backward loop)
+    //OK, who is responsible for logging the errors in this while (true) loop, it seems like the blaming stack is indeterministic (we can't take a slice at a stack and says this guy is responsible for this error without introducing tons of overheads (think about 1 allocation / pingpong signal, it's ridiculous)) 
 
-    //the number is very sound when we have a heap of 15 height
-    //we fit everything in the CPU cache
+    //the warehouse is very fast, responsible for bouncing roughly 1 << 30 memevents/ second
 
-    //what is a good number
-    //1024 mempress regions, the only reason we are not serializing the access of 1024 mempress -> 1 mempress is the problem of serialization overheads
-    //the number of mempress regions are only to reduce the serialization overheads, does not represent the memlocks or etc
+    //how do we mimic the cron job again?
+    //by bouncing in the high latency regions (a signal in a high frequency region stucks in the high frequency region until it is expired)
 
-    //1024 mempress regions, with an iterable sz of 2036, average frequencied region iterations per scan == 3 -> 4
-    //so the actual iterable sz reduced -> 512
-    //the number is sound
-    //plus, we established a basic retry_prioritized for lock contention
+    //what's wrong?
+    //our connector workload is too heavy (we cant really hit the frequency requirements if we are doing a lot of extra workloads)
+    //we are in a tight_loop of scanning 1024 suffix array, then there comes a ton of memory event, and we are also responsible for packaging the memory events before offloading that to the warehouse !!!
+    //we can't really optimize that YET, it would look very ridiculous to return dg::vector<event_t> * dst, size_t& dst_sz, size_t dst_cap, because essentially, that's what we want (we are trading maintainability for the gains which we can't really quantify)
+    //that is something that we consider the collector problem, we need to increase more collector to do the job, because ... someone has to do the job eventually ... frequency wise ... not good, but arrival time wise ... it's about the same
 
-    //I think this should suffice
+    //why would we want to introduce so much headaches? can we just do a normal synchronized forward + backward
+    //well ...
 
-    //I was thinking about ClockCompetitiveTryCollector ->  ClockCollector
+    //we want to introduce the problem, the leetcode problem of "most efficient forward + backward schedules", it's a tree with cron jobs + extn tiles + internal tiles + memory_access, memory fetch + locality of those
+    //it's simple, it has rules, it has languages, it's optimizable, and most importantly, it can run on a billion devices at a time with no contention or socket problem !!! of coursce IF you AC the problem 
 
-    //ClockCompetitiveTryCollector should suffice for most of the cases
-    //ClockCollector would prune the minor cases (the absolute worst cases)
+    //how about memevents that we really dont want to latencize, alright, it's directly moved from the producer -> the dispatch_warehouse
+    //it seems to me like the mempress is only for the semaphore tiles, where we'd intentionally hold things back on a bonsaied + frequencized schedule to increase locality of dispatches
+    //it's incredibly complicated, we dont really wanna talk about the latency + friends for now
 
-    //CompetitiveTryCollector should suffice for most of the cases that require ASAP notification (without temporal)
-    //and ClockCollector would prune the minor cases (the absolute worst cases)
-
-    //
     class WareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
         private:
