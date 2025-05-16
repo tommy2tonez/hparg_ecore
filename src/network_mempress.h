@@ -22,6 +22,10 @@ namespace dg::network_mempress{
     using uma_ptr_t = dg::network_pointer::uma_ptr_t;
     using event_t   = uint64_t;
 
+    //this is a very tough component to write correctly
+    //I'm telling yall that I have rewritten this the 20th time already
+    //we'll settle with what we have for now
+
     struct MemoryPressInterface{
         virtual ~MemoryPressInterface() noexcept = default;
         virtual auto first() const noexcept -> uma_ptr_t = 0;
@@ -31,9 +35,11 @@ namespace dg::network_mempress{
                                                                                                          //we cant really log the exhaustion (-> user_id) due to performance + technical constraints
                                                                                                          //yet we could log the exhaustion as a global error (because that's not a performance contraint)
 
-        virtual auto try_collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept -> bool = 0; 
+        virtual auto try_collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept -> bool = 0;
         virtual void collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept = 0;
+        virtual auto is_collectable(uma_ptr_t) noexcept -> bool = 0; 
         virtual auto max_consume_size() noexcept -> size_t = 0;
+        virtual auto minimum_collect_cap() noexcept -> size_t = 0;
     };
 
     template <class lock_t>
@@ -167,29 +173,40 @@ namespace dg::network_mempress{
                     }
                 }
 
-                bool local_is_empty = this->region_vec[bucket_idx].is_empty_concurrent_var.value.load(std::memory_order_relaxed);
-
-                if (local_is_empty){
-                    return false;
-                }
-
                 //sequenced after the is_empty, does not need a fence
 
                 if (!stdx::try_lock(*this->region_vec[bucket_idx].lck)){ //OK, what happens, worst case: try_lock is noipa, not seen by compiler (expected), the std::atomic_thread_fence() kicks in the hardware, the if fences the acquire, the following statements post the if must be after the if
                     return false;
                 }
 
-                dg::network_stack_allocation::NoExceptAllocation<std::optional<dg::vector<event_t>>[]> tmp_vec(this->_collect_tmp_vec_cap);
+                // dg::network_stack_allocation::NoExceptAllocation<std::optional<dg::vector<event_t>>[]> tmp_vec(this->_collect_tmp_vec_cap); //consider _collect_tmp_vec_cap as a reservation technique (this is a very important optimizable, we cant really do resize + etc., its not good)
+                //this is incredibly difficult to write, we'll stick with noexcept measurements for now
+
+                dg::sensitive_vector<dg::vector<event_t>> tmp_vec = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::sensitive_vector<dg::vector<event_t>>>());
 
                 {
                     stdx::unlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
-                    this->do_collect(bucket_idx, tmp_vec.get(), this->_collect_tmp_vec_cap, dst_cap);    
+                    this->do_collect(bucket_idx, tmp_vec, dst_cap);    
                 }
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                dst_sz = std::distance(dst, this->write_contiguous(dst, std::make_move_iterator(tmp_vec.get()), this->_collect_tmp_vec_cap));
+                dst_sz = std::distance(dst, this->write_contiguous(dst, std::move(tmp_vec)));
 
                 return true;
+            }
+
+            auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
+
+                size_t bucket_idx   = stdx::safe_integer_cast<size_t>(dg::memult::distance(this->_first, ptr)) >> this->_memregion_sz_2exp;
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (bucket_idx >= this->region_vec.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                        std::abort();
+                    }
+                }
+
+                return !this->region_vec[bucket_idx].is_empty_concurrent_var.value.load(std::memory_order_relaxed);
             }
 
             void collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
@@ -203,22 +220,27 @@ namespace dg::network_mempress{
                     }
                 }
 
-                dg::network_stack_allocation::NoExceptAllocation<std::optional<dg::vector<event_t>>[]> tmp_vec(this->_collect_tmp_vec_cap);
+                dg::sensitive_vector<dg::vector<event_t>> tmp_vec = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::sensitive_vector<dg::vector<event_t>>>());
 
                 {
                     stdx::xlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
-                    this->do_collect(bucket_idx, tmp_vec.get(), this->_collect_tmp_vec_cap, dst_cap);    
+                    this->do_collect(bucket_idx, tmp_vec, dst_cap);    
                 }
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                dst_sz = std::distance(dst, this->write_contiguous(dst, std::make_move_iterator(tmp_vec.get()), this->_collect_tmp_vec_cap));
+                dst_sz = std::distance(dst, this->write_contiguous(dst, std::move(tmp_vec)));
             }
 
             auto max_consume_size() noexcept -> size_t{
 
                 return this->_submit_cap;
             }
-        
+
+            auto minimum_collect_cap() noexcept -> size_t{
+
+                return this->_submit_cap;
+            }
+
         private:
 
             void update_concurrent_is_empty(size_t bucket_idx) noexcept{
@@ -229,17 +251,12 @@ namespace dg::network_mempress{
                 bucket.is_empty_concurrent_var.value.exchange(bucket.event_container.empty(), std::memory_order_relaxed); //is this expensive ??? people are trying to collect, we are introducing serialization @ the variable
             }
 
-            void do_collect(size_t bucket_idx, std::optional<dg::vector<event_t>> * output_arr, size_t output_arr_cap, size_t event_cap) noexcept{
+            void do_collect(size_t bucket_idx, dg::sensitive_vector<dg::vector<event_t>>& output_vec, size_t event_cap) noexcept{
 
-                size_t output_arr_sz    = 0u;
-                size_t event_sz         = 0u; 
+                size_t event_sz = 0u; 
 
                 while (true){
                     if (this->region_vec[bucket_idx].event_container.empty()){
-                        break;
-                    }
-
-                    if (output_arr_sz == output_arr_cap){
                         break;
                     }
 
@@ -247,24 +264,18 @@ namespace dg::network_mempress{
                         break;
                     }
 
-                    output_arr[output_arr_sz++] = std::move(this->region_vec[bucket_idx].event_container.front());
+                    output_vec.push_back(std::move(this->region_vec[bucket_idx].event_container.front()));
                     this->region_vec[bucket_idx].event_container.pop_front();
-                    event_sz += output_arr[output_arr_sz - 1].size();
+                    event_sz += output_vec.back().size();
                 }
 
                 this->update_concurrent_is_empty(bucket_idx);
             }
 
-            auto write_contiguous(event_t * dst, std::move_iterator<std::optional<dg::vector<event_t>> *> src_arr, size_t src_arr_sz) noexcept -> event_t *{
+            auto write_contiguous(event_t * dst, dg::sensitive_vector<dg::vector<event_t>>&& src_vec) noexcept -> event_t *{
 
-                auto base_src_arr = src_arr.base(); 
-
-                for (size_t i = 0u; i < src_arr_sz; ++i){
-                    if (!base_src_arr[i].has_value()){
-                        return dst;
-                    }
-
-                    dst = std::copy(std::make_move_iterator(base_src_arr[i]->begin()), std::make_move_iterator(base_src_arr[i]->end()), dst);
+                for (dg::vector<event_t>& src: src_vec){
+                    dst = std::copy(std::make_move_iterator(src.begin()), std::make_move_iterator(src.end()), dst);
                 }
 
                 return dst;
@@ -277,7 +288,7 @@ namespace dg::network_mempress{
 
             std::unique_ptr<MemoryPress> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-        
+
         public:
 
             ExhaustionControlledMemoryPress(std::unique_ptr<MemoryPress> base,
@@ -352,6 +363,11 @@ namespace dg::network_mempress{
                 return this->base->try_collect(region, event_arr, event_arr_sz, event_arr_cap);
             }
 
+            auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
+
+                return this->base->is_collectable(ptr);
+            }
+
             void collect(uma_ptr_t region, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept{
 
                 this->base->collect(region, event_arr, event_arr_sz, event_arr_cap);
@@ -360,6 +376,11 @@ namespace dg::network_mempress{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->base->max_consume_size();
+            }
+
+            auto minimum_collect_cap() noexcept -> size_t{
+
+                return this->base->minimum_collect_cap();
             }
     };
 

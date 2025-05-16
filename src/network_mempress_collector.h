@@ -30,6 +30,7 @@ namespace dg::network_mempress_collector{
         virtual ~RangePressInterface() noexcept = default;
         virtual auto size() const noexcept -> size_t = 0;
         virtual auto try_get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool = 0;
+        virtual auto is_gettable(size_t idx) noexcept -> bool = 0;
         virtual void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
     };
 
@@ -67,6 +68,19 @@ namespace dg::network_mempress_collector{
 
                 uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
                 return this->mempress->try_collect(region, dst, dst_sz, dst_cap);
+            } 
+
+            auto is_gettable(size_t idx) noexcept -> bool{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->region_table.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
+                return this->mempress->is_collectable(region);
             } 
 
             void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
@@ -282,6 +296,10 @@ namespace dg::network_mempress_collector{
                 for (size_t i = 0u; i < range_sz; ++i){
                     size_t event_arr_sz = {};
 
+                    if (!this->range_press->is_gettable(i)){
+                        continue;
+                    }
+
                     if (this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap)){
                         std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
                     }
@@ -357,6 +375,10 @@ namespace dg::network_mempress_collector{
                     for (size_t j = first; j < last; ++j){
                         size_t region_idx   = this->suffix_array[j]; 
                         size_t event_arr_sz = {};
+
+                        if (!this->range_press->is_gettable(region_idx)){
+                            continue;
+                        }
 
                         if (this->range_press->try_get(region_idx, event_arr.get(), event_arr_sz, this->collect_cap)){
                             std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
@@ -509,6 +531,11 @@ namespace dg::network_mempress_collector{
                         continue;
                     }
 
+                    if (!this->range_press->is_gettable(i)){
+                        this->clock_data_table[i].last_updated = clock.get();    
+                        continue;
+                    }
+
                     size_t event_arr_sz = {};
 
                     if (this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap)){
@@ -595,6 +622,11 @@ namespace dg::network_mempress_collector{
                         std::chrono::nanoseconds lifetime                               = now - last_updated;
 
                         if (lifetime < update_interval){
+                            continue;
+                        }
+
+                        if (!this->range_press->is_gettable(region_idx)){
+                            this->clock_data_table[j].last_updated = clock.get();
                             continue;
                         }
 
