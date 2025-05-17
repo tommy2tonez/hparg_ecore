@@ -332,6 +332,8 @@ namespace dg::network_rest_frame::server_impl1{
     //we'll probably do filesystem cache, which is a ... database (we wont be there YET), because we think that all of our tile operations are on filessytem 
     //we have PLENTY of RAM to store these guys 
 
+    //we got a feedback about using a cyclic_queue as a replacement for vector to do infinite cache map, it's a good idea, we definitely will implement that along with the filesystem cache features
+
     template <class Hasher>
     class CacheController: public virtual CacheControllerInterface{
 
@@ -4030,12 +4032,14 @@ namespace dg::network_rest_frame::client_impl1{
                     ~InternalBatchResponse() noexcept{
 
                         this->base->wait_response();
+                        std::atomic_signal_fence(std::memory_order_seq_cst); //not really necessary
                         this->release_ticket();
                     }
 
                     auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
                         auto rs = this->base->response();
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
                         this->release_ticket();
                         return rs;
                     }

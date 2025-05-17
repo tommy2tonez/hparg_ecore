@@ -135,6 +135,32 @@ namespace dg::network_mempress_collector{
     //it seems to me like the mempress is only for the semaphore tiles, where we'd intentionally hold things back on a bonsaied + frequencized schedule to increase locality of dispatches
     //it's incredibly complicated, we dont really wanna talk about the latency + friends for now
 
+    //to be honest Son
+    //it's already incredibly complicated to write these
+    //it's a miracle that we could quantify the components, build a filesystem, have a compile-time allocator (which would guarantee to be in the confine of memregions)
+    //we altered the semantic of memlocks (which is supposed to be tile lock), which I would consider a bad move
+    //we made the region scanning possible, the semaphore tiles, the immediate forward + backward
+
+    //our clients really just want to do forward + backward on all cores + wait on the msgrfwd + msgrbwd to "hopefully" get something from the system, once in a bluemoon read the log files to see what's going on
+    //delete + reinstall the core to make it work again
+    //apart from that, they dont want to know the low level implementations
+
+    //we tried our best to make it "not spaghetti"
+    //in the sense of each component is not heavily polymorphised, nor circular referencing
+    //each component can be unplugged and plugged for performance tuning 
+
+    //I know what yall thinking, I wish the tile size is not static
+    //I wish the dispatch can be this can be that
+    //I wish the system does not have to be so rigid
+    //that's precisely where we failed
+
+    //alright, if you have done it better, we must be at the search + navigation implementation + logit saturation problem
+    //its about the two sum, two tile -> one tile problem
+    //how precisely do we solve the problem?
+    //that's actually leetcode easy problem
+    //how precisely do we solve the self-generated synthetic data problem?
+    //OK, I'm sorry that you can't comprehend the logics, it's undoubtably hard
+
     class WareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
         private:
@@ -228,7 +254,7 @@ namespace dg::network_mempress_collector{
                     std::copy(std::make_move_iterator(std::next(base_event_arr, first)), std::make_move_iterator(std::next(base_event_arr, last)), vec->begin());
                     std::expected<bool, exception_t> push_err = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
 
-                    auto task = []() noexcept{
+                    auto task = [&]() noexcept{
                         push_err = this->warehouse->push(std::move(vec.value()));                       
                         return !push_err.has_value() || push_err.value() == true;
                     };
