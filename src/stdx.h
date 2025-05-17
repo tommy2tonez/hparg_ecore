@@ -314,6 +314,8 @@ namespace stdx{
     static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
     static inline constexpr bool IS_ATOMIC_FLAG_AS_SPINLOCK         = true;
 
+    static inline constexpr size_t SPINLOCK_SIZE_MAGIC_VALUE        = 16u;
+
     using spin_lock_t = std::conditional_t<IS_ATOMIC_FLAG_AS_SPINLOCK,
                                            std::atomic_flag,
                                            std::mutex>; 
