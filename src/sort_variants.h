@@ -12,14 +12,15 @@
 #include "assert.h"
 #include "stdx.h"
 #include <type_traits>
+#include <bit>
 
-namespace dg::sort_variants::asc_quicksort{
+namespace dg::sort_variants::quicksort{
 
-    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 32u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 16u;
     static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
-    static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 4u; 
+    static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
-    static inline constexpr size_t ASC_SORTING_RATIO            = 4u; 
+    static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
 
     template <class _Ty>
     static void insertion_sort_1(_Ty * first, _Ty * last){
@@ -92,7 +93,7 @@ namespace dg::sort_variants::asc_quicksort{
     }
 
     template <class _Ty>
-    static __attribute__((noinline)) void insertion_sort_2(_Ty * first, _Ty * last){
+    static void insertion_sort_2(_Ty * first, _Ty * last){
 
         size_t sz                           = std::distance(first, last);
         constexpr size_t SLIDING_WINDOW_SZ  = 3u;
@@ -206,38 +207,8 @@ namespace dg::sort_variants::asc_quicksort{
         }
     }
 
-    //pivot is within first last
-    //we'll have a very special applications for these, we'll implement an inplace binary tree insert???
-    //it's complicated yet we'd want to reduce the inplace_merge complexity -> inserting complexity, we've yet to know the answer 
-
     template <class _Ty>
-    static auto block_pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        std::swap(*std::prev(last), *pivot);
-
-        _Ty pivot_value         = *std::prev(last); 
-        size_t iteration_sz     = std::distance(first, last); 
-        size_t less_sz          = 0u;
-
-        assert(iteration_sz <= BLOCK_PIVOT_MAX_LESS_SZ);
-
-        std::add_pointer_t<_Ty> less_ptr_arr[BLOCK_PIVOT_MAX_LESS_SZ];
-        
-        for (size_t i = 0u; i < iteration_sz; ++i){
-            less_ptr_arr[less_sz]   = std::next(first, i);
-            less_sz                 += first[i] < pivot_value; //what is this problem? we are having cache problems
-        }
-
-        for (size_t i = 0u; i < less_sz; ++i){
-            std::swap(first[i], *less_ptr_arr[i]);
-        }
-
-        std::swap(first[less_sz], *std::prev(last));
-        return std::next(first, less_sz);
-    }
-
-    template <class _Ty>
-    static auto normal_pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+    static auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         assert(first != last);
 
@@ -248,10 +219,29 @@ namespace dg::sort_variants::asc_quicksort{
         _Ty pivot_value         = *std::prev(last); 
         size_t iteration_sz     = std::distance(first, last); 
         size_t less_sz          = 0u;
+        
+        size_t blk_sz           = iteration_sz / BLOCK_PIVOT_MAX_LESS_SZ;
+        size_t blk_pop_sz       = blk_sz * BLOCK_PIVOT_MAX_LESS_SZ; 
+        size_t rem_sz           = iteration_sz - blk_pop_sz; 
 
-        for (size_t i = 0u; i < iteration_sz; ++i){
-            if (first[i] < pivot_value){
-                std::swap(first[less_sz++], first[i]);
+        for (size_t i = 0u; i < blk_sz; ++i){
+            _Ty * local_first   = std::next(first, i * BLOCK_PIVOT_MAX_LESS_SZ);
+            uint64_t bitset     = 0u;
+
+            for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
+                bitset |= static_cast<uint64_t>(local_first[j] < pivot_value) << j;
+            }
+
+            while (bitset != 0u){
+                size_t j = std::countr_zero(bitset);
+                bitset &= (bitset - 1u);
+                std::swap(first[less_sz++], local_first[j]);      
+            }
+        }
+
+        for (size_t i = 0u; i < rem_sz; ++i){
+            if (first[i + blk_pop_sz] < pivot_value){
+                std::swap(first[less_sz++], first[i + blk_pop_sz]);
             }
         }
 
@@ -260,19 +250,7 @@ namespace dg::sort_variants::asc_quicksort{
     }
 
     template <class _Ty>
-    static auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        size_t sz = std::distance(first, last);
-
-        if (sz <= BLOCK_PIVOT_MAX_LESS_SZ){
-            return block_pivot_partition(first, last, pivot);
-        }
-
-        return normal_pivot_partition(first, last, pivot);
-    }
-
-    template <class _Ty>
-    static auto base_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
+    static auto base_asc_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
 
         size_t sz = std::distance(first, last);
 
@@ -303,13 +281,53 @@ namespace dg::sort_variants::asc_quicksort{
         _Ty * pivot_ptr                 = pivot_partition(left_incl_wall, right_excl_wall, std::next(new_first, mid_idx));
         
         incurred_cost                   += new_sz * 2;
-        incurred_cost                   += base_quicksort(new_first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
-        incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
+        incurred_cost                   += base_asc_quicksort(new_first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
+        incurred_cost                   += base_asc_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
 
         std::inplace_merge(first, new_first, last); //this is incredibly hard to implement correctly
         incurred_cost                   += sz;
 
         return incurred_cost;
+    }
+
+    template <class _Ty>
+    static auto base_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
+
+        size_t sz = std::distance(first, last);
+
+        if (sz <= SMALL_QUICKSORT_SZ){
+            insertion_sort_2(first, last);
+            return sz * sz;
+        }
+
+        if (flops > max_flops || stack_idx >= MAX_RECURSION_DEPTH) [[unlikely]]{
+            std::sort(first, last);
+            return sz * stdx::ulog2(stdx::ceil2(sz));
+        }
+
+        size_t mid_idx                  = sz >> 1;
+        uint64_t incurred_cost          = 0u;
+
+        _Ty * left_incl_wall            = find_left_wall(first, last, std::next(first, mid_idx));
+        _Ty * right_excl_wall           = find_right_wall(first, last, std::next(first, mid_idx));  
+        _Ty * pivot_ptr                 = pivot_partition(left_incl_wall, right_excl_wall, std::next(first, mid_idx));
+        
+        incurred_cost                   += sz * 2;
+        incurred_cost                   += base_quicksort(first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
+        incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
+
+        return incurred_cost;
+    }
+
+    template <class _Ty>
+    __attribute__((noinline)) void asc_quicksort(_Ty * first, _Ty * last) noexcept{
+
+        static_assert(std::is_arithmetic_v<_Ty>);
+
+        size_t sz           = std::distance(first, last);
+        size_t compute_sz   = sz * stdx::ulog2(stdx::ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
+
+        base_asc_quicksort(first, last, 0u, compute_sz, 0u);
     }
 
     template <class _Ty>
