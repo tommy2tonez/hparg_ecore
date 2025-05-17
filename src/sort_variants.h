@@ -272,7 +272,7 @@ namespace dg::sort_variants::asc_quicksort{
     }
 
     template <class _Ty>
-    static auto base_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_sz) -> uint64_t{
+    static auto base_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
 
         size_t sz = std::distance(first, last);
 
@@ -281,7 +281,7 @@ namespace dg::sort_variants::asc_quicksort{
             return sz * sz;
         }
 
-        if (flops > max_flops || stack_sz > MAX_RECURSION_DEPTH) [[unlikely]]{
+        if (flops > max_flops || stack_idx >= MAX_RECURSION_DEPTH) [[unlikely]]{
             std::sort(first, last);
             return sz * stdx::ulog2(stdx::ceil2(sz));
         }
@@ -303,8 +303,8 @@ namespace dg::sort_variants::asc_quicksort{
         _Ty * pivot_ptr                 = pivot_partition(left_incl_wall, right_excl_wall, std::next(new_first, mid_idx));
         
         incurred_cost                   += new_sz * 2;
-        incurred_cost                   += base_quicksort(new_first, pivot_ptr, flops + incurred_cost, max_flops, stack_sz + 1u);
-        incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_sz + 1u);
+        incurred_cost                   += base_quicksort(new_first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
+        incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
 
         std::inplace_merge(first, new_first, last); //this is incredibly hard to implement correctly
         incurred_cost                   += sz;
@@ -320,7 +320,7 @@ namespace dg::sort_variants::asc_quicksort{
         size_t sz           = std::distance(first, last);
         size_t compute_sz   = sz * stdx::ulog2(stdx::ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
 
-        base_quicksort(first, last, 0u, compute_sz, 1u);
+        base_quicksort(first, last, 0u, compute_sz, 0u);
     }
 } 
 
