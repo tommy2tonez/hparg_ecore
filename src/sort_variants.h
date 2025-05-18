@@ -10,17 +10,36 @@
 #include <chrono>
 #include <iostream>
 #include "assert.h"
-#include "stdx.h"
+// #include "stdx.h"
 #include <type_traits>
 #include <bit>
 
 namespace dg::sort_variants::quicksort{
 
-    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 16u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 32u;
     static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
     static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
+    static inline constexpr size_t SMALL_PIVOT_SZ               = 32u; 
+
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto ulog2(T val) noexcept -> T{
+
+        return static_cast<T>(sizeof(T) * CHAR_BIT - 1u) - static_cast<T>(std::countl_zero(val));
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    static constexpr auto ceil2(T val) noexcept -> T{
+
+        if (val < 2u) [[unlikely]]{
+            return 1u;
+        } else [[likely]]{
+            T uplog_value = ulog2(static_cast<T>(val - 1u)) + 1u;
+            return T{1u} << uplog_value;
+        }
+    }
 
     template <class _Ty>
     static void insertion_sort_1(_Ty * first, _Ty * last){
@@ -96,11 +115,11 @@ namespace dg::sort_variants::quicksort{
     static void insertion_sort_2(_Ty * first, _Ty * last){
 
         size_t sz                           = std::distance(first, last);
-        constexpr size_t SLIDING_WINDOW_SZ  = 3u;
+        constexpr size_t SLIDING_WINDOW_SZ  = 5u;
 
-        if (sz < SLIDING_WINDOW_SZ) [[unlikely]]{
+        if (sz < SLIDING_WINDOW_SZ){
             insertion_sort_1(first, last);
-            return;        
+            return;
         }
 
         //strategize, for loop, 4 + trailing one every iteration
@@ -163,13 +182,14 @@ namespace dg::sort_variants::quicksort{
         return last;
     }
 
+    //optimization ON, how to do this correctly?
     template <class _Ty>
     static auto find_left_wall(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         while (true){
-            if (first == last){
-                return first;
-            }
+            // if (first == last){
+                // return first;
+            // }
 
             if (first == pivot){
                 return first;
@@ -189,9 +209,9 @@ namespace dg::sort_variants::quicksort{
     static auto find_right_wall(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         while (true){
-            if (first == last){
-                return last;
-            }
+            // if (first == last){
+                // return last;
+            // }
 
             if (std::prev(last) == pivot){
                 return last;
@@ -202,13 +222,13 @@ namespace dg::sort_variants::quicksort{
             }
 
             //>= pivot
-            // last = std::prev(last);
-            std::advance(last, -1);
+            last = std::prev(last);
+            // std::advance(last, -1);
         }
     }
 
     template <class _Ty>
-    static auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+    static auto pivot_partition_1(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         assert(first != last);
 
@@ -216,7 +236,7 @@ namespace dg::sort_variants::quicksort{
 
         std::swap(*std::prev(last), *pivot);
 
-        _Ty pivot_value         = *std::prev(last); 
+        const _Ty& pivot_value  = *std::prev(last); 
         size_t iteration_sz     = std::distance(first, last); 
         size_t less_sz          = 0u;
         
@@ -250,6 +270,222 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class _Ty>
+    static auto dg_restrict_swap(_Ty * __restrict__ lhs, _Ty * __restrict__ rhs){
+
+        std::swap(*lhs, *rhs);
+    }
+
+    template <class Ty>
+    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const size_t sz) noexcept -> uint64_t{
+
+        uint64_t lhs_bitset = 0u; 
+
+        for (size_t i = 0u; i < sz; ++i) [[likely]]{
+            size_t reverse_idx  = sz - i;
+            lhs_bitset          |= static_cast<uint64_t>(first[i] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz
+        }
+
+        return lhs_bitset;
+    }
+
+    template <class Ty>
+    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) noexcept -> uint64_t{
+
+        uint64_t rhs_bitset = 0u;
+
+        for (size_t i = 0u; i < sz; ++i) [[likely]]{
+            size_t reverse_idx  = sz - (i + 1); 
+            rhs_bitset          |= static_cast<uint64_t>(last[-(static_cast<intmax_t>(i) + 1)] < pivot) << reverse_idx;
+        }
+
+        return rhs_bitset;
+    }
+
+    template <class Ty, size_t SZ>
+    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) noexcept -> uint64_t{
+
+        uint64_t lhs_bitset = 0u; 
+
+        [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            (
+                [&]{
+                    (void) IDX;
+                    constexpr size_t reverse_idx = SZ - IDX;
+                    lhs_bitset |= static_cast<uint64_t>(first[IDX] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
+                }(), ...
+            );
+        }(std::make_index_sequence<SZ>{});
+
+        return lhs_bitset;
+    }
+
+    template <class Ty, size_t SZ>
+    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const std::integral_constant<size_t, SZ>) noexcept -> uint64_t{
+
+        uint64_t rhs_bitset = 0u;
+
+        [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            (
+                [&]{
+                    (void) IDX;
+                    constexpr size_t reverse_idx        = SZ - (IDX + 1);
+                    constexpr intmax_t reverse_cursor   =  -(static_cast<intmax_t>(IDX) + 1);
+
+                    rhs_bitset |= static_cast<uint64_t>(last[reverse_cursor] < pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
+                }(), ...
+            );
+        }(std::make_index_sequence<SZ>{});
+
+        return rhs_bitset;
+    }
+
+    //
+    template <class _Ty>
+    static auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+
+        //this is complicated to write, I'll try
+
+        std::swap(*std::prev(last), *pivot);
+
+        const _Ty& pivot_value  = *std::prev(last);
+        _Ty * llast             = std::prev(last);
+
+        uint64_t lhs_bitset = 0u;
+        uint64_t rhs_bitset = 0u;
+
+        while (true){
+            size_t sz = std::distance(first, llast);
+
+            if (sz == 0u){
+                break;
+            }
+
+            if (lhs_bitset == 0u){
+                size_t refill_sz = std::min(sz, BLOCK_PIVOT_MAX_LESS_SZ); 
+
+                if (refill_sz == BLOCK_PIVOT_MAX_LESS_SZ) [[likely]]{
+                    lhs_bitset = extract_greater(first, pivot_value, std::integral_constant<size_t, BLOCK_PIVOT_MAX_LESS_SZ>{});
+                } else [[unlikely]]{
+                    lhs_bitset = extract_greater(first, pivot_value,  refill_sz);
+                }
+
+
+                std::advance(first, refill_sz);
+                continue;
+            }
+
+            if (rhs_bitset == 0u){
+                size_t refill_sz = std::min(sz, BLOCK_PIVOT_MAX_LESS_SZ);
+
+                if (refill_sz == BLOCK_PIVOT_MAX_LESS_SZ) [[likely]]{
+                    rhs_bitset = extract_lesser(llast, pivot_value, std::integral_constant<size_t, BLOCK_PIVOT_MAX_LESS_SZ>{});
+                } else [[unlikely]]{
+                    rhs_bitset = extract_lesser(llast, pivot_value, refill_sz);
+                }
+    
+                std::advance(llast, -static_cast<intmax_t>(refill_sz));
+                continue;
+            }
+
+            //lhs_bitset != 0 && rhs_bitset != 0
+
+            while (lhs_bitset != 0u && rhs_bitset != 0u){ //what's the better word? a & b != 0
+                uint64_t lhs_back_idx       = std::countr_zero(lhs_bitset); 
+                uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset); //
+
+                lhs_bitset                  &= (lhs_bitset - 1u);
+                rhs_bitset                  &= (rhs_bitset - 1u);
+
+                dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
+            }
+        }
+
+        while (lhs_bitset != 0u && rhs_bitset != 0u){
+            uint64_t lhs_back_idx       = std::countr_zero(lhs_bitset); 
+            uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset);
+            lhs_bitset                  &= (lhs_bitset - 1u);
+            rhs_bitset                  &= (rhs_bitset - 1u);
+
+            dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
+        }
+
+        if (lhs_bitset != 0u){
+            uint64_t max_significant_idx = (std::numeric_limits<uint64_t>::digits - 1) - std::countl_zero(lhs_bitset); //
+            std::iter_swap(std::prev(first, max_significant_idx), std::prev(last));
+
+            return pivot_partition_1(std::prev(first, max_significant_idx), first, std::prev(first, max_significant_idx));
+        }
+
+        if (rhs_bitset != 0u){
+            uint64_t max_significant_idx    = (std::numeric_limits<uint64_t>::digits - 1) - std::countl_zero(rhs_bitset);//???
+            uint64_t swapping_idx           = max_significant_idx + 1u;
+
+            std::iter_swap(std::next(llast, swapping_idx), std::prev(last));
+
+            return pivot_partition_1(llast, std::next(llast, swapping_idx + 1u), std::next(llast, swapping_idx));
+        }
+
+        std::iter_swap(first, std::prev(last));
+        return first; 
+    } 
+
+    template <class _Ty>
+    static auto pivot_partition_3(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+
+        assert(first != last);
+
+        //attempt to swap pivot
+
+        std::swap(*first, *pivot);
+
+        const _Ty& pivot_value  = *first; 
+        size_t iteration_sz     = std::distance(first, last); 
+        size_t greater_sz       = 0u;
+
+        size_t blk_sz           = iteration_sz / BLOCK_PIVOT_MAX_LESS_SZ;
+        size_t blk_pop_sz       = blk_sz * BLOCK_PIVOT_MAX_LESS_SZ; 
+        size_t rem_sz           = iteration_sz - blk_pop_sz; 
+
+        for (size_t i = 0u; i < blk_sz; ++i){
+            _Ty * local_last    = std::prev(last, i * BLOCK_PIVOT_MAX_LESS_SZ);
+            uint64_t bitset     = 0u;
+
+            for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
+                bitset |= static_cast<uint64_t>(local_last[-static_cast<intmax_t>(j + 1u)] > pivot_value) << j;
+            }
+
+            while (bitset != 0u){
+                size_t j = std::countr_zero(bitset);
+                bitset &= (bitset - 1u);
+                std::swap(last[-static_cast<intmax_t>(++greater_sz)], local_last[-static_cast<intmax_t>(j + 1u)]);      
+            }
+        }
+
+        for (size_t i = 0u; i < rem_sz; ++i){
+            size_t back_idx = (rem_sz - 1) - i; 
+
+            if (first[back_idx] > pivot_value){
+                std::swap(last[-static_cast<intmax_t>(++greater_sz)], first[back_idx]);
+            }
+        }
+
+        std::swap(last[-static_cast<intmax_t>(greater_sz + 1u)], *first);
+        return std::prev(last, greater_sz + 1u);
+    }
+
+    template <class _Ty>
+    static auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+
+        size_t sz = std::distance(first, last);
+
+        if (sz <= SMALL_PIVOT_SZ){
+            return pivot_partition_1(first, last, pivot);
+        } else{
+            return pivot_partition_2(first, last, pivot);
+        }
+    }
+
+    template <class _Ty>
     static auto base_asc_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
 
         size_t sz = std::distance(first, last);
@@ -261,7 +497,7 @@ namespace dg::sort_variants::quicksort{
 
         if (flops > max_flops || stack_idx >= MAX_RECURSION_DEPTH) [[unlikely]]{
             std::sort(first, last);
-            return sz * stdx::ulog2(stdx::ceil2(sz));
+            return sz * ulog2(ceil2(sz));
         }
 
         size_t insertion_sort_allowance = sz / ASC_SORTING_RATIO;
@@ -278,7 +514,7 @@ namespace dg::sort_variants::quicksort{
 
         _Ty * left_incl_wall            = find_left_wall(new_first, last, std::next(new_first, mid_idx));
         _Ty * right_excl_wall           = find_right_wall(new_first, last, std::next(new_first, mid_idx));  
-        _Ty * pivot_ptr                 = pivot_partition(left_incl_wall, right_excl_wall, std::next(new_first, mid_idx));
+        _Ty * pivot_ptr                 = pivot_partition_1(left_incl_wall, right_excl_wall, std::next(new_first, mid_idx));
         
         incurred_cost                   += new_sz * 2;
         incurred_cost                   += base_asc_quicksort(new_first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
@@ -302,21 +538,19 @@ namespace dg::sort_variants::quicksort{
 
         if (flops > max_flops || stack_idx >= MAX_RECURSION_DEPTH) [[unlikely]]{
             std::sort(first, last);
-            return sz * stdx::ulog2(stdx::ceil2(sz));
+            return sz * ulog2(ceil2(sz));
+        } else [[likely]]{
+            size_t mid_idx          = sz >> 1;
+            uint64_t incurred_cost  = 0u;
+
+            _Ty * pivot_ptr         = pivot_partition(first, last, std::next(first, mid_idx));    
+
+            incurred_cost           += sz;
+            incurred_cost           += base_quicksort(first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
+            incurred_cost           += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
+
+            return incurred_cost;    
         }
-
-        size_t mid_idx                  = sz >> 1;
-        uint64_t incurred_cost          = 0u;
-
-        _Ty * left_incl_wall            = find_left_wall(first, last, std::next(first, mid_idx));
-        _Ty * right_excl_wall           = find_right_wall(first, last, std::next(first, mid_idx));  
-        _Ty * pivot_ptr                 = pivot_partition(left_incl_wall, right_excl_wall, std::next(first, mid_idx));
-        
-        incurred_cost                   += sz * 2;
-        incurred_cost                   += base_quicksort(first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
-        incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
-
-        return incurred_cost;
     }
 
     template <class _Ty>
@@ -325,7 +559,7 @@ namespace dg::sort_variants::quicksort{
         static_assert(std::is_arithmetic_v<_Ty>);
 
         size_t sz           = std::distance(first, last);
-        size_t compute_sz   = sz * stdx::ulog2(stdx::ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
+        size_t compute_sz   = sz * ulog2(ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
 
         base_asc_quicksort(first, last, 0u, compute_sz, 0u);
     }
@@ -336,7 +570,7 @@ namespace dg::sort_variants::quicksort{
         static_assert(std::is_arithmetic_v<_Ty>);
 
         size_t sz           = std::distance(first, last);
-        size_t compute_sz   = sz * stdx::ulog2(stdx::ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
+        size_t compute_sz   = sz * ulog2(ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
 
         base_quicksort(first, last, 0u, compute_sz, 0u);
     }
