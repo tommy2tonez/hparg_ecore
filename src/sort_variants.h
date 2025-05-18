@@ -22,7 +22,7 @@ namespace dg::sort_variants::quicksort{
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
     static inline constexpr size_t SMALL_PIVOT_SZ               = 32u; 
-
+    // static inline constexpr size_t BLOCK_PIVOT_BITSET_DUMP_SZ   = 4u;
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto ulog2(T val) noexcept -> T{
@@ -143,7 +143,7 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class _Ty>
-    static __attribute__((noinline)) auto insertion_sort_3(_Ty * first, _Ty * last, size_t insertion_sort_allowance) -> _Ty *{
+    static auto insertion_sort_3(_Ty * first, _Ty * last, size_t insertion_sort_allowance) -> _Ty *{
 
         size_t sz                           = std::distance(first, last);
         constexpr size_t SLIDING_WINDOW_SZ  = 3u;
@@ -270,13 +270,13 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class _Ty>
-    static auto dg_restrict_swap(_Ty * __restrict__ lhs, _Ty * __restrict__ rhs){
+    static inline __attribute__((always_inline)) void dg_restrict_swap(_Ty * __restrict__ lhs, _Ty * __restrict__ rhs){
 
         std::swap(*lhs, *rhs);
     }
 
     template <class Ty>
-    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const size_t sz) noexcept -> uint64_t{
+    static __attribute__((noinline)) auto extract_greater(Ty * first, const Ty& pivot, const size_t sz) -> uint64_t{
 
         uint64_t lhs_bitset = 0u; 
 
@@ -289,7 +289,7 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class Ty>
-    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) noexcept -> uint64_t{
+    static  __attribute__((noinline)) auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) -> uint64_t{
 
         uint64_t rhs_bitset = 0u;
 
@@ -302,7 +302,7 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class Ty, size_t SZ>
-    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) noexcept -> uint64_t{
+    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> uint64_t{
 
         uint64_t lhs_bitset = 0u; 
 
@@ -320,18 +320,16 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class Ty, size_t SZ>
-    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const std::integral_constant<size_t, SZ>) noexcept -> uint64_t{
+    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> uint64_t{
 
         uint64_t rhs_bitset = 0u;
+        Ty * first          = std::prev(last, SZ);
 
         [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
             (
                 [&]{
                     (void) IDX;
-                    constexpr size_t reverse_idx        = SZ - (IDX + 1);
-                    constexpr intmax_t reverse_cursor   =  -(static_cast<intmax_t>(IDX) + 1);
-
-                    rhs_bitset |= static_cast<uint64_t>(last[reverse_cursor] < pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
+                    rhs_bitset |= static_cast<uint64_t>(first[IDX] < pivot) << IDX; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
                 }(), ...
             );
         }(std::make_index_sequence<SZ>{});
@@ -339,7 +337,10 @@ namespace dg::sort_variants::quicksort{
         return rhs_bitset;
     }
 
-    //
+    //we are 15% from optimal as clued by our peers
+    //where how
+    //without SIMD, I dont think I could further optimize the code, as hinted by our measures
+
     template <class _Ty>
     static auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
@@ -369,7 +370,6 @@ namespace dg::sort_variants::quicksort{
                     lhs_bitset = extract_greater(first, pivot_value,  refill_sz);
                 }
 
-
                 std::advance(first, refill_sz);
                 continue;
             }
@@ -387,14 +387,12 @@ namespace dg::sort_variants::quicksort{
                 continue;
             }
 
-            //lhs_bitset != 0 && rhs_bitset != 0
-
-            while (lhs_bitset != 0u && rhs_bitset != 0u){ //what's the better word? a & b != 0
+            while (lhs_bitset != 0u && rhs_bitset != 0u){
                 uint64_t lhs_back_idx       = std::countr_zero(lhs_bitset); 
-                uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset); //
+                uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset);
 
-                lhs_bitset                  &= (lhs_bitset - 1u);
-                rhs_bitset                  &= (rhs_bitset - 1u);
+                lhs_bitset                  &= lhs_bitset - 1u;
+                rhs_bitset                  &= rhs_bitset - 1u;
 
                 dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
             }
@@ -403,8 +401,9 @@ namespace dg::sort_variants::quicksort{
         while (lhs_bitset != 0u && rhs_bitset != 0u){
             uint64_t lhs_back_idx       = std::countr_zero(lhs_bitset); 
             uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset);
-            lhs_bitset                  &= (lhs_bitset - 1u);
-            rhs_bitset                  &= (rhs_bitset - 1u);
+
+            lhs_bitset                  &= lhs_bitset - 1u;
+            rhs_bitset                  &= rhs_bitset - 1u;
 
             dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
         }

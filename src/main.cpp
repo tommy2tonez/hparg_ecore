@@ -67,6 +67,8 @@ int main(){
     // }
     // std::sort(vec3.begin(), vec3.end());
 
+    // std::cout << dg::sort_variants::quicksort::counter;
+
     assert(vec == vec2);
     // assert(vec2 == vec3);
 
