@@ -540,14 +540,22 @@ namespace dg::sort_variants::quicksort{
             std::sort(first, last);
             return sz * ulog2(ceil2(sz));
         } else [[likely]]{
-            size_t mid_idx          = sz >> 1;
-            uint64_t incurred_cost  = 0u;
+            static_assert(SMALL_QUICKSORT_SZ >= 4);
 
-            _Ty * pivot_ptr         = pivot_partition(first, last, std::next(first, mid_idx));    
+            constexpr size_t PIVOT_CAND_SZ  = 3u;
+            size_t mid_idx                  = sz >> 1;
+            uint64_t incurred_cost          = 0u;
 
-            incurred_cost           += sz;
-            incurred_cost           += base_quicksort(first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
-            incurred_cost           += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
+            _Ty * mid_ptr                   = std::next(first, mid_idx);
+            _Ty * previous_mid_ptr          = std::prev(mid_ptr);
+
+            template_sort_arr(previous_mid_ptr, std::integral_constant<size_t, PIVOT_CAND_SZ>{});
+
+            _Ty * pivot_ptr                 = pivot_partition(first, last, mid_ptr);    
+
+            incurred_cost                   += sz;
+            incurred_cost                   += base_quicksort(first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
+            incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
 
             return incurred_cost;    
         }
@@ -563,6 +571,10 @@ namespace dg::sort_variants::quicksort{
 
         base_asc_quicksort(first, last, 0u, compute_sz, 0u);
     }
+
+    //we are very proud of what people have recommended at 
+    //https://llvm.org/devmtg/2023-02-25/slides/A-New-Implementation-for-std-sort.pdf
+    //for the first time, we can sort our heap segments 3 times faster without polluting CPUs
 
     template <class _Ty>
     __attribute__((noinline)) void quicksort(_Ty * first, _Ty * last) noexcept{
