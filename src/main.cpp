@@ -13,6 +13,7 @@
 #include <chrono>
 #include <iostream>
 #include "assert.h"
+// #include "stdx.h"
 #include "sort_variants.h"
 
 //let's strategize
@@ -36,36 +37,58 @@ auto timeit(Task task) -> size_t{
 
 int main(){
 
-    // const size_t SZ = size_t{1} << 23;
+    const size_t SZ = size_t{1} << 23;
 
-    auto random_device_1    = std::bind(std::uniform_int_distribution<uint32_t>(0, 2048), std::mt19937{});
-    auto random_device_2    = std::bind(std::uniform_int_distribution<uint32_t>(0, 256), std::mt19937{});
-    size_t iter             = 0u; 
+    std::vector<uint32_t> vec(SZ);
+    std::generate(vec.begin(), vec.end(), std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{}));
 
-    while (true){
-        const size_t SZ = random_device_1();
-        std::vector<uint32_t> vec(SZ);
+    std::vector<uint32_t> vec2 = vec;
+    std::vector<uint32_t> vec3 = vec;
 
-        if (random_device_1() % 2 == 0){
-            std::generate(vec.begin(), vec.end(), std::ref(random_device_1));
-        } else{
-            std::generate(vec.begin(), vec.end(), std::ref(random_device_2));
-        }
+    std::cout << "<insertion_sort_1>" << timeit([&]{std::sort(vec.data(), std::next(vec.data(), vec.size()));}) << "<ms>" << std::endl;
+    std::cout << "<insertion_sort_2>" << timeit([&]{dg::sort_variants::quicksort::quicksort(vec2.data(), std::next(vec2.data(), vec2.size()));}) << "<ms>" << std::endl;
 
-        std::vector<uint32_t> vec2 = vec;
+    std::cout << "<insertion_sort_1>" << timeit([&]{std::sort(vec.data(), std::next(vec.data(), vec.size()));}) << "<ms>" << std::endl;
+    std::cout << "<insertion_sort_2>" << timeit([&]{dg::sort_variants::quicksort::quicksort(vec2.data(), std::next(vec2.data(), vec2.size()));}) << "<ms>" << std::endl;
 
-        std::sort(vec.begin(), vec.end());
-        dg::sort_variants::quicksort::quicksort(vec2.data(), std::next(vec2.data(), vec2.size()));
+    // std::cout << "<insertion_sort_1>" << timeit([&]{std::sort(vec.data(), std::next(vec.data(), vec.size()));}) << "<ms>" << std::endl;
+    // std::cout << "<insertion_sort_2>" << timeit([&]{dg::sort_variants::quicksort::quicksort(vec2.data(), std::next(vec2.data(), vec2.size()));}) << "<ms>" << std::endl;
 
-        if (vec != vec2){
-            std::cout << "mayday" << std::endl;
-            std::abort();
-        }
+    // std::cout << "<insertion_sort_1>" << timeit([&]{std::sort(vec.data(), std::next(vec.data(), vec.size()));}) << "<ms>" << std::endl;
+    // std::cout << "<insertion_sort_2>" << timeit([&]{dg::sort_variants::quicksort::quicksort(vec2.data(), std::next(vec2.data(), vec2.size()));}) << "<ms>" << std::endl;
 
-        iter++;
+    // for (size_t i = 0u; i < vec2.size(); ++i){
+    //     if (vec[i] != vec2[i]){
+    //         std::cout << i << "<>" << vec[i] << "<>" << vec2[i] << std::endl;
+    //     }
+    // }
+    // for (uint32_t e: vec2){
+        // std::cout << e << std::endl;
+    // }
+    // std::sort(vec3.begin(), vec3.end());
 
-        if (iter % 10000 == 0){
-            std::cout << iter << std::endl;
-        }
-    }
+    // std::cout << dg::sort_variants::quicksort::counter;
+
+    assert(vec == vec2);
+
+    // const size_t SZ_BITSET = size_t{1} << 30;
+
+    // std::vector<uint8_t> bitset_vec(SZ_BITSET);
+    // std::generate(bitset_vec.begin(), bitset_vec.end(), std::bind(std::uniform_int_distribution<uint8_t>{}, std::mt19937{}));
+    // uint64_t total = 0u; 
+
+    // auto task = [&]{
+    //     for (uint8_t bitset: bitset_vec){
+    //         total += bitset;
+    //     }
+    // };
+
+    // std::cout << "<countr_zero>" << timeit(task) << "<ms>" << "<>" << total << std::endl; 
+
+    // std::cout << dg::sort_variants::quicksort::COUNTING_SZ << std::endl; 
+
+    // assert(vec2 == vec3);
+
+    //our agenda today is to work on the frame + resolutor + quicksort (to improve the sorting speed of the heap allocator, we got a feedback about this insertion sort feature a while ago, roughly 1-2 months ago)
+
 }

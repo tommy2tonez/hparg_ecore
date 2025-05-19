@@ -629,6 +629,9 @@ namespace dg::sort_variants::quicksort{
     //we dont really have applications for the arithmetic sort except for our heap implementation which is a very crucial backbone of all things
     //for the first time, we can sort our heap segments 3 times faster without polluting CPUs (we have completed the assignment!!!)
     //we'll move on, because this implementation is already uptodate-blackart-optimized, I can't find another instruction just yet, we'll circle back to this problem, I think 15% squeeze could be performed as clued by our peers
+    //the only thing left to implement is a quad swap
+    //quad swap is a merge_sort (or quicksort) approach of swapping, reducing the number of supposedly 6 cmps -> 5 cmps
+    //this when used in conjunction with our template sort can be very useful 
 
     template <class _Ty>
     __attribute__((noinline)) void quicksort(_Ty * first, _Ty * last) noexcept{
