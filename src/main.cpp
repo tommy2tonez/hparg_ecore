@@ -70,23 +70,6 @@ int main(){
     // std::cout << dg::sort_variants::quicksort::counter;
 
     assert(vec == vec2);
-
-    // const size_t SZ_BITSET = size_t{1} << 30;
-
-    // std::vector<uint8_t> bitset_vec(SZ_BITSET);
-    // std::generate(bitset_vec.begin(), bitset_vec.end(), std::bind(std::uniform_int_distribution<uint8_t>{}, std::mt19937{}));
-    // uint64_t total = 0u; 
-
-    // auto task = [&]{
-    //     for (uint8_t bitset: bitset_vec){
-    //         total += bitset;
-    //     }
-    // };
-
-    // std::cout << "<countr_zero>" << timeit(task) << "<ms>" << "<>" << total << std::endl; 
-
-    // std::cout << dg::sort_variants::quicksort::COUNTING_SZ << std::endl; 
-
     // assert(vec2 == vec3);
 
     //our agenda today is to work on the frame + resolutor + quicksort (to improve the sorting speed of the heap allocator, we got a feedback about this insertion sort feature a while ago, roughly 1-2 months ago)
