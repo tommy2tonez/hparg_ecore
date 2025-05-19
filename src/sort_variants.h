@@ -16,13 +16,15 @@
 
 namespace dg::sort_variants::quicksort{
 
-    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 32u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 31u;
     static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
     static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
     static inline constexpr size_t SMALL_PIVOT_SZ               = 32u; 
     // static inline constexpr size_t BLOCK_PIVOT_BITSET_DUMP_SZ   = 4u;
+
+    using qs_unsigned_bitset_t = uint_fast32_t;
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto ulog2(T val) noexcept -> T{
@@ -245,11 +247,11 @@ namespace dg::sort_variants::quicksort{
         size_t rem_sz           = iteration_sz - blk_pop_sz; 
 
         for (size_t i = 0u; i < blk_sz; ++i){
-            _Ty * local_first   = std::next(first, i * BLOCK_PIVOT_MAX_LESS_SZ);
-            uint64_t bitset     = 0u;
+            _Ty * local_first           = std::next(first, i * BLOCK_PIVOT_MAX_LESS_SZ);
+            qs_unsigned_bitset_t bitset = 0u;
 
             for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
-                bitset |= static_cast<uint64_t>(local_first[j] < pivot_value) << j;
+                bitset |= static_cast<qs_unsigned_bitset_t>(local_first[j] < pivot_value) << j;
             }
 
             while (bitset != 0u){
@@ -276,42 +278,42 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class Ty>
-    static __attribute__((noinline)) auto extract_greater(Ty * first, const Ty& pivot, const size_t sz) -> uint64_t{
+    static __attribute__((noinline)) auto extract_greater(Ty * first, const Ty& pivot, const size_t sz) -> qs_unsigned_bitset_t{
 
-        uint64_t lhs_bitset = 0u; 
+        qs_unsigned_bitset_t lhs_bitset = 0u; 
 
         for (size_t i = 0u; i < sz; ++i) [[likely]]{
             size_t reverse_idx  = sz - i;
-            lhs_bitset          |= static_cast<uint64_t>(first[i] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz
+            lhs_bitset          |= static_cast<qs_unsigned_bitset_t>(first[i] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz
         }
 
         return lhs_bitset;
     }
 
     template <class Ty>
-    static  __attribute__((noinline)) auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) -> uint64_t{
+    static  __attribute__((noinline)) auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) -> qs_unsigned_bitset_t{
 
-        uint64_t rhs_bitset = 0u;
+        qs_unsigned_bitset_t rhs_bitset = 0u;
 
         for (size_t i = 0u; i < sz; ++i) [[likely]]{
             size_t reverse_idx  = sz - (i + 1); 
-            rhs_bitset          |= static_cast<uint64_t>(last[-(static_cast<intmax_t>(i) + 1)] < pivot) << reverse_idx;
+            rhs_bitset          |= static_cast<qs_unsigned_bitset_t>(last[-(static_cast<intmax_t>(i) + 1)] < pivot) << reverse_idx;
         }
 
         return rhs_bitset;
     }
 
     template <class Ty, size_t SZ>
-    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> uint64_t{
+    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> qs_unsigned_bitset_t{
 
-        uint64_t lhs_bitset = 0u; 
+        qs_unsigned_bitset_t lhs_bitset = 0u; 
 
         [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
             (
                 [&]{
                     (void) IDX;
                     constexpr size_t reverse_idx = SZ - IDX;
-                    lhs_bitset |= static_cast<uint64_t>(first[IDX] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
+                    lhs_bitset |= static_cast<qs_unsigned_bitset_t>(first[IDX] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
                 }(), ...
             );
         }(std::make_index_sequence<SZ>{});
@@ -320,16 +322,16 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class Ty, size_t SZ>
-    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> uint64_t{
+    static inline __attribute__((always_inline)) auto extract_lesser(Ty * last, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> qs_unsigned_bitset_t{
 
-        uint64_t rhs_bitset = 0u;
-        Ty * first          = std::prev(last, SZ);
+        qs_unsigned_bitset_t rhs_bitset = 0u;
+        Ty * first                      = std::prev(last, SZ);
 
         [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
             (
                 [&]{
                     (void) IDX;
-                    rhs_bitset |= static_cast<uint64_t>(first[IDX] < pivot) << IDX; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
+                    rhs_bitset |= static_cast<qs_unsigned_bitset_t>(first[IDX] < pivot) << IDX; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
                 }(), ...
             );
         }(std::make_index_sequence<SZ>{});
@@ -348,11 +350,11 @@ namespace dg::sort_variants::quicksort{
 
         std::swap(*std::prev(last), *pivot);
 
-        const _Ty& pivot_value  = *std::prev(last);
-        _Ty * llast             = std::prev(last);
+        const _Ty& pivot_value          = *std::prev(last);
+        _Ty * llast                     = std::prev(last);
 
-        uint64_t lhs_bitset = 0u;
-        uint64_t rhs_bitset = 0u;
+        qs_unsigned_bitset_t lhs_bitset = 0u;
+        qs_unsigned_bitset_t rhs_bitset = 0u;
 
         while (true){
             size_t sz = std::distance(first, llast);
@@ -388,36 +390,34 @@ namespace dg::sort_variants::quicksort{
             }
 
             while (lhs_bitset != 0u && rhs_bitset != 0u){
-                uint64_t lhs_back_idx       = std::countr_zero(lhs_bitset); 
-                uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset);
-
-                lhs_bitset                  &= lhs_bitset - 1u;
-                rhs_bitset                  &= rhs_bitset - 1u;
+                size_t lhs_back_idx     = std::countr_zero(lhs_bitset); 
+                size_t rhs_forward_idx  = std::countr_zero(rhs_bitset);
+                lhs_bitset              &= lhs_bitset - 1u;
+                rhs_bitset              &= rhs_bitset - 1u;
 
                 dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
             }
         }
 
         while (lhs_bitset != 0u && rhs_bitset != 0u){
-            uint64_t lhs_back_idx       = std::countr_zero(lhs_bitset); 
-            uint64_t rhs_forward_idx    = std::countr_zero(rhs_bitset);
-
-            lhs_bitset                  &= lhs_bitset - 1u;
-            rhs_bitset                  &= rhs_bitset - 1u;
+            size_t lhs_back_idx     = std::countr_zero(lhs_bitset); 
+            size_t rhs_forward_idx  = std::countr_zero(rhs_bitset);
+            lhs_bitset              &= lhs_bitset - 1u;
+            rhs_bitset              &= rhs_bitset - 1u;
 
             dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
         }
 
         if (lhs_bitset != 0u){
-            uint64_t max_significant_idx = (std::numeric_limits<uint64_t>::digits - 1) - std::countl_zero(lhs_bitset); //
+            size_t max_significant_idx  = (std::numeric_limits<qs_unsigned_bitset_t>::digits - 1) - std::countl_zero(lhs_bitset);
             std::iter_swap(std::prev(first, max_significant_idx), std::prev(last));
 
             return pivot_partition_1(std::prev(first, max_significant_idx), first, std::prev(first, max_significant_idx));
         }
 
         if (rhs_bitset != 0u){
-            uint64_t max_significant_idx    = (std::numeric_limits<uint64_t>::digits - 1) - std::countl_zero(rhs_bitset);//???
-            uint64_t swapping_idx           = max_significant_idx + 1u;
+            size_t max_significant_idx  = (std::numeric_limits<qs_unsigned_bitset_t>::digits - 1) - std::countl_zero(rhs_bitset);
+            size_t swapping_idx         = max_significant_idx + 1u;
 
             std::iter_swap(std::next(llast, swapping_idx), std::prev(last));
 
@@ -446,11 +446,11 @@ namespace dg::sort_variants::quicksort{
         size_t rem_sz           = iteration_sz - blk_pop_sz; 
 
         for (size_t i = 0u; i < blk_sz; ++i){
-            _Ty * local_last    = std::prev(last, i * BLOCK_PIVOT_MAX_LESS_SZ);
-            uint64_t bitset     = 0u;
+            _Ty * local_last            = std::prev(last, i * BLOCK_PIVOT_MAX_LESS_SZ);
+            qs_unsigned_bitset_t bitset = 0u;
 
             for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
-                bitset |= static_cast<uint64_t>(local_last[-static_cast<intmax_t>(j + 1u)] > pivot_value) << j;
+                bitset |= static_cast<qs_unsigned_bitset_t>(local_last[-static_cast<intmax_t>(j + 1u)] > pivot_value) << j;
             }
 
             while (bitset != 0u){
@@ -574,6 +574,7 @@ namespace dg::sort_variants::quicksort{
     //we are very proud of what people have recommended at 
     //https://llvm.org/devmtg/2023-02-25/slides/A-New-Implementation-for-std-sort.pdf
     //for the first time, we can sort our heap segments 3 times faster without polluting CPUs
+    //we'll move on, because this implementation is already uptodate-blackart-optimized, I can't find another instruction just yet, we'll circle back to this problem, I think 15% squeeze could be performed as clued by our peers
 
     template <class _Ty>
     __attribute__((noinline)) void quicksort(_Ty * first, _Ty * last) noexcept{
