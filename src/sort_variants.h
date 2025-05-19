@@ -16,15 +16,17 @@
 
 namespace dg::sort_variants::quicksort{
 
-    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 31u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 16u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_WALL_SZ      = 32u;
     static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
     static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
-    static inline constexpr size_t SMALL_PIVOT_SZ               = 32u; 
+    static inline constexpr size_t SMALL_PIVOT_SZ               = 64u; 
+
     // static inline constexpr size_t BLOCK_PIVOT_BITSET_DUMP_SZ   = 4u;
 
-    using qs_unsigned_bitset_t = uint_fast32_t;
+    using qs_unsigned_bitset_t = uint32_t;
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto ulog2(T val) noexcept -> T{
@@ -229,8 +231,9 @@ namespace dg::sort_variants::quicksort{
         }
     }
 
+    //we'll be super happy if we could optimize this
     template <class _Ty>
-    static auto pivot_partition_1(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+    static inline auto  pivot_partition_1(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         assert(first != last);
 
@@ -257,6 +260,7 @@ namespace dg::sort_variants::quicksort{
             while (bitset != 0u){
                 size_t j = std::countr_zero(bitset);
                 bitset &= (bitset - 1u);
+
                 std::swap(first[less_sz++], local_first[j]);      
             }
         }
@@ -278,20 +282,20 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class Ty>
-    static __attribute__((noinline)) auto extract_greater(Ty * first, const Ty& pivot, const size_t sz) -> qs_unsigned_bitset_t{
+    static auto extract_greatereq(Ty * first, const Ty& pivot, const size_t sz) -> qs_unsigned_bitset_t{
 
         qs_unsigned_bitset_t lhs_bitset = 0u; 
 
         for (size_t i = 0u; i < sz; ++i) [[likely]]{
-            size_t reverse_idx  = sz - i;
-            lhs_bitset          |= static_cast<qs_unsigned_bitset_t>(first[i] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz
+            size_t reverse_idx  = (sz - 1) - i;
+            lhs_bitset          |= static_cast<qs_unsigned_bitset_t>(first[i] >= pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz
         }
 
         return lhs_bitset;
     }
 
     template <class Ty>
-    static  __attribute__((noinline)) auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) -> qs_unsigned_bitset_t{
+    static auto extract_lesser(Ty * last, const Ty& pivot, const size_t sz) -> qs_unsigned_bitset_t{
 
         qs_unsigned_bitset_t rhs_bitset = 0u;
 
@@ -303,8 +307,20 @@ namespace dg::sort_variants::quicksort{
         return rhs_bitset;
     }
 
+    template <class T, size_t SZ>
+    static consteval auto low_bits(const std::integral_constant<size_t, SZ>) -> T{
+
+        static_assert(std::is_unsigned_v<T>);
+
+        if (SZ == std::numeric_limits<T>::digits){
+            return std::numeric_limits<T>::max();
+        }
+
+        return (T{1} << SZ) - 1u;
+    } 
+
     template <class Ty, size_t SZ>
-    static inline __attribute__((always_inline)) auto extract_greater(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> qs_unsigned_bitset_t{
+    static inline __attribute__((always_inline)) auto extract_greatereq(Ty * first, const Ty& pivot, const std::integral_constant<size_t, SZ>) -> qs_unsigned_bitset_t{
 
         qs_unsigned_bitset_t lhs_bitset = 0u; 
 
@@ -312,13 +328,13 @@ namespace dg::sort_variants::quicksort{
             (
                 [&]{
                     (void) IDX;
-                    constexpr size_t reverse_idx = SZ - IDX;
-                    lhs_bitset |= static_cast<qs_unsigned_bitset_t>(first[IDX] > pivot) << reverse_idx; //refill_sz, we'd want to get the relative position compared to the advance -refill_sz        
+                    constexpr size_t reverse_idx = (SZ - 1) - IDX;
+                    lhs_bitset |= static_cast<qs_unsigned_bitset_t>(first[IDX] < pivot) << reverse_idx; //less is better, due to the population of the operation, no one ever does >
                 }(), ...
             );
         }(std::make_index_sequence<SZ>{});
 
-        return lhs_bitset;
+        return (~lhs_bitset) & low_bits<qs_unsigned_bitset_t>(std::integral_constant<size_t, SZ>{});
     }
 
     template <class Ty, size_t SZ>
@@ -342,77 +358,102 @@ namespace dg::sort_variants::quicksort{
     //we are 15% from optimal as clued by our peers
     //where how
     //without SIMD, I dont think I could further optimize the code, as hinted by our measures
+    //this function performance is fine, if first last size is > 128 or 256, the optimality of this function is reached at the point,
+    //if there are performance issues, we'd want to have another dispatch code for another size
+    //we have given up on actually solving the problem, it's very super complicated
+    //the theoerical limit is probably around 30% w.r.t to the std sort for uniform distributed data, we are still 20% deviated from the optimal code, we have done a fine job, not the best pivot_partition_1 could be further optimized or another radix of the implementation
+    //we have reached 37.8% w.r.t to the std implementation without using SIMD, this is quite an achievement, we'll be back
 
     template <class _Ty>
-    static auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+    static inline __attribute__((noinline)) auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         //this is complicated to write, I'll try
 
         std::swap(*std::prev(last), *pivot);
 
         const _Ty& pivot_value          = *std::prev(last);
+        _Ty * ffirst                    = first;
         _Ty * llast                     = std::prev(last);
 
         qs_unsigned_bitset_t lhs_bitset = 0u;
         qs_unsigned_bitset_t rhs_bitset = 0u;
 
         while (true){
-            size_t sz = std::distance(first, llast);
+            size_t sz = std::distance(ffirst, llast);
+
+            if (sz < BLOCK_PIVOT_MAX_WALL_SZ * 2){
+                break;
+            }
+
+            if (lhs_bitset == 0u){
+                lhs_bitset = extract_greatereq(ffirst, pivot_value, std::integral_constant<size_t, BLOCK_PIVOT_MAX_WALL_SZ>{});
+                std::advance(ffirst, BLOCK_PIVOT_MAX_WALL_SZ);
+            }
+
+            if (rhs_bitset == 0u){
+                rhs_bitset = extract_lesser(llast, pivot_value, std::integral_constant<size_t, BLOCK_PIVOT_MAX_WALL_SZ>{});
+                std::advance(llast, -static_cast<intmax_t>(BLOCK_PIVOT_MAX_WALL_SZ));
+            }
+
+            while (lhs_bitset != 0u && rhs_bitset != 0u){
+                size_t lhs_back_idx     = std::countr_zero(lhs_bitset) + 1u;
+                size_t rhs_forward_idx  = std::countr_zero(rhs_bitset);
+
+                lhs_bitset              &= lhs_bitset - 1u;
+                rhs_bitset              &= rhs_bitset - 1u;
+
+                dg_restrict_swap(std::prev(ffirst, lhs_back_idx), std::next(llast, rhs_forward_idx));
+            }
+        }
+
+        while (true){
+            size_t sz = std::distance(ffirst, llast);
 
             if (sz == 0u){
                 break;
             }
 
             if (lhs_bitset == 0u){
-                size_t refill_sz = std::min(sz, BLOCK_PIVOT_MAX_LESS_SZ); 
-
-                if (refill_sz == BLOCK_PIVOT_MAX_LESS_SZ) [[likely]]{
-                    lhs_bitset = extract_greater(first, pivot_value, std::integral_constant<size_t, BLOCK_PIVOT_MAX_LESS_SZ>{});
-                } else [[unlikely]]{
-                    lhs_bitset = extract_greater(first, pivot_value,  refill_sz);
-                }
-
-                std::advance(first, refill_sz);
+                size_t fwd_sz   = std::min(BLOCK_PIVOT_MAX_WALL_SZ, sz);
+                lhs_bitset      = extract_greatereq(ffirst, pivot_value, fwd_sz);
+                
+                std::advance(ffirst, fwd_sz);
                 continue;
             }
 
             if (rhs_bitset == 0u){
-                size_t refill_sz = std::min(sz, BLOCK_PIVOT_MAX_LESS_SZ);
+                size_t bwd_sz   = std::min(BLOCK_PIVOT_MAX_WALL_SZ, sz);
+                rhs_bitset      = extract_lesser(llast, pivot_value, bwd_sz);
 
-                if (refill_sz == BLOCK_PIVOT_MAX_LESS_SZ) [[likely]]{
-                    rhs_bitset = extract_lesser(llast, pivot_value, std::integral_constant<size_t, BLOCK_PIVOT_MAX_LESS_SZ>{});
-                } else [[unlikely]]{
-                    rhs_bitset = extract_lesser(llast, pivot_value, refill_sz);
-                }
-    
-                std::advance(llast, -static_cast<intmax_t>(refill_sz));
+                std::advance(llast, -static_cast<intmax_t>(bwd_sz));
                 continue;
             }
 
             while (lhs_bitset != 0u && rhs_bitset != 0u){
-                size_t lhs_back_idx     = std::countr_zero(lhs_bitset); 
+                size_t lhs_back_idx     = std::countr_zero(lhs_bitset) + 1u; 
                 size_t rhs_forward_idx  = std::countr_zero(rhs_bitset);
+
                 lhs_bitset              &= lhs_bitset - 1u;
                 rhs_bitset              &= rhs_bitset - 1u;
 
-                dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
+                dg_restrict_swap(std::prev(ffirst, lhs_back_idx), std::next(llast, rhs_forward_idx));
             }
         }
 
         while (lhs_bitset != 0u && rhs_bitset != 0u){
-            size_t lhs_back_idx     = std::countr_zero(lhs_bitset); 
+            size_t lhs_back_idx     = std::countr_zero(lhs_bitset) + 1u;
             size_t rhs_forward_idx  = std::countr_zero(rhs_bitset);
             lhs_bitset              &= lhs_bitset - 1u;
             rhs_bitset              &= rhs_bitset - 1u;
 
-            dg_restrict_swap(std::prev(first, lhs_back_idx), std::next(llast, rhs_forward_idx));
+            dg_restrict_swap(std::prev(ffirst, lhs_back_idx), std::next(llast, rhs_forward_idx));
         }
 
         if (lhs_bitset != 0u){
-            size_t max_significant_idx  = (std::numeric_limits<qs_unsigned_bitset_t>::digits - 1) - std::countl_zero(lhs_bitset);
-            std::iter_swap(std::prev(first, max_significant_idx), std::prev(last));
+            size_t max_significant_idx  = (std::numeric_limits<qs_unsigned_bitset_t>::digits - 1) - std::countl_zero(lhs_bitset) + 1u;
+            std::iter_swap(std::prev(ffirst, max_significant_idx), std::prev(last));
 
-            return pivot_partition_1(std::prev(first, max_significant_idx), first, std::prev(first, max_significant_idx));
+            return pivot_partition_1(std::prev(ffirst, max_significant_idx), ffirst, std::prev(ffirst, max_significant_idx));
         }
 
         if (rhs_bitset != 0u){
@@ -424,56 +465,12 @@ namespace dg::sort_variants::quicksort{
             return pivot_partition_1(llast, std::next(llast, swapping_idx + 1u), std::next(llast, swapping_idx));
         }
 
-        std::iter_swap(first, std::prev(last));
-        return first; 
+        std::iter_swap(ffirst, std::prev(last));
+        return ffirst; 
     } 
 
     template <class _Ty>
-    static auto pivot_partition_3(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        assert(first != last);
-
-        //attempt to swap pivot
-
-        std::swap(*first, *pivot);
-
-        const _Ty& pivot_value  = *first; 
-        size_t iteration_sz     = std::distance(first, last); 
-        size_t greater_sz       = 0u;
-
-        size_t blk_sz           = iteration_sz / BLOCK_PIVOT_MAX_LESS_SZ;
-        size_t blk_pop_sz       = blk_sz * BLOCK_PIVOT_MAX_LESS_SZ; 
-        size_t rem_sz           = iteration_sz - blk_pop_sz; 
-
-        for (size_t i = 0u; i < blk_sz; ++i){
-            _Ty * local_last            = std::prev(last, i * BLOCK_PIVOT_MAX_LESS_SZ);
-            qs_unsigned_bitset_t bitset = 0u;
-
-            for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
-                bitset |= static_cast<qs_unsigned_bitset_t>(local_last[-static_cast<intmax_t>(j + 1u)] > pivot_value) << j;
-            }
-
-            while (bitset != 0u){
-                size_t j = std::countr_zero(bitset);
-                bitset &= (bitset - 1u);
-                std::swap(last[-static_cast<intmax_t>(++greater_sz)], local_last[-static_cast<intmax_t>(j + 1u)]);      
-            }
-        }
-
-        for (size_t i = 0u; i < rem_sz; ++i){
-            size_t back_idx = (rem_sz - 1) - i; 
-
-            if (first[back_idx] > pivot_value){
-                std::swap(last[-static_cast<intmax_t>(++greater_sz)], first[back_idx]);
-            }
-        }
-
-        std::swap(last[-static_cast<intmax_t>(greater_sz + 1u)], *first);
-        return std::prev(last, greater_sz + 1u);
-    }
-
-    template <class _Ty>
-    static auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+    static inline auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         size_t sz = std::distance(first, last);
 
