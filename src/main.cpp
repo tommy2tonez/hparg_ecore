@@ -37,7 +37,7 @@ auto timeit(Task task) -> size_t{
 
 int main(){
 
-    const size_t SZ = size_t{1} << 23;
+    const size_t SZ = size_t{1} << 26;
 
     std::vector<uint32_t> vec(SZ);
     std::generate(vec.begin(), vec.end(), std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{}));

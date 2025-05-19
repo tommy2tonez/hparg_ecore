@@ -14,6 +14,9 @@
 #include <type_traits>
 #include <bit>
 
+//this implementation is not complicated, yet involved a lot of blackarts, we'll further optimize this if there are times
+//this should suffice as a production implementation
+
 namespace dg::sort_variants::quicksort{
 
     static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 8u;
@@ -22,8 +25,7 @@ namespace dg::sort_variants::quicksort{
     static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
-    static inline constexpr size_t SMALL_PIVOT_PARTITION_SZ     = 16u; 
-
+    // static inline constexpr size_t SMALL_PIVOT_PARTITION_SZ     = 32u;
     // static inline constexpr size_t BLOCK_PIVOT_BITSET_DUMP_SZ   = 4u;
 
     using qs_unsigned_bitset_t = uint32_t;
@@ -358,9 +360,9 @@ namespace dg::sort_variants::quicksort{
 
         if (SZ == std::numeric_limits<T>::digits){
             return std::numeric_limits<T>::max();
+        } else{
+            return (T{1} << SZ) - 1u;
         }
-
-        return (T{1} << SZ) - 1u;
     } 
 
     template <class Ty, size_t SZ>
@@ -526,13 +528,13 @@ namespace dg::sort_variants::quicksort{
     template <class _Ty>
     static inline auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
-        size_t sz = std::distance(first, last);
+        // size_t sz = std::distance(first, last);
 
-        if (sz <= SMALL_PIVOT_PARTITION_SZ){
-            return pivot_partition_1(first, last, pivot);
-        } else{
-            return pivot_partition_2(first, last, pivot);
-        }
+        // if (sz <= SMALL_PIVOT_PARTITION_SZ){
+            // return pivot_partition_1(first, last, pivot);
+        // } else{
+        return pivot_partition_2(first, last, pivot);
+        // }
     }
 
     template <class _Ty>
