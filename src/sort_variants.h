@@ -16,13 +16,13 @@
 
 namespace dg::sort_variants::quicksort{
 
-    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 16u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 8u;
     static inline constexpr size_t BLOCK_PIVOT_MAX_WALL_SZ      = 32u;
     static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
     static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
-    static inline constexpr size_t SMALL_PIVOT_PARTITION_SZ     = 64u; 
+    static inline constexpr size_t SMALL_PIVOT_PARTITION_SZ     = 16u; 
 
     // static inline constexpr size_t BLOCK_PIVOT_BITSET_DUMP_SZ   = 4u;
 
@@ -407,13 +407,13 @@ namespace dg::sort_variants::quicksort{
     //we have given up on actually solving the problem, it's very super complicated
     //the theoerical limit is probably around 30% w.r.t to the std sort for uniform distributed data, we are still 20% deviated from the optimal code, we have done a fine job, not the best pivot_partition_1 could be further optimized or another radix of the implementation
     //we have reached 37.8% w.r.t to the std implementation without using SIMD, this is quite an achievement, we'll be back
-    //180ms is the optimal threshold, we'll try
+    //180ms is the optimal threshold, we'll try (we have reached 179ms guys!!!)
     //for the very first time, we've reached 189ms
     //we'll stop the optimizations fellas
     //I think this is good enough, we'll process the pull requests later
 
     template <class _Ty>
-    static inline __attribute__((noinline)) auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
+    static inline auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         //this is complicated to write, I'll try
 
@@ -427,6 +427,16 @@ namespace dg::sort_variants::quicksort{
         qs_unsigned_bitset_t rhs_bitset = 0u;
 
         //this loop is not optimized
+
+        //the programming strategy we used here is called tranactional programming
+        //assume the valid state is first, last, lhs_bitset, rhs_bitset
+        //for every transaction, first last must be a valid interval representing the not-considered partition
+        //and lhs_bitset and rhs_bitset must be representing the trailing information of those first last
+
+        //what before first must be less (when the bitset is empty)
+        //what after or equal last must be greater or equal (when the bitset is empty)
+
+        //we dont really care why the transaction is there, as long as it snaps the program into a valid state + the loop break is reached after certain valid transactions
 
         while (true){
             while (lhs_bitset != 0u && rhs_bitset != 0u){
@@ -452,13 +462,17 @@ namespace dg::sort_variants::quicksort{
             }
         }
 
+        //while loop is broken when the not considered range < BLOCK_PIVOT_MAX_WALL_SZ
+        //and the while (lhs_bitset + rhs_bitset) is guaranteed to be the immediate previous reached point 
+
         size_t after_sz = std::distance(ffirst, llast);
 
+        //lhs_bitset == 0u or rhs_bitset == 0u
         if (lhs_bitset == 0u){
-            lhs_bitset  = extract_greatereq_from_left(ffirst, pivot_value, after_sz);                
+            lhs_bitset      = extract_greatereq_from_left(ffirst, pivot_value, after_sz);                
             std::advance(ffirst, after_sz);
         } else{
-            rhs_bitset  = extract_lesser_from_right(llast, pivot_value, after_sz);
+            rhs_bitset      = extract_lesser_from_right(llast, pivot_value, after_sz);
             std::advance(llast, -static_cast<intmax_t>(after_sz));
         }
 
@@ -471,25 +485,43 @@ namespace dg::sort_variants::quicksort{
             dg_restrict_swap(std::prev(ffirst, lhs_back_idx), std::next(llast, rhs_forward_idx));
         }
 
-        if (lhs_bitset != 0u){
-            size_t max_significant_idx  = (std::numeric_limits<qs_unsigned_bitset_t>::digits - 1) - std::countl_zero(lhs_bitset) + 1u;
-            std::iter_swap(std::prev(ffirst, max_significant_idx), std::prev(last));
+        //we'll do another optimization here
+        //three cases
+        //lhs_bitset == 0u (rhs_bitset != 0u)
+        //lhs_bitset == 0u (lhs_bitset != 0u)
+        //lhs_bitset == 0u && rhs_bitset == 0u (other)
 
-            return pivot_partition_1(std::prev(ffirst, max_significant_idx), ffirst, std::prev(ffirst, max_significant_idx));
+        if (lhs_bitset != 0u){
+            _Ty * back_ptr = std::prev(llast, 1u); //we are doing greater partition, since all the llast forward are greater + eq, and all the prev_ffirst backward are lesser, the only partition to be considered is what's left in the lhs_bitset  
+
+            while (lhs_bitset != 0u){
+                size_t back_idx = std::countr_zero(lhs_bitset);
+                lhs_bitset      &= lhs_bitset - 1u;
+                std::iter_swap(back_ptr, std::prev(ffirst, back_idx + 1u));
+                std::advance(back_ptr, -1);
+            }
+
+            std::iter_swap(std::next(back_ptr), std::prev(last));
+            return std::next(back_ptr);
         }
 
         if (rhs_bitset != 0u){
-            size_t max_significant_idx  = (std::numeric_limits<qs_unsigned_bitset_t>::digits - 1) - std::countl_zero(rhs_bitset);
-            size_t swapping_idx         = max_significant_idx + 1u;
+            _Ty * front_ptr = ffirst; //we are doing lesser partition, ...
 
-            std::iter_swap(std::next(llast, swapping_idx), std::prev(last));
+            while (rhs_bitset != 0u){
+                size_t front_idx    = std::countr_zero(rhs_bitset);
+                rhs_bitset          &= rhs_bitset - 1u;
+                std::iter_swap(front_ptr, std::next(llast, front_idx));
+                std::advance(front_ptr, 1u);
+            }
 
-            return pivot_partition_1(llast, std::next(llast, swapping_idx + 1u), std::next(llast, swapping_idx));
+            std::iter_swap(front_ptr, std::prev(last));
+            return front_ptr;
         }
 
-        std::iter_swap(ffirst, std::prev(last));
-        return ffirst;
-    } 
+        std::iter_swap(llast, std::prev(last)); //first == last, according to our logic, all the last including itself forward (up to the std::prev(last)) are greater or equal, if it is std::prev(last) then it is definitely equal, we can safely do an iter_swap
+        return llast;
+    }
 
     template <class _Ty>
     static inline auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
@@ -592,7 +624,10 @@ namespace dg::sort_variants::quicksort{
 
     //we are very proud of what people have recommended at 
     //https://llvm.org/devmtg/2023-02-25/slides/A-New-Implementation-for-std-sort.pdf
-    //for the first time, we can sort our heap segments 3 times faster without polluting CPUs
+    //our good friends implementation is here: https://github.com/llvm/llvm-project/blob/main/libcxx/include/__algorithm/sort.h
+    //we have made a further progress on the optimization (by re-branching + reimplementing insertion sort for arithmetic types)
+    //we dont really have applications for the arithmetic sort except for our heap implementation which is a very crucial backbone of all things
+    //for the first time, we can sort our heap segments 3 times faster without polluting CPUs (we have completed the assignment!!!)
     //we'll move on, because this implementation is already uptodate-blackart-optimized, I can't find another instruction just yet, we'll circle back to this problem, I think 15% squeeze could be performed as clued by our peers
 
     template <class _Ty>
