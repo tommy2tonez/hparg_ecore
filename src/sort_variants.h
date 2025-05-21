@@ -6,11 +6,7 @@
 #include <functional>
 #include <utility>
 #include <algorithm>
-#include <vector>
-#include <chrono>
-#include <iostream>
 #include "assert.h"
-// #include "stdx.h"
 #include <type_traits>
 #include <bit>
 
@@ -20,15 +16,13 @@
 namespace dg::sort_variants::quicksort{
 
     static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 8u;
-    static inline constexpr size_t BLOCK_PIVOT_MAX_WALL_SZ      = 32u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_WALL_SZ      = 64u;
     static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
     static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
     static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
     static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
-    // static inline constexpr size_t SMALL_PIVOT_PARTITION_SZ     = 32u;
-    // static inline constexpr size_t BLOCK_PIVOT_BITSET_DUMP_SZ   = 4u;
 
-    using qs_unsigned_bitset_t = uint32_t;
+    using qs_unsigned_bitset_t = uint64_t;
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
     constexpr auto ulog2(T val) noexcept -> T{
@@ -427,18 +421,6 @@ namespace dg::sort_variants::quicksort{
 
         qs_unsigned_bitset_t lhs_bitset = 0u;
         qs_unsigned_bitset_t rhs_bitset = 0u;
-
-        //this loop is not optimized
-
-        //the programming strategy we used here is called tranactional programming
-        //assume the valid state is first, last, lhs_bitset, rhs_bitset
-        //for every transaction, first last must be a valid interval representing the not-considered partition
-        //and lhs_bitset and rhs_bitset must be representing the trailing information of those first last
-
-        //what before first must be less (when the bitset is empty)
-        //what after or equal last must be greater or equal (when the bitset is empty)
-
-        //we dont really care why the transaction is there, as long as it snaps the program into a valid state + the loop break is reached after certain valid transactions
 
         while (true){
             while (lhs_bitset != 0u && rhs_bitset != 0u){
