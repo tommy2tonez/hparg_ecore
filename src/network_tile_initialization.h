@@ -47,7 +47,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t forward_ops_id,
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
-                   void * logit_value, uint64_t logit_value_sz,
+                   const void * logit_value, uint64_t logit_value_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_leaf_ptr_access(ptr);
@@ -82,7 +82,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t memevent_ops_id, 
                    std::optional<uma_ptr_t> signal_accum_addr,
                    dispatch_control_t dispatch_control,
-                   ObserverData * observer_arr, uint64_t observer_arr_sz,
+                   const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_blkr_ptr_access(ptr);
@@ -122,7 +122,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr,
                    dispatch_control_t dispatch_control, 
-                   uma_ptr_t * observer_arr, uint64_t observer_arr_sz,
+                   const uma_ptr_t * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_mono_ptr_access(ptr);
@@ -164,7 +164,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr, 
                    dispatch_control_t dispatch_control,
-                   ObserverData * observer_arr, uint64_t observer_arr_sz,
+                   const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_pair_ptr_access(ptr);
@@ -202,13 +202,13 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     }
 
     auto init_uacm(uma_ptr_t ptr, 
-                   uma_ptr_t * src_arr, uint64_t src_arr_sz,
+                   const uma_ptr_t * src_arr, uint64_t src_arr_sz,
                    operatable_id_t forward_ops_id,
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr,
                    dispatch_control_t dispatch_control,
-                   ObserverData * observer_arr, uint64_t observer_arr_sz,
+                   const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_uacm_ptr_access(ptr);
@@ -245,13 +245,13 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     }
 
     auto init_pacm(uma_ptr_t ptr,
-                   uma_ptr_t * lhs_arr, uma_ptr_t * rhs_arr, uint64_t acm_sz, 
+                   const uma_ptr_t * lhs_arr, const uma_ptr_t * rhs_arr, uint64_t acm_sz, 
                    operatable_id_t forward_ops_id,
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr,
                    dispatch_control_t dispatch_control, 
-                   ObserverData * observer_arr, uint64_t observer_arr_sz,
+                   const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_pacm_ptr_access(ptr);
@@ -296,8 +296,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    std::optional<uma_ptr_t> signal_accum_addr,
                    dispatch_control_t dispatch_control,
                    learning_rate_t learning_rate,
-                   void * clogit_value, uint64_t clogit_value_sz,
-                   ObserverData * observer_arr, uint64_t observer_arr_sz,
+                   const void * clogit_value, uint64_t clogit_value_sz,
+                   const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_crit_ptr_access(ptr);
@@ -343,7 +343,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t forward_ops_id,
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
-                   void * logit_value, uint64_t logit_value_sz,
+                   const void * logit_value, uint64_t logit_value_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_immu_ptr_access(ptr);
@@ -371,7 +371,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       std::optional<uma_ptr_t> signal_accum_addr,
                       dispatch_control_t dispatch_control,
                       ClientDeliveryInfo dst_info,
-                      ObserverData * observer_arr, uint64_t observer_arr_sz,
+                      const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(ptr);
@@ -417,7 +417,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       std::optional<uma_ptr_t> signal_accum_addr,
                       dispatch_control_t dispatch_control,
                       ClientDeliveryInfo dst_info, 
-                      ObserverData * observer_arr, uint64_t observer_arr_sz,
+                      const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(ptr);
@@ -465,7 +465,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       operatable_id_t memevent_ops_id,
                       std::optional<uma_ptr_t> signal_accum_addr,
                       dispatch_control_t dispatch_control,
-                      ObserverData * observer_arr, uint64_t observer_arr_sz,
+                      const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(ptr);
@@ -514,7 +514,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       operatable_id_t memevent_ops_id,
                       std::optional<uma_ptr_t> signal_accum_addr,
                       dispatch_control_t dispatch_control, 
-                      ObserverData * observer_arr, uint64_t observer_arr_sz,
+                      const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_extndst_ptr_access(ptr);
@@ -2066,7 +2066,34 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 void * clogit_value, uint64_t clogit_value_sz,
                                 ObserverData * observer_arr, uint64_t observer_arr_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitCritPayLoad, exception_t>{
+                            
+        std::expected<dg::string, exception_t> clogit_buf = dg::network_exception::cstyle_initialize<dg::string>(clogit_value_sz);
+        
+        if (!clogit_buf.has_value()){
+            return std::unexpected(clogit_buf.error());
+        }
 
+        std::memcpy(clogit_buf->data(), clogit_value, clogit_value_sz);
+
+        std::expected<dg::vector<ObserverData>, exception_t> observer_vec = dg::network_exception::cstyle_initialize<dg::vector<ObserverData>>(observer_arr_sz);
+
+        if (!observer_vec.has_value()){
+            return std::unexpected(observer_vec.error());
+        }
+
+        std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
+
+        return InitCritPayLoad{.ptr                 = ptr,
+                               .src                 = src,
+                               .forward_ops_id      = forward_ops_id,
+                               .backward_ops_id     = backward_ops_id,
+                               .memevent_ops_id     = memevent_ops_id,
+                               .signal_accum_addr   = signal_accum_addr,
+                               .dispatch_control    = dispatch_control,
+                               .learning_rate       = learning_rate,
+                               .clogit_value        = std::move(clogit_buf.value()),
+                               .observer_vec        = std::move(observer_vec.value()),
+                               .force_init_flag     = force_init_flag};
     }
 
     auto make_init_immu_payload(uma_ptr_t ptr,
@@ -2075,7 +2102,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 operatable_id_t memevent_ops_id, 
                                 void * logit_value, uint64_t logit_value_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitImmuPayLoad, exception_t>{
+        
+        std::expected<dg::string, exception_t> logit_buf = dg::network_exception::cstyle_initialize<dg::string>(logit_value_sz);
 
+        if (!logit_buf.has_value()){
+            return std::unexpected(logit_buf.error());
+        }
+
+        std::memcpy(logit_buf->data(), logit_value, logit_value_sz);
+
+        return InitImmuPayLoad{.ptr             = ptr,
+                               .forward_ops_id  = forward_ops_id,
+                               .backward_ops_id = backward_ops_id,
+                               .memevent_ops_id = memevent_ops_id,
+                               .logit_value     = std::move(logit_buf.value()),
+                               .force_init_flag = force_init_flag};
     }
 
     auto make_init_msgrfwd_payload(uma_ptr_t ptr,
@@ -2088,7 +2129,25 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    ClientDeliveryInfo dst_info, 
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitMsgrFwdPayLoad, exception_t>{
+        
+        std::expected<dg::vector<ObserverData>, exception_t> observer_vec = dg::network_exception::cstyle_initialize<dg::vector<ObserverData>>(observer_arr_sz);
 
+        if (!observer_vec.has_value()){
+            return std::unexpected(observer_vec.error());
+        }
+
+        std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
+
+        return InitMsgrFwdPayLoad{.ptr                  = ptr,
+                                  .src                  = src,
+                                  .forward_ops_id       = forward_ops_id,
+                                  .backward_ops_id      = backward_ops_id,
+                                  .memevent_ops_id      = memevent_ops_id,
+                                  .signal_accum_addr    = signal_accum_addr,
+                                  .dispatch_control     = dispatch_control,
+                                  .dst_info             = dst_info,
+                                  .observer_vec         = std::move(observer_vec.value()),
+                                  .force_init_flag      = force_init_flag};
     }
 
     auto make_init_msgrbwd_payload(uma_ptr_t ptr,
@@ -2101,7 +2160,25 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    ClientDeliveryInfo dst_info, 
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitMsgrBwdPayLoad, exception_t>{
+        
+        std::expected<dg::vector<ObserverData>, exception_t> observer_vec = dg::network_exception::cstyle_initialize<dg::vector<ObserverData>>(observer_arr_sz);
 
+        if (!observer_vec.has_value()){
+            return std::unexpected(observer_vec.error());
+        }
+
+        std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
+
+        return InitMsgrBwdPayLoad{.ptr                  = ptr,
+                                  .src                  = src,
+                                  .forward_ops_id       = forward_ops_id,
+                                  .backward_ops_id      = backward_ops_id,
+                                  .memevent_ops_id      = memevent_ops_id,
+                                  .signal_accum_addr    = signal_accum_addr,
+                                  .dispatch_control     = dispatch_control,
+                                  .dst_info             = dst_info,
+                                  .observer_vec         = std::move(observer_vec.value()),
+                                  .force_init_flag      = force_init_flag};
     }
 
     auto make_init_extnsrc_payload(uma_ptr_t ptr,
@@ -2115,14 +2192,37 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    dispatch_control_t dispatch_control,
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnSrcPayLoad, exception_t>{
+        
+        std::expected<dg::vector<ObserverData>, exception_t> observer_vec = dg::network_exception::cstyle_initialize<dg::vector<ObserverData>>(observer_arr_sz);
 
+        if (!observer_vec.has_value()){
+            return std::unexpected(observer_vec.error());
+        }
+
+        std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
+
+        return InitExtnSrcPayLoad{.ptr                  = ptr,
+                                  .src                  = src,
+                                  .counterpart          = counterpart,
+                                  .counterpart_shadow   = counterpart_shadow,
+                                  .forward_ops_id       = forward_ops_id,
+                                  .backward_ops_id      = backward_ops_id,
+                                  .memevent_ops_id      = memevent_ops_id,
+                                  .signal_accum_addr    = signal_accum_addr,
+                                  .dispatch_control     = dispatch_control,
+                                  .observer_vec         = std::move(observer_vec.value()),
+                                  .force_init_flag      = force_init_flag};
     }
 
     auto make_init_extnsrx_payload(uma_ptr_t ptr,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnSrxPayLoad, exception_t>{
-
+        
+        return InitExtnSrxPayLoad{.ptr                  = ptr,
+                                  .memevent_ops_id      = memevent_ops_id,
+                                  .signal_accum_addr    = signal_accum_addr,
+                                  .force_init_flag      = force_init_flag};
     }
 
     auto make_init_extndst_payload(uma_ptr_t ptr,
@@ -2136,176 +2236,262 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    dispatch_control_t dispatch_control, 
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnDstPayLoad, exception_t>{
+        
+        std::expected<dg::vector<ObserverData>, exception_t> observer_vec = dg::network_exception::cstyle_initialize<dg::vector<ObserverData>>(observer_arr_sz);
 
+        if (!observer_vec.has_value()){
+            return std::unexpected(observer_vec.error());
+        }
+
+        std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
+
+        return InitExtnDstPayLoad{.ptr                  = ptr,
+                                  .src                  = src,
+                                  .counterpart          = counterpart,
+                                  .counterpart_shadow   = counterpart_shadow,
+                                  .forward_ops_id       = forward_ops_id,
+                                  .backward_ops_id      = backward_ops_id,
+                                  .memevent_ops_id      = memevent_ops_id,
+                                  .signal_accum_addr    = signal_accum_addr,
+                                  .dispatch_control     = dispatch_control,
+                                  .observer_vec         = std::move(observer_vec.value()),
+                                  .force_init_flag      = force_init_flag}
     }
 
     auto make_init_extndsx_payload(uma_ptr_t ptr,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnDsxPayLoad, exception_t>{
-
+        
+        return InitExtnDsxPayLoad{.ptr                  = ptr,
+                                  .memevent_ops_id      = memevent_ops_id,
+                                  .signal_accum_addr    = signal_accum_addr,
+                                  .force_init_flag      = force_init_flag};
     }
 
     auto make_orphan_leaf_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanLeafPayLoad, exception_t>{
-
+        
+        return OrphanLeafPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_blkr_payload(uma_ptr_t ptr,
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanBlkrPayLoad, exception_t>{
-
+        
+        return OrphanBlkrPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_mono_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanMonoPayLoad, exception_t>{
-
+        
+        return OrphanMonoPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_pair_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanPairPayLoad, exception_t>{
-
+        
+        return OrphanPairPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_uacm_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanUACMPayLoad, exception_t>{
-
+        
+        return OrphanUACMPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_pacm_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanPACMPayLoad, exception_t>{
-
+        
+        return OrphanPACMPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_crit_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanCritPayLoad, exception_t>{
-
+        
+        return OrphanCritPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_immu_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanImmuPayLoad, exception_t>{
 
+        return OrphanImmuPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_orphan_msgrfwd_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanMsgrFwdPayLoad, exception_t>{
 
+        return OrphanMsgrFwdPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_orphan_msgrbwd_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanMsgrBwdPayLoad, exception_t>{
 
+        return OrphanMsgrBwdPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_orphan_extnsrc_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanExtnSrcPayLoad, exception_t>{
 
+        return OrphanExtnSrcPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_orphan_extnsrx_payload(uma_ptr_t ptr,
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanExtnSrxPayLoad, exception_t>{
 
+        return OrphanExtnSrxPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_orphan_extndst_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanExtnDstPayLoad, exception_t>{
 
+        return OrphanExtnDstPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_orphan_extndsx_payload(uma_ptr_t ptr,
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<OrphanExtnDsxPayLoad, exception_t>{
 
+        return OrphanExtnDsxPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_deinit_leaf_payload(uma_ptr_t ptr,
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitLeafPayLoad, exception_t>{
 
+        return DeinitLeafPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_blkr_payload(uma_ptr_t ptr,
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitBlkrPayLoad, exception_t>{
 
+        return DeinitBlkrPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
  
     auto make_deinit_mono_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitMonoPayLoad, exception_t>{
 
+        return DeinitMonoPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_pair_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitPairPayLoad, exception_t>{
 
+        return DeinitPairPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_uacm_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitUACMPayLoad, exception_t>{
 
+        return DeinitUACMPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_pacm_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitPACMPayLoad, exception_t>{
 
+        return DeinitPACMPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_crit_payload(uma_ptr_t ptr,
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitCritPayLoad, exception_t>{
 
+        return DeinitCritPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_immu_payload(uma_ptr_t ptr, 
                                   operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitImmuPayLoad, exception_t>{
 
+        return DeinitImmuPayLoad{.ptr               = ptr,
+                                 .memevent_ops_id   = memevent_ops_id};
     }
 
     auto make_deinit_msgrfwd_payload(uma_ptr_t ptr,
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitMsgrFwdPayLoad, exception_t>{
 
+        return DeinitMsgrFwdPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_deinit_msgrbwd_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitMsgrBwdPayLoad, exception_t>{
 
+        return DeinitMsgrBwdPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_deinit_extnsrc_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitExtnSrcPayLoad, exception_t>{
 
+        return DeinitExtnSrcPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_deinit_extnsrx_payload(uma_ptr_t ptr,
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitExtnSrxPayLoad, exception_t>{
 
+        return DeinitExtnSrxPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_deinit_extndst_payload(uma_ptr_t ptr, 
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitExtnDstPayLoad, exception_t>{
 
+        return DeinitExtnDstPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     auto make_deinit_extndsx_payload(uma_ptr_t ptr,
                                      operatable_id_t memevent_ops_id) noexcept -> std::expected<DeinitExtnDsxPayLoad, exception_t>{
 
+        return DeinitExtnDsxPayLoad{.ptr                = ptr,
+                                    .memevent_ops_id    = memevent_ops_id};
     }
 
     //the problem is that we are leaking resources, std::move_iterator<> on failure must be kept like before invoking the function
+    //the move iterator is looking very badly for this particular payload job
+    //the problem is that we dont want to do a move, each of the payload is already 1 cache fetch ...
+    //so it's better to do a pointer delvrsrv instead of a move InitLeafPayload...
 
-    void load_init_leaf_payload(std::move_iterator<InitLeafPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_leaf_payload(const InitLeafPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA}; //we are trying to catch as many use cases as possible but not all use cases - first usecase is cuda_runtime_ptr_t overlapped with cuda_transfer_ptr_t backed by cuda_runtime_ptr_t (circular), second usecase is cuda_runtime_ptr_t overlapped with host_ptr_t, third usecase is cuda_runtime_ptr_t overlapped with cuda_fsys_ptr_t backed by storage devices, fourth is cuda_fsys_ptr_t
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8; //we'll fix this
 
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitLeafPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
-            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr); //fine to lock things twice
-            exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size()); //we rather do advise here because it's not part of the official interface of concurrent_unsafe - it pollutes the interface in a negative way - we aren't hard-coding so we use consts here
-            //the memory_platform is actually batch responsibility and vectorization responsibility (this guy) so it makes sense for this guy to do advise rather than the individual get/setters
-            //we don't care if the calling code path actually uses the advise or not - it is not mandatory - so this optimization is only a hint
-            //there is an optimizable of remap_try - which we haven't discussed yet
-            //this is a huge optimization in terms of reducing atomic operations but we aren't worrying about that now - we are the only one spinning the lock due to the mem_grd
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitLeafPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<uma_memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                            dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                            dg::network_uma::MEMORY_PLATFORM_CUDA}; //we are trying to catch as many use cases as possible but not all use cases - first usecase is cuda_runtime_ptr_t overlapped with cuda_transfer_ptr_t backed by cuda_runtime_ptr_t (circular), second usecase is cuda_runtime_ptr_t overlapped with host_ptr_t, third usecase is cuda_runtime_ptr_t overlapped with cuda_fsys_ptr_t backed by storage devices, fourth is cuda_fsys_ptr_t
+
+            exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size()); //we'll fix this
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_err            = dg::network_tile_lifetime::concurrent_unsafe::init_leaf(payload.ptr, payload.group_operatable_id, payload.logit_value.data(), payload.logit_value.size()); // this is very expensive, how do we solve this?
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_err                = dg::network_tile_lifetime::concurrent_unsafe::init_leaf(payload_ptr->ptr, 
+                                                                                                              payload_ptr->forward_ops_id, 
+                                                                                                              payload_ptr->backward_ops_id,
+                                                                                                              payload_ptr->memevent_ops_id,
+                                                                                                              payload_ptr->logit_value.data(),
+                                                                                                              payload_ptr->logit_value.size(),
+                                                                                                              payload_ptr->force_init_flag);
 
                 if (dg::network_exception::is_failed(init_err)){
                     *exception_ptr = init_err;
@@ -2317,15 +2503,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
         };
 
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitLeafPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            LeafPayload payload                             = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_leaf_rcu_addr(payload.ptr); 
+            const InitLeafPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i); 
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_leaf_rcu_addr(payload_ptr->ptr); 
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2333,35 +2523,48 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_mono_payload(std::move_iterator<InitMonoPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_mono_payload(const InitMonoPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitMonoPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitMonoPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_err            = dg::network_tile_lifetime::concurrent_unsafe::init_mono(payload.ptr, payload.src, payload.dispatch_control, payload.group_operatable_id, payload.observer_vec.data(), payload.observer_vec.size());
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_err                = dg::network_tile_lifetime::concurrent_unsafe::init_mono(payload_ptr->ptr,
+                                                                                                              payload_ptr->src,
+                                                                                                              payload_ptr->forward_ops_id,
+                                                                                                              payload_ptr->backward_ops_id,
+                                                                                                              payload_ptr->memevent_ops_id,
+                                                                                                              payload_ptr->signal_accum_addr,
+                                                                                                              payload_ptr->dispatch_control, 
+                                                                                                              payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                              payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_err)){
                     *exception_ptr = init_err;
                 }
             }
         };
 
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitMonoPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitMonoPayLoad payload                         = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr(payload.ptr);
+            const InitMonoPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2369,34 +2572,49 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     } 
 
-    void load_init_pair_payload(std::move_iterator<InitPairPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_pair_payload(const InitPairPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitPairPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitPairPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_err            = dg::network_tile_lifetime::concurrent_unsafe::init_pair(payload.ptr, payload.lhs, payload.rhs, payload.dispatch_control, payload.group_operatable_id, payload.observer_vec.data(), payload.observer_vec.size(), payload.pong_count);
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_err                = dg::network_tile_lifetime::concurrent_unsafe::init_pair(payload_ptr->ptr,
+                                                                                                              payload_ptr->lhs,
+                                                                                                              payload_ptr->rhs,
+                                                                                                              payload_ptr->forward_ops_id,
+                                                                                                              payload_ptr->backward_ops_id,
+                                                                                                              payload_ptr->memevent_ops_id,
+                                                                                                              payload_ptr->signal_accum_addr,
+                                                                                                              payload_ptr->dispatch_control,
+                                                                                                              payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                              payload_ptr->force_init_flag);
 
                 if (dg::network_exception::is_failed(init_err)){
                     *exception_ptr = init_err;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitPairPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitPairPayLoad payload                         = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr(payload.ptr);
+            const InitPairPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2404,34 +2622,48 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_uacm_payload(std::move_iterator<InitUACMPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_uacm_payload(const InitUACMPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitUACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitUACMPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_err            = dg::network_tile_lifetime::concurrent_unsafe::init_uacm(payload.ptr, payload.src.data(), payload.src.size(), payload.dispatch_control, payload.group_operatable_id, payload.observer_vec.data(), payload.observer_vec.size(), payload.pong_count);
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_err                = dg::network_tile_lifetime::concurrent_unsafe::init_uacm(payload_ptr->ptr, 
+                                                                                                              payload_ptr->src.data(), payload_ptr->src.size(), 
+                                                                                                              payload_ptr->forward_ops_id,
+                                                                                                              payload_ptr->backward_ops_id,
+                                                                                                              payload_ptr->memevent_ops_id,
+                                                                                                              payload_ptr->signal_accum_addr,
+                                                                                                              payload_ptr->dispatch_control, 
+                                                                                                              payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                              payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_err)){
                     *exception_ptr = init_err;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitUACMPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LamdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(sz, LOCAL_VECTORIZATION_SZ); 
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitUACMPayLoad payload                         = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr(payload.ptr);
+            const InitUACMPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2439,44 +2671,54 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_pacm_payload(std::move_iterator<InitPACMPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_pacm_payload(const InitPACMPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitPACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitPACMPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr] = payload_arr[i]; 
+                auto [payload_ptr, exception_ptr] = payload_arr[i]; 
 
-                if (payload.lhs.size() != payload.rhs.size()){
+                if (payload_ptr->lhs.size() != payload_ptr->rhs.size()){
                     *exception_ptr = dg::network_exception::INVALID_ARGUMENT;
                     continue;
                 }
 
-                exception_t init_err = dg::network_tile_lifetime::concurrent_unsafe::init_pacm(payload.ptr,
-                                                                                               payload.lhs.data(), payload.rhs.data(), payload.lhs.size(),
-                                                                                               payload.dispatch_control, payload.group_operatable_id,
-                                                                                               payload.observer_vec.data(), payload.observer_vec.size());
-                
+                exception_t init_err = dg::network_tile_lifetime::concurrent_unsafe::init_pacm(payload_ptr->ptr,
+                                                                                               payload_ptr->lhs.data(), payload_ptr->rhs.data(), payload_ptr->lhs.size(),
+                                                                                               payload_ptr->forward_ops_id,
+                                                                                               payload_ptr->backward_ops_id,
+                                                                                               payload_ptr->memevent_ops_id,
+                                                                                               payload_ptr->signal_accum_addr,
+                                                                                               payload_ptr->dispatch_control, 
+                                                                                               payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                               payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_err)){
                     *exception_ptr = init_err;
                 }
             }
         };
+        
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
 
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitPACMPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitPACMPayLoad payload                         = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr(payload.ptr);
+            const InitPACMPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_ptr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2484,30 +2726,37 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_crit_payload(std::move_iterator<InitCritPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_crit_payload(const InitCritPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
 
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitCritPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitCritPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_status         = dg::network_tile_lifetime::concurrent_unsafe::init_crit(payload.ptr, 
-                                                                                                          payload.src, payload.dispatch_control, 
-                                                                                                          payload.group_operatable_id, 
-                                                                                                          payload.learning_rate, 
-                                                                                                          payload.clogit_value.data(), payload.clogit_value.size(), 
-                                                                                                          payload.observer_vec.data(), payload.observer_vec.size());
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_crit(payload_ptr->ptr, 
+                                                                                                              payload_ptr->src, 
+                                                                                                              payload_ptr->forward_ops_id,
+                                                                                                              payload_ptr->backward_ops_id,
+                                                                                                              payload_ptr->memevent_ops_id,
+                                                                                                              payload_ptr->signal_accum_addr,
+                                                                                                              payload_ptr->dispatch_control,  
+                                                                                                              payload_ptr->learning_rate, 
+                                                                                                              payload_ptr->clogit_value.data(), payload_ptr->clogit_value.size(), 
+                                                                                                              payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                              payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_status)){
                     *exception_ptr = init_status;
                 }
@@ -2517,15 +2766,20 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitCritPayLoad, exception-t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz); 
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitCritPayLoad payload                         = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr(payload.ptr);
+            const InitCritPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2533,27 +2787,32 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_immu_payload(std::move_iterator<InitImmuPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_immu_payload(const InitImmuPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
 
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitImmuPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitImmuPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_status         = dg::network_tile_lifetime::concurrent_unsafe::init_immu(payload.ptr, 
-                                                                                                          payload.group_operatable_id, 
-                                                                                                          payload.logit_value.data(), payload.logit_value.size());
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_immu(payload_ptr->ptr,
+                                                                                                              payload_ptr->forward_ops_id,
+                                                                                                              payload_ptr->backward_ops_id,
+                                                                                                              payload_ptr->memevent_ops_id,
+                                                                                                              payload_ptr->logit_value.data(), payload_ptr->logit_value.size(),
+                                                                                                              payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_status)){
                     *exception_ptr = init_status;
                 }
@@ -2563,15 +2822,20 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitImmuPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitImmuPayLoad payload                         = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr(payload.ptr);
+            const InitImmuPayLoad * payload_ptr             = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2579,36 +2843,49 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_msgrfwd_payload(std::move_iterator<InitMsgrFwdPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_msgrfwd_payload(const InitMsgrFwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitMsgrFwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitMsgrFwdPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_status         = dg::network_tile_lifetime::concurrent_unsafe::init_msgrfwd(payload.ptr, payload.src, payload.dispatch_control, payload.group_operatable_id, 
-                                                                                                             payload.operatable_id, payload.dst_info, 
-                                                                                                             payload.observer_vec.data(), payload.observer_vec.size());
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_msgrfwd(payload_ptr->ptr, 
+                                                                                                                 payload_ptr->src,
+                                                                                                                 payload_ptr->forward_ops_id,
+                                                                                                                 payload_ptr->backward_ops_id,
+                                                                                                                 payload_ptr->memevent_ops_id,
+                                                                                                                 payload_ptr->signal_accum_addr,
+                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->dst_info,
+                                                                                                                 payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                                 payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_status)){
                     *exception_ptr = init_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitMsgrFwdPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitMsgrFwdPayLoad payload                      = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr(payload.ptr);
+            const InitMsgrFwdPayLoad * payload_ptr          = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2616,36 +2893,49 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_msgrbwd_payload(std::move_iterator<InitMsgrBwdPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_msgrbwd_payload(const InitMsgrBwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitMsgrBwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitMsgrBwdPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_status         = dg::network_tile_lifetime::concurrent_unsafe::init_msgrbwd(payload.ptr, payload.src, payload.dispatch_control, payload.group_operatable_id, 
-                                                                                                             payload.operatable_id, payload.timein, payload.dst_info, 
-                                                                                                             payload.observer_vec.data(), payload.observer_vec.size());
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_msgrbwd(payload_ptr->ptr,
+                                                                                                                 payload_ptr->src,
+                                                                                                                 payload_ptr->forward_ops_id,
+                                                                                                                 payload_ptr->backward_ops_id,
+                                                                                                                 payload_ptr->memevent_ops_id,
+                                                                                                                 payload_ptr->signal_accum_addr,
+                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->dst_info,
+                                                                                                                 payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(), 
+                                                                                                                 payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_status)){
                     *exception_ptr = init_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LamdaWrappedConsumer<std::tuple<InitMsgrBwdPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitMsgrBwdPayLoad payload                      = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr(payload.ptr);
+            const InitMsgrBwdPayLoad * payload_ptr          = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2653,35 +2943,50 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_extnsrc_payload(std::move_iterator<InitExtnSrcPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_extnsrc_payload(const InitExtnSrcPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitExtnSrcPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitExtnSrcPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_status         = dg::network_tile_lifetime::concurrent_unsafe::init_extnsrc(payload.ptr, payload.src, payload.counterpart, 
-                                                                                                             payload.dispatch_control, payload.group_operatable_id);
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_extnsrc(payload_ptr->ptr, 
+                                                                                                                 payload_ptr->src, 
+                                                                                                                 payload_ptr->counterpart, 
+                                                                                                                 payload_ptr->counterpart_shadow,
+                                                                                                                 payload_ptr->forward_ops_id,
+                                                                                                                 payload_ptr->backward_ops_id,
+                                                                                                                 payload_ptr->memevent_ops_id,
+                                                                                                                 payload_ptr->signal_accum_addr,
+                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                                 payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_status)){
                     *exception_ptr = init_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LamdaWrappedConsumer<std::tuple<InitExtnSrcPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitExtnSrcPayLoad payload                      = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr(payload.ptr);
+            const InitExtnSrcPayLoad * payload_ptr          = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2689,36 +2994,50 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_init_extndst_payload(std::move_iterator<InitExtnDstPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_init_extndst_payload(const InitExtnDstPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<InitExtnDstPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<const InitExtnDstPayLoad *, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t init_status         = dg::network_tile_lifetime::concurrent_unsafe::init_extndst(payload.ptr, payload.counterpart, 
-                                                                                                             payload.dispatch_control, payload.group_operatable_id,
-                                                                                                             payload.observer_vec.data(), payload.observer_vec.size());
-                
+                auto [payload_ptr, exception_ptr]   = payload_arr[i];
+                exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_extndst(payload_ptr->ptr,
+                                                                                                                 payload_ptr->src,
+                                                                                                                 payload_ptr->counterpart,
+                                                                                                                 payload_ptr->counterpart_shadow,
+                                                                                                                 payload_ptr->forward_ops_id,
+                                                                                                                 payload_ptr->backward_ops_id,
+                                                                                                                 payload_ptr->memevent_ops_id,
+                                                                                                                 payload_ptr->signal_accum_addr,
+                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
+                                                                                                                 payload_ptr->force_init_flag);
+
                 if (dg::network_exception::is_failed(init_status)){
                     *exception_ptr = init_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<InitExtnDstPayLoad, exception_t * >, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            InitExtnDstPayLoad payload                      = payload_arr[i];
-            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr(payload.ptr);
+            const InitExtnDstPayLoad * payload_ptr          = std::next(payload_arr, i);
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
+            std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr(payload_ptr->ptr);
 
             if (!rcu_addr.has_value()){
                 exception_arr[i] = rcu_addr.error();
@@ -2726,33 +3045,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload_ptr, exception_ptr));
         }
     }
 
-    void load_orphan_leaf_payload(std::move_iterator<OrphanLeafPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_orphan_leaf_payload(const OrphanLeafPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t lck_addr, std::tuple<OrphanLeafPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
-            dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanLeafPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_leaf(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_leaf(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanLeafPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
-            OrphanLeafPayload payload                       = payload_arr[i];
+            OrphanLeafPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_leaf_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2761,33 +3086,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_orphan_mono_payload(std::move_iterator<OrphanMonoPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_orphan_mono_payload(const OrphanMonoPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t lck_addr, std::tuple<OrphanMonoPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
-            dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanMonoPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+            dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_mono(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_mono(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanMonoPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             OrphanMonoPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2796,33 +3127,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             } 
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_orphan_pair_payload(std::move_iterator<OrphanPairPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_orphan_pair_payload(const OrphanPairPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanPairPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanPairPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_pair(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_pair(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanPairPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             OrphanPairPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exxception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_pair_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2831,33 +3168,38 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_orphan_uacm_payload(std::move_iterator<OrphanUACMPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_orphan_uacm_payload(const OrphanUACMPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanUACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        const size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanUACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_uacm(payload.ptr, payload.group_operatable_id);
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_uacm(payload.ptr, payload.memevent_ops_id);
 
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanUACMPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             OrphanUACMPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_uacm_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2866,33 +3208,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_orphan_pacm_payload(std::move_iterator<OrphanPACMPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_orphan_pacm_payload(const OrphanPACMPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanPACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanPACMPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_pacm(payload.ptr, payload.group_operatable_id);
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_pacm(payload.ptr, payload.memevent_ops_id);
 
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanPACMPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             OrphanPACMPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_pacm_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2901,33 +3249,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
     void load_orphan_crit_payload(std::move_iterator<OrphanCritPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanCritPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+s
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanCritPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_crit(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_crit(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanCritPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             OrphanCritPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_crit_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2936,33 +3290,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
     void load_orphan_msgrfwd_payload(std::move_iterator<OrphanMsgrFwdPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ   = size_t{1} << 8;
-        auto vectrz                     = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanMsgrFwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<OrphanMsgrFwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_msgrfwd(payload.ptr, payload.group_operatable_id);
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t orphan_status       = dg::network_tile_lifetime::concurrent_unsafe::orphan_msgrfwd(payload.ptr, payload.memevent_ops_id);
                 
                 if (dg::network_exception::is_failed(orphan_status)){
                     *exception_ptr = orphan_status;
                 }
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<OrphanMsgrFwdPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             OrphanMsgrFwdPayLoad payload                    = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -2970,10 +3330,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 continue;
             }
 
-            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size()); //this is the most important optimization - we are managing all the allocations
-            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr);
         }
     }
+
+    //---
 
     void load_orphan_msgrbwd_payload(std::move_iterator<OrphanMsgrBwdPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
