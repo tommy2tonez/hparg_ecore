@@ -104,6 +104,10 @@ int main(){
     //the minimal coding size for THIS is n! suffix array (this is image encoding)
     //remember our stock prediction compression algorithm, we have n! suffix array then n! suffix array then another n! suffix array
     //we need to store the "linearity information", in a lossy compressed way
+    //the two sum problem is usally done by PACM of lhs and rhs (uint8_t + uint8_t -> uint16_t) followed by another pacm (uint16_t + uint16_t -> uint16_t) followed by another split
+    //we've been working super hard to solve the suffix compression (with extra information to allow specific "leeway" to bonsai the domain projection space) on cuda 
+    //the most optimized instruction set we have found is Taylor Series precomputed intercourse operation tile x tile (involing 2, 3, 4 variables)
+    //
 
     //so linearity compression is about sorting the array + extracting the suffix + get slopes of sorted array + rinse and repeat
     //the suffices after certain recursive calls will be lossy or lossless compared to the orginal input data 
