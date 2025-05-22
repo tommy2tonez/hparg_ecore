@@ -3340,8 +3340,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         }
     }
 
-    //---
-
     void load_orphan_msgrbwd_payload(const OrphanMsgrBwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
         constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
@@ -3505,8 +3503,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
-
-    //----
 
     void load_deinit_leaf_payload(const DeinitLeafPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
@@ -3814,23 +3810,23 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         }
     }
 
-    //
+    void load_deinit_msgrfwd_payload(const DeinitMsgrFwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-    void load_deinit_msgrfwd_payload(std::move_iterator<DeinitMsgrFwdPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
-
-        auto vectrz = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMsgrFwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMsgrFwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_msgrfwd(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_msgrfwd(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(deinit_status)){
                     *exception_ptr = deinit_status;
                 }
@@ -3840,14 +3836,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<DeinitMsgrFwdPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             DeinitMsgrFwdPayLoad payload                    = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrfwd_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -3856,25 +3857,27 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_deinit_msgrbwd_payload(std::move_iterator<DeinitMsgrBwdPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_deinit_msgrbwd_payload(const DeinitMsgrBwdPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
 
-        auto vectrz = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMsgrBwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitMsgrBwdPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_msgrbwd(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_msgrbwd(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(deinit_status)){
                     *exception_ptr = deinit_status;
                 }
@@ -3884,14 +3887,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<DeinitMsgrBwdPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             DeinitMsgrBwdPayLoad payload                    = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -3900,24 +3908,26 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_deinit_extnsrc_payload(std::move_iterator<DeinitExtnSrcPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_deinit_extnsrc_payload(const DeinitExtnSrcPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
 
-        auto vectrz = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitExtnSrcPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitExtnSrcPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_extnsrc(payload.ptr, payload.group_operatable_id);
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_extnsrc(payload.ptr, payload.memevent_ops_id);
                 
                 if (dg::network_exception::is_failed(deinit_status)){
                     *exception_ptr = deinit_status;
@@ -3928,14 +3938,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<DeinitExtnSrcPayLoad, exception-t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             DeinitExtnSrcPayLoad payload                    = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_extnsrc_rcu_addr(payload.ptr);
 
             if (!rcu_addr.has_value()){
@@ -3944,25 +3959,27 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_deinit_extndst_payload(std::move_iterator<DeinitExtnDstPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_deinit_extndst_payload(const DeinitExtnDstPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
 
-        auto vectrz = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitExtnDstPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitExtnDstPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_extndst(payload.ptr, payload.group_operatable_id);
-                
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_extndst(payload.ptr, payload.memevent_ops_id);
+
                 if (dg::network_exception::is_failed(deinit_status)){
                     *exception_ptr = deinit_status;
                 }
@@ -3972,14 +3989,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<DeinitExtnDstPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             DeinitExtnDstPayLoad payload                    = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_extndst_rcu_addr(payload.dst);
 
             if (!rcu_addr.has_value()){
@@ -3988,24 +4010,26 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 
-    void load_deinit_immu_payload(std::move_iterator<DeinitImmuPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_deinit_immu_payload(const DeinitImmuPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
-        const size_t VECTORIZATION_SZ                           = size_t{1} << 8;
-        const std::array<memory_advise_t, 5u> MEM_ADVISE_SET    = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
-                                                                   dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
-                                                                   dg::network_uma::MEMORY_PLATFORM_CUDA};
-        
-        auto vectrz = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitImmuPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
+        constexpr size_t LOCAL_VECTORIZATION_SZ = size_t{1} << 8;
+
+        auto vectorizer = [](uma_ptr_t rcu_lck_addr, std::tuple<DeinitImmuPayLoad, exception_t *> * payload_arr, size_t sz) noexcept{
             dg::network_memops_uma::memlock_guard mem_grd(rcu_lck_addr);
+
+            constexpr std::array<memory_advise_t, 5u> MEM_ADVISE_SET = {dg::network_uma::MEMORY_PLATFORM_CUTF, dg::network_uma::MEMORY_PLATFORM_CUFS, 
+                                                                        dg::network_uma::MEMORY_PLATFORM_FSYS, dg::network_uma::MEMORY_PLATFORM_HOST,
+                                                                        dg::network_uma::MEMORY_PLATFORM_CUDA};
+
             exception_t advise_err = dg::network_uma::affined_advise_memory_platform(MEM_ADVISE_SET.data(), MEM_ADVISE_SET.size());
 
             for (size_t i = 0u; i < sz; ++i){
-                auto& [payload, exception_ptr]  = payload_arr[i];
-                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_immu(payload.ptr, payload.group_operatable_id);
+                auto [payload, exception_ptr]   = payload_arr[i];
+                exception_t deinit_status       = dg::network_tile_lifetime::concurrent_unsafe::deinit_immu(payload.ptr, payload.memevent_ops_id);
                 
                 if (dg::network_exception::is_failed(deinit_status)){
                     *exception_ptr = deinit_status;
@@ -4016,14 +4040,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 dg::network_uma::affined_unadvise_memory_platform();
             }
         };
-        auto virtual_vectrz     = dg::network_producer_consumer::LambdaWrappedConsumer<uma_ptr_t, std::tuple<DeinitImmuPayLoad, exception_t *>, decltype(vectrz)>(vectrz);
-        dg::network_stack_allocation::NoExceptAllocation<char[]> buf(dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&virtual_vectz, VECTORIZATION_SZ));
-        auto delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&virtual_vectrz, VECTORIZATION_SZ, buf.get()));
+
+        dg::network_producer_consumer::LambdaWrappedConsumer virtual_vectorizer(vectorizer);
+
+        size_t trimmed_vectorization_sz = std::min(LOCAL_VECTORIZATION_SZ, sz);
+        size_t allocation_cost          = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&virtual_vectorizer, trimmed_vectorization_sz); 
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> buf(allocation_cost);
+        auto delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&virtual_vectorizer, trimmed_vectorization_sz, buf.get()));
 
         std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             DeinitImmuPayLoad payload                       = payload_arr[i];
+            exception_t * exception_ptr                     = std::next(exception_arr, i);
             std::expected<uma_ptr_t, exception_t> rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr(payload.dst);
 
             if (!rcu_addr.has_value()){
@@ -4032,7 +4061,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
             }
 
             uma_ptr_t lck_addr = dg::memult::region(rcu_addr.value(), dg::network_memops_uma::memlock_region_size());
-            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(std::move(payload), std::next(exception_arr, i)));
+            dg::network_memops_uma::delvrsrv_regionkv_deliver(delivery_handle.get(), lck_addr, std::make_tuple(payload, exception_ptr));
         }
     }
 }
@@ -4053,31 +4082,39 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         payload_kind_init_msgrfwd       = 8u,
         payload_kind_init_msgrbwd       = 9u,
         payload_kind_init_extnsrc       = 10u,
-        payload_kind_init_extndst       = 11u,
-        payload_kind_orphan_leaf        = 12u,
-        payload_kind_orphan_blkr        = 13u,
-        payload_kind_orphan_mono        = 14u,
-        payload_kind_orphan_pair        = 15u,
-        payload_kind_orphan_uacm        = 16u,
-        payload_kind_orphan_pacm        = 17u,
-        payload_kind_orphan_crit        = 18u,
-        payload_kind_orphan_immu        = 19u,
-        payload_kind_orphan_msgrfwd     = 20u,
-        payload_kind_orphan_msgrbwd     = 21u,
-        payload_kind_orphan_extnsrc     = 22u,
-        payload_kind_orphan_extndst     = 23u,
-        payload_kind_deinit_leaf        = 24u,
-        payload_kind_deinit_blkr        = 25u,
-        payload_kind_deinit_mono        = 26u,
-        payload_kind_deinit_pair        = 27u,
-        payload_kind_deinit_uacm        = 28u,
-        payload_kind_deinit_pacm        = 29u,
-        payload_kind_deinit_crit        = 30u,
-        payload_kind_deinit_immu        = 31u
-        payload_kind_deinit_msgrfwd     = 32u,
-        payload_kind_deinit_msgrbwd     = 33u,
-        payload_kind_deinit_extnsrc     = 34u,
-        payload_kind_deinit_extndst     = 35u
+        payload_kind_init_extnsrx       = 11u,
+        payload_kind_init_extndst       = 12u,
+        payload_kind_init_extndsx       = 13u,
+
+        payload_kind_orphan_leaf        = 14u,
+        payload_kind_orphan_blkr        = 15u,
+        payload_kind_orphan_mono        = 16u,
+        payload_kind_orphan_pair        = 17u,
+        payload_kind_orphan_uacm        = 18u,
+        payload_kind_orphan_pacm        = 19u,
+        payload_kind_orphan_crit        = 20u,
+        payload_kind_orphan_immu        = 21u,
+        payload_kind_orphan_msgrfwd     = 22u,
+        payload_kind_orphan_msgrbwd     = 23u,
+        payload_kind_orphan_extnsrc     = 24u,
+        payload_kind_orphan_extnsrx     = 25u,
+        payload_kind_orphan_extndst     = 26u,
+        payload_kind_orphan_extndsx     = 27u,
+
+        payload_kind_deinit_leaf        = 28u,
+        payload_kind_deinit_blkr        = 29u,
+        payload_kind_deinit_mono        = 30u,
+        payload_kind_deinit_pair        = 31u,
+        payload_kind_deinit_uacm        = 32u,
+        payload_kind_deinit_pacm        = 33u,
+        payload_kind_deinit_crit        = 34u,
+        payload_kind_deinit_immu        = 35u
+        payload_kind_deinit_msgrfwd     = 36u,
+        payload_kind_deinit_msgrbwd     = 37u,
+        payload_kind_deinit_extnsrc     = 38u,
+        payload_kind_deinit_extnsrx     = 39u,
+        payload_kind_deinit_extndst     = 40u,
+        payload_kind_deinit_extndsx     = 41u
     };
 
     //static inline constexpr size_t VIRTUAL_PAYLOAD_CONTENT_SZ = size_t{1} << 5;

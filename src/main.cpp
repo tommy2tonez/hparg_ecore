@@ -107,7 +107,6 @@ int main(){
     //the two sum problem is usally done by PACM of lhs and rhs (uint8_t + uint8_t -> uint16_t) followed by another pacm (uint16_t + uint16_t -> uint16_t) followed by another split
     //we've been working super hard to solve the suffix compression (with extra information to allow specific "leeway" to bonsai the domain projection space) on cuda 
     //the most optimized instruction set we have found is Taylor Series precomputed intercourse operation tile x tile (involing 2, 3, 4 variables)
-    //
 
     //so linearity compression is about sorting the array + extracting the suffix + get slopes of sorted array + rinse and repeat
     //the suffices after certain recursive calls will be lossy or lossless compared to the orginal input data 
@@ -117,6 +116,25 @@ int main(){
     //what we would actually want is an optimized to the Moon tile intercourse operation (compiled + assemblied + tuned by our compute engines)
     //we'd want to have a FIXED flops for that because we can EXPECT that the lock will be unlocked within a certain time (we can tune this by juggling the memregion_sz) so we dont have to forever wait on a memregion to complete
     //we dont want your rotate, or multihead attentions, or softmax or multi-layer-perceptrons or layer normalization, what the hell does that even do???? 
+
+    //I've been thinking about the suffix array
+    //the suffix array propagation is transient
+    //there are suffix array collisions, which is a problem of resolution at the collided nodes
+    //and suffix array saturation, which is also a problem of resolution at the collided nodes
+
+    //the problem is that we'd want to decay the "resolution" of the suffix array without compromising the final results
+    //we'd attempt that by offloading the responsibility to the intercoursing tile (diffracting tile), and kind of loose the suffix array information to the immediate succeeding nodes
+
+    //that's one dimensional
+
+    //how do we talk in terms of 2 dimensionals, 3 dimensionals, ...
+    //it's enumerated projection space compression (a single index to compress the projection space)
+    //and Taylor Series linearity index
+
+    //for every node, we'd want to mimic the projection space and reduce the linearity index by informing the succeeding guy of the expecting enumerated projection space (the finding of the enumerated projection space is truly a problem, and the intersections of the enumerated projection space need to have a rule)
+    //so we only have one operation, which is the intercourse operation
+    //so we have a set of crit tiles, accumulated -> a tile called instrument, the instrument would be propped down to the immediate succeeding by using "special" projection space compression and resolute the "linearity" problem
+    //well well, it's gonna be at least 6 months for me to get that fully working + polished
 
     //I have to admit though, people would change their point of views in roughly 3months -> 6months about how advanced search + logit density mining will be actually performed
     //brother, we've been working on the neural network problem for 50 years, people made it classified it, people didnt make it publish it
