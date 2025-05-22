@@ -56,15 +56,18 @@ struct Bar{
     std::map<size_t, size_t> y; //its this guy
     std::vector<uint64_t> xy;
     std::set<size_t> xyz;
+    std::unique_ptr<Foo> d;
+    double f1;
+    float f2;
 
     template <class Reflector>
     void dg_reflect(const Reflector& reflector) const{
-        reflector(x, y, xy);
+        reflector(x, y, xy, xyz, d, f1, f2);
     }
 
     template <class Reflector>
     void dg_reflect(const Reflector& reflector){
-        reflector(x, y, xy);
+        reflector(x, y, xy, xyz, d, f1, f2);
     }
 
     bool operator ==(const Bar& other) const noexcept{
@@ -83,7 +86,11 @@ int main(){
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},
             {{1, 2}, {2, 3}, {3, 4}},
-            {1, 2, 3, 4, 5, 6}};
+            {1, 2, 3, 4, 5, 6},
+            {},
+            std::make_unique<Foo>(Foo{1, 2}),
+            1,
+            2};
 
     std::string buf     = dg::network_compact_serializer::dgstd_serialize<std::string>(bar);
     Bar deserialized    = dg::network_compact_serializer::dgstd_deserialize<Bar>(buf);

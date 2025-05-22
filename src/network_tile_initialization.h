@@ -4161,217 +4161,319 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     auto virtualize_payload(const InitMonoPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_mono;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitMonoPayLoad>)(payload, INIT_MONO_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_mono,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitPairPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_pair;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitPairPayLoad>)(payload, INIT_PAIR_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_pair,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitUACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_uacm;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitUACMPayLoad>)(payload, INIT_UACM_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_uacm,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitPACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_pacm;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitPACMPayLoad>)(payload, INIT_PACM_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_pacm,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitCritPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_crit;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
-    
-        return rs;
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitCritPayLoad>)(payload, INIT_CRIT_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_crit,
+                              .content  = std::move(serialized_payload.value())};
+
     }
     
     auto virtualize_payload(const InitImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_immu;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitImmuPayLoad>)(payload, INIT_IMMU_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_immu,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_msgrfwd;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitMsgrFwdPayLoad>)(payload, INIT_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_msgrfwd,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitMsgrBwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_msgrbwd;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitMsgrBwdPayLoad>)(payload, INIT_MSGRBWD_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_msgrbwd,
+                              .content  = std::move(serialized_payload.value())};
+
     }
 
     auto virtualize_payload(const InitExtnSrcPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_extnsrc;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitExtnSrcPayLoad>)(payload, INIT_EXTNSRC_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_extnsrc,
+                              .content  = std::move(serialized_payload.value())};
+
     }
 
     auto virtualize_payload(const InitExtnSrxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitExtnSrxPayLoad>)(payload, INIT_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_extnsrx,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitExtnDstPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_extndst;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitExtnDstPayLoad>)(payload, INIT_EXTNDST_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_extndst,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const InitExtnDsxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitExtnDsxPayLoad>)(payload, INIT_EXTNDST_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_extndsx,
+                              .content  = std::move(serialized_payload.value())};
     }
     //
 
     auto virtualize_payload(const OrphanLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_leaf;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanLeafPayLoad>)(payload, ORPHAN_LEAF_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_leaf,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanBlkrPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_blkr;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanBlkrPayLoad>)(payload, ORPHAN_BLKR_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_blkr,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanMonoPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_mono;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanMonoPayLoad>)(payload, ORPHAN_MONO_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_mono,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanPairPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_pair;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanPairPayLoad>)(payload, ORPHAN_PAIR_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_pair,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanUACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_uacm;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanUACMPayLoad>)(payload, ORPHAN_UACM_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_uacm,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanPACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_pacm;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanPACMPayLoad>)(payload, ORPHAN_PACM_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_pacm,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanCritPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_crit;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanCritPayLoad>)(payload, ORPHAN_CRIT_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
-    }
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
 
-    auto virtualize_payload(const OrphanMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
-
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_msgrfwd;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
-
-        return rs;
-    }
-
-    auto virtualize_payload(const OrphanMsgrBwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
-
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_msgrbwd;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
-
-        return rs;
-    }
-
-    auto virtualize_payload(const OrphanExtnSrcPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
-
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_extnsrc;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
-
-        return rs;
-    }
-
-    auto virtualize_payload(const OrphanExtnSrxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
-
-    }
-
-    auto virtualize_payload(const OrphanExtnDstPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
-
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_extndst;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
-
-        return rs;
-    }
-
-    auto virtualize_payload(const OrphanExtnDsxPayload& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+        return VirtualPayLoad{.kind     = payload_kind_orphan_crit,
+                              .content  = std::move(serialized_payload.value())};
 
     }
 
     auto virtualize_payload(const OrphanImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_orphan_immu;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanImmuPayLoad>)(payload, ORPHAN_IMMU_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_immu,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
+    auto virtualize_payload(const OrphanMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanMsgrFwdPayLoad>)(payload, ORPHAN_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_msgrfwd,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
+    auto virtualize_payload(const OrphanMsgrBwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanMsgrBwdPayLoad>)(payload, ORPHAN_MSGRBWD_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_msgrbwd,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
+    auto virtualize_payload(const OrphanExtnSrcPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanExtnSrcPayLoad>)(payload, ORPHAN_EXTNSRC_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_extnsrc,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
+    auto virtualize_payload(const OrphanExtnSrxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanExtnSrxPayLoad>)(payload, ORPHAN_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_extnsrx,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
+    auto virtualize_payload(const OrphanExtnDstPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanExtnDstPayLoad>)(payload, ORPHAN_EXNTDST_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_extndst,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
+    auto virtualize_payload(const OrphanExtnDsxPayload& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanExtnDsxPayLoad>)(payload, ORPHAN_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_extndsx,
+                              .content  = std::move(serialized_payload.value())};
     }
 
     //

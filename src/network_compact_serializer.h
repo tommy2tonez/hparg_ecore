@@ -961,6 +961,12 @@ namespace dg::network_compact_serializer::archive{
         }
     };
 
+    //the problem we cant get over is the false positive, which we can decrease by using a begin end transaction format
+    //or we'd want to reduce the chances by increasing the header types width and kind of randomize the values 
+    //this is proven to be the most effective way for this type
+
+    //the adding the header would only to serve to reduce the false positive (maybe true positive, which we dont care)
+
     struct DgStdForward{
 
         using Self = DgStdForward;
