@@ -4117,13 +4117,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         payload_kind_deinit_extndsx     = 41u
     };
 
-    //static inline constexpr size_t VIRTUAL_PAYLOAD_CONTENT_SZ = size_t{1} << 5;
-    //we probably will relax the no-exceptability of memory allocations - but for now - let's assume that memory allocations aren't errors
-    //reality shows that aborting programs on memory exhaustion is better in most cases
+    static inline constexpr uint32_t POLY_PAYLOAD_SERIALIZATION_SECRET  = 1015571905UL;
+    static inline constexpr uint32_t PAYLOAD_SERIALIZATION_SECRET       = 0u;
 
     struct VirtualPayLoad{
         payload_kind_t kind;
-        dg::sstring content; //we are using fat string - relies heavily on the stack buffers - because concurrency is very memory sensitive - especially host concurrency - where we want to minimize the memory operations and relies on CPU flops
+        dg::string content; //we are using fat string - relies heavily on the stack buffers - because concurrency is very memory sensitive - especially host concurrency - where we want to minimize the memory operations and relies on CPU flops
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const noexcept{
@@ -4136,25 +4135,31 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         }
     };
 
-    auto virtualize_payload(InitLeafPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_leaf;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload); 
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitLeafPayLoad>)(payload, INIT_LEAF_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_leaf,
+                              .content  = std::move(serialized_payload.value())};
     }
 
-    auto virtualize_payload(InitBlkrPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitBlkrPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        VirtualPayLoad rs{};
-        rs.kind     = payload_kind_init_blkr;
-        rs.content  = dg::network_compact_serializer::serialize<dg::sstring>(payload);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitBlkrPayLoad>)(payload, INIT_BLKR_PAYLOAD_SERIALIZATION_SECRET);
 
-        return rs;
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_blkr,
+                              .content  = std::move(serialized_payload.value())};
     }
 
-    auto virtualize_payload(InitMonoPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitMonoPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_mono;
@@ -4163,7 +4168,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitPairPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitPairPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_pair;
@@ -4172,7 +4177,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitUACMPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitUACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_uacm;
@@ -4181,7 +4186,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitPACMPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitPACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_pacm;
@@ -4190,7 +4195,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitCritPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitCritPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_crit;
@@ -4199,7 +4204,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
     
-    auto virtualize_payload(InitImmuPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_immu;
@@ -4208,7 +4213,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitMsgrFwdPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_msgrfwd;
@@ -4217,7 +4222,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitMsgrBwdPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitMsgrBwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_msgrbwd;
@@ -4226,7 +4231,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitExtnSrcPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitExtnSrcPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_extnsrc;
@@ -4235,7 +4240,11 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(InitExtnDstPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitExtnSrxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+    }
+
+    auto virtualize_payload(const InitExtnDstPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_init_extndst;
@@ -4244,7 +4253,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanLeafPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const InitExtnDsxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+    }
+    //
+
+    auto virtualize_payload(const OrphanLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_leaf;
@@ -4253,7 +4267,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanBlkrPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanBlkrPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_blkr;
@@ -4262,7 +4276,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanMonoPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanMonoPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_mono;
@@ -4271,7 +4285,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanPairPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanPairPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_pair;
@@ -4280,7 +4294,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanUACMPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanUACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_uacm;
@@ -4289,7 +4303,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanPACMPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanPACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_pacm;
@@ -4298,7 +4312,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanCritPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanCritPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_crit;
@@ -4307,7 +4321,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanMsgrFwdPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_msgrfwd;
@@ -4316,7 +4330,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanMsgrBwdPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanMsgrBwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_msgrbwd;
@@ -4325,7 +4339,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanExtnSrcPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanExtnSrcPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_extnsrc;
@@ -4334,7 +4348,11 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanExtnDstPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanExtnSrxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+    }
+
+    auto virtualize_payload(const OrphanExtnDstPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_extndst;
@@ -4343,7 +4361,11 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(OrphanImmuPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const OrphanExtnDsxPayload& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+    }
+
+    auto virtualize_payload(const OrphanImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_orphan_immu;
@@ -4352,7 +4374,9 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitLeafPayLoad payload) noexcept -> VirtualPayLoad{
+    //
+
+    auto virtualize_payload(const DeinitLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_leaf;
@@ -4361,7 +4385,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitBlkrPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitBlkrPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_blkr;
@@ -4370,7 +4394,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitMonoPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitMonoPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_mono;
@@ -4379,7 +4403,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitPairPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitPairPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_pair;
@@ -4388,7 +4412,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitUACMPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitUACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_uacm;
@@ -4397,7 +4421,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitPACMPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitPACMPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_pacm;
@@ -4406,7 +4430,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitCritPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitCritPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_crit;
@@ -4415,7 +4439,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitImmuPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_immu;
@@ -4424,7 +4448,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitMsgrFwdPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_msgrfwd;
@@ -4433,7 +4457,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitMsgrBwdPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitMsgrBwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_msgrbwd;
@@ -4442,7 +4466,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitExtnSrcPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitExtnSrcPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_extnsrc;
@@ -4451,7 +4475,11 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto virtualize_payload(DeinitExtnDstPayLoad payload) noexcept -> VirtualPayLoad{
+    auto virtualize_payload(const DeinitExtnSrxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+    }
+
+    auto virtualize_payload(const DeinitExtnDstPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         VirtualPayLoad rs{};
         rs.kind     = payload_kind_deinit_extndst;
@@ -4460,8 +4488,25 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_leaf_payload(VirtualPayLoad payload) noexcept -> std::expected<InitLeafPayLoad, exception_t>{
+    auto virtualize_payload(const DeinitExtnDsxPayload& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
+    }
+
+    //-------
+
+    auto serialize_payload(const VirtualPayLoad& virtual_payload) noexcept -> std::expected<dg::string, exception_t>{
+
+    }
+
+    auto deserialize_payload(const dg::string&) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+    }
+
+    //-------
+
+    inline auto devirtualize_init_leaf_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitLeafPayLoad, exception_t>{
+
+        //we are making sure that this line could be seen by the compiler
         if (payload.kind != payload_kind_init_leaf){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
         }
@@ -4472,7 +4517,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_blkr_payload(VirtualPayload payload) noexcept -> std::expected<InitBlkrPayLoad, exception_t>{
+    inline auto devirtualize_init_blkr_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitBlkrPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_blkr){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4484,7 +4529,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_mono_payload(VirtualPayLoad payload) noexcept -> std::expected<InitMonoPayLoad, exception_t>{
+    inline auto devirtualize_init_mono_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitMonoPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_mono){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4496,7 +4541,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_pair_payload(VirtualPayLoad payload) noexcept -> std::expected<InitPairPayLoad, exception_t>{
+    inline auto devirtualize_init_pair_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitPairPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_pair){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4508,7 +4553,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_uacm_payload(VirtualPayLoad payload) noexcept -> std::expected<InitUACMPayLoad, exception_t>{
+    inline auto devirtualize_init_uacm_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitUACMPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_uacm){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4520,7 +4565,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_pacm_payload(VirtualPayLoad payload) noexcept -> std::expected<InitPACMPayLoad, exception_t>{
+    inline auto devirtualize_init_pacm_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitPACMPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_pacm){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4532,7 +4577,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_crit_payload(VirtualPayLoad payload) noexcept -> std::expected<InitCritPayLoad, exception_t>{
+    inline auto devirtualize_init_crit_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitCritPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_crit){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4544,7 +4589,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     } 
 
-    auto devirtualize_init_immu_payload(VirtualPayLoad payload) noexcept -> std::expected<InitImmuPayLoad, exception_t>{
+    inline auto devirtualize_init_immu_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitImmuPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_immu){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4556,7 +4601,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_msgrfwd_payload(VirtualPayLoad payload) noexcept -> std::expected<InitMsgrFwdPayLoad, exception_t>{
+    inline auto devirtualize_init_msgrfwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitMsgrFwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_msgrfwd){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4568,7 +4613,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_msgrbwd_payload(VirtualPayLoad payload) noexcept -> std::expected<InitMsgrBwdPayLoad, exception_t>{
+    inline auto devirtualize_init_msgrbwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitMsgrBwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_msgrbwd){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4580,7 +4625,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_extnsrc_payload(VirtualPayLoad payload) noexcept -> std::expected<InitExtnSrcPayLoad, exception_t>{
+    inline auto devirtualize_init_extnsrc_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitExtnSrcPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_extnsrc){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4592,7 +4637,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_init_extndst_payload(VirtualPayLoad payload) noexcept -> std::expected<InitExtnDstPayLoad, exception_t>{
+    inline auto devirtualize_init_extndst_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitExtnDstPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_extndst){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4606,7 +4651,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     //
 
-    auto devirtualize_orphan_leaf_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanLeafPayLoad, exception_t>{
+    inline auto devirtualize_orphan_leaf_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanLeafPayLoad, exception_t>{
         
         if (payload.kind != payload_kind_orphan_leaf){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4618,7 +4663,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_blkr_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanBlkrPayLoad, exception_t>{
+    inline auto devirtualize_orphan_blkr_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanBlkrPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_blkr){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4630,7 +4675,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_mono_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanMonoPayLoad, exception_t>{
+    inline auto devirtualize_orphan_mono_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanMonoPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_mono){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4642,7 +4687,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_pair_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanPairPayLoad, exception_t>{
+    inline auto devirtualize_orphan_pair_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanPairPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_pair){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4654,7 +4699,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_uacm_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanUACMPayLoad, exception_t>{
+    inline auto devirtualize_orphan_uacm_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanUACMPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_uacm){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4666,7 +4711,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_pacm_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanPACMPayLoad, exception_t>{
+    inline auto devirtualize_orphan_pacm_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanPACMPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_pacm){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4678,7 +4723,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_crit_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanCritPayLoad, exception_t>{
+    inline auto devirtualize_orphan_crit_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanCritPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_crit){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4690,7 +4735,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_immu_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanImmuPayLoad, exception_t>{
+    inline auto devirtualize_orphan_immu_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanImmuPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_immu){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4702,7 +4747,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_msgrfwd_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanMsgrFwdPayLoad, exception_t>{
+    inline auto devirtualize_orphan_msgrfwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanMsgrFwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_msgrfwd){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4714,7 +4759,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_msgrbwd_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanMsgrBwdPayLoad, exception_t>{
+    inline auto devirtualize_orphan_msgrbwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanMsgrBwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_msgrbwd){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4726,7 +4771,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_extnsrc_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanExtnSrcPayLoad, exception_t>{
+    inline auto devirtualize_orphan_extnsrc_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanExtnSrcPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_extnsrc){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4738,7 +4783,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_orphan_extndst_payload(VirtualPayLoad payload) noexcept -> std::expected<OrphanExtnDstPayLoad, exception_t>{
+    inline auto devirtualize_orphan_extndst_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanExtnDstPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_extndst){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4752,7 +4797,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     //
 
-    auto devirtualize_deinit_leaf_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitLeafPayLoad, exception_t>{
+    inline auto devirtualize_deinit_leaf_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitLeafPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_leaf){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4764,7 +4809,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_blkr_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitBlkrPayLoad, exception_t>{
+    inline auto devirtualize_deinit_blkr_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitBlkrPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_blkr){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4776,7 +4821,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_mono_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitMonoPayLoad, exception_t>{
+    inline auto devirtualize_deinit_mono_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitMonoPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_mono){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4788,7 +4833,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_pair_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitPairPayLoad, exception_t>{
+    inline auto devirtualize_deinit_pair_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitPairPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_pair){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4800,7 +4845,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_uacm_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitUACMPayLoad, exception_t>{
+    inline auto devirtualize_deinit_uacm_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitUACMPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_uacm){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4812,7 +4857,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_pacm_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitPACMPayLoad, exception_t>{
+    inline auto devirtualize_deinit_pacm_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitPACMPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_pacm){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4824,7 +4869,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_crit_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitCritPayLoad, exception_t>{
+    inline auto devirtualize_deinit_crit_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitCritPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_crit){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4836,7 +4881,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_immu_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitImmuPayLoad, exception_t>{
+    inline auto devirtualize_deinit_immu_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitImmuPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_immu){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4848,7 +4893,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_msgrfwd_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitMsgrFwdPayLoad, exception_t>{
+    inline auto devirtualize_deinit_msgrfwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitMsgrFwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_msgrfwd){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4860,7 +4905,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_msgrbwd_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitMsgrBwdPayLoad, exception_t>{
+    inline auto devirtualize_deinit_msgrbwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitMsgrBwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_msgrbwd){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4872,7 +4917,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_extnsrc_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitExtnSrcPayLoad, exception_t>{
+    inline auto devirtualize_deinit_extnsrc_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitExtnSrcPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_extnsrc){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4884,7 +4929,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    auto devirtualize_deinit_extndst_payload(VirtualPayLoad payload) noexcept -> std::expected<DeinitExtnDstPayLoad, exception_t>{
+    inline auto devirtualize_deinit_extndst_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitExtnDstPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_deinit_extndst){
             return std::unexpected(dg::network_exception::BAD_FORMAT);
@@ -4896,7 +4941,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return rs;
     }
 
-    void load_virtual_payloads(std::move_iterator<VirtualPayLoad *> payload_arr, exception_t * exception_arr, size_t sz) noexcept{
+    void load_virtual_payloads(const VirtualPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
         //exception_t * need to be exactly 1 byte to be reasonably random-accessed
 

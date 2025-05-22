@@ -31,6 +31,8 @@ namespace dg::network_compact_serializer::types{
     using hash_type     = std::pair<uint64_t, uint64_t>; //alright this seems silly, we are to increase the chances of 10 ** 18 -> 10 ** 39 (never gonna happen), we actually chance better than RAM https://www.cs.toronto.edu/~bianca/papers/sigmetrics09.pdf, https://en.wikipedia.org/wiki/ECC_memory
                                                          //the only way to be successful in the career is to not trust everything, assume we are to deploy a massive 1 billion devices training system, we are gonna see errors very often
     using size_type     = uint64_t;
+
+    using dgstd_unsigned_serialization_header_t = uint8_t;
 }
 
 namespace dg::network_compact_serializer::exception_space{
@@ -109,7 +111,7 @@ namespace dg::network_compact_serializer::types_space{
     struct is_reflectible<T, std::void_t<decltype(std::declval<T>().dg_reflect(nil_lambda))>>: std::true_type{};
     
     template <class T, class = void>
-    struct is_dg_arithmetic: std::is_arithmetic<T>{};
+    struct is_dg_arithmetic: std::disjunction<std::is_integral<T>, std::is_floating_point<T>>{};
 
     template <class T>
     struct is_dg_arithmetic<T, std::void_t<std::enable_if_t<std::is_floating_point_v<T>>>>: std::bool_constant<std::numeric_limits<T>::is_iec559>{}; 
@@ -174,6 +176,23 @@ namespace dg::network_compact_serializer::types_space{
                                                                                                              std::is_same<T, int16_t>, std::is_same<T, uint16_t>, 
                                                                                                              std::is_same<T, int32_t>, std::is_same<T, uint32_t>, 
                                                                                                              std::is_same<T, int64_t>, std::is_same<T, uint64_t>>;
+    template <class T>
+    static inline constexpr bool is_vector_v                                            = is_vector<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_basic_string_v                                      = is_basic_string<T>::value;
+    
+    template <class T>
+    static inline constexpr bool is_map_v                                               = is_map<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_unordered_map_v                                     = is_unordered_map<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_set_v                                               = is_set<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_unordered_set_v                                     = is_unordered_set<T>::value;
 
     template <class T>
     static inline constexpr bool is_cpyable_linear_container_v                          = std::disjunction_v<is_vector<T>, is_basic_string<T>> && (has_unique_serializable_representations_v<containee_or_empty_t<T>> || has_unique_serializable_sameendian_representations_v<containee_or_empty_t<T>> && (std::endian::native == constants::endianness)); //this requires inter-compatible with noncpyable_linear
@@ -182,7 +201,7 @@ namespace dg::network_compact_serializer::types_space{
     static inline constexpr bool is_noncpyable_linear_container_v                       = std::disjunction_v<is_vector<T>, is_basic_string<T>> && !is_cpyable_linear_container_v<T>;
 
     template <class T>
-    static inline constexpr bool is_nonlinear_container_v                               = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_set<T>>;
+    static inline constexpr bool is_nonlinear_container_v                               = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_unordered_set<T>, is_set<T>>;
 
     template <class T>
     static inline constexpr bool is_tuple_v                                             = is_tuple<T>::value; 
@@ -396,7 +415,7 @@ namespace dg::network_compact_serializer::archive{
 
             using base_type     = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
-            size_t rs           = {};
+            size_t rs           = 0u;
 
             [&rs]<size_t ...IDX>(T&& data, const std::index_sequence<IDX...>) noexcept{
                 rs += (Self().count(std::get<IDX>(data)) + ...);
@@ -426,7 +445,7 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
         auto count(T&& data) const noexcept -> size_t{
 
-            size_t rs       = {};
+            size_t rs       = 0u;
             auto archiver   = [&rs]<class ...Args>(Args&& ...args) noexcept{
                 rs += (Self().count(std::forward<Args>(args)) + ...);
             };
@@ -745,6 +764,464 @@ namespace dg::network_compact_serializer::archive{
             data.dg_reflect(archiver);
         }
     };
+
+    template <class T>
+    static consteval auto get_dgstd_serialization_header() noexcept -> types::dgstd_unsigned_serialization_header_t{
+
+        if constexpr(types_space::is_dg_arithmetic_v<T>){
+            //this is very complicated, hard to maintain
+            //this involves another header to specifiy the model, and the potential aliasing problems, this is precisely why this is hard!!!
+            //we'll attempt to do a signness + unsignedness
+
+            // static_assert(sizeof(int) == 4u);
+            // static_assert();
+
+            if constexpr(std::is_integral_v<T>){
+                if constexpr(std::is_signed_v<T>){
+                    if constexpr(sizeof(T) == 1u){
+                        return 0u;
+                    } else if constexpr(sizeof(T) == 2u){
+                        return 1u;
+                    } else if constexpr(sizeof(T) == 4u){
+                        return 2u;
+                    } else if constexpr(sizeof(T) == 8u){
+                        return 3u;
+                    } else if constexpr(sizeof(T) == 16u){
+                        return 4u;
+                    } else if constexpr(sizeof(T) == 32u){
+                        return 5u;
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else if constexpr(std::is_unsigned_v<T>){
+                    if constexpr(sizeof(T) == 1u){
+                        return 6u;
+                    } else if constexpr(sizeof(T) == 2u){
+                        return 7u;
+                    } else if constexpr(sizeof(T) == 4u){
+                        return 8u;
+                    } else if constexpr(sizeof(T) == 8u){
+                        return 9u;
+                    } else if constexpr(sizeof(T) == 16u){
+                        return 10u;
+                    } else if constexpr(sizeof(T) == 32u){
+                        return 11u;
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    static_assert(FALSE_VAL<>);
+                }
+            } else if constexpr(std::is_floating_point_v<T>){
+                if constexpr(std::numeric_limits<T>::is_iec559){
+                    if constexpr(sizeof(T) == 1u){
+                        return 12u;
+                    } else if constexpr(sizeof(T) == 2u){
+                        return 13u; 
+                    } else if constexpr(sizeof(T) == 4u){
+                        return 14u;
+                    } else if constexpr(sizeof(T) == 8u){
+                        return 15u;
+                    } else if constexpr(sizeof(T) == 16u){
+                        return 16u;
+                    } else if constexpr(sizeof(T) == 32u){
+                        return 17u;
+                    } else if constexpr(sizeof(T) == 64u){
+                        return 18u;
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    static_assert(FALSE_VAL<>);
+                }
+            } else if constexpr(types::is_vector_v<T>){
+                return 19u;
+            } else if constexpr(types::is_basic_string_v<T>){
+                return 20u;
+            } else if constexpr(types::is_map_v<T>){
+                return 21u;
+            } else if constexpr(types::is_unordered_map_v<T>){
+                return 22u;
+            } else if constexpr(types::is_set_v<T>){
+                return 23u;
+            } else if constexpr(types::is_unordered_set<T>){
+                return 24u;
+            } else if constexpr(types::is_tuple_v<T>){
+                return 25u;
+            } else if constexpr(types::is_unique_ptr_v<T>){
+                return 26u;
+            } else if constexpr(types::is_optional_v<T>){
+                return 27u;
+            } else if constexpr(types::is_reflectible_v<T>){
+                return 28u;
+            } else{
+                static_assert(FALSE_VAL<>);
+            }
+        }
+    }
+
+    struct DgStdCounter{
+
+        using Self = DgStdCounter;
+
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            return sizeof(types::dgstd_unsigned_serialization_header_t) + sizeof(types_space::base_type_t<T>);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(bool{});
+
+            if (data){
+                rs += this->count(*data);
+            }
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(bool{}); 
+
+            if (data){
+                rs += this->count(*data);
+            }
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            using base_type     = types_space::base_type_t<T>;
+            const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
+
+            size_t rs           = this->count(types::dgstd_unsigned_serialization_header_t{});
+
+            [&rs]<size_t ...IDX>(T&& data, const std::index_sequence<IDX...>) noexcept{
+                rs += (Self().count(std::get<IDX>(data)) + ...);
+            }(std::forward<T>(data), idx_seq);
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(types::size_type{});
+
+            for (const auto& e: data){
+                rs += this->count(e);
+            }
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            return this->count(types::dgstd_unsigned_serialization_header_t{})
+                   + this->count(types::dgstd_unsigned_serialization_header_t{})  
+                   + this->count(types::size_type{})
+                   + static_cast<size_t>(data.size()) * sizeof(types_space::containee_t<types_space::base_type_t<T>>);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
+        auto count(T&& data) const noexcept -> size_t{
+
+            size_t rs       = this->count(types::dgstd_unsigned_serialization_header_t{});
+
+            auto archiver   = [&rs]<class ...Args>(Args&& ...args) noexcept{
+                rs += (Self().count(std::forward<Args>(args)) + ...);
+            };
+
+            data.dg_reflect(archiver);
+
+            return rs;
+        }
+    };
+
+    struct DgStdForward{
+
+        using Self = DgStdForward;
+
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            types::dgstd_unsigned_serialization_header_t serialization_header = get_dgstd_serialization_header<types::base_type_t<T>>();
+
+            network_compact_serializer::utility::SyncedEndiannessService::dump(buf, serialization_header);
+            std::advance(buf, sizeof(types::dgstd_unsigned_serialization_header_t));
+
+            network_compact_serializer::utility::SyncedEndiannessService::dump(buf, std::forward<T>(data));
+            std::advance(buf, sizeof(types_space::base_type_t<T>));
+        }
+
+        template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            this->put(buf, get_dgstd_serialization_header<types::base_type_t<T>>());
+            this->put(buf, static_cast<bool>(data));
+
+            if (data){
+                this->put(buf, *data);
+            }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            this->put(buf, get_dgstd_serialization_header<types::base_type_t<T>>());
+            this->put(buf, static_cast<bool>(data));
+
+            if (data){
+                this->put(buf, *data);
+            }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            using base_type     = types_space::base_type_t<T>;
+            const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
+
+            this->put(buf, get_dgstd_serialization_header<base_type>());
+
+            []<size_t ...IDX>(char *& buf, T&& data, const std::index_sequence<IDX...>) noexcept{
+                (Self().put(buf, std::get<IDX>(data)), ...);
+            }(buf, std::forward<T>(data), idx_seq);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            this->put(buf, get_dgstd_serialization_header<types_space::base_type_t<T>>());
+            this->put(buf, network_compact_serializer::utility::safe_integer_cast<types::size_type>(data.size()));
+
+            for (const auto& e: data){
+                this->put(buf, e);
+            }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            using base_type = types_space::base_type_t<T>;
+            using elem_type = types_space::containee_t<base_type>;
+
+            this->put(buf, get_dgstd_serialization_header<base_type>());
+            this->put(buf, get_dgstd_serialization_header<elem_type>());
+            this->put(buf, network_compact_serializer::utility::safe_integer_cast<types::size_type>(data.size()));
+
+            void * dst          = buf;
+            const void * src    = data.data();
+            size_t cpy_sz       = data.size() * sizeof(elem_type);  
+
+            std::memcpy(dst, src, cpy_sz);
+            std::advance(buf, cpy_sz);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
+        void put(char *& buf, T&& data) const noexcept{
+
+            this->put(buf, get_dgstd_serialization_header<types::base_type_t<T>>());
+
+            auto archiver = [&buf]<class ...Args>(Args&& ...args) noexcept{
+                (Self().put(buf, std::forward<Args>(args)), ...);
+            };
+
+            data.dg_reflect(archiver);
+        }
+    };
+
+    struct DgStdBackward{
+
+        using Self = DgStdBackward;
+
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+
+            if (buf_sz < sizeof(base_type) + sizeof(types::dgstd_unsigned_serialization_header_t)){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = network_compact_serializer::utility::SyncedEndiannessService::load<types::dgstd_unsigned_serialization_header_t>(buf);
+            std::advance(buf, sizeof(types::dgstd_unsigned_serialization_header_t));
+            buf_sz                                                          -= sizeof(types::dgstd_unsigned_serialization_header_t);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<base_type>(); 
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            data    = network_compact_serializer::utility::SyncedEndiannessService::load<base_type>(buf);
+            std::advance(buf, sizeof(base_type));
+            buf_sz  -= sizeof(base_type);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using containee_type = typename types_space::base_type_t<T>::element_type;
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<types_space::base_type_t<T>>();
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            bool status = {};
+            this->put(buf, buf_sz, status);
+
+            if (status){
+                auto obj = containee_type{};
+                this->put(buf, buf_sz, obj);
+                data = std::make_unique<containee_type>(std::move(obj));
+            } else{
+                data = nullptr;
+            }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using containee_type = typename types_space::base_type_t<T>::value_type;
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<types_space::base_type_t<T>>();
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            bool status = {};
+            this->put(buf, buf_sz, status);
+
+            if (status){
+                auto obj = containee_type{};
+                this->put(buf, buf_sz, obj);
+                data = std::optional<containee_type>(std::in_place_t{}, std::move(obj));
+            } else{
+                data = std::nullopt;
+            }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type     = types_space::base_type_t<T>;
+            const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<base_type>();
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            []<size_t ...IDX>(const char *& buf, size_t& buf_sz, T&& data, const std::index_sequence<IDX...>){
+                (Self().put(buf, buf_sz, std::get<IDX>(data)), ...);
+            }(buf, buf_sz, std::forward<T>(data), idx_seq);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+            using elem_type = types_space::containee_t<base_type>;
+
+            types::dgstd_unsigned_serialization_header_t expected_container_header  = {};
+            this->put(buf, buf_sz, expected_container_header);
+            types::dgstd_unsigned_serialization_header_t container_header           = get_dgstd_serialization_header<base_type>();
+
+            if (container_header != expected_container_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            auto sz         = types::size_type{};
+            auto isrter     = network_compact_serializer::utility::get_inserter<base_type>();
+            this->put(buf, buf_sz, sz); 
+
+            if constexpr(dg::network_compact_serializer::constants::DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT){
+                data.clear();
+            }
+
+            data.reserve(sz);
+
+            for (size_t i = 0; i < sz; ++i){
+                elem_type e{};
+                this->put(buf, buf_sz, e);
+                isrter(data, std::move(e));
+            }
+        }
+
+        template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+            using elem_type = types_space::containee_t<base_type>;
+
+            types::dgstd_unsigned_serialization_header_t expected_container_header  = {};
+            this->put(buf, buf_sz, expected_container_header);
+            types::dgstd_unsigned_serialization_header_t container_header           = get_dgstd_serialization_header<base_type>();
+
+            if (container_header != expected_container_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            types::dgstd_unsigned_serialization_header_t expected_elem_header       = {};
+            this->put(buf, buf_sz, expected_elem_header);
+            types::dgstd_unsigned_serialization_header_t elem_header                = get_dgstd_serialization_header<elem_type>();
+
+            if (elem_header != expected_elem_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            auto sz = types::size_type{};
+            this->put(buf, buf_sz, sz);
+            data.resize(sz);
+
+            void * dst          = data.data();
+            const void * src    = buf;
+            size_t cpy_sz       = sz * sizeof(elem_type); 
+
+            if (buf_sz < cpy_sz){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            std::memcpy(dst, src, cpy_sz);
+            std::advance(buf, cpy_sz);
+            buf_sz -= cpy_sz;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
+        void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t container_header   = get_dgstd_serialization_header<types_space::base_type_t<T>>();
+
+            if (container_header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            auto archiver = [&buf, &buf_sz]<class ...Args>(Args&& ...args){
+                (Self().put(buf, buf_sz, std::forward<Args>(args)), ...);
+            };
+
+            data.dg_reflect(archiver);
+        }
+    };
 }
 
 namespace dg::network_compact_serializer{
@@ -847,6 +1324,22 @@ namespace dg::network_compact_serializer{
         return std::next(first, obj_sz);
     }
 
+    template <class T>
+    auto dgstd_size(const T& obj) noexcept -> size_t{
+
+        return dg::network_compact_serializer::archive::DgStdCounter{}.count(obj) + network_compact_serializer::size(types::hash_type{});
+    }
+
+    template <class T>
+    auto dgstd_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) noexcept -> char *{
+
+    }
+
+    template <class T>
+    auto dgstd_deserialize_into(T& obj, const char * buf, size_t sz, uint32_t secret = 0u) -> const char *{
+
+    }
+
     template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
     auto serialize(const T& obj) -> Stream{
         
@@ -855,6 +1348,15 @@ namespace dg::network_compact_serializer{
         dg::network_compact_serializer::serialize_into(stream.data(), obj);
 
         return stream;
+    }
+
+    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto deserialize(const Stream& stream) -> T{
+
+        T rs{};
+        dg::network_compact_serializer::deserialize_into(rs, stream.data());
+
+        return rs;
     }
 
     template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
@@ -868,21 +1370,22 @@ namespace dg::network_compact_serializer{
     }
 
     template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
-    auto deserialize(const Stream& stream) -> T{
-
-        T rs{};
-        dg::network_compact_serializer::deserialize_into(rs, stream.data());
-
-        return rs;
-    }
-
-    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
     auto integrity_deserialize(const Stream& stream, uint32_t secret = 0u) -> T{
 
         T rs{};
         dg::network_compact_serializer::integrity_deserialize_into(rs, stream.data(), stream.size(), secret);
 
         return rs;
+    }
+
+    template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto dgstd_serialize(const T& obj, uint32_t secret = 0u) -> Stream{
+
+    }
+
+    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    auto dgstd_deserialize(const Stream& stream, uint32_t secret = 0u) -> T{
+
     }
 }
 
