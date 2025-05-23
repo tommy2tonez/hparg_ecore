@@ -127,4 +127,14 @@ int main(){
         // std::cout << "mayday3" << std::endl;
         // std::abort();
     // }
+
+    //careful boys
+    //we've been researching this for longer than you have been alive
+    //there exists an optimal intercourse operation for tile1 x tile2 (tile1 pair tile2, uint8_t -> uint16_t promotion) pair (taylor_coeef tile3 uint128_t)
+    //we have not been able to do that yet, which is a subject to be researched
+    //and there exists an optimal backprop algorithm (which does not involve differentiations, yet translatable to differentiations ???)
+    //we usually would want to do that by using a set of crit tiles -> search -> backprop the "expected domain projection space"
+
+    //it's already incredibly hard to get the engine running with no problems + not thrashing the cores memory orderings + friends
+    //I guess it's yall jobs to research within a confined requirements
 }
