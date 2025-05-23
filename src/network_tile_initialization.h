@@ -6223,40 +6223,40 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         //alrights - we want to split interface and link these guys by char[] here
         //stack allocations is probably one of the major optimization to reduce spin_lock overheads + allow true concurrency by using affined allocations
 
-        size_t trimmed_init_leaf_dispatch_sz                = std::min(INIT_LEAF_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_leaf_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_leaf_dispatcher, trimmed_init_leaf_dispatch_sz); 
+        size_t trimmed_init_leaf_dispatch_sz                    = std::min(INIT_LEAF_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_leaf_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_leaf_dispatcher, trimmed_init_leaf_dispatch_sz); 
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_leaf_allocation(virtual_init_leaf_dispatch_allocation_cost);
 
-        size_t trimmed_init_blkr_dispatch_sz                = std::min(INIT_BLKR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_blkr_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_blkr_dispatcher, trimmed_init_blkr_dispatch_sz);
+        size_t trimmed_init_blkr_dispatch_sz                    = std::min(INIT_BLKR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_blkr_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_blkr_dispatcher, trimmed_init_blkr_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_blkr_allocation(virtual_init_blkr_dispatch_allocation_cost);
 
-        size_t trimmed_init_mono_dispatch_sz                = std::min(INIT_MONO_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_mono_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_mono_dispatcher, trimmed_init_mono_dispatch_sz);
+        size_t trimmed_init_mono_dispatch_sz                    = std::min(INIT_MONO_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_mono_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_mono_dispatcher, trimmed_init_mono_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_mono_allocation(virtual_init_mono_dispatch_allocation_cost);
 
-        size_t trimmed_init_pair_dispatch_sz                = std::min(INIT_PAIR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_pair_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_pair_dispatcher, trimmed_init_pair_dispatch_sz);
+        size_t trimmed_init_pair_dispatch_sz                    = std::min(INIT_PAIR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_pair_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_pair_dispatcher, trimmed_init_pair_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_pair_allocation(virtual_init_pair_dispatch_allocation_cost);
 
-        size_t trimmed_init_uacm_dispatch_sz                = std::min(INIT_UACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_uacm_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_uacm_dispatcher, trimmed_init_uacm_dispatch_sz);
+        size_t trimmed_init_uacm_dispatch_sz                    = std::min(INIT_UACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_uacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_uacm_dispatcher, trimmed_init_uacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_uacm_allocation(virtual_init_uacm_dispatch_allocation_cost);
 
-        size_t trimmed_init_pacm_dispatch_sz                = std::min(INIT_PACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_pacm_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_init_pacm_dispatch_sz);
+        size_t trimmed_init_pacm_dispatch_sz                    = std::min(INIT_PACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_pacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_init_pacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_pacm_allocation(virtual_init_pacm_dispatch_allocation_cost);
 
-        size_t trimmed_init_crit_dispatch_sz                = std::min(INIT_CRIT_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_crit_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_crit_dispatcher, trimmed_init_crit_dispatch_sz);
+        size_t trimmed_init_crit_dispatch_sz                    = std::min(INIT_CRIT_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_crit_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_crit_dispatcher, trimmed_init_crit_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_crit_allocation(virtual_init_crit_dispatch_allocation_cost);
 
-        size_t trimmed_init_immu_dispatch_sz                = std::min(INIT_IMMU_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_immu_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_immu_dispatcher, trimmed_init_immu_dispatch_sz);
+        size_t trimmed_init_immu_dispatch_sz                    = std::min(INIT_IMMU_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_immu_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_immu_dispatcher, trimmed_init_immu_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_immu_allocation(virtual_init_immu_dispatch_allocation_cost);
 
-        size_t trimmed_init_poly_dispatch_sz                = std::min(INIT_POLY_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_poly_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_poly_dispatcher, trimmed_init_poly_dispatch_sz);
+        size_t trimmed_init_poly_dispatch_sz                    = std::min(INIT_POLY_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_poly_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_poly_dispatcher, trimmed_init_poly_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_immu_allocation(virtual_init_poly_dispatch_allocation_cost);
 
         size_t trimmed_init_msgrfwd_dispatch_sz                 = std::min(INIT_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);

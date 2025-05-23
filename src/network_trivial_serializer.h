@@ -102,7 +102,7 @@ namespace dg::network_trivial_serializer::utility{
 
         static_assert(precond); //xor
 
-        template <class T, std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+        template <class T, std::enable_if_t<std::disjunction_v<std::is_integral<T>, std::is_floating_point<T>>, bool> = true>
         static constexpr T bswap(T value){
             
             auto src = std::array<char, sizeof(T)>{};
@@ -118,7 +118,7 @@ namespace dg::network_trivial_serializer::utility{
             return value;
         }
 
-        template <class T, std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+        template <class T, std::enable_if_t<std::disjunction_v<std::is_integral<T>, std::is_floating_point<T>>, bool> = true>
         static constexpr void dump(char * dst, T data) noexcept{    
 
             if constexpr(std::endian::native != deflt){
@@ -130,7 +130,7 @@ namespace dg::network_trivial_serializer::utility{
             memcpy(dst, data_buf.data(), std::integral_constant<size_t, sizeof(T)>());
         }
 
-        template <class T, std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+        template <class T, std::enable_if_t<std::disjunction_v<std::is_integral<T>, std::is_floating_point<T>>, bool> = true>
         static constexpr T load(const char * src) noexcept{
             
             std::array<char, sizeof(T)> tmp{};
