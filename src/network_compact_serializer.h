@@ -577,7 +577,7 @@ namespace dg::network_compact_serializer::archive{
             this->put(buf, status);
 
             if (status){
-                auto obj = containee_type{};
+                containee_type obj;
                 this->put(buf, obj);
                 data = std::make_unique<containee_type>(std::move(obj));
             } else{
@@ -593,7 +593,7 @@ namespace dg::network_compact_serializer::archive{
             this->put(buf, status);
 
             if (status){
-                auto obj = containee_type{};
+                containee_type obj;
                 this->put(buf, obj);
                 data = std::optional<containee_type>(std::in_place_t{}, std::move(obj));
             } else{
@@ -636,7 +636,7 @@ namespace dg::network_compact_serializer::archive{
             dg::network_compact_serializer::utility::reserve_if_possible(data, sz);
 
             for (size_t i = 0; i < sz; ++i){
-                elem_type e{};
+                elem_type e;
                 this->put(buf, e);
                 isrter(data, std::move(e));
             }
