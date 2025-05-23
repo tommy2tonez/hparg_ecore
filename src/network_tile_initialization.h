@@ -25,7 +25,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     using group_operatable_id_t     = dg::network_tile_metadata::group_operatable_id_t; //sounds weird but it should be group_operatable_id_t not operatable_group_id_t - we want topology of things here
     using dispatch_control_t        = dg::network_tile_metadata::dispatch_control_t;
     using crit_kind_t               = dg::network_tile_metadata::crit_kind_t;
-    using ClientDeliveryInfo    = dg::network_tile_metadata::ClientDeliveryInfo;
+    using ClientDeliveryInfo        = dg::network_tile_metadata::ClientDeliveryInfo;
     using timein_t                  = dg::network_tile_metadata::timein_t;
 
     static inline constexpr UACM_ACM_SZ = dg::network_tile_metadata::UACM_ACM_SZ;
@@ -1154,12 +1154,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, forward_ops_id, backward_ops_id, memevent_ops_id, logit_value, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, forward_ops_id, backward_ops_id, memevent_ops_id, logit_value, force_init_flag);
         }
     };
@@ -1176,12 +1176,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1198,12 +1198,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1221,12 +1221,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1243,12 +1243,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1266,12 +1266,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1290,13 +1290,13 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, learning_rate,
                       clogit_value, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, learning_rate,
                       clogit_value, observer_vec, force_init_flag);
         }
@@ -1311,12 +1311,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, forward_ops_id, backward_ops_id, memevent_ops_id, logit_value, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, forward_ops_id, backward_ops_id, memevent_ops_id, logit_value, force_init_flag);
         }
     };
@@ -1334,12 +1334,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
         }
     };
@@ -1357,12 +1357,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
         }
     };
@@ -1381,12 +1381,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1398,12 +1398,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id, signal_accum_addr, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id, signal_accum_addr, force_init_flag);
         }
     };
@@ -1422,12 +1422,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
@@ -1439,12 +1439,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         bool force_init_flag;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id, signal_accum_addr, force_init_flag);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id, signal_accum_addr, force_init_flag);
         }
     };
@@ -1454,12 +1454,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1469,12 +1469,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1484,12 +1484,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id; 
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1499,12 +1499,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1514,12 +1514,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1529,12 +1529,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1544,12 +1544,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1559,12 +1559,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1574,12 +1574,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1589,12 +1589,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1604,12 +1604,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1619,12 +1619,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
         
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1634,12 +1634,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1649,12 +1649,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1664,12 +1664,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1679,12 +1679,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1694,12 +1694,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1709,12 +1709,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1724,12 +1724,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1739,12 +1739,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1754,12 +1754,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1769,12 +1769,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1784,12 +1784,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1799,12 +1799,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1814,12 +1814,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1829,12 +1829,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1844,12 +1844,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -1859,12 +1859,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t memevent_ops_id;
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const noexcept{
+        void dg_reflect(const Reflector& reflector) const{
             reflector(ptr, memevent_ops_id);
         }
 
         template <class Reflector>
-        void dg_reflect(const Reflector& reflector) noexcept{
+        void dg_reflect(const Reflector& reflector){
             reflector(ptr, memevent_ops_id);
         }
     };
@@ -6223,230 +6223,253 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         //alrights - we want to split interface and link these guys by char[] here
         //stack allocations is probably one of the major optimization to reduce spin_lock overheads + allow true concurrency by using affined allocations
 
-        size_t trimmed_virtual_init_leaf_dispatch_sz            = std::min(INIT_LEAF_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_leaf_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_leaf_dispatcher, trimmed_virtual_init_leaf_dispatch_sz); 
+        size_t trimmed_init_leaf_dispatch_sz                = std::min(INIT_LEAF_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_leaf_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_leaf_dispatcher, trimmed_init_leaf_dispatch_sz); 
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_leaf_allocation(virtual_init_leaf_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_blkr_dispatch_sz            = std::min(INIT_BLKR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_blkr_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_blkr_dispatcher, trimmed_virtual_init_blkr_dispatch_sz);
+        size_t trimmed_init_blkr_dispatch_sz                = std::min(INIT_BLKR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_blkr_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_blkr_dispatcher, trimmed_init_blkr_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_blkr_allocation(virtual_init_blkr_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_mono_dispatch_sz            = std::min(INIT_MONO_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_mono_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_mono_dispatcher, trimmed_virtual_init_mono_dispatch_sz);
+        size_t trimmed_init_mono_dispatch_sz                = std::min(INIT_MONO_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_mono_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_mono_dispatcher, trimmed_init_mono_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_mono_allocation(virtual_init_mono_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_pair_dispatch_sz            = std::min(INIT_PAIR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_pair_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_pair_dispatcher, trimmed_virtual_init_pair_dispatch_sz);
+        size_t trimmed_init_pair_dispatch_sz                = std::min(INIT_PAIR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_pair_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_pair_dispatcher, trimmed_init_pair_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_pair_allocation(virtual_init_pair_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_uacm_dispatch_sz            = std::min(INIT_UACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_uacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_uacm_dispatcher, trimmed_virtual_init_uacm_dispatch_sz);
+        size_t trimmed_init_uacm_dispatch_sz                = std::min(INIT_UACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_uacm_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_uacm_dispatcher, trimmed_init_uacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_uacm_allocation(virtual_init_uacm_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_pacm_dispatch_sz            = std::min(INIT_PACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_pacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_virtual_init_pacm_dispatch_sz);
+        size_t trimmed_init_pacm_dispatch_sz                = std::min(INIT_PACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_pacm_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_init_pacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_pacm_allocation(virtual_init_pacm_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_crit_dispatch_sz            = std::min(INIT_CRIT_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_crit_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_crit_dispatcher, trimmed_virtual_init_crit_dispatch_sz);
+        size_t trimmed_init_crit_dispatch_sz                = std::min(INIT_CRIT_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_crit_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_crit_dispatcher, trimmed_init_crit_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_crit_allocation(virtual_init_crit_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_immu_dispatch_sz            = std::min(INIT_IMMU_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_immu_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_immu_dispatcher, trimmed_virtual_init_immu_dispatch_sz);
+        size_t trimmed_init_immu_dispatch_sz                = std::min(INIT_IMMU_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_immu_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_immu_dispatcher, trimmed_init_immu_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_immu_allocation(virtual_init_immu_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_poly_dispatch_sz            = std::min(INIT_POLY_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_poly_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_poly_dispatcher, trimmed_virtual_init_poly_dispatch_sz);
+        size_t trimmed_init_poly_dispatch_sz                = std::min(INIT_POLY_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_poly_dispatch_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_poly_dispatcher, trimmed_init_poly_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_immu_allocation(virtual_init_poly_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_msgrfwd_dispatch_sz         = std::min(INIT_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_msgrfwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_msgrfwd_dispatcher, trimmed_virtual_init_msgrfwd_dispatch_sz);
+        size_t trimmed_init_msgrfwd_dispatch_sz                 = std::min(INIT_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_msgrfwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_msgrfwd_dispatcher, trimmed_init_msgrfwd_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_msgrfwd_allocation(virtual_init_msgrfwd_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_msgrbwd_dispatch_sz         = std::min(INIT_MSGRBWD_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_msgrbwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_msgrbwd_dispatcher, trimmed_virtual_init_msgrbwd_dispatch_sz);
+        size_t trimmed_init_msgrbwd_dispatch_sz                 = std::min(INIT_MSGRBWD_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_msgrbwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_msgrbwd_dispatcher, trimmed_init_msgrbwd_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_msgrbwd_allocation(virtual_init_msgrbwd_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_extnsrc_dispatch_sz         = std::min(INIT_EXTNSRC_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_extnsrc_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extnsrc_dispatcher, trimmed_virtual_init_extnsrc_dispatch_sz);
+        size_t trimmed_init_extnsrc_dispatch_sz                 = std::min(INIT_EXTNSRC_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_extnsrc_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extnsrc_dispatcher, trimmed_init_extnsrc_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_extnsrc_allocation(virtual_init_extnsrc_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_extnsrx_dispatch_sz         = std::min(INIT_EXTNSRX_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_extnsrx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extnsrx_dispatcher, trimmed_virtual_init_extnsrx_dispatch_sz);
+        size_t trimmed_init_extnsrx_dispatch_sz                 = std::min(INIT_EXTNSRX_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_extnsrx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extnsrx_dispatcher, trimmed_init_extnsrx_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_extnsrx_allocation(virtual_init_extnsrx_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_extndst_dispatch_sz         = std::min(INIT_EXTNDST_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_extndst_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extndst_dispatcher, trimmed_virtual_init_extndst_dispatch_sz);
+        size_t trimmed_init_extndst_dispatch_sz                 = std::min(INIT_EXTNDST_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_extndst_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extndst_dispatcher, trimmed_init_extndst_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_extndst_allocation(virtual_init_extndst_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_init_extndsx_dispatch_sz         = std::min(INIT_EXTNDSX_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_init_extndsx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extndsx_dispatcher, trimmed_virtual_init_extndsx_dispatch_sz);
+        size_t trimmed_init_extndsx_dispatch_sz                 = std::min(INIT_EXTNDSX_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_init_extndsx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_init_extndsx_dispatcher, trimmed_init_extndsx_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_init_extndsx_allocation(virtual_init_extndsx_dispatch_allocation_cost);
 
         //
 
-        size_t trimmed_virtual_orphan_leaf_dispatch_sz            = std::min(ORPHAN_LEAF_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_leaf_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_leaf_dispatcher, trimmed_virtual_orphan_leaf_dispatch_sz); 
+        size_t trimmed_orphan_leaf_dispatch_sz                  = std::min(ORPHAN_LEAF_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_leaf_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_leaf_dispatcher, trimmed_orphan_leaf_dispatch_sz); 
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_leaf_allocation(virtual_orphan_leaf_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_blkr_dispatch_sz            = std::min(ORPHAN_BLKR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_blkr_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_blkr_dispatcher, trimmed_virtual_orphan_blkr_dispatch_sz);
+        size_t trimmed_orphan_blkr_dispatch_sz                  = std::min(ORPHAN_BLKR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_blkr_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_blkr_dispatcher, trimmed_orphan_blkr_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_blkr_allocation(virtual_orphan_blkr_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_mono_dispatch_sz            = std::min(ORPHAN_MONO_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_mono_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_mono_dispatcher, trimmed_virtual_orphan_mono_dispatch_sz);
+        size_t trimmed_orphan_mono_dispatch_sz                  = std::min(ORPHAN_MONO_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_mono_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_mono_dispatcher, trimmed_orphan_mono_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_mono_allocation(virtual_orphan_mono_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_pair_dispatch_sz            = std::min(ORPHAN_PAIR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_pair_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_pair_dispatcher, trimmed_virtual_orphan_pair_dispatch_sz);
+        size_t trimmed_orphan_pair_dispatch_sz                  = std::min(ORPHAN_PAIR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_pair_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_pair_dispatcher, trimmed_orphan_pair_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_pair_allocation(virtual_orphan_pair_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_uacm_dispatch_sz            = std::min(ORPHAN_UACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_uacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_uacm_dispatcher, trimmed_virtual_orphan_uacm_dispatch_sz);
+        size_t trimmed_orphan_uacm_dispatch_sz                  = std::min(ORPHAN_UACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_uacm_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_uacm_dispatcher, trimmed_orphan_uacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_uacm_allocation(virtual_orphan_uacm_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_pacm_dispatch_sz            = std::min(ORPHAN_PACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_pacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_virtual_orphan_pacm_dispatch_sz);
+        size_t trimmed_orphan_pacm_dispatch_sz                  = std::min(ORPHAN_PACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_pacm_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_orphan_pacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_pacm_allocation(virtual_orphan_pacm_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_crit_dispatch_sz            = std::min(ORPHAN_CRIT_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_crit_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_crit_dispatcher, trimmed_virtual_orphan_crit_dispatch_sz);
+        size_t trimmed_orphan_crit_dispatch_sz                  = std::min(ORPHAN_CRIT_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_crit_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_crit_dispatcher, trimmed_orphan_crit_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_crit_allocation(virtual_orphan_crit_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_immu_dispatch_sz            = std::min(ORPHAN_IMMU_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_immu_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_immu_dispatcher, trimmed_virtual_orphan_immu_dispatch_sz);
+        size_t trimmed_orphan_immu_dispatch_sz                  = std::min(ORPHAN_IMMU_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_immu_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_immu_dispatcher, trimmed_orphan_immu_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_immu_allocation(virtual_orphan_immu_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_poly_dispatch_sz            = std::min(ORPHAN_POLY_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_poly_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_poly_dispatcher, trimmed_virtual_orphan_poly_dispatch_sz);
+        size_t trimmed_orphan_poly_dispatch_sz                  = std::min(ORPHAN_POLY_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_poly_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_poly_dispatcher, trimmed_orphan_poly_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_immu_allocation(virtual_orphan_poly_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_msgrfwd_dispatch_sz         = std::min(ORPHAN_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_msgrfwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_msgrfwd_dispatcher, trimmed_virtual_orphan_msgrfwd_dispatch_sz);
+        size_t trimmed_orphan_msgrfwd_dispatch_sz               = std::min(ORPHAN_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_msgrfwd_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_msgrfwd_dispatcher, trimmed_orphan_msgrfwd_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_msgrfwd_allocation(virtual_orphan_msgrfwd_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_msgrbwd_dispatch_sz         = std::min(ORPHAN_MSGRBWD_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_msgrbwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_msgrbwd_dispatcher, trimmed_virtual_orphan_msgrbwd_dispatch_sz);
+        size_t trimmed_orphan_msgrbwd_dispatch_sz               = std::min(ORPHAN_MSGRBWD_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_msgrbwd_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_msgrbwd_dispatcher, trimmed_orphan_msgrbwd_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_msgrbwd_allocation(virtual_orphan_msgrbwd_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_extnsrc_dispatch_sz         = std::min(ORPHAN_EXTNSRC_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_extnsrc_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extnsrc_dispatcher, trimmed_virtual_orphan_extnsrc_dispatch_sz);
+        size_t trimmed_orphan_extnsrc_dispatch_sz               = std::min(ORPHAN_EXTNSRC_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_extnsrc_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extnsrc_dispatcher, trimmed_orphan_extnsrc_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_extnsrc_allocation(virtual_orphan_extnsrc_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_extnsrx_dispatch_sz         = std::min(ORPHAN_EXTNSRX_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_extnsrx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extnsrx_dispatcher, trimmed_virtual_orphan_extnsrx_dispatch_sz);
+        size_t trimmed_orphan_extnsrx_dispatch_sz               = std::min(ORPHAN_EXTNSRX_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_extnsrx_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extnsrx_dispatcher, trimmed_orphan_extnsrx_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_extnsrx_allocation(virtual_orphan_extnsrx_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_extndst_dispatch_sz         = std::min(ORPHAN_EXTNDST_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_extndst_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extndst_dispatcher, trimmed_virtual_orphan_extndst_dispatch_sz);
+        size_t trimmed_orphan_extndst_dispatch_sz               = std::min(ORPHAN_EXTNDST_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_extndst_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extndst_dispatcher, trimmed_orphan_extndst_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_extndst_allocation(virtual_orphan_extndst_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_orphan_extndsx_dispatch_sz         = std::min(ORPHAN_EXTNDSX_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_orphan_extndsx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extndsx_dispatcher, trimmed_virtual_orphan_extndsx_dispatch_sz);
+        size_t trimmed_orphan_extndsx_dispatch_sz               = std::min(ORPHAN_EXTNDSX_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_orphan_extndsx_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_orphan_extndsx_dispatcher, trimmed_orphan_extndsx_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_orphan_extndsx_allocation(virtual_orphan_extndsx_dispatch_allocation_cost);
 
         //
 
-        size_t trimmed_virtual_deinit_leaf_dispatch_sz            = std::min(DEINIT_LEAF_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_leaf_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_leaf_dispatcher, trimmed_virtual_deinit_leaf_dispatch_sz); 
+        size_t trimmed_deinit_leaf_dispatch_sz                  = std::min(DEINIT_LEAF_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_leaf_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_leaf_dispatcher, trimmed_deinit_leaf_dispatch_sz); 
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_leaf_allocation(virtual_deinit_leaf_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_blkr_dispatch_sz            = std::min(DEINIT_BLKR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_blkr_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_blkr_dispatcher, trimmed_virtual_deinit_blkr_dispatch_sz);
+        size_t trimmed_deinit_blkr_dispatch_sz                  = std::min(DEINIT_BLKR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_blkr_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_blkr_dispatcher, trimmed_deinit_blkr_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_blkr_allocation(virtual_deinit_blkr_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_mono_dispatch_sz            = std::min(DEINIT_MONO_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_mono_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_mono_dispatcher, trimmed_virtual_deinit_mono_dispatch_sz);
+        size_t trimmed_deinit_mono_dispatch_sz                  = std::min(DEINIT_MONO_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_mono_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_mono_dispatcher, trimmed_deinit_mono_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_mono_allocation(virtual_deinit_mono_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_pair_dispatch_sz            = std::min(DEINIT_PAIR_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_pair_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_pair_dispatcher, trimmed_virtual_deinit_pair_dispatch_sz);
+        size_t trimmed_deinit_pair_dispatch_sz                  = std::min(DEINIT_PAIR_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_pair_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_pair_dispatcher, trimmed_deinit_pair_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_pair_allocation(virtual_deinit_pair_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_uacm_dispatch_sz            = std::min(DEINIT_UACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_uacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_uacm_dispatcher, trimmed_virtual_deinit_uacm_dispatch_sz);
+        size_t trimmed_deinit_uacm_dispatch_sz                  = std::min(DEINIT_UACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_uacm_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_uacm_dispatcher, trimmed_deinit_uacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_uacm_allocation(virtual_deinit_uacm_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_pacm_dispatch_sz            = std::min(DEINIT_PACM_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_pacm_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_virtual_deinit_pacm_dispatch_sz);
+        size_t trimmed_deinit_pacm_dispatch_sz                  = std::min(DEINIT_PACM_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_pacm_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_pacm_mono_dispatcher, trimmed_deinit_pacm_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_pacm_allocation(virtual_deinit_pacm_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_crit_dispatch_sz            = std::min(DEINIT_CRIT_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_crit_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_crit_dispatcher, trimmed_virtual_deinit_crit_dispatch_sz);
+        size_t trimmed_deinit_crit_dispatch_sz                  = std::min(DEINIT_CRIT_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_crit_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_crit_dispatcher, trimmed_deinit_crit_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_crit_allocation(virtual_deinit_crit_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_immu_dispatch_sz            = std::min(DEINIT_IMMU_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_immu_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_immu_dispatcher, trimmed_virtual_deinit_immu_dispatch_sz);
+        size_t trimmed_deinit_immu_dispatch_sz                  = std::min(DEINIT_IMMU_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_immu_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_immu_dispatcher, trimmed_deinit_immu_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_immu_allocation(virtual_deinit_immu_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_poly_dispatch_sz            = std::min(DEINIT_POLY_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_poly_dispatch_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_poly_dispatcher, trimmed_virtual_deinit_poly_dispatch_sz);
+        size_t trimmed_deinit_poly_dispatch_sz                  = std::min(DEINIT_POLY_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_poly_dispatch_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_poly_dispatcher, trimmed_deinit_poly_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_immu_allocation(virtual_deinit_poly_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_msgrfwd_dispatch_sz         = std::min(DEINIT_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_msgrfwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_msgrfwd_dispatcher, trimmed_virtual_deinit_msgrfwd_dispatch_sz);
+        size_t trimmed_deinit_msgrfwd_dispatch_sz               = std::min(DEINIT_MSGRFWD_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_msgrfwd_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_msgrfwd_dispatcher, trimmed_deinit_msgrfwd_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_msgrfwd_allocation(virtual_deinit_msgrfwd_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_msgrbwd_dispatch_sz         = std::min(DEINIT_MSGRBWD_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_msgrbwd_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_msgrbwd_dispatcher, trimmed_virtual_deinit_msgrbwd_dispatch_sz);
+        size_t trimmed_deinit_msgrbwd_dispatch_sz               = std::min(DEINIT_MSGRBWD_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_msgrbwd_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_msgrbwd_dispatcher, trimmed_deinit_msgrbwd_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_msgrbwd_allocation(virtual_deinit_msgrbwd_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_extnsrc_dispatch_sz         = std::min(DEINIT_EXTNSRC_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_extnsrc_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extnsrc_dispatcher, trimmed_virtual_deinit_extnsrc_dispatch_sz);
+        size_t trimmed_deinit_extnsrc_dispatch_sz               = std::min(DEINIT_EXTNSRC_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_extnsrc_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extnsrc_dispatcher, trimmed_deinit_extnsrc_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_extnsrc_allocation(virtual_deinit_extnsrc_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_extnsrx_dispatch_sz         = std::min(DEINIT_EXTNSRX_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_extnsrx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extnsrx_dispatcher, trimmed_virtual_deinit_extnsrx_dispatch_sz);
+        size_t trimmed_deinit_extnsrx_dispatch_sz               = std::min(DEINIT_EXTNSRX_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_extnsrx_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extnsrx_dispatcher, trimmed_deinit_extnsrx_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_extnsrx_allocation(virtual_deinit_extnsrx_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_extndst_dispatch_sz         = std::min(DEINIT_EXTNDST_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_extndst_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extndst_dispatcher, trimmed_virtual_deinit_extndst_dispatch_sz);
+        size_t trimmed_deinit_extndst_dispatch_sz               = std::min(DEINIT_EXTNDST_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_extndst_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extndst_dispatcher, trimmed_deinit_extndst_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_extndst_allocation(virtual_deinit_extndst_dispatch_allocation_cost);
 
-        size_t trimmed_virtual_deinit_extndsx_dispatch_sz         = std::min(DEINIT_EXTNDSX_DISPATCH_DELIVERY_CAP, sz);
-        size_t virtual_deinit_extndsx_dispatch_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extndsx_dispatcher, trimmed_virtual_deinit_extndsx_dispatch_sz);
+        size_t trimmed_deinit_extndsx_dispatch_sz               = std::min(DEINIT_EXTNDSX_DISPATCH_DELIVERY_CAP, sz);
+        size_t virtual_deinit_extndsx_dispatch_allocation_cost  = dg::network_producer_consumer::delvrsrv_allocation_cost(&virtual_deinit_extndsx_dispatcher, trimmed_deinit_extndsx_dispatch_sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> virtual_deinit_extndsx_allocation(virtual_deinit_extndsx_dispatch_allocation_cost);
 
         //
 
-        auto init_leaf_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_leaf_consumer, DISPATCH_DELIVERY_CAP, init_leaf_allocation.get()));
-        auto init_blkr_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_blkr_consumer, DISPATCH_DELIVERY_CAP, init_blkr_allocation.get()));
-        auto init_mono_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_mono_consumer, DISPATCH_DELIVERY_CAP, init_mono_allocation.get()));
-        auto init_pair_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_pair_consumer, DISPATCH_DELIVERY_CAP, init_pair_allocation.get()));
-        auto init_uacm_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_uacm_consumer, DISPATCH_DELIVERY_CAP, init_uacm_allocation.get()));
-        auto init_pacm_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_pacm_consumer, DISPATCH_DELIVERY_CAP, init_pacm_allocation.get()));
-        auto init_crit_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_crit_consumer, DISPATCH_DELIVERY_CAP, init_crit_allocation.get()));
-        auto init_immu_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_immu_consumer, DISPATCH_DELIVERY_CAP, init_immu_allocation.get()));
-        auto init_msgrfwd_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_msgrfwd_consumer, DISPATCH_DELIVERY_CAP, init_msgrfwd_allocation.get()));
-        auto init_msgrbwd_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_msgrbwd_consumer, DISPATCH_DELIVERY_CAP, init_msgrbwd_allocation.get()));
-        auto init_extnsrc_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_extnsrc_consumer, DISPATCH_DELIVERY_CAP, init_extnsrc_allocation.get()));
-        auto init_extndst_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&init_extndst_consumer, DISPATCH_DELIVERY_CAP, init_extndst_allocation.get()));
+        auto init_leaf_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_leaf_dispatcher, trimmed_init_leaf_dispatch_sz, virtual_init_leaf_allocation.get()));
+        auto init_blkr_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_blkr_dispatcher, trimmed_init_blkr_dispatch_sz, virtual_init_blkr_allocation.get()));
+        auto init_mono_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_mono_dispatcher, trimmed_init_mono_dispatch_sz, virtual_init_mono_allocation.get()));
+        auto init_pair_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_pair_dispatcher, trimmed_init_pair_dispatch_sz, virtual_init_pair_allocation.get()));
+        auto init_uacm_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_uacm_dispatcher, trimmed_init_uacm_dispatch_sz, virtual_init_uacm_allocation.get()));
+        auto init_pacm_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_pacm_dispatcher, trimmed_init_pacm_dispatch_sz, virtual_init_pacm_allocation.get()));
+        auto init_crit_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_crit_dispatcher, trimmed_init_crit_dispatch_sz, virtual_init_crit_allocation.get()));
+        auto init_immu_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_immu_dispatcher, trimmed_init_immu_dispatch_sz, virtual_init_immu_allocation.get()));
+        auto init_poly_delivery_handle              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_poly_dispatcher, trimmed_init_poly_dispatch_sz, virtual_init_immu_allocation.get()));        
+        auto init_msgrfwd_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_msgrfwd_dispatcher, trimmed_init_msgrfwd_dispatch_sz, virtual_init_msgrfwd_allocation.get()));
+        auto init_msgrbwd_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_msgrbwd_dispatcher, trimmed_init_msgrbwd_dispatch_sz, virtual_init_msgrbwd_allocation.get()));
+        auto init_extnsrc_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_extnsrc_dispatcher, trimmed_init_extnsrc_dispatch_sz, virtual_init_extnsrc_allocation.get()));
+        auto init_extnsrx_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_extnsrx_dispatcher, trimmed_init_extnsrx_dispatch_sz, virtual_init_extnsrx_allocation.get()));
+        auto init_extndst_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_extndst_dispatcher, trimmed_init_extndst_dispatch_sz, virtual_init_extndst_allocation.get()));
+        auto init_extndsx_delivery_handle           = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_init_extndsx_dispatcher, trimmed_init_extndsx_dispatch_sz, virtual_init_extndsx_allocation.get()));
 
-        auto orphan_leaf_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_leaf_consumer, DISPATCH_DELIVERY_CAP, orphan_leaf_allocation.get()));
-        auto orphan_blkr_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_blkr_consumer, DISPATCH_DELIVERY_CAP, orphan_blkr_allocation.get()));
-        auto orphan_mono_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_mono_consumer, DISPATCH_DELIVERY_CAP, orphan_mono_allocation.get()));
-        auto orphan_pair_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_pair_consumer, DISPATCH_DELIVERY_CAP, orphan_pair_allocation.get()));
-        auto orphan_uacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_uacm_consumer, DISPATCH_DELIVERY_CAP, orphan_uacm_allocation.get()));
-        auto orphan_pacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_pacm_consumer, DISPATCH_DELIVERY_CAP, orphan_pacm_allocation.get()));
-        auto orphan_crit_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_crit_consumer, DISPATCH_DELIVERY_CAP, orphan_crit_allocation.get()));
-        auto orphan_immu_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_immu_consumer, DISPATCH_DELIVERY_CAP, orphan_immu_allocation.get()));
-        auto orphan_msgrfwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_msgrfwd_consumer, DISPATCH_DELIVERY_CAP, orphan_msgrfwd_allocation.get()));
-        auto orphan_msgrbwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_msgrbwd_consumer, DISPATCH_DELIVERY_CAP, orphan_msgrbwd_allocation.get()));
-        auto orphan_extnsrc_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_extnsrc_consumer, DISPATCH_DELIVERY_CAP, orphan_extnsrc_allocation.get()));
-        auto orphan_extndst_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&orphan_extndst_consumer, DISPATCH_DELIVERY_CAP, orphan_extndst_allocation.get()));
+        auto orphan_leaf_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_leaf_dispatcher, trimmed_orphan_leaf_dispatch_sz, virtual_orphan_leaf_allocation.get()));
+        auto orphan_blkr_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_blkr_dispatcher, trimmed_orphan_blkr_dispatch_sz, virtual_orphan_blkr_allocation.get()));
+        auto orphan_mono_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_mono_dispatcher, trimmed_orphan_mono_dispatch_sz, virtual_orphan_mono_allocation.get()));
+        auto orphan_pair_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_pair_dispatcher, trimmed_orphan_pair_dispatch_sz, virtual_orphan_pair_allocation.get()));
+        auto orphan_uacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_uacm_dispatcher, trimmed_orphan_uacm_dispatch_sz, virtual_orphan_uacm_allocation.get()));
+        auto orphan_pacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_pacm_dispatcher, trimmed_orphan_pacm_dispatch_sz, virtual_orphan_pacm_allocation.get()));
+        auto orphan_crit_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_crit_dispatcher, trimmed_orphan_crit_dispatch_sz, virtual_orphan_crit_allocation.get()));
+        auto orphan_immu_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_immu_dispatcher, trimmed_orphan_immu_dispatch_sz, virtual_orphan_immu_allocation.get()));
+        auto orphan_poly_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_poly_dispatcher, trimmed_orphan_poly_dispatch_sz, virtual_orphan_immu_allocation.get()));        
+        auto orphan_msgrfwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_msgrfwd_dispatcher, trimmed_orphan_msgrfwd_dispatch_sz, virtual_orphan_msgrfwd_allocation.get()));
+        auto orphan_msgrbwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_msgrbwd_dispatcher, trimmed_orphan_msgrbwd_dispatch_sz, virtual_orphan_msgrbwd_allocation.get()));
+        auto orphan_extnsrc_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_extnsrc_dispatcher, trimmed_orphan_extnsrc_dispatch_sz, virtual_orphan_extnsrc_allocation.get()));
+        auto orphan_extnsrx_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_extnsrx_dispatcher, trimmed_orphan_extnsrx_dispatch_sz, virtual_orphan_extnsrx_allocation.get()));
+        auto orphan_extndst_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_extndst_dispatcher, trimmed_orphan_extndst_dispatch_sz, virtual_orphan_extndst_allocation.get()));
+        auto orphan_extndsx_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_orphan_extndsx_dispatcher, trimmed_orphan_extndsx_dispatch_sz, virtual_orphan_extndsx_allocation.get()));
 
-        auto deinit_leaf_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_leaf_consumer, DISPATCH_DELIVERY_CAP, deinit_leaf_allocation.get()));
-        auto deinit_blkr_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_blkr_consumer, DISPATCH_DELIVERY_CAP, deinit_blkr_allocation.get()));
-        auto deinit_mono_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_mono_consumer, DISPATCH_DELIVERY_CAP, deinit_mono_allocation.get()));
-        auto deinit_pair_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_pair_consumer, DISPATCH_DELIVERY_CAP, deinit_pair_allocation.get()));
-        auto deinit_uacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_uacm_consumer, DISPATCH_DELIVERY_CAP, deinit_uacm_allocation.get()));
-        auto deinit_pacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_pacm_consumer, DISPATCH_DELIVERY_CAP, deinit_pacm_allocation.get()));
-        auto deinit_crit_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_crit_consumer, DISPATCH_DELIVERY_CAP, deinit_crit_allocation.get()));
-        auto deinit_immu_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_immu_consumer, DISPATCH_DELIVERY_CAP, deinit_immu_allocation.get()));
-        auto deinit_msgrfwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_msgrfwd_consumer, DISPATCH_DELIVERY_CAP, deinit_msgrfwd_allocation.get()));
-        auto deinit_msgrbwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_msgrbwd_consumer, DISPATCH_DELIVERY_CAP, deinit_msgrbwd_allocation.get()));
-        auto deinit_extnsrc_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_extnsrc_consumer, DISPATCH_DELIVERY_CAP, deinit_extnsrc_allocation.get()));
-        auto deinit_extndst_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deinit_extndst_consumer, DISPATCH_DELIVERY_CAP, deinit_extndst_allocation.get()));
+        auto deinit_leaf_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_leaf_dispatcher, trimmed_deinit_leaf_dispatch_sz, virtual_deinit_leaf_allocation.get()));
+        auto deinit_blkr_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_blkr_dispatcher, trimmed_deinit_blkr_dispatch_sz, virtual_deinit_blkr_allocation.get()));
+        auto deinit_mono_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_mono_dispatcher, trimmed_deinit_mono_dispatch_sz, virtual_deinit_mono_allocation.get()));
+        auto deinit_pair_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_pair_dispatcher, trimmed_deinit_pair_dispatch_sz, virtual_deinit_pair_allocation.get()));
+        auto deinit_uacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_uacm_dispatcher, trimmed_deinit_uacm_dispatch_sz, virtual_deinit_uacm_allocation.get()));
+        auto deinit_pacm_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_pacm_dispatcher, trimmed_deinit_pacm_dispatch_sz, virtual_deinit_pacm_allocation.get()));
+        auto deinit_crit_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_crit_dispatcher, trimmed_deinit_crit_dispatch_sz, virtual_deinit_crit_allocation.get()));
+        auto deinit_immu_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_immu_dispatcher, trimmed_deinit_immu_dispatch_sz, virtual_deinit_immu_allocation.get()));
+        auto deinit_poly_delivery_handle            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_poly_dispatcher, trimmed_deinit_poly_dispatch_sz, virtual_deinit_immu_allocation.get()));        
+        auto deinit_msgrfwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_msgrfwd_dispatcher, trimmed_deinit_msgrfwd_dispatch_sz, virtual_deinit_msgrfwd_allocation.get()));
+        auto deinit_msgrbwd_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_msgrbwd_dispatcher, trimmed_deinit_msgrbwd_dispatch_sz, virtual_deinit_msgrbwd_allocation.get()));
+        auto deinit_extnsrc_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_extnsrc_dispatcher, trimmed_deinit_extnsrc_dispatch_sz, virtual_deinit_extnsrc_allocation.get()));
+        auto deinit_extnsrx_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_extnsrx_dispatcher, trimmed_deinit_extnsrx_dispatch_sz, virtual_deinit_extnsrx_allocation.get()));
+        auto deinit_extndst_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_extndst_dispatcher, trimmed_deinit_extndst_dispatch_sz, virtual_deinit_extndst_allocation.get()));
+        auto deinit_extndsx_delivery_handle         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&virtual_deinit_extndsx_dispatcher, trimmed_deinit_extndsx_dispatch_sz, virtual_deinit_extndsx_allocation.get()));
+
+        //it's incredibly hard to be able to push 100MM virtual dispatches/ second * core
+        //we had to invent our own invention of "radix sort" of dispatches
+        //our own locking routine, the memregion lock size needs to be reasonable, and all the operations in the duration must be reasonable (this is prescisely why the forward + backward dispatch operations must be known beforehand and carefully tuned -> a specific number)
+        //we need to try_acquire at most 3 times to not pollute the atomic cmpexch instructions
+
+        //we have considered every possible scenerios of batching
+        //from dynamic size of specific dispatch -> fixed size of specific dispatch -> vectorization of blks
+
+        //we have come to the conclusion that Poly type would solve most of the persisting problems that we haven't solved here YET
+        //msgrfwd + msgrbwd + init_leaf + init_immu need special aggregation sizes to offset the cost of accessing the filesystem data
+        //and it's incredibly complicated
+
+        std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
         for (size_t i = 0u; i < sz; ++i){
             const VirtualPayLoad * dispatching_payload  = std::next(payload_arr, i);
