@@ -173,8 +173,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -289,8 +288,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -403,8 +401,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -521,8 +518,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -651,8 +647,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -769,8 +764,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -896,8 +890,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -1011,8 +1004,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -1146,8 +1138,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                       = event_arr[i].dst;
@@ -1272,8 +1263,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -1387,8 +1377,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t ptr                               = event_arr[i].dst;
@@ -1785,8 +1774,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -1899,8 +1887,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2009,8 +1996,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2129,8 +2115,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2249,8 +2234,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2369,8 +2353,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2493,8 +2476,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2613,8 +2595,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2733,8 +2714,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -2853,7 +2833,8 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(const uma_ptr_t& key, std::move_iterator<ForwardPongRequestEvent *> org_event_arr, size_t sz) noexcept{
 
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
                     ForwardPongRequestEvent * event_arr = org_event_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
@@ -2983,8 +2964,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -3113,8 +3093,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -3233,8 +3212,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -3630,8 +3608,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -3740,8 +3717,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t> * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                         = event_arr[i].requestee;
@@ -3850,8 +3826,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -4012,8 +3987,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -4173,8 +4147,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -4334,8 +4307,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -4511,8 +4483,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -4679,8 +4650,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -4857,8 +4827,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -5018,8 +4987,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -5210,8 +5178,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -5378,8 +5345,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -5540,8 +5506,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         uma_ptr_t requestee                             = event_arr[i].requestee;
@@ -6091,8 +6056,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t lck_addr, DispatchRadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(data_arr[i].root);
@@ -6249,8 +6213,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                  = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{}));
                     auto dst_vmamap_reacquirer              = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -6523,8 +6486,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(data_arr[i].root);
@@ -6681,8 +6643,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{}));
                     auto dst_vmamap_reacquirer                      = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -6955,8 +6916,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(data_arr[i].root);
@@ -7130,8 +7090,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.lhs_region_rcu_addr, key.rhs_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.lhs_region_rcu_addr, key.rhs_region_rcu_addr);
 
                     auto umamap_reacquirer                              = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto dst_vmamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -8303,8 +8262,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(data_arr[i].root);
@@ -8429,8 +8387,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     dg::network_stack_allocation::NoExceptAllocation<std::optional<ExtnSrxTile>[]> extnsrx_tile_arr(sz);
 
@@ -8716,8 +8673,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(data_arr[i].root);
@@ -8874,8 +8830,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    stdx::seq_cst_guard tx_grd;
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                  = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{}));
                     auto dst_logit_vmamap_reacquirer        = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize()); 
@@ -9157,8 +9112,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(data_arr[i].root);
@@ -9331,8 +9285,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    stdx::seq_cst_guard tx_grd;
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 4u>{}));
                     auto dst_logit_vmamap_reacquirer                = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -9634,8 +9587,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(data_arr[i].root);
@@ -9770,8 +9722,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                  = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{}));
                     auto dst_logit_vmamap_reacquirer        = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -10063,8 +10014,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(data_arr[i].root);
@@ -10221,8 +10171,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    stdx::seq_cst_guard tx_grd;
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                  = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{}));
                     auto dst_vmamap_reacquirer              = dg::network_exception_handler::nothrow_log(dg::network_vmamap::remapper_raii_initialize());
@@ -10754,8 +10703,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status               = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(data_arr[i].root);
@@ -10907,8 +10855,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
                     
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd; 
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 2u>{}));
                     auto logit_vmamap_reacquirer                    = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -11146,8 +11093,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_mono_init_status_nothrow(data_arr[i].root);
@@ -11314,8 +11260,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                              = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto src_grad_vmamap_reacquirer                     = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -11627,8 +11572,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_pair_init_status_nothrow(data_arr[i].root);
@@ -11819,8 +11763,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.lhs_region_rcu_addr, key.rhs_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.lhs_region_rcu_addr, key.rhs_region_rcu_addr);
 
                     auto umamap_reacquirer                              = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 5u>{}));
                     auto lhs_logit_vmamap_reacquirer                    = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -13170,8 +13113,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t lck_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(lck_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(data_arr[i].root);
@@ -13337,8 +13279,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto src_grad_vmamap_reacquirer                 = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -13639,8 +13580,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, AddressFetcherArgument * data_arr, size_t sz){
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extnsrc_init_status_nothrow(data_arr[i].root);
@@ -13804,8 +13744,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto src_logit_vmamap_reacquirer                = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -14095,8 +14034,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndst_init_status_nothrow(data_arr[i].root);
@@ -14212,8 +14150,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr);
 
                     dg::network_stack_allocation::NoExceptAllocation<std::optional<ExtnDsxTile>[]> extndsx_arr(sz);
 
@@ -14459,8 +14396,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_extndsx_init_status_nothrow(data_arr[i].root);
@@ -14627,8 +14563,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
                     
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto src_grad_vmamap_reacquirer                 = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -14905,8 +14840,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(data_arr[i].root);
@@ -15071,8 +15005,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto src_grad_vmamap_reacquirer                 = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());
@@ -15374,8 +15307,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(uma_ptr_t rcu_addr, RadixFetcherArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(data_arr[i].root);
@@ -15541,8 +15473,7 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(ResolutorKeyArgument key, ResolutorValueArgument * data_arr, size_t sz) noexcept{
 
-                    // dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
-                    stdx::seq_cst_guard tx_grd;
+                    dg::network_memops_uma::memlock_guard mem_grd(key.dst_region_rcu_addr, key.src_region_rcu_addr);
 
                     auto umamap_reacquirer                          = dg::network_exception_handler::nothrow_log(dg::network_uma::region_reacquirer_fixedsize_raii_initialize(std::integral_constant<size_t, 3u>{}));
                     auto dst_grad_vmamap_reacquirer                 = dg::network_exception_handler::nothrow_log(dg::network_vmamap::region_remapper_raii_initialize());

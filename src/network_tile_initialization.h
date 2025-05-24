@@ -99,7 +99,6 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     auto init_blkr(uma_ptr_t ptr,
                    uma_ptr_t src,
                    operatable_id_t forward_ops_id,
-                   operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id, 
                    std::optional<uma_ptr_t> signal_accum_addr,
                    dispatch_control_t dispatch_control,
@@ -134,7 +133,6 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
         dg::network_tile_member_getsetter::set_blkr_descendant_nothrow(ptr, src);
         dg::network_tile_member_getsetter::set_blkr_forward_operatable_id_nothrow(ptr, forward_ops_id);
-        dg::network_tile_member_getsetter::set_blkr_backward_operatable_id_nothrow(ptr, backward_ops_id);
         dg::network_tile_member_getsetter::set_blkr_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
         dg::network_tile_member_getsetter::set_blkr_signal_smph_addr_nothrow(ptr, signal_accum_addr);
         dg::network_tile_member_getsetter::set_blkr_dispatch_control_nothrow(ptr, dispatch_control);
@@ -255,9 +253,9 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_pair_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_pair_dispatch_major_nothrow(ptr, dispatch_major);
         dg::network_tile_member_getsetter::set_pair_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(ptr, 0u);
         dg::network_tile_member_getsetter::set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
-        dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(ptr, 0u);
 
         return dg::network_exception::SUCCESS;
     }
@@ -268,7 +266,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr,
-                   dispatch_control_t dispatch_control,
+                   dispatch_control_t forward_dispatch_control,
+                   dispatch_control_t backward_dispatch_control,
                    const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
@@ -282,7 +281,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_uacm_dispatch_control(ptr, src_arr, src_arr_sz, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_uacm_forward_dispatch_control(ptr, src_arr, src_arr_sz, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_uacm_backward_dispatch_control(ptr, src_arr, src_arr_sz, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -298,12 +301,16 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             }
         }
 
+        dg::network_tile_member_getsetter::set_uacm_descendant_nothrow(ptr, src_arr, src_arr_sz);
+        dg::network_tile_member_getsetter::set_uacm_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_uacm_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_uacm_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_uacm_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_uacm_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_uacm_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
+        dg::network_tile_member_getsetter::set_uacm_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_uacm_pong_count_nothrow(ptr, 0u);
         dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_uacm_observer_array_size_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_uacm_group_operatable_id_nothrow(ptr, group_operatable_id);
-        dg::network_tile_member_getsetter::set_uacm_dispatch_control_nothrow(ptr, dispatch_control);
-        dg::network_tile_member_getsetter::set_uacm_pong_count_nothrow(ptr, pong_count);
-        dg::network_tile_member_getsetter::set_uacm_descendant_nothrow(ptr, src);
         dg::network_tile_member_getsetter::set_uacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
@@ -315,7 +322,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr,
-                   dispatch_control_t dispatch_control, 
+                   dispatch_control_t forward_dispatch_control,
+                   dispatch_control_t backward_dispatch_control,
                    const ObserverData * observer_arr, uint64_t observer_arr_sz,
                    bool force_init_flag) noexcept -> exception_t{
 
@@ -329,7 +337,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_pacm_dispatch_control(ptr, lhs_arr, rhs_arr, acm_sz, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_pacm_forward_dispatch_control(ptr, lhs_arr, rhs_arr, acm_sz, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_pacm_backward_dispatch_control(ptr, lhs_arr, rhs_arr, acm_sz, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -347,11 +359,15 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
         dg::network_tile_member_getsetter::set_pacm_left_descendant_nothrow(ptr, lhs, acm_sz);
         dg::network_tile_member_getsetter::set_pacm_right_descendant_nothrow(ptr, rhs, acm_sz);
-        dg::network_tile_member_getsetter::set_pacm_dispatch_control_nothrow(ptr, dispatch_control);
-        dg::network_tile_member_getsetter::set_pacm_group_operatable_id_nothrow(ptr, group_operatable_id);
+        dg::network_tile_member_getsetter::set_pacm_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_pacm_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_pacm_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_pacm_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_pacm_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_pacm_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_pacm_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_pacm_pong_count_nothrow(ptr, 0u);
         dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_pacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
@@ -363,7 +379,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                    operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
                    std::optional<uma_ptr_t> signal_accum_addr,
-                   dispatch_control_t dispatch_control,
+                   dispatch_control_t forward_dispatch_control,
+                   dispatch_control_t backward_dispatch_control,
                    learning_rate_t learning_rate,
                    const void * clogit_value, uint64_t clogit_value_sz,
                    const ObserverData * observer_arr, uint64_t observer_arr_sz,
@@ -379,7 +396,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_crit_dispatch_control(ptr, src, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_crit_forward_dispatch_control(ptr, src, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_crit_backward_dispatch_control(ptr, src, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -404,13 +425,16 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         }
 
         dg::network_tile_member_getsetter::set_crit_descendant_nothrow(ptr, src);
-        dg::network_tile_member_getsetter::set_crit_dispatch_control_nothrow(ptr, dispatch_control);
-        dg::network_tile_member_getsetter::set_crit_group_operatable_id_nothrow(ptr, group_operatable_id);
+        dg::network_tile_member_getsetter::set_crit_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_crit_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_crit_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_crit_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_crit_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_crit_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_crit_learning_rate_nothrow(ptr, learning_rate);
         dg::network_tile_member_getsetter::set_crit_clogit_nothrow(ptr, clogit_value, clogit_value_sz);
         dg::network_tile_member_getsetter::set_crit_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_crit_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_crit_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
@@ -418,7 +442,6 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     auto init_immu(uma_ptr_t ptr,
                    operatable_id_t forward_ops_id,
-                   operatable_id_t backward_ops_id,
                    operatable_id_t memevent_ops_id,
                    const void * logit_value, uint64_t logit_value_sz,
                    bool force_init_flag) noexcept -> exception_t{
@@ -441,9 +464,10 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             }
         }
 
-        dg::network_tile_member_getsetter::set_immu_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
+        dg::network_tile_member_getsetter::set_immu_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_immu_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
         dg::network_tile_member_getsetter::set_immu_logit_nothrow(ptr, logit_value, logit_value_sz);
-        dg::network_tile_member_getsetter::set_immu_group_operatable_id_nothrow(ptr, group_operatable_id);
+        dg::network_tile_member_getsetter::set_immu_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -458,7 +482,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       operatable_id_t backward_ops_id,
                       operatable_id_t memevent_ops_id,
                       std::optional<uma_ptr_t> signal_accum_addr,
-                      dispatch_control_t dispatch_control,
+                      dispatch_control_t forward_dispatch_control,
+                      dispatch_control_t backward_dispatch_control,
                       ClientDeliveryInfo dst_info,
                       const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
@@ -473,7 +498,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_msgrfwd_dispatch_control(ptr, src, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_msgrfwd_forward_dispatch_control(ptr, src, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrfwd_backward_dispatch_control(ptr, src, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -493,14 +522,16 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             }
         }
 
-        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_msgrfwd_observer_array_size_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_msgrfwd_group_operatable_id_nothrow(ptr, group_operatable_id);
-        dg::network_tile_member_getsetter::set_msgrfwd_operatable_id_nothrow(ptr, operatable_id);
-        dg::network_tile_member_getsetter::set_msgrfwd_dispatch_control_nothrow(ptr, dispatch_control);
-        dg::network_tile_member_getsetter::set_msgrfwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_msgrfwd_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_msgrfwd_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_msgrfwd_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_msgrfwd_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_msgrfwd_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_msgrfwd_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_msgrfwd_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
+        dg::network_tile_member_getsetter::set_msgrfwd_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_msgrfwd_dst_info_nothrow(ptr, dst_info);
+        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_msgrfwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
@@ -512,7 +543,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       operatable_id_t backward_ops_id,
                       operatable_id_t memevent_ops_id,
                       std::optional<uma_ptr_t> signal_accum_addr,
-                      dispatch_control_t dispatch_control,
+                      dispatch_control_t forward_dispatch_control,
+                      dispatch_control_t backward_dispatch_control,
                       ClientDeliveryInfo dst_info, 
                       const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
@@ -527,7 +559,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_msgrbwd_dispatch_control(ptr, src, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_msgrbwd_forward_dispatch_control(ptr, src, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_msgrbwd_backward_dispatch_control(ptr, src, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -547,19 +583,41 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             }
         }
 
-        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_msgrbwd_observer_array_size_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_msgrbwd_group_operatable_id_nothrow(ptr, group_operatable_id);
-        dg::network_tile_member_getsetter::set_msgrbwd_operatable_id_nothrow(ptr, operatable_id);
-        dg::network_tile_member_getsetter::set_msgrbwd_dispatch_control_nothrow(ptr, dispatch_control);
-        dg::network_tile_member_getsetter::set_msgrbwd_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_msgrbwd_descendant_nothrow(ptr, src);
+        dg::network_tile_member_getsetter::set_msgrbwd_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_msgrbwd_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_msgrbwd_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_msgrbwd_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_msgrbwd_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_msgrbwd_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
+        dg::network_tile_member_getsetter::set_msgrbwd_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_msgrbwd_dst_info_nothrow(ptr, dst_info);
-        dg::network_tile_member_getsetter::set_msgrbwd_timein_nothrow(ptr, timein);
+        dg::network_tile_member_getsetter::set_msgrbwd_is_delivered_nothrow(ptr, false);
+        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_msgrbwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
+
+    //the most complicated logic is probably extnsrc extnsrx extndst extndsx
+    //what does that even DO???
+
+    //extnsrc and extndst are intercomm-compatible, such is it has the polymorphic properties of every other normal tiles
+
+    //extnsrx is the shadow of extnsrc on the dst machine (where the extndst resides)
+    //extndsx is the shadow of extndst on the src machine (where the extnsrc resides)
+
+    //we would want to differentiate the extnsrc, extndst because it mimics the transportation compression extnsrc compresses extdst decompresses
+    //we'd have our own dispatch protocol for extnsrc and extndst because it is very important, data transfer efficiency wise
+
+    //it is forward ping compatible, it is backward ping compatible, forward compatible + backward compatible
+    //assume that we have a working tree
+    //we can prove that an insert of extnsrc and extndst at a random point is guaranteed to be correct (such tree is not circular or intentionally corrupted)
+
+    //now we face the problem of weakly connected components (we need to find region splits such that the efficiency of the tree compute is maximized, alright non-disclosure agreement, we worked on this problem, I failed!!!)
+
+    //we have our own virtues of coding because it's incredibly hard to code otherwise (The Great Escape by Boys Like Girls)
+    //we dont really know what to do without the expected implementation, God saved C++
 
     auto init_extnsrc(uma_ptr_t ptr,
                       uma_ptr_t src,
@@ -569,7 +627,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       operatable_id_t backward_ops_id,
                       operatable_id_t memevent_ops_id,
                       std::optional<uma_ptr_t> signal_accum_addr,
-                      dispatch_control_t dispatch_control,
+                      dispatch_control_t forward_dispatch_control,
+                      dispatch_control_t backward_dispatch_control,
                       const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
 
@@ -583,7 +642,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_extnsrc_dispatch_control(ptr, src, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_extnsrc_forward_dispatch_control(ptr, src, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_extnsrc_backward_dispatch_control(ptr, src, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -607,23 +670,50 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             }
         }
 
-        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_extnsrc_observer_array_size_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_extnsrc_group_operatable_id_nothrow(ptr, group_operatable_id);
-        dg::network_tile_member_getsetter::set_extnsrc_dispatch_control_nothrow(ptr, dispatch_control);
-        dg::network_tile_member_getsetter::set_extnsrc_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_extnsrc_descendant_nothrow(ptr, src);
         dg::network_tile_member_getsetter::set_extnsrc_counterpart_nothrow(ptr, counterpart);
+        dg::network_tile_member_getsetter::set_extnsrc_counterpart_shadow_nothrow(ptr, counterpart_shadow);
+        dg::network_tile_member_getsetter::set_extnsrc_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_extnsrc_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_extnsrc_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_extnsrc_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_extnsrc_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_extnsrc_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
+        dg::network_tile_member_getsetter::set_extnsrc_observer_array_nothrow(observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_extnsrx(uma_ptr_t ptr,
-                      operatable_id_t memevent_ops_id,
-                      std::optional<uma_ptr_t> signal_accum_addr,
+                      operatable_id_t memevent_ops_id, //memevent_ops_id is for external shadow injection,
+                      std::optional<uma_ptr_t> signal_accum_addr, //we dont really know what this is for ...
                       bool force_init_flag) noexcept -> exception_t{
 
+        auto ptr_access = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(ptr);
+
+        if (!ptr_access.has_value()){
+            return ptr_access.error();
+        }
+
+        if (exception_t err = check_signal_accum_addr(signal_accum_addr); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (!force_init_flag){
+            init_status_t init_status = dg::network_tile_member_getsetter::get_extnsrx_init_status_nothrow(ptr);
+
+            if (init_status != TILE_INIT_STATUS_EMPTY && init_status != TILE_INIT_STATUS_ORPHANED){
+                return dg::network_exception::TILE_INIT_INITIALIZED_TILE;
+            }
+        }
+
+        dg::network_tile_member_getsetter::set_extnsrx_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_extnsrx_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_extnsrx_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+
+        return dg::network_exception::SUCCESS;
     }
 
     auto init_extndst(uma_ptr_t ptr,
@@ -634,7 +724,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
                       operatable_id_t backward_ops_id,
                       operatable_id_t memevent_ops_id,
                       std::optional<uma_ptr_t> signal_accum_addr,
-                      dispatch_control_t dispatch_control, 
+                      dispatch_control_t forward_dispatch_control,
+                      dispatch_control_t backward_dispatch_control, 
                       const ObserverData * observer_arr, uint64_t observer_arr_sz,
                       bool force_init_flag) noexcept -> exception_t{
 
@@ -648,7 +739,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return err;
         }
 
-        if (exception_t err = check_extndst_dispatch_control(ptr, src, dispatch_control); dg::network_exception::is_failed(err)){
+        if (exception_t err = check_extndst_forward_dispatch_control(ptr, src, forward_dispatch_control); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (exception_t err = check_extndst_backward_dispatch_control(ptr, src, backward_dispatch_control); dg::network_exception::is_failed(err)){
             return err;
         }
 
@@ -672,24 +767,53 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             }
         }
 
-        dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
-        dg::network_tile_member_getsetter::set_extndst_observer_array_size_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_extndst_group_operatable_id_nothrow(ptr, group_operatable_id);
-        dg::network_tile_member_getsetter::set_extndst_dispatch_control_nothrow(ptr, dispatch_control);
+        dg::network_tile_member_getsetter::set_extndst_descendant_nothrow(ptr, src);
         dg::network_tile_member_getsetter::set_extndst_counterpart_nothrow(ptr, counterpart);
+        dg::network_tile_member_getsetter::set_extndst_counterpart_shadow_nothrow(ptr, counterpart_shadow);
+        dg::network_tile_member_getsetter::set_extndst_forward_operatable_id_nothrow(ptr, forward_ops_id);
+        dg::network_tile_member_getsetter::set_extndst_backward_operatable_id_nothrow(ptr, backward_ops_id);
+        dg::network_tile_member_getsetter::set_extndst_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_extndst_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_extndst_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
+        dg::network_tile_member_getsetter::set_extndst_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
+        dg::network_tile_member_getsetter::set_extndst_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
+        dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+        dg::network_tile_member_getsetter::set_extndst_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto init_extndsx(uma_ptr_t ptr,
-                      operatable_id_t memevent_ops_id,
+                      operatable_id_t memevent_ops_id, //memevent_ops_id is for external shadow injection,
                       std::optional<uma_ptr_t> signal_accum_addr,
                       bool force_init_flag) noexcept -> exception_t{
+        
+        auto ptr_access = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(ptr);
 
+        if (!ptr_access.has_value()){
+            return ptr_access.error();
+        }
+
+        if (exception_t err = check_signal_accum_addr(signal_accum_addr); dg::network_exception::is_failed(err)){
+            return err;
+        }
+
+        if (!force_init_flag){
+            init_status_t init_status = dg::network_tile_member_getsetter::get_extndsx_init_status_nothrow(ptr);
+
+            if (init_status != TILE_INIT_STATUS_EMPTY && init_status != TILE_INIT_STATUS_ORPHANED){
+                return dg::network_exception::TILE_INIT_INITIALIZED_TILE;
+            }
+        }
+
+        dg::network_tile_member_getsetter::set_extndsx_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
+        dg::network_tile_member_getsetter::set_extndsx_signal_smph_addr_nothrow(ptr, signal_accum_addr);
+        dg::network_tile_member_getsetter::set_extndsx_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
+
+        return dg::network_exception::SUCCESS;
     }
 
-    //I admit things could be done better
-    //we are objecting the polymorphic dispatch at the moment
+    //
 
     auto orphan_leaf(uma_ptr_t ptr, 
                      operatable_id_t expected_id) noexcept -> exception_t{
@@ -1521,7 +1645,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         uma_ptr_t ptr;
         uma_ptr_t src;
         operatable_id_t forward_ops_id;
-        operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
         dispatch_control_t dispatch_control;
@@ -1530,12 +1653,12 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
         }
     };
 
@@ -1546,18 +1669,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr,
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      observer_vec, force_init_flag);
         }
     };
 
@@ -1569,18 +1695,22 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
+        dispatch_major_t dispatch_major;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control, 
+                      dispatch_major, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      dispatch_major, observer_vec, force_init_flag);
         }
     };
 
@@ -1591,18 +1721,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      observer_vec, force_init_flag);
         }
     };
 
@@ -1614,18 +1747,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, lhs, rhs, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      observer_vec, force_init_flag);
         }
     };
 
@@ -1636,7 +1772,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         learning_rate_t learning_rate;
         dg::string clogit_value;
         dg::vector<ObserverData> observer_vec;
@@ -1644,33 +1781,32 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, learning_rate,
-                      clogit_value, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      learning_rate, clogit_value, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, learning_rate,
-                      clogit_value, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      learning_rate, clogit_value, observer_vec, force_init_flag);
         }
     };
 
     struct InitImmuPayLoad{
         uma_ptr_t ptr;
         operatable_id_t forward_ops_id;
-        operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         dg::string logit_value;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, forward_ops_id, backward_ops_id, memevent_ops_id, logit_value, force_init_flag);
+            reflector(ptr, forward_ops_id, memevent_ops_id, logit_value, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, forward_ops_id, backward_ops_id, memevent_ops_id, logit_value, force_init_flag);
+            reflector(ptr, forward_ops_id, memevent_ops_id, logit_value, force_init_flag);
         }
     };
 
@@ -1681,19 +1817,22 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         ClientDeliveryInfo dst_info;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      dst_info, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      dst_info, observer_vec, force_init_flag);
         }
     };
 
@@ -1704,19 +1843,22 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         ClientDeliveryInfo dst_info;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      dst_info, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, dst_info, observer_vec, force_init_flag);
+            reflector(ptr, src, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, backward_dispatch_control,
+                      dst_info, observer_vec, force_init_flag);
         }
     };
 
@@ -1729,18 +1871,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control, 
+                      backward_dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control,
+                      backward_dispatch_control, observer_vec, force_init_flag);
         }
     };
 
@@ -1770,18 +1915,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         operatable_id_t backward_ops_id;
         operatable_id_t memevent_ops_id;
         std::optional<uma_ptr_t> signal_accum_addr;
-        dispatch_control_t dispatch_control;
+        dispatch_control_t forward_dispatch_control;
+        dispatch_control_t backward_dispatch_control;
         dg::vector<ObserverData> observer_vec;
         bool force_init_flag;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control,
+                      backward_dispatch_control, observer_vec, force_init_flag);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, dispatch_control, observer_vec, force_init_flag);
+            reflector(ptr, src, counterpart, counterpart_shadow, forward_ops_id, backward_ops_id, memevent_ops_id, signal_accum_addr, forward_dispatch_control,
+                      backward_dispatch_control, observer_vec, force_init_flag);
         }
     };
 
@@ -2248,7 +2396,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
     auto make_init_blkr_payload(uma_ptr_t ptr,
                                 uma_ptr_t src,
                                 operatable_id_t forward_ops_id,
-                                operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id,
                                 std::optional<uma_ptr_t> signal_accum_addr,
                                 dispatch_control_t dispatch_control,
@@ -2266,7 +2413,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         return InitBlkrPayLoad{.ptr                 = ptr,
                                .src                 = src,
                                .forward_ops_id      = forward_ops_id,
-                               .backward_ops_id     = backward_ops_id,
                                .memevent_ops_id     = memevent_ops_id,
                                .signal_accum_addr   = signal_accum_addr,
                                .dispatch_control    = dispatch_control,
@@ -2280,7 +2426,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id,
                                 std::optional<uma_ptr_t> signal_accum_addr, 
-                                dispatch_control_t dispatch_control, 
+                                dispatch_control_t forward_dispatch_control,
+                                dispatch_control_t backward_dispatch_control, 
                                 ObserverData * observer_arr, uint64_t observer_arr_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitMonoPayLoad, exception_t>{
 
@@ -2292,15 +2439,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitMonoPayLoad{.ptr                 = ptr,
-                               .src                 = src,
-                               .forward_ops_id      = forward_ops_id,
-                               .backward_ops_id     = backward_ops_id,
-                               .memevent_ops_id     = memevent_ops_id,
-                               .signal_accum_addr   = signal_accum_addr,
-                               .dispatch_control    = dispatch_control,
-                               .observer_vec        = std::move(observer_vec.value()),
-                               .force_init_flag     = force_init_flag};
+        return InitMonoPayLoad{.ptr                         = ptr,
+                               .src                         = src,
+                               .forward_ops_id              = forward_ops_id,
+                               .backward_ops_id             = backward_ops_id,
+                               .memevent_ops_id             = memevent_ops_id,
+                               .signal_accum_addr           = signal_accum_addr,
+                               .forward_dispatch_control    = forward_dispatch_control,
+                               .backward_dispatch_control   = backward_dispatch_control,
+                               .observer_vec                = std::move(observer_vec.value()),
+                               .force_init_flag             = force_init_flag};
     }
 
     auto make_init_pair_payload(uma_ptr_t ptr, 
@@ -2310,7 +2458,9 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id,
                                 std::optional<uma_ptr_t> signal_accum_addr,
-                                dispatch_control_t dispatch_control, 
+                                dispatch_control_t forward_dispatch_control,
+                                dispatch_control_t backward_dispatch_control,
+                                dispatch_major_t dispatch_major, 
                                 ObserverData * observer_arr, uint64_t observer_arr_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitPairPayLoad, exception_t>{
         
@@ -2322,15 +2472,17 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitPairPayLoad{.ptr                 = ptr,
-                               .lhs                 = lhs,
-                               .rhs                 = rhs,
-                               .forward_ops_id      = forward_ops_id,
-                               .backward_ops_id     = backward_ops_id,
-                               .signal_accum_addr   = signal_accum_addr,
-                               .dispatch_control    = dispatch_control,
-                               .observer_vec        = std::move(observer_vec.value()),
-                               .force_init_flag     = force_init_flag};
+        return InitPairPayLoad{.ptr                         = ptr,
+                               .lhs                         = lhs,
+                               .rhs                         = rhs,
+                               .forward_ops_id              = forward_ops_id,
+                               .backward_ops_id             = backward_ops_id,
+                               .signal_accum_addr           = signal_accum_addr,
+                               .forward_dispatch_control    = forward_dispatch_control,
+                               .backward_dispatch_control   = backward_dispatch_control,
+                               .dispatch_major              = dispatch_major,
+                               .observer_vec                = std::move(observer_vec.value()),
+                               .force_init_flag             = force_init_flag};
     }
 
     auto make_init_uacm_payload(uma_ptr_t ptr, 
@@ -2339,7 +2491,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id,
                                 std::optional<uma_ptr_t> signal_accum_addr,
-                                dispatch_control_t dispatch_control, 
+                                dispatch_control_t forward_dispatch_control,
+                                dispatch_control_t backward_dispatch_control, 
                                 ObserverData * observer_arr, uint64_t observer_arr_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitUACMPayLoad, exception_t>{
         
@@ -2358,15 +2511,16 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         std::copy(src, std::next(src, src_sz), src_vec->begin());
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitUACMPayLoad{.ptr                 = ptr,
-                               .src                 = std::move(src_vec.value()),
-                               .forward_ops_id      = forward_ops_id,
-                               .backward_ops_id     = backward_ops_id,
-                               .memevent_ops_id     = memevent_ops_id,
-                               .signal_accum_addr   = signal_accum_addr,
-                               .dispatch_control    = dispatch_control,
-                               .observer_vec        = std::move(observer_vec.value()),
-                               .force_init_flag     = force_init_flag};
+        return InitUACMPayLoad{.ptr                         = ptr,
+                               .src                         = std::move(src_vec.value()),
+                               .forward_ops_id              = forward_ops_id,
+                               .backward_ops_id             = backward_ops_id,
+                               .memevent_ops_id             = memevent_ops_id,
+                               .signal_accum_addr           = signal_accum_addr,
+                               .forward_dispatch_control    = forward_dispatch_control,
+                               .backward_dispatch_control   = backward_dispatch_control,
+                               .observer_vec                = std::move(observer_vec.value()),
+                               .force_init_flag             = force_init_flag};
     }
 
     auto make_init_pacm_payload(uma_ptr_t ptr,
@@ -2375,7 +2529,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id,
                                 std::optional<uma_ptr_t> signal_accum_addr,
-                                dispatch_control_t dispatch_control,
+                                dispatch_control_t forward_dispatch_control,
+                                dispatch_control_t backward_dispatch_control,
                                 ObserverData * observer_arr, uint64_t observer_arr_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitPACMPayLoad, exception_t>{
         
@@ -2401,16 +2556,17 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
         std::copy(rhs, std::next(rhs, acm_sz), rhs_vec->begin());
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitPACMPayLoad{.ptr                 = ptr,
-                               .lhs                 = std::move(lhs_vec.value()),
-                               .rhs                 = std::move(rhs_vec.value()),
-                               .forward_ops_id      = forward_ops_id,
-                               .backward_ops_id     = backward_ops_id,
-                               .memevent_ops_id     = memevent_ops_id,
-                               .signal_accum_addr   = signal_accum_addr,
-                               .dispatch_control    = dispatch_control,
-                               .observer_vec        = std::move(observer_vec.value()),
-                               .force_init_flag     = force_init_flag};
+        return InitPACMPayLoad{.ptr                         = ptr,
+                               .lhs                         = std::move(lhs_vec.value()),
+                               .rhs                         = std::move(rhs_vec.value()),
+                               .forward_ops_id              = forward_ops_id,
+                               .backward_ops_id             = backward_ops_id,
+                               .memevent_ops_id             = memevent_ops_id,
+                               .signal_accum_addr           = signal_accum_addr,
+                               .forward_dispatch_control    = forward_dispatch_control,
+                               .backward_dispatch_control   = backward_dispatch_control,
+                               .observer_vec                = std::move(observer_vec.value()),
+                               .force_init_flag             = force_init_flag};
     }
 
     auto make_init_crit_payload(uma_ptr_t ptr,
@@ -2419,14 +2575,15 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                 operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id,
                                 std::optional<uma_ptr_t> signal_accum_addr,
-                                dispatch_control_t dispatch_control,
+                                dispatch_control_t forward_dispatch_control,
+                                dispatch_control_t backward_dispatch_control,
                                 learning_rate_t learning_rate,
                                 void * clogit_value, uint64_t clogit_value_sz,
                                 ObserverData * observer_arr, uint64_t observer_arr_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitCritPayLoad, exception_t>{
-                            
-        std::expected<dg::string, exception_t> clogit_buf = dg::network_exception::cstyle_initialize<dg::string>(clogit_value_sz);
-        
+
+        std::expected<dg::string, exception_t> clogit_buf = dg::network_exception::cstyle_initialize<dg::string>((char) 0, clogit_value_sz);
+
         if (!clogit_buf.has_value()){
             return std::unexpected(clogit_buf.error());
         }
@@ -2441,27 +2598,27 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitCritPayLoad{.ptr                 = ptr,
-                               .src                 = src,
-                               .forward_ops_id      = forward_ops_id,
-                               .backward_ops_id     = backward_ops_id,
-                               .memevent_ops_id     = memevent_ops_id,
-                               .signal_accum_addr   = signal_accum_addr,
-                               .dispatch_control    = dispatch_control,
-                               .learning_rate       = learning_rate,
-                               .clogit_value        = std::move(clogit_buf.value()),
-                               .observer_vec        = std::move(observer_vec.value()),
-                               .force_init_flag     = force_init_flag};
+        return InitCritPayLoad{.ptr                         = ptr,
+                               .src                         = src,
+                               .forward_ops_id              = forward_ops_id,
+                               .backward_ops_id             = backward_ops_id,
+                               .memevent_ops_id             = memevent_ops_id,
+                               .signal_accum_addr           = signal_accum_addr,
+                               .forward_dispatch_control    = forward_dispatch_control,
+                               .backward_dispatch_control   = backward_dispatch_control,
+                               .learning_rate               = learning_rate,
+                               .clogit_value                = std::move(clogit_buf.value()),
+                               .observer_vec                = std::move(observer_vec.value()),
+                               .force_init_flag             = force_init_flag};
     }
 
     auto make_init_immu_payload(uma_ptr_t ptr,
                                 operatable_id_t forward_ops_id,
-                                operatable_id_t backward_ops_id,
                                 operatable_id_t memevent_ops_id, 
                                 void * logit_value, uint64_t logit_value_sz,
                                 bool force_init_flag) noexcept -> std::expected<InitImmuPayLoad, exception_t>{
-        
-        std::expected<dg::string, exception_t> logit_buf = dg::network_exception::cstyle_initialize<dg::string>(logit_value_sz);
+
+        std::expected<dg::string, exception_t> logit_buf = dg::network_exception::cstyle_initialize<dg::string>((char) 0, logit_value_sz);
 
         if (!logit_buf.has_value()){
             return std::unexpected(logit_buf.error());
@@ -2471,7 +2628,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         return InitImmuPayLoad{.ptr             = ptr,
                                .forward_ops_id  = forward_ops_id,
-                               .backward_ops_id = backward_ops_id,
                                .memevent_ops_id = memevent_ops_id,
                                .logit_value     = std::move(logit_buf.value()),
                                .force_init_flag = force_init_flag};
@@ -2483,8 +2639,9 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    operatable_id_t backward_ops_id,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr,
-                                   dispatch_control_t dispatch_control,
-                                   ClientDeliveryInfo dst_info, 
+                                   dispatch_control_t forward_dispatch_control,
+                                   dispatch_control_t backward_dispatch_control,
+                                   ClientDeliveryInfo dst_info,
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitMsgrFwdPayLoad, exception_t>{
         
@@ -2496,16 +2653,17 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitMsgrFwdPayLoad{.ptr                  = ptr,
-                                  .src                  = src,
-                                  .forward_ops_id       = forward_ops_id,
-                                  .backward_ops_id      = backward_ops_id,
-                                  .memevent_ops_id      = memevent_ops_id,
-                                  .signal_accum_addr    = signal_accum_addr,
-                                  .dispatch_control     = dispatch_control,
-                                  .dst_info             = dst_info,
-                                  .observer_vec         = std::move(observer_vec.value()),
-                                  .force_init_flag      = force_init_flag};
+        return InitMsgrFwdPayLoad{.ptr                          = ptr,
+                                  .src                          = src,
+                                  .forward_ops_id               = forward_ops_id,
+                                  .backward_ops_id              = backward_ops_id,
+                                  .memevent_ops_id              = memevent_ops_id,
+                                  .signal_accum_addr            = signal_accum_addr,
+                                  .forward_dispatch_control     = forward_dispatch_control,
+                                  .backward_dispatch_control    = backward_dispatch_control,
+                                  .dst_info                     = dst_info,
+                                  .observer_vec                 = std::move(observer_vec.value()),
+                                  .force_init_flag              = force_init_flag};
     }
 
     auto make_init_msgrbwd_payload(uma_ptr_t ptr,
@@ -2514,7 +2672,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    operatable_id_t backward_ops_id,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr,
-                                   dispatch_control_t dispatch_control,
+                                   dispatch_control_t forward_dispatch_control,
+                                   dispatch_control_t backward_dispatch_control,
                                    ClientDeliveryInfo dst_info, 
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitMsgrBwdPayLoad, exception_t>{
@@ -2527,16 +2686,17 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitMsgrBwdPayLoad{.ptr                  = ptr,
-                                  .src                  = src,
-                                  .forward_ops_id       = forward_ops_id,
-                                  .backward_ops_id      = backward_ops_id,
-                                  .memevent_ops_id      = memevent_ops_id,
-                                  .signal_accum_addr    = signal_accum_addr,
-                                  .dispatch_control     = dispatch_control,
-                                  .dst_info             = dst_info,
-                                  .observer_vec         = std::move(observer_vec.value()),
-                                  .force_init_flag      = force_init_flag};
+        return InitMsgrBwdPayLoad{.ptr                          = ptr,
+                                  .src                          = src,
+                                  .forward_ops_id               = forward_ops_id,
+                                  .backward_ops_id              = backward_ops_id,
+                                  .memevent_ops_id              = memevent_ops_id,
+                                  .signal_accum_addr            = signal_accum_addr,
+                                  .forward_dispatch_control     = forward_dispatch_control,
+                                  .backward_dispatch_control    = backward_dispatch_control,
+                                  .dst_info                     = dst_info,
+                                  .observer_vec                 = std::move(observer_vec.value()),
+                                  .force_init_flag              = force_init_flag};
     }
 
     auto make_init_extnsrc_payload(uma_ptr_t ptr,
@@ -2547,7 +2707,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    operatable_id_t backward_ops_id,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr, 
-                                   dispatch_control_t dispatch_control,
+                                   dispatch_control_t forward_dispatch_control,
+                                   dispatch_control_t backward_dispatch_control,
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnSrcPayLoad, exception_t>{
         
@@ -2559,17 +2720,18 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitExtnSrcPayLoad{.ptr                  = ptr,
-                                  .src                  = src,
-                                  .counterpart          = counterpart,
-                                  .counterpart_shadow   = counterpart_shadow,
-                                  .forward_ops_id       = forward_ops_id,
-                                  .backward_ops_id      = backward_ops_id,
-                                  .memevent_ops_id      = memevent_ops_id,
-                                  .signal_accum_addr    = signal_accum_addr,
-                                  .dispatch_control     = dispatch_control,
-                                  .observer_vec         = std::move(observer_vec.value()),
-                                  .force_init_flag      = force_init_flag};
+        return InitExtnSrcPayLoad{.ptr                          = ptr,
+                                  .src                          = src,
+                                  .counterpart                  = counterpart,
+                                  .counterpart_shadow           = counterpart_shadow,
+                                  .forward_ops_id               = forward_ops_id,
+                                  .backward_ops_id              = backward_ops_id,
+                                  .memevent_ops_id              = memevent_ops_id,
+                                  .signal_accum_addr            = signal_accum_addr,
+                                  .forward_dispatch_control     = forward_dispatch_control,
+                                  .backward_dispatch_control    = backward_dispatch_control,
+                                  .observer_vec                 = std::move(observer_vec.value()),
+                                  .force_init_flag              = force_init_flag};
     }
 
     auto make_init_extnsrx_payload(uma_ptr_t ptr,
@@ -2591,10 +2753,11 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                    operatable_id_t backward_ops_id,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr,
-                                   dispatch_control_t dispatch_control, 
+                                   dispatch_control_t forward_dispatch_control,
+                                   dispatch_control_t backward_dispatch_control, 
                                    ObserverData * observer_arr, uint64_t observer_arr_sz,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnDstPayLoad, exception_t>{
-        
+
         std::expected<dg::vector<ObserverData>, exception_t> observer_vec = dg::network_exception::cstyle_initialize<dg::vector<ObserverData>>(observer_arr_sz);
 
         if (!observer_vec.has_value()){
@@ -2603,24 +2766,25 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
 
         std::copy(observer_arr, std::next(observer_arr, observer_arr_sz), observer_vec->begin());
 
-        return InitExtnDstPayLoad{.ptr                  = ptr,
-                                  .src                  = src,
-                                  .counterpart          = counterpart,
-                                  .counterpart_shadow   = counterpart_shadow,
-                                  .forward_ops_id       = forward_ops_id,
-                                  .backward_ops_id      = backward_ops_id,
-                                  .memevent_ops_id      = memevent_ops_id,
-                                  .signal_accum_addr    = signal_accum_addr,
-                                  .dispatch_control     = dispatch_control,
-                                  .observer_vec         = std::move(observer_vec.value()),
-                                  .force_init_flag      = force_init_flag}
+        return InitExtnDstPayLoad{.ptr                          = ptr,
+                                  .src                          = src,
+                                  .counterpart                  = counterpart,
+                                  .counterpart_shadow           = counterpart_shadow,
+                                  .forward_ops_id               = forward_ops_id,
+                                  .backward_ops_id              = backward_ops_id,
+                                  .memevent_ops_id              = memevent_ops_id,
+                                  .signal_accum_addr            = signal_accum_addr,
+                                  .forward_dispatch_control     = forward_dispatch_control,
+                                  .backward_dispatch_control    = backward_dispatch_control,
+                                  .observer_vec                 = std::move(observer_vec.value()),
+                                  .force_init_flag              = force_init_flag};
     }
 
     auto make_init_extndsx_payload(uma_ptr_t ptr,
                                    operatable_id_t memevent_ops_id,
                                    std::optional<uma_ptr_t> signal_accum_addr,
                                    bool force_init_flag) noexcept -> std::expected<InitExtnDsxPayLoad, exception_t>{
-        
+
         return InitExtnDsxPayLoad{.ptr                  = ptr,
                                   .memevent_ops_id      = memevent_ops_id,
                                   .signal_accum_addr    = signal_accum_addr,
@@ -2900,7 +3064,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                               payload_ptr->backward_ops_id,
                                                                                                               payload_ptr->memevent_ops_id,
                                                                                                               payload_ptr->signal_accum_addr,
-                                                                                                              payload_ptr->dispatch_control, 
+                                                                                                              payload_ptr->forward_dispatch_control,
+                                                                                                              payload_ptr->backward_dispatch_control, 
                                                                                                               payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                               payload_ptr->force_init_flag);
 
@@ -2950,7 +3115,9 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                               payload_ptr->backward_ops_id,
                                                                                                               payload_ptr->memevent_ops_id,
                                                                                                               payload_ptr->signal_accum_addr,
-                                                                                                              payload_ptr->dispatch_control,
+                                                                                                              payload_ptr->forward_dispatch_control,
+                                                                                                              payload_ptr->backward_dispatch_control,
+                                                                                                              payload_ptr->dispatch_major,
                                                                                                               payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                               payload_ptr->force_init_flag);
 
@@ -2999,7 +3166,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                               payload_ptr->backward_ops_id,
                                                                                                               payload_ptr->memevent_ops_id,
                                                                                                               payload_ptr->signal_accum_addr,
-                                                                                                              payload_ptr->dispatch_control, 
+                                                                                                              payload_ptr->forward_dispatch_control,
+                                                                                                              payload_ptr->backward_dispatch_control, 
                                                                                                               payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                               payload_ptr->force_init_flag);
 
@@ -3054,7 +3222,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                payload_ptr->backward_ops_id,
                                                                                                payload_ptr->memevent_ops_id,
                                                                                                payload_ptr->signal_accum_addr,
-                                                                                               payload_ptr->dispatch_control, 
+                                                                                               payload_ptr->forward_dispatch_control,
+                                                                                               payload_ptr->backward_dispatch_control, 
                                                                                                payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                payload_ptr->force_init_flag);
 
@@ -3109,7 +3278,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                               payload_ptr->backward_ops_id,
                                                                                                               payload_ptr->memevent_ops_id,
                                                                                                               payload_ptr->signal_accum_addr,
-                                                                                                              payload_ptr->dispatch_control,  
+                                                                                                              payload_ptr->forward_dispatch_control,
+                                                                                                              payload_ptr->backward_dispatch_control,  
                                                                                                               payload_ptr->learning_rate, 
                                                                                                               payload_ptr->clogit_value.data(), payload_ptr->clogit_value.size(), 
                                                                                                               payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
@@ -3166,7 +3336,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                 auto [payload_ptr, exception_ptr]   = payload_arr[i];
                 exception_t init_status             = dg::network_tile_lifetime::concurrent_unsafe::init_immu(payload_ptr->ptr,
                                                                                                               payload_ptr->forward_ops_id,
-                                                                                                              payload_ptr->backward_ops_id,
                                                                                                               payload_ptr->memevent_ops_id,
                                                                                                               payload_ptr->logit_value.data(), payload_ptr->logit_value.size(),
                                                                                                               payload_ptr->force_init_flag);
@@ -3220,7 +3389,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                                  payload_ptr->backward_ops_id,
                                                                                                                  payload_ptr->memevent_ops_id,
                                                                                                                  payload_ptr->signal_accum_addr,
-                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->forward_dispatch_control,
+                                                                                                                 payload_ptr->backward_dispatch_control,
                                                                                                                  payload_ptr->dst_info,
                                                                                                                  payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                                  payload_ptr->force_init_flag);
@@ -3270,7 +3440,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                                  payload_ptr->backward_ops_id,
                                                                                                                  payload_ptr->memevent_ops_id,
                                                                                                                  payload_ptr->signal_accum_addr,
-                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->forward_dispatch_control,
+                                                                                                                 payload_ptr->backward_dispatch_control,
                                                                                                                  payload_ptr->dst_info,
                                                                                                                  payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(), 
                                                                                                                  payload_ptr->force_init_flag);
@@ -3322,7 +3493,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                                  payload_ptr->backward_ops_id,
                                                                                                                  payload_ptr->memevent_ops_id,
                                                                                                                  payload_ptr->signal_accum_addr,
-                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->forward_dispatch_control,
+                                                                                                                 payload_ptr->backward_dispatch_control,
                                                                                                                  payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                                  payload_ptr->force_init_flag);
 
@@ -3373,7 +3545,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_batch{
                                                                                                                  payload_ptr->backward_ops_id,
                                                                                                                  payload_ptr->memevent_ops_id,
                                                                                                                  payload_ptr->signal_accum_addr,
-                                                                                                                 payload_ptr->dispatch_control,
+                                                                                                                 payload_ptr->forward_dispatch_control,
+                                                                                                                 payload_ptr->backward_dispatch_control,
                                                                                                                  payload_ptr->observer_vec.data(), payload_ptr->observer_vec.size(),
                                                                                                                  payload_ptr->force_init_flag);
 
