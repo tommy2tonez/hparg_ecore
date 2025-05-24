@@ -15,8 +15,14 @@
 
 namespace dg::network_memlock_proxyspin{
 
-    //we are moving to a new std where the caller has to take care of the memory orderings + friends, and this is only for relaxed operations 
-    //we have too many instances where inlinability would hinder the fences so badly, we wonder if we ever need the memory ordering at the callee at all
+    //I've been working on the notify + lock features for acquire + acquire reference + acquire_reference
+
+    //can we prove that for every state change, from false -> true, true -> false, a notification in between is sufficient?
+    //this proof is hard to write, we already proved that the atomic_lock + notify + cmp_exch_strong would work, how about that in this case?
+    //it seems like the logic of that is carried over to this
+    //the China-man keymaker came to me in my dream
+
+    //except for that we need a dedicated boolean for each of the feature, and making sure that the acquisition has the reverse operation (such responsibility is created upon acquisition)
 
     static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = false;
 
