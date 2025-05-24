@@ -4120,12 +4120,63 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         payload_kind_deinit_extndsx     = 44u
     };
 
-    static inline constexpr uint32_t POLY_PAYLOAD_SERIALIZATION_SECRET  = 1015571905UL;
-    static inline constexpr uint32_t PAYLOAD_SERIALIZATION_SECRET       = 0u;
+    //these are used for internal errors + checkings, aren't supposed to be changed as secrets
+    //these numbers are part of the structure definition, as if it is invisible to users yet crucial for serialization + deserialization
+    //we'll provide the serialization format to external users via the public APIs, which they'd want to call a C file to run the serialization and get the payloads
+    //parsing a JSON string is very hard to get correctly + very slow, we'll stick with the approach for now
+
+    static inline constexpr uint32_t POLY_PAYLOAD_SERIALIZATION_SECRET              = 1015571905UL;
+    static inline constexpr uint32_t INIT_LEAF_PAYLOAD_SERIALIZATION_SECRET         = 775110819UL;
+    static inline constexpr uint32_t INIT_BLKR_PAYLOAD_SERIALIZATION_SECRET         = 1410260615UL;
+    static inline constexpr uint32_t INIT_MONO_PAYLOAD_SERIALIZATION_SECRET         = 1279769031UL;
+    static inline constexpr uint32_t INIT_PAIR_PAYLOAD_SERIALIZATION_SECRET         = 3319988850UL;
+    static inline constexpr uint32_t INIT_UACM_PAYLOAD_SERIALIZATION_SECRET         = 2132729877UL;
+    static inline constexpr uint32_t INIT_PACM_PAYLOAD_SERIALIZATION_SECRET         = 3463896483UL;
+    static inline constexpr uint32_t INIT_CRIT_PAYLOAD_SERIALIZATION_SECRET         = 4285963311UL;
+    static inline constexpr uint32_t INIT_IMMU_PAYLOAD_SERIALIZATION_SECRET         = 4162690786UL
+    static inline constexpr uint32_t INIT_POLY_PAYLOAD_SERIALIZATION_SECRET         = 1031221616UL;
+    static inline constexpr uint32_t INIT_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET      = 206935149UL;
+    static inline constexpr uint32_t INIT_MSGRBWD_PAYLOAD_SERIALIZATION_SECRET      = 3038720787UL;
+    static inline constexpr uint32_t INIT_EXTNSRC_PAYLOAD_SERIALIZATION_SECRET      = 3070992396UL;
+    static inline constexpr uint32_t INIT_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET      = 3691088546UL;
+    static inline constexpr uint32_t INIT_EXTNDST_PAYLOAD_SERIALIZATION_SECRET      = 1967035241UL;
+    static inline constexpr uint32_t INIT_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET      = 160838281UL;
+
+    static inline constexpr uint32_t ORPHAN_LEAF_PAYLOAD_SERIALIZATION_SECRET       = 3153482732UL;
+    static inline constexpr uint32_t ORPHAN_BLKR_PAYLOAD_SERIALIZATION_SECRET       = 45859177UL;
+    static inline constexpr uint32_t ORPHAN_MONO_PAYLOAD_SERIALIZATION_SECRET       = 2239278293UL;
+    static inline constexpr uint32_t ORPHAN_PAIR_PAYLOAD_SERIALIZATION_SECRET       = 4093082929UL;
+    static inline constexpr uint32_t ORPHAN_UACM_PAYLOAD_SERIALIZATION_SECRET       = 650003605UL;
+    static inline constexpr uint32_t ORPHAN_PACM_PAYLOAD_SERIALIZATION_SECRET       = 2264319474UL;
+    static inline constexpr uint32_t ORPHAN_CRIT_PAYLOAD_SERIALIZATION_SECRET       = 1513593274UL;
+    static inline constexpr uint32_t ORPHAN_IMMU_PAYLOAD_SERIALIZATION_SECRET       = 1416929944UL;
+    static inline constexpr uint32_t ORPHAN_POLY_PAYLOAD_SERIALIZATION_SECRET       = 237134996UL;
+    static inline constexpr uint32_t ORPHAN_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET    = 2055475217UL;
+    static inline constexpr uint32_t ORPHAN_MSGRBWD_PAYLOAD_SERIALIZATION_SECRET    = 2673192566UL;
+    static inline constexpr uint32_t ORPHAN_EXTNSRC_PAYLOAD_SERIALIZATION_SECRET    = 1537480300UL;
+    static inline constexpr uint32_t ORPHAN_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET    = 25239095UL;
+    static inline constexpr uint32_t ORPHAN_EXNTDST_PAYLOAD_SERIALIZATION_SECRET    = 3004954735UL;
+    static inline constexpr uint32_t ORPHAN_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET    = 957952478UL;
+
+    static inline constexpr uint32_t DEINIT_LEAF_PAYLOAD_SERIALIZATION_SECRET       = 3383954495UL;
+    static inline constexpr uint32_t DEINIT_BLKR_PAYLOAD_SERIALIZATION_SECRET       = 1994339924UL;
+    static inline constexpr uint32_t DEINIT_MONO_PAYLOAD_SERIALIZATION_SECRET       = 1019424741UL;
+    static inline constexpr uint32_t DEINIT_PAIR_PAYLOAD_SERIALIZATION_SECRET       = 2205608154UL;
+    static inline constexpr uint32_t DEINIT_UACM_PAYLOAD_SERIALIZATION_SECRET       = 2406924483UL;
+    static inline constexpr uint32_t DEINIT_PACM_PAYLOAD_SERIALIZATION_SECRET       = 4265611268UL;
+    static inline constexpr uint32_t DEINIT_CRIT_PAYLOAD_SERIALIZATION_SECRET       = 2561344351UL;
+    static inline constexpr uint32_t DEINIT_IMMU_PAYLOAD_SERIALIZATION_SECRET       = 2933283905UL;
+    static inline constexpr uint32_t DEINIT_POLY_PAYLOAD_SERIALIZATION_SECRET       = 1350879522UL;
+    static inline constexpr uint32_t DEINIT_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET    = 2872102250UL;
+    static inline constexpr uint32_t DEINIT_MSGRBWD_PAYLOAD_SERIALIZATION_SECRET    = 3996583514UL;
+    static inline constexpr uint32_t DEINIT_EXTNSRC_PAYLOAD_SERIALIZATION_SECRET    = 2769127462UL;
+    static inline constexpr uint32_t DEINIT_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET    = 3359415902UL;
+    static inline constexpr uint32_t DEINIT_EXTNDST_PAYLOAD_SERIALIZATION_SECRET    = 2732518174UL;
+    static inline constexpr uint32_t DEINIT_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET    = 440808470UL;
 
     struct VirtualPayLoad{
         payload_kind_t kind;
-        dg::string content; //we are using fat string - relies heavily on the stack buffers - because concurrency is very memory sensitive - especially host concurrency - where we want to minimize the memory operations and relies on CPU flops
+        dg::string content;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const noexcept{
@@ -4137,11 +4188,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             reflector(kind, content);
         }
     };
-
-    //the reason we'd want to have different serialization secret is to make sure that we aren't decoding the payloads supposedly for others, not for security practices but internal checking practices
-    //the numerical values of those secerets aren't to change, served as a part of the semantic of the underlying structure 
-    //we'd want to make this a standalone encoding, queriable via sockets (or pipe) as primary comm or even a .exe file
-    //it's complicated
 
     auto virtualize_payload(const InitLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
@@ -4240,6 +4286,18 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
                               .content  = std::move(serialized_payload.value())};
     }
 
+    auto virtualize_payload(const InitPolyPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitPolyPayLoad>)(payload, INIT_POLY_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_init_poly,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
     auto virtualize_payload(const InitMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitMsgrFwdPayLoad>)(payload, INIT_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET);
@@ -4304,7 +4362,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     auto virtualize_payload(const InitExtnDsxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitExtnDsxPayLoad>)(payload, INIT_EXTNDST_PAYLOAD_SERIALIZATION_SECRET);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, InitExtnDsxPayLoad>)(payload, INIT_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET);
 
         if (!serialized_payload.has_value()){
             return std::unexpected(serialized_payload.error());
@@ -4313,6 +4371,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return VirtualPayLoad{.kind     = payload_kind_init_extndsx,
                               .content  = std::move(serialized_payload.value())};
     }
+
+    //----
 
     auto virtualize_payload(const OrphanLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
@@ -4399,6 +4459,19 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     }
 
+    auto virtualize_payload(const OrphanPolyPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanPolyPayLoad>)(payload, ORPHAN_POLY_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_poly,
+                              .content  = std::move(serialized_payload.value())};
+
+    }
+
     auto virtualize_payload(const OrphanImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanImmuPayLoad>)(payload, ORPHAN_IMMU_PAYLOAD_SERIALIZATION_SECRET);
@@ -4471,7 +4544,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
                               .content  = std::move(serialized_payload.value())};
     }
 
-    auto virtualize_payload(const OrphanExtnDsxPayload& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+    auto virtualize_payload(const OrphanExtnDsxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanExtnDsxPayLoad>)(payload, ORPHAN_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET);
 
@@ -4482,6 +4555,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return VirtualPayLoad{.kind     = payload_kind_orphan_extndsx,
                               .content  = std::move(serialized_payload.value())};
     }
+
+    //----
 
     auto virtualize_payload(const DeinitLeafPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
@@ -4579,9 +4654,21 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
                               .content  = std::move(serialized_payload.value())};
     }
 
+    auto virtualize_payload(const DeinitPolyPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, DeinitPolyPayLoad>)(payload, DEINIT_POLY_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_deinit_poly,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
     auto virtualize_payload(const DeinitMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
-        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, DeinitMsgrFwdPayLoadPayLoad>)(payload, DEINIT_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET);
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, DeinitMsgrFwdPayLoad>)(payload, DEINIT_MSGRFWD_PAYLOAD_SERIALIZATION_SECRET);
 
         if (!serialized_payload.has_value()){
             return std::unexpected(serialized_payload.error());
@@ -4639,7 +4726,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
                               .content  = std::move(serialized_payload.value())};
     }
 
-    auto virtualize_payload(const DeinitExtnDsxPayload& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+    auto virtualize_payload(const DeinitExtnDsxPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, DeinitExtnDsxPayLoad>)(payload, DEINIT_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET);
 
@@ -4680,7 +4767,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             return std::unexpected(dg::network_exception::BAD_FORMAT);
         }
 
-        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<InitLeafPayLoad, dg::string>)(payload.content, INIT_BLKR_PAYLOAD_SERIALIZATION_SECRET);
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<InitBlkrPayLoad, dg::string>)(payload.content, INIT_BLKR_PAYLOAD_SERIALIZATION_SECRET);
     }
 
     auto devirtualize_init_mono_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitMonoPayLoad, exception_t>{
@@ -4770,7 +4857,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             return std::unexpected(dg::network_exception::BAD_FORMAT);
         }
 
-        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<InitExtnSrcPayLoad, dg::string>)(payload.content, INIT_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET);
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<InitExtnSrxPayLoad, dg::string>)(payload.content, INIT_EXTNSRX_PAYLOAD_SERIALIZATION_SECRET);
     }
 
     auto devirtualize_init_extndst_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitExtnDstPayLoad, exception_t>{
@@ -5046,7 +5133,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
         return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<DeinitExtnDsxPayLoad, dg::string>)(payload.content, DEINIT_EXTNDSX_PAYLOAD_SERIALIZATION_SECRET);
     }
-
 
     void load_virtual_payloads(const VirtualPayLoad * payload_arr, exception_t * exception_arr, size_t sz) noexcept{
 
@@ -5987,6 +6073,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
                 }
             }
         };
+
         //
 
         auto deinit_leaf_dispatcher                 = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{

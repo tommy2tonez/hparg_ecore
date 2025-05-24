@@ -799,33 +799,33 @@ namespace dg::network_compact_serializer::archive{
         if constexpr(std::is_integral_v<T>){
             if constexpr(std::is_signed_v<T>){
                 if constexpr(sizeof(T) == 1u){
-                    return 0u;
+                    return 201u;
                 } else if constexpr(sizeof(T) == 2u){
-                    return 1u;
+                    return 202u;
                 } else if constexpr(sizeof(T) == 4u){
-                    return 2u;
+                    return 203u;
                 } else if constexpr(sizeof(T) == 8u){
-                    return 3u;
+                    return 204u;
                 } else if constexpr(sizeof(T) == 16u){
-                    return 4u;
+                    return 205u;
                 } else if constexpr(sizeof(T) == 32u){
-                    return 5u;
+                    return 206u;
                 } else{
                     static_assert(FALSE_VAL<>);
                 }
             } else if constexpr(std::is_unsigned_v<T>){
                 if constexpr(sizeof(T) == 1u){
-                    return 6u;
+                    return 207u;
                 } else if constexpr(sizeof(T) == 2u){
-                    return 7u;
+                    return 208u;
                 } else if constexpr(sizeof(T) == 4u){
-                    return 8u;
+                    return 209u;
                 } else if constexpr(sizeof(T) == 8u){
-                    return 9u;
+                    return 210u;
                 } else if constexpr(sizeof(T) == 16u){
-                    return 10u;
+                    return 211u;
                 } else if constexpr(sizeof(T) == 32u){
-                    return 11u;
+                    return 212u;
                 } else{
                     static_assert(FALSE_VAL<>);
                 }
@@ -835,19 +835,19 @@ namespace dg::network_compact_serializer::archive{
         } else if constexpr(std::is_floating_point_v<T>){
             if constexpr(std::numeric_limits<T>::is_iec559){
                 if constexpr(sizeof(T) == 1u){
-                    return 12u;
+                    return 213u;
                 } else if constexpr(sizeof(T) == 2u){
-                    return 13u; 
+                    return 214u; 
                 } else if constexpr(sizeof(T) == 4u){
-                    return 14u;
+                    return 215u;
                 } else if constexpr(sizeof(T) == 8u){
-                    return 15u;
+                    return 216u;
                 } else if constexpr(sizeof(T) == 16u){
-                    return 16u;
+                    return 217u;
                 } else if constexpr(sizeof(T) == 32u){
-                    return 17u;
+                    return 218u;
                 } else if constexpr(sizeof(T) == 64u){
-                    return 18u;
+                    return 219u;
                 } else{
                     static_assert(FALSE_VAL<>);
                 }
@@ -855,25 +855,25 @@ namespace dg::network_compact_serializer::archive{
                 static_assert(FALSE_VAL<>);
             }
         } else if constexpr(types_space::is_vector_v<T>){
-            return 19u;
+            return 220u;
         } else if constexpr(types_space::is_basic_string_v<T>){
-            return 20u;
+            return 221u;
         } else if constexpr(types_space::is_map_v<T>){
-            return 21u;
+            return 222u;
         } else if constexpr(types_space::is_unordered_map_v<T>){
-            return 22u;
+            return 223u;
         } else if constexpr(types_space::is_set_v<T>){
-            return 23u;
+            return 224u;
         } else if constexpr(types_space::is_unordered_set_v<T>){
-            return 24u;
+            return 225u;
         } else if constexpr(types_space::is_tuple_v<T>){
-            return 25u;
+            return 226u;
         } else if constexpr(types_space::is_unique_ptr_v<T>){
-            return 26u;
+            return 227u;
         } else if constexpr(types_space::is_optional_v<T>){
-            return 27u;
+            return 228u;
         } else if constexpr(types_space::is_reflectible_v<T>){
-            return 28u;
+            return 229u;
         } else{
             static_assert(FALSE_VAL<>);
         }
