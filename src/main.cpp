@@ -137,4 +137,7 @@ int main(){
 
     //it's already incredibly hard to get the engine running with no problems + not thrashing the cores memory orderings + friends
     //I guess it's yall jobs to research within a confined requirements
+
+    //I've been exposed to destructive interferences of brain virtues, forcing a rewrite that is potentially dangerous to my writing ability
+    //we would want to complete the project as soon as possible, probably 3-12 months
 }

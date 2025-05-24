@@ -5100,6 +5100,8 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         constexpr size_t DEINIT_EXTNDST_DISPATCH_DELIVERY_CAP       = size_t{1} << 8;
         constexpr size_t DEINIT_EXTNDSX_DISPATCH_DELIVERY_CAP       = size_t{1} << 8;
 
+        //we dont want to generalize the polymorphic dispatches, it looks reduntdant but we'd want to keep it that way, if there are issues, we can compromise the edit tree -> that specific dispatch only, such is the worst possible scenerio is that specific dispatch being not working
+
         auto init_leaf_dispatcher                   = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
             dg::network_stack_allocation::NoExceptAllocation<InitLeafPayLoad[]> devirt_payload_arr(sz);
             dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -5306,7 +5308,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
         auto init_immu_dispatcher                   = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
             dg::network_stack_allocation::NoExceptAllocation<InitImmuPayLoad[]> devirt_payload_arr(sz):
-            dg::network_stack_allocation::NoExceptAllocation<exception_t> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
             dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
 
             for (size_t i = 0u; i < sz; ++i){
@@ -5324,6 +5326,34 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
 
             dg::network_tile_lifetime::concurrent_safe_batch::load_init_immu_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
+
+        auto init_poly_dispatcher                   = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<InitPolyPayLoad[]> devirt_payload_arr(sz):
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<InitPolyPayLoad, exception_t> devirtualized_payload = devirtualize_init_poly_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_init_poly_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
 
             for (size_t i = 0u; i < dispatch_sz; ++i){
                 if (dg::network_exception::is_failed(exception_arr[i])){
@@ -5418,6 +5448,34 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
         };
 
+        auto init_extnsrx_dispatcher                = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<InitExtnSrxPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<InitExtnSrxPayLoad, exception_t> devirtualized_payload = devirtualize_init_extnsrx_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_init_extnsrx_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
+
         auto init_extndst_dispatcher                = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
             dg::network_stack_allocation::NoExceptAllocation<InitExtnDstPayLoad[]> devirt_payload_arr(sz);
             dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -5440,6 +5498,36 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
 
             dg::network_tile_lifetime::concurrent_safe_batch::load_init_extndst_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
+
+        auto init_extndsx_dispatcher                = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<InitExtnDsxPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u;
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<InitExtnDsxPayLoad, exception_t> devirtualized_payload = devirtualize_init_extndsx_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_init_extndsx_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
 
             for (size_t i = 0u; i < dispatch_sz; ++i){
                 if (dg::network_exception::is_failed(exception_arr[i])){
@@ -5690,6 +5778,36 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
         };
 
+        auto orphan_poly_dispatcher                 = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<OrphanPolyPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u; 
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<OrphanPolyPayLoad, exception_t> devirtualized_payload = devirtualize_orphan_poly_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_orphan_poly_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i]))[
+                    *exception_ptr_arr[i] = exception_arr[i];
+                ]
+            }
+        };
+
         auto orphan_msgrfwd_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
             dg::network_stack_allocation::NoExceptAllocation<OrphanMsgrFwdPayLoad[]> devirt_payload_arr(sz);
             dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -5759,7 +5877,7 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
             for (size_t i = 0u; i < sz; ++i){
                 auto [payload_ptr, exception_ptr] = data_arr[i];
-                std::expected<OrphanExtnSrcPayLoad, exception_t> devirtualized_payload = devirtualize_orphan_msgrbwd_payload(*payload_ptr);
+                std::expected<OrphanExtnSrcPayLoad, exception_t> devirtualized_payload = devirtualize_orphan_extnsrc_payload(*payload_ptr);
 
                 if (!devirtualized_payload.has_value()){
                     *exception_ptr = devirtualized_payload.error();
@@ -5772,6 +5890,36 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
 
             dg::network_tile_lifetime::concurrent_safe_batch::load_orphan_extnsrc_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
+
+        auto orphan_extnsrx_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<OrphanExtnSrxPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u;
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<OrphanExtnSrxPayLoad, exception_t> devirtualized_payload = devirtualize_orphan_extnsrx_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u; 
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_orphan_extnsrx_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
 
             for (size_t i = 0u; i < dispatch_sz; ++i){
                 if (dg::network_exception::is_failed(exception_arr[i])){
@@ -5810,6 +5958,35 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
         };
 
+        auto orphan_extndsx_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<OrphanExtnDsxPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u;
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<OrphanExtnDsxPayLoad, exception_t> devirtualized_payload = devirtualize_orphan_extndsx_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_orphan_extndsx_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
         //
 
         auto deinit_leaf_dispatcher                 = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
@@ -6052,6 +6229,36 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
         };
 
+        auto deinit_immu_dispatcher                 = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<DeinitPolyPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u;
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<DeinitPolyPayLoad, exception_t> devirtualized_payload = devirtualize_deinit_poly_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_deinit_poly_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
+
         auto deinit_msgrfwd_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
             dg::network_stack_allocation::NoExceptAllocation<DeinitMsgrFwdPayLoad[]> devirt_payload_arr(sz):
             dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -6142,6 +6349,36 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
             }
         };
 
+        auto deinit_extnsrx_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<DeinitExtnSrxPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u;
+
+            for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<DeinitExtnSrxPayLoad, exception_t> devirtualized_payload = devirtualize_deinit_extnsrx_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_deinit_extnsrx_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i]))[
+                    *exception_ptr_arr[i] = exception_arr[i];
+                ]
+            }
+        };
+
         auto deinit_extndst_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
             dg::network_stack_allocation::NoExceptAllocation<DeinitExtnDstPayLoad[]> devirt_payload_arr(sz);
             dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -6165,7 +6402,37 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
             dg::network_tile_lifetime::concurrent_safe_batch::load_deinit_extndst_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
 
+            for (size_t i = 0u; i < dispatch_sz; ++i){
+                if (dg::network_exception::is_failed(exception_arr[i])){
+                    *exception_ptr_arr[i] = exception_arr[i];
+                }
+            }
+        };
+
+        auto deinit_extndsx_dispatcher              = [](std::pair<const VirtualPayLoad *, exception_t *> * data_arr, size_t sz) noexcept{
+            dg::network_stack_allocation::NoExceptAllocation<DeinitExtnDsxPayLoad[]> devirt_payload_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+            dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+
+            size_t dispatch_sz = 0u;
+
             for (size_t i = 0u; i < sz; ++i){
+                auto [payload_ptr, exception_ptr] = data_arr[i];
+                std::expected<DeinitExtnDsxPayLoad, exception_t> devirtualized_payload = devirtualize_deinit_extndsx_payload(*payload_ptr);
+
+                if (!devirtualized_payload.has_value()){
+                    *exception_ptr = devirtualized_payload.error();
+                    continue;
+                }
+
+                devirt_payload_arr[dispatch_sz] = std::move(devirtualized_payload.value());
+                exception_ptr_arr[dispatch_sz]  = exception_ptr;
+                dispatch_sz                     += 1u;
+            }
+
+            dg::network_tile_lifetime::concurrent_safe_batch::load_deinit_extndsx_payload(devirt_payload_arr.get(), exception_arr.get(), dispatch_sz);
+
+            for (size_t i = 0u; i < dispatch_sz; ++i){
                 if (dg::network_exception::is_failed(exception_arr[i])){
                     *exception_ptr_arr[i] = exception_arr[i];
                 }
