@@ -83,6 +83,18 @@ struct Bar{
 
 int main(){
 
+    //we have spent years working on the concepts
+    //it is about the unit of the tile, flattened tree -> tile
+    //multiple trees -> tile
+    //training strategies:
+    //directional backprop
+    //single variable directional backprop
+    //search + linearity hint (every tile1xtile2 in binary tree is self sufficient to approx)
+    //its complicated
+    //the most complicated of them all is synthetic data
+    //we are training our product on inferior data (we need to generate NP search problems for AI to train on)
+    //self-generated synthetic daat, etc.
+    
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},
             {{1, 2}, {2, 3}, {3, 4}},
