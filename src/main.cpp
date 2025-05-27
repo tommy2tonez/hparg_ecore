@@ -93,8 +93,21 @@ int main(){
     //its complicated
     //the most complicated of them all is synthetic data
     //we are training our product on inferior data (we need to generate NP search problems for AI to train on)
-    //self-generated synthetic daat, etc.
-    
+    //self-generated synthetic data, etc.
+    //let's see...
+    //every approximation problem could be done via taylor series search + dicing
+    //the problem is that it is not sufficient to approx complicated calibrated semantic space like in described in Wanted
+    //the introducing problem is not the calibration + the approximation, but the storage to allow such to happen
+    //this means we have to have a pattern database to commit the "special semantics"
+    //the problem with being "special" is that it is not always right, thus every "special" commit needs to have a scheduled "reversed operation"
+    //this reversed operation is only for the "special" ones, not the Taylor Series coefficients
+    //we've been trying to increase the parallel mining operations to mine those guys, the "special" semantics to increase logit density
+    //I'm telling you that this is very difficult, the reaching the escape velocity of logit density
+    //we need to have sufficient inputs to accurate all the projections and the appropricate frequency to scan the CPU cache, not so late like MLTR
+    //years and we have not found a better answer than to do dicing + randomizing
+    //we don't have control over that, we are never as smart as randomization !!!
+    //we'll try to deploy this on 10 ** 9 cuda devices to mine this in parallel, we are going to pick his brain to work on this particular task
+
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},
             {{1, 2}, {2, 3}, {3, 4}},
