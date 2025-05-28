@@ -368,7 +368,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                if (uma_proxy_lock::reference_try(host_ptr, device_id)){
+                if (uma_proxy_lock::reference_try_strong(host_ptr, device_id)){
                     return translation_table::translate(device_id, host_ptr);
                 }
 
@@ -381,7 +381,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                if (uma_proxy_lock::reference_try(host_ptr, device_id)){
+                if (uma_proxy_lock::reference_try_strong(host_ptr, device_id)){
                     return translation_table::translate(device_id, host_ptr);
                 }
 

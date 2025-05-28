@@ -1566,7 +1566,32 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     auto deinit_extnsrx(uma_ptr_t ptr,
                         operatable_id_t expected_id) noexcept -> exception_t{
+        
+        auto ptr_access = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(ptr);
 
+        if (!ptr_access.has_value()){
+            return ptr_access.error();
+        }
+
+        init_status_t init_status   = dg::network_tile_member_getsetter::get_extnsrx_init_status_nothrow(ptr);
+
+        if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED){
+            return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
+        }
+
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_extnsrx_memevent_operatable_id_nothrow(ptr);
+
+        if (ops_id != expected_id){
+            return dg::network_exception::BAD_ACCESS;
+        }
+
+        dg::network_tile_member_getsetter::set_extnsrx_forward_operatable_id_nothrow(ptr, dg::network_tile_member_getsetter::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrx_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrx_signal_smph_addr_nothrow(ptr, std::nullopt);        
+        dg::network_tile_member_getsetter::controller_extnsrx_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::set_extnsrx_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
+
+        return dg::network_exception::SUCCESS;
     }
 
     auto deinit_extndst(uma_ptr_t ptr, 
@@ -1612,7 +1637,38 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     auto deinit_extndsx(uma_ptr_t ptr,
                         operatable_id_t memevent_ops_id) noexcept -> exception_t{
+        
+        auto ptr_access = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(ptr);
 
+        if (!ptr_access.has_value()){
+            return ptr_access.error();
+        }
+
+        init_status_t init_status   = dg::network_tile_member_getsetter::get_extndsx_init_status_nothrow(ptr);
+
+        if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED){
+            return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
+        }
+
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_extndsx_memevent_operatable_id_nothrow(ptr);
+
+        if (ops_id != expected_id){
+            return dg::network_exception::BAD_ACCESS;
+        }
+
+        dg::network_tile_member_getsetter::set_extndsx_counterpart_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndsx_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndsx_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndsx_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_extndsx_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_extndsx_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_extndst_defaultize_grad_value(ptr);
+
+        dg::network_tile_member_getsetter::set_extndsx_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_extndsx_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
+
+        return dg::network_exception::SUCCESS;
     }
 }
 

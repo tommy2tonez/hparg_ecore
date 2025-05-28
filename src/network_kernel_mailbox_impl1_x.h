@@ -1322,6 +1322,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 constexpr uint8_t ACTION_NO         = 0u;
                 constexpr uint8_t ACTION_ACQUIRE    = 1u;
+                constexpr uint8_t ACTION_THRU       = 2u;
 
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
@@ -1352,6 +1353,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     if (new_current >= expected){
                         this->unsafe_notify_subscribers();
+                        return ACTION_THRU;
                     }
 
                     return ACTION_ACQUIRE;
@@ -1371,6 +1373,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             dg::network_log_stackdump::error(dg::network_exception::verbose(smp_err.error()));
                         }
 
+                        break;
+                    }
+                    case ACTION_THRU:
+                    {
                         break;
                     }
                     default:

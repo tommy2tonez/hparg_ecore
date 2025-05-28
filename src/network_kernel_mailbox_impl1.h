@@ -1329,6 +1329,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 constexpr uint8_t ACTION_NO         = 0u;
                 constexpr uint8_t ACTION_ACQUIRE    = 1u;
+                constexpr uint8_t ACTION_THRU       = 2u;
 
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
@@ -1363,6 +1364,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         }
 
                         this->mtx_queue.clear();
+                        return ACTION_THRU;
                     }
 
                     return ACTION_ACQUIRE;
@@ -1377,6 +1379,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     {
                         dg::network_exception_handler::err_log(spinning_mtx->try_acquire_for(waiting_time));
                         std::atomic_signal_fence(std::memory_order_seq_cst);
+                        break;
+                    }
+                    case ACTION_THRU:
+                    {
                         break;
                     }
                     default:

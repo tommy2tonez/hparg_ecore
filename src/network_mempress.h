@@ -119,10 +119,10 @@ namespace dg::network_mempress{
                 }
 
                 this->region_vec[bucket_idx].event_container.push_back(std::move(event_vec));    
-                this->update_concurrent_is_empty(bucket_idx);
+                this->unsafe_update_concurrent_is_empty(bucket_idx);
 
                 return true;
-            } 
+            }
 
             void push(uma_ptr_t ptr, std::move_iterator<event_t *> event_arr, size_t event_sz, exception_t * exception_arr) noexcept{
 
@@ -186,7 +186,7 @@ namespace dg::network_mempress{
 
                 {
                     stdx::unlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
-                    this->do_collect(bucket_idx, tmp_vec, dst_cap);    
+                    this->unsafe_do_collect(bucket_idx, tmp_vec, dst_cap);    
                 }
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -194,6 +194,9 @@ namespace dg::network_mempress{
 
                 return true;
             }
+
+            //I have a hinge that this could be part of the try_collect, as if is_empty == true + dst_sz == 0 
+            //having this as is_collectable is ... fine
 
             auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
 
@@ -224,7 +227,7 @@ namespace dg::network_mempress{
 
                 {
                     stdx::xlock_guard<lock_t> lck_grd(*this->region_vec[bucket_idx].lck);
-                    this->do_collect(bucket_idx, tmp_vec, dst_cap);    
+                    this->unsafe_do_collect(bucket_idx, tmp_vec, dst_cap);    
                 }
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -243,7 +246,7 @@ namespace dg::network_mempress{
 
         private:
 
-            void update_concurrent_is_empty(size_t bucket_idx) noexcept{
+            void unsafe_update_concurrent_is_empty(size_t bucket_idx) noexcept{
 
                 stdx::seq_cst_guard tx_grd;
 
@@ -251,7 +254,7 @@ namespace dg::network_mempress{
                 bucket.is_empty_concurrent_var.value.exchange(bucket.event_container.empty(), std::memory_order_relaxed); //is this expensive ??? people are trying to collect, we are introducing serialization @ the variable
             }
 
-            void do_collect(size_t bucket_idx, dg::sensitive_vector<dg::vector<event_t>>& output_vec, size_t event_cap) noexcept{
+            void unsafe_do_collect(size_t bucket_idx, dg::sensitive_vector<dg::vector<event_t>>& output_vec, size_t event_cap) noexcept{
 
                 size_t event_sz = 0u; 
 
@@ -269,7 +272,7 @@ namespace dg::network_mempress{
                     event_sz += output_vec.back().size();
                 }
 
-                this->update_concurrent_is_empty(bucket_idx);
+                this->unsafe_update_concurrent_is_empty(bucket_idx);
             }
 
             auto write_contiguous(event_t * dst, dg::sensitive_vector<dg::vector<event_t>>&& src_vec) noexcept -> event_t *{
