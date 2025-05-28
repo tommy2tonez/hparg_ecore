@@ -312,6 +312,32 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                 return true;
             }
 
+            static auto steal_wait(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept -> bool{
+
+                uma_ptr_t host_region = memregion(host_ptr);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                device_id_t potential_stealee_id = uma_proxy_lock::acquire_wait(host_region);  
+
+                //mem tx payload begin
+                std::atomic_thread_fence(std::memory_order_acquire);
+                device_id_t stealee_id = potential_stealee_id;
+
+                if (stealee_id != stealer_id){
+                    vma_ptr_t dst   = translation_table::translate(stealer_id, host_region);
+                    vma_ptr_t src   = translation_table::translate(stealee_id, host_region);
+                    size_t cpy_sz   = MEMREGION_SZ;
+                    memcopy_device::memcpy(dst, src, cpy_sz);
+                }
+
+                std::atomic_thread_fence(std::memory_order_release);
+                //mem tx payload end
+
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{}); //make sure to release this post the payload, by calling the signal_fence_seq_cst
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+            }
+
         public:
 
             static_assert(stdx::is_pow2(MEMREGION_SZ));
@@ -355,17 +381,13 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                vma_ptr_t rs    = {};
-                auto job        = [&]() noexcept{
-                    rs = map_try(device_id, host_ptr);
-                    return rs != dg::ptr_limits<vma_ptr_t>::null_value();
-                };
-                stdx::eventloop_spin_expbackoff(job); //we'll be back to add the wait features, I have yet to prove that this could be done cleanly
-                                                      //can we generalize that the notify at every possible point would hinder this from freed lock + forever wait() ?
-                                                      //we'll write the proof later + implement a readable version
-                                                      //the problem with these implementations is that we dont want to introduce complexities, because it could be solved by using other measurements, like memregion locks or whatever
-                                                      //we can't really write a software if we keep introducing complexities, it's gonna blow up (the logic) at some point
-                return rs;
+                if (uma_proxy_lock::reference_try(host_ptr, device_id)){
+                    return translation_table::translate(device_id, host_ptr);
+                }
+
+                steal_wait(device_id, host_ptr);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                return translation_table::translate(device_id, host_ptr);
             }
 
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{

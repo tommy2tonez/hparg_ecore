@@ -15,6 +15,7 @@
 #include "assert.h"
 #include "sort_variants.h"
 #include "network_compact_serializer.h"
+#include "network_memlock_proxyspin.h"
 
 template <class Task>
 auto timeit(Task task) -> size_t{
@@ -80,6 +81,11 @@ struct Bar{
         return std::tie(x, y, xy) != std::tie(other.x, other.y, other.xy);  
     }
 };
+
+//this is hard!!!
+//why does this work?
+//alright, remember the clue, the very last guy notifying must wake up at least one dude waiting, this is the most important point
+//we dont care if wrong dudes get thru or right dudes get thru or whatever
 
 int main(){
 

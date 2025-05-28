@@ -12,13 +12,6 @@
 #include "stdx.h"
 #include "network_pointer.h"
 
-//alright, we'll try to get in the coding mode to write all of these within 1 week
-
-//bijective mapping function f(x) -> y
-//semantic space
-//logit density mining
-//logit mining patterns
-
 namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     using uma_ptr_t                 = dg::network_pointer::uma_ptr_t; 
@@ -30,32 +23,6 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
 
     static inline constexpr UACM_ACM_SZ = dg::network_tile_metadata::UACM_ACM_SZ;
     static inline constexpr PACM_ACM_SZ = dg::network_tile_metadata::PACM_ACM_SZ;
-
-    //we need three operatable ids to fence off the other users, we'll get the exclusivity of accesses via these three tickets
-    //for reusages of leaf nodes, we'll need to orphan the upper nodes to vodify the signals
-    //before we init_... again
-    //we have settled for the design of optional<uma_ptr_t> as an accumulated signal tile, which is frequencized on the mempress, the otherwises are delivered directly to the dispatch_warehose
-
-    //I'm tired of having to explain to my Mom about that differential is probably not the way, but TWO SUM problem is the classical physical problem
-    //there is no way to make another variable out of thin air, without intercoursing two existing variables
-    //if there are problems, the problem is the tile being not FAT enough
-    //now think about the differential problem is probably not the way again
-    //this is an incorrect statement
-    //this is because our logit density miner + Taylor Series patterns database aren't rich enough
-
-    //insanely complicated, I am now 5-senses blind
-    //the only compass is my forward pair + forward poly
-    //I think this should suffice for most of the usecases 
-    //in terms of performance + latency, a signal accum tile would delay + reduce the cmpexch instructions @ the memregion_press
-    //                                   without signal accum tile would immediately transferred -> the dispatch warehouse smp producer consumer (which has nanoseconds + microseconds latency)
-
-    //forward wise, we'd want to init everything with observer_arr, a 2-way shared_ptr to forward without pingpongs involved
-    //yet this needs an immediate clone layer on top of the leaf layer for every training iteration
-
-    //forward_ops_id + backward_ops_id + memevent_ops_id should be sufficent to fence out the other signals
-    //special case is leaf reuses, which we'd want to orphan the reusing tiles to make sure that we could fence out other signals without changing the forward_id + backward_id
-    //this is the sufficient instructions
-    //we'd want to implement a set of tiles to be a search instrument (we'd figure out how to do this later)
 
     auto init_leaf(uma_ptr_t ptr,
                    operatable_id_t forward_ops_id,
@@ -90,8 +57,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_leaf_backward_operatable_id_nothrow(ptr, backward_ops_id);
         dg::network_tile_member_getsetter::set_leaf_memevent_operatable_id_nothrow(ptr, memevent_ops_id);
         dg::network_tile_member_getsetter::set_leaf_logit_nothrow(ptr, logit_value, logit_value_sz);
-        dg::network_tile_member_getsetter::set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
         dg::network_tile_member_getsetter::set_leaf_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_INITIALIZED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -191,8 +158,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_mono_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
         dg::network_tile_member_getsetter::set_mono_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_mono_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
-        dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_mono_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -254,8 +221,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_pair_dispatch_major_nothrow(ptr, dispatch_major);
         dg::network_tile_member_getsetter::set_pair_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -310,8 +277,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_uacm_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_uacm_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_uacm_pong_count_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_uacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -367,8 +334,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_pacm_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_pacm_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_pacm_pong_count_nothrow(ptr, 0u);
-        dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_pacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -434,8 +401,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_crit_learning_rate_nothrow(ptr, learning_rate);
         dg::network_tile_member_getsetter::set_crit_clogit_nothrow(ptr, clogit_value, clogit_value_sz);
         dg::network_tile_member_getsetter::set_crit_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
-        dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_crit_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -531,8 +498,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_msgrfwd_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_msgrfwd_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_msgrfwd_dst_info_nothrow(ptr, dst_info);
-        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_msgrfwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -593,31 +560,11 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_msgrbwd_observer_array_nothrow(ptr, observer_arr, observer_arr_sz);
         dg::network_tile_member_getsetter::set_msgrbwd_dst_info_nothrow(ptr, dst_info);
         dg::network_tile_member_getsetter::set_msgrbwd_is_delivered_nothrow(ptr, false);
-        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_msgrbwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
-
-    //the most complicated logic is probably extnsrc extnsrx extndst extndsx
-    //what does that even DO???
-
-    //extnsrc and extndst are intercomm-compatible, such is it has the polymorphic properties of every other normal tiles
-
-    //extnsrx is the shadow of extnsrc on the dst machine (where the extndst resides)
-    //extndsx is the shadow of extndst on the src machine (where the extnsrc resides)
-
-    //we would want to differentiate the extnsrc, extndst because it mimics the transportation compression extnsrc compresses extdst decompresses
-    //we'd have our own dispatch protocol for extnsrc and extndst because it is very important, data transfer efficiency wise
-
-    //it is forward ping compatible, it is backward ping compatible, forward compatible + backward compatible
-    //assume that we have a working tree
-    //we can prove that an insert of extnsrc and extndst at a random point is guaranteed to be correct (such tree is not circular or intentionally corrupted)
-
-    //now we face the problem of weakly connected components (we need to find region splits such that the efficiency of the tree compute is maximized, alright non-disclosure agreement, we worked on this problem, I failed!!!)
-
-    //we have our own virtues of coding because it's incredibly hard to code otherwise (The Great Escape by Boys Like Girls)
-    //we dont really know what to do without the expected implementation, God saved C++
 
     auto init_extnsrc(uma_ptr_t ptr,
                       uma_ptr_t src,
@@ -680,8 +627,8 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         dg::network_tile_member_getsetter::set_extnsrc_forward_dispatch_control_nothrow(ptr, forward_dispatch_control);
         dg::network_tile_member_getsetter::set_extnsrc_backward_dispatch_control_nothrow(ptr, backward_dispatch_control);
         dg::network_tile_member_getsetter::set_extnsrc_observer_array_nothrow(observer_arr, observer_arr_sz);
-        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
         dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_UNINITIALIZED);
+        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_ADOPTED);
 
         return dg::network_exception::SUCCESS;
     }
@@ -1193,7 +1140,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     //---
 
     auto deinit_leaf(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_leaf_ptr_access(ptr);
 
@@ -1207,25 +1154,25 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_leaf_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_leaf_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
-        dg::network_tile_member_getsetter::set_leaf_logit_nothrow(ptr, dg::network_tile_metadata::TILE_LOGIT_VALUE_DEFAULT);
-        dg::network_tile_member_getsetter::set_leaf_grad_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_VALUE_DEFAULT);
-        dg::network_tile_member_getsetter::set_leaf_observer_array_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
-        dg::network_tile_member_getsetter::set_leaf_observer_array_size_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_SIZE_DEFAULT);
-        dg::network_tile_member_getsetter::set_leaf_group_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_leaf_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_leaf_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_leaf_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_SET_DEFAULT);
+        dg::network_tile_member_getsetter::controller_leaf_defaulitze_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_leaf_defaultize_grad_value(ptr);
         dg::network_tile_member_getsetter::set_leaf_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
-        
+        dg::network_tile_member_getsetter::set_leaf_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
+
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_blkr(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_blkr_ptr_access(ptr);
 
@@ -1234,30 +1181,31 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         }
 
         init_status_t init_status   = dg::network_tile_member_getsetter::get_blkr_init_status_nothrow(ptr);
-        
+
         if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED)[
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         ]
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_blkr_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_blkr_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_blkr_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_blkr_logit_nothrow();
-        dg::network_tile_member_getsetter::set_blkr_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_blkr_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_blkr_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_blkr_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_blkr_grad_status_nothrow();
+        dg::network_tile_member_getsetter::set_blkr_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_blkr_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_blkr_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_blkr_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_blkr_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::controller_blkr_defaulitze_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_blkr_defaultize_observer_value(ptr);
+        dg::network_tile_member_getsetter::set_blkr_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_mono(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_mono_ptr_access(ptr);
 
@@ -1271,28 +1219,32 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_mono_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_mono_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
-        dg::network_tile_member_getsetter::set_mono_logit_nothrow(ptr, dg::network_tile_metadata::TILE_LOGIT_VALUE_DEFAULT);
-        dg::network_tile_member_getsetter::set_mono_grad_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_VALUE_DEFAULT);
-        dg::network_tile_member_getsetter::set_mono_observer_array_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
-        dg::network_tile_member_getsetter::set_mono_observer_array_size_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_SIZE_DEFAULT);
-        dg::network_tile_member_getsetter::set_mono_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
-        dg::network_tile_member_getsetter::set_mono_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_mono_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
-        dg::network_tile_member_getsetter::set_mono_group_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_mono_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_mono_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_mono_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_mono_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_mono_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_mono_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_mono_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_mono_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_mono_defaultize_observer_value(ptr);
+
         dg::network_tile_member_getsetter::set_mono_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_mono_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_pair(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_pair_ptr_access(ptr);
 
@@ -1306,29 +1258,35 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_pair_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_pair_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
-        dg::network_tile_member_getsetter::set_pair_logit_nothrow(ptr, dg::network_tile_metadata::TILE_LOGIT_VALUE_DEFAULT);
-        dg::network_tile_member_getsetter::set_pair_grad_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_VALUE_DEFAULT);
-        dg::network_tile_member_getsetter::set_pair_observer_array_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_DEFAULT);
-        dg::network_tile_member_getsetter::set_pair_observer_array_size_nothrow(ptr, dg::network_tile_metadata::TILE_OBSERVER_ARRAY_SIZE_DEFAULT);
-        dg::network_tile_member_getsetter::set_pair_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
-        dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_pair_left_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
         dg::network_tile_member_getsetter::set_pair_right_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
-        dg::network_tile_member_getsetter::set_pair_group_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_pair_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_pair_dispatch_major_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_MAJOR_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_pair_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_pair_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_pair_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
         dg::network_tile_member_getsetter::set_pair_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_pair_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
     
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_uacm(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_uacm_ptr_access(ptr);
 
@@ -1337,33 +1295,38 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         }
 
         init_status_t init_status   = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(ptr);
-        
+
         if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED){
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_uacm_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_uacm_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_uacm_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_logit_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_grad_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_pong_count_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_uacm_grad_status_nothrow();
+        dg::network_tile_member_getsetter::controller_uacm_defaultize_descendant_value(ptr);
+        dg::network_tile_member_getsetter::set_uacm_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_uacm_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_uacm_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_uacm_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_uacm_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_uacm_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        
+        dg::network_tile_member_getsetter::controller_uacm_defautlize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_uacm_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_uacm_defaultize_observer_value(ptr);
+        
+        dg::network_tile_member_getsetter::set_uacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_uacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_uacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_pacm(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{ 
+                     operatable_id_t expected_id) noexcept -> exception_t{ 
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_pacm_ptr_access(ptr);
 
@@ -1377,65 +1340,75 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_pacm_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_pacm_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_pacm_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_logit_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_grad_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_pong_count_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_left_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_right_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_pacm_grad_status_nothrow();
+        dg::network_tile_member_getsetter::controller_pacm_defautlize_left_descendant(ptr);
+        dg::network_tile_member_getsetter::controller_pacm_defautlize_right_descendant(ptr);
+        dg::network_tile_member_getsetter::set_pacm_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pacm_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pacm_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_pacm_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_pacm_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_pacm_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_pacm_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_pacm_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_pacm_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_pacm_pong_count_nothrow(ptr, dg::network_tile_metadata::TILE_PONG_COUNT_DEFAULT);
+        dg::network_tile_member_getsetter::set_pacm_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_pacm_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_crit(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_crit_ptr_access(ptr);
 
         if (!ptr_access.has_value()){
             return ptr_access.error();
         }
-        
+
         init_status_t init_status   = dg::network_tile_member_getsetter::get_crit_init_status_nothrow(ptr);
-        
+
         if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED){
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_crit_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_crit_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_crit_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_crit_logit_nothrow();
-        dg::network_tile_member_getsetter::set_crit_grad_nothrow();
-        dg::network_tile_member_getsetter::set_crit_clogit_nothrow();
-        dg::network_tile_member_getsetter::set_crit_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_crit_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_crit_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_crit_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_crit_pong_count_nothrow();
-        dg::network_tile_member_getsetter::set_crit_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_crit_kind_nothrow();
-        dg::network_tile_member_getsetter::set_crit_grad_status_nothrow();
+        dg::network_tile_member_getsetter::set_crit_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_crit_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_crit_learning_rate_nothrow(ptr, dg::network_tile_metadata::TILE_LEARNING_RATE_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_crit_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_crit_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_crit_defaultize_clogit_value(ptr);
+        dg::network_tile_member_getsetter::controller_crit_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_crit_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_crit_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_immu(uma_ptr_t ptr, 
-                     operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                     operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_immu_ptr_access(ptr);
 
@@ -1449,17 +1422,16 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_immu_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_immu_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_immu_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_immu_logit_nothrow();
-        dg::network_tile_member_getsetter::set_immu_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_immu_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_immu_group_operatable_id_nothrow();
+        dg::network_tile_member_getsetter::set_immu_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_immu_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::controller_immu_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::set_immu_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
@@ -1470,7 +1442,7 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
     }
 
     auto deinit_msgrfwd(uma_ptr_t ptr, 
-                        operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                        operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(ptr);
 
@@ -1479,34 +1451,38 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         }
 
         init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrfwd_init_status_nothrow(ptr);
-        
+
         if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED){
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_msgrfwd_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_msgrfwd_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_logit_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_grad_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_pong_count_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_dst_info_nothrow();
-        dg::network_tile_member_getsetter::set_msgrfwd_grad_status_nothrow();
+        dg::network_tile_member_getsetter::set_msgrfwd_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_msgrfwd_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_msgrfwd_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_msgrfwd_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_msgrfwd_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_msgrfwd_dst_info_nothrow(ptr, dg::network_tile_metadata::TILE_CLIENT_DELIVERY_INFO_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrfwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_msgrfwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_msgrbwd(uma_ptr_t ptr, 
-                        operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                        operatable_id_t expected_id) noexcept -> exception_t{
         
         auto ptr_access = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(ptr);
 
@@ -1515,35 +1491,39 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
         }
 
         init_status_t init_status   = dg::network_tile_member_getsetter::get_msgrbwd_init_status_nothrow(ptr);
-        
+
         if (init_status == TILE_INIT_STATUS_EMPTY || init_status == TILE_INIT_STATUS_ORPHANED){
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_msgrbwd_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_msgrbwd_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_logit_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_grad_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_pong_count_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_dst_info_nothrow();
-        dg::network_tile_member_getsetter::set_msgrbwd_timein_nothrow(); //
-        dg::network_tile_member_getsetter::set_msgrbwd_grad_status_nothrow();
+        dg::network_tile_member_getsetter::set_msgrbwd_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_msgrbwd_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_msgrbwd_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_msgrbwd_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_msgrbwd_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_msgrbwd_dst_info_nothrow(ptr, dg::network_tile_metadata::TILE_CLIENT_DELIVERY_INFO_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_is_delivered_nothrow(ptr, dg::network_tile_metadata::TILE_DELIVERABILITY_DEFAULT);
+        dg::network_tile_member_getsetter::set_msgrbwd_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_msgrbwd_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_extnsrc(uma_ptr_t ptr, 
-                        operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                        operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(ptr);
 
@@ -1557,34 +1537,40 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_extnsrc_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_extnsrc_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_logit_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_grad_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_pong_count_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_descendant_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_counterpart_nothrow();
-        dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow();
+        dg::network_tile_member_getsetter::set_extnsrc_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_counterpart_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_counterpart_shadow_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        //
+        dg::network_tile_member_getsetter::set_extnsrc_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_extnsrc_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_extnsrc_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_extnsrc_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_extnsrc_defaultize_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_extnsrc_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_extnsrc_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
 
     auto deinit_extnsrx(uma_ptr_t ptr,
-                        operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                        operatable_id_t expected_id) noexcept -> exception_t{
 
     }
 
     auto deinit_extndst(uma_ptr_t ptr, 
-                        operatable_id_t memevent_ops_id) noexcept -> exception_t{
+                        operatable_id_t expected_id) noexcept -> exception_t{
 
         auto ptr_access = dg::network_tile_member_access::safecthrow_extndst_ptr_access(ptr);
 
@@ -1598,18 +1584,28 @@ namespace dg::network_tile_lifetime::concurrent_unsafe{
             return dg::network_exception::DEINIT_TILE_EMPTY_TILE;
         }
 
-        group_operatable_id_t ops_id = dg::network_tile_member_getsetter::get_extndst_group_operatable_id_nothrow(ptr);
+        operatable_id_t ops_id = dg::network_tile_member_getsetter::get_extndst_memevent_operatable_id_nothrow(ptr);
 
-        if (ops_id != group_operatable_id){
+        if (ops_id != expected_id){
             return dg::network_exception::BAD_ACCESS;
         }
 
-        dg::network_tile_member_getsetter::set_extndst_init_status_nothrow();
-        dg::network_tile_member_getsetter::set_extndst_observer_array_nothrow();
-        dg::network_tile_member_getsetter::set_extndst_observer_array_size_nothrow();
-        dg::network_tile_member_getsetter::set_extndst_group_operatable_id_nothrow();
-        dg::network_tile_member_getsetter::set_extndst_dispatch_control_nothrow();
-        dg::network_tile_member_getsetter::set_extndst_counterpart_nothrow();
+        dg::network_tile_member_getsetter::set_extndst_descendant_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_counterpart_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_counterpart_shadow_nothrow(ptr, dg::network_tile_metadata::TILE_ADDRESS_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_forward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_backward_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_memevent_operatable_id_nothrow(ptr, dg::network_tile_metadata::TILE_OPERATABLE_ID_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_signal_smph_addr_nothrow(ptr, std::nullopt);
+        dg::network_tile_member_getsetter::set_extndst_forward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+        dg::network_tile_member_getsetter::set_extndst_backward_dispatch_control_nothrow(ptr, dg::network_tile_metadata::TILE_DISPATCH_CONTROL_DEFAULT);
+
+        dg::network_tile_member_getsetter::controller_extndst_defaultize_logit_value(ptr);
+        dg::network_tile_member_getsetter::controller_extndst_defaulitze_grad_value(ptr);
+        dg::network_tile_member_getsetter::controller_extndst_defaultize_observer_value(ptr);
+
+        dg::network_tile_member_getsetter::set_extndst_grad_status_nothrow(ptr, dg::network_tile_metadata::TILE_GRAD_STATUS_EMPTY);
+        dg::network_tile_member_getsetter::set_extndst_init_status_nothrow(ptr, dg::network_tile_metadata::TILE_INIT_STATUS_EMPTY);
 
         return dg::network_exception::SUCCESS;
     }
