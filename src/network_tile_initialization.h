@@ -4702,8 +4702,14 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
     //these numbers are part of the structure definition, as if it is invisible to users yet crucial for serialization + deserialization
     //we'll provide the serialization format to external users via the public APIs, which they'd want to call a C file to run the serialization and get the payloads
     //parsing a JSON string is very hard to get correctly + very slow, we'll stick with the approach for now
+    //client complained, don't worry, we'll write a C script + external interface to dump the configuration, we'll keep the dgstd_serialization as legacy
+    //we'll try to keep the schedule, push this to the mainframe, we'll try, I'm not saying that this is easy
+    //i'm afraid that we'd be in a lazy phase of human kind after we have reached a certain logit density
+    //that would void the very meaning of human existence as a superior being
+    //I guess we are no longer having the love of God for being on top of the food chain
 
     static inline constexpr uint32_t POLY_PAYLOAD_SERIALIZATION_SECRET              = 1015571905UL;
+
     static inline constexpr uint32_t INIT_LEAF_PAYLOAD_SERIALIZATION_SECRET         = 775110819UL;
     static inline constexpr uint32_t INIT_BLKR_PAYLOAD_SERIALIZATION_SECRET         = 1410260615UL;
     static inline constexpr uint32_t INIT_MONO_PAYLOAD_SERIALIZATION_SECRET         = 1279769031UL;
@@ -5037,6 +5043,18 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
 
     }
 
+    auto virtualize_payload(const OrphanImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
+
+        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanImmuPayLoad>)(payload, ORPHAN_IMMU_PAYLOAD_SERIALIZATION_SECRET);
+
+        if (!serialized_payload.has_value()){
+            return std::unexpected(serialized_payload.error());
+        }
+
+        return VirtualPayLoad{.kind     = payload_kind_orphan_immu,
+                              .content  = std::move(serialized_payload.value())};
+    }
+
     auto virtualize_payload(const OrphanPolyPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
 
         std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanPolyPayLoad>)(payload, ORPHAN_POLY_PAYLOAD_SERIALIZATION_SECRET);
@@ -5048,18 +5066,6 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return VirtualPayLoad{.kind     = payload_kind_orphan_poly,
                               .content  = std::move(serialized_payload.value())};
 
-    }
-
-    auto virtualize_payload(const OrphanImmuPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
-
-        std::expected<dg::string, exception_t> serialized_payload = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, OrphanImmuPayLoad>)(payload, ORPHAN_IMMU_PAYLOAD_SERIALIZATION_SECRET);
-
-        if (!serialized_payload.has_value()){
-            return std::unexpected(serialized_payload.error());
-        }
-
-        return VirtualPayLoad{.kind     = payload_kind_orphan_immu,
-                              .content  = std::move(serialized_payload.value())};
     }
 
     auto virtualize_payload(const OrphanMsgrFwdPayLoad& payload) noexcept -> std::expected<VirtualPayLoad, exception_t>{
@@ -5402,6 +5408,15 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<InitImmuPayLoad, dg::string>)(payload.content, INIT_IMMU_PAYLOAD_SERIALIZATION_SECRET);
     }
 
+    auto devirtualize_init_poly_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitPolyPayLoad, exception_t>{
+
+        if (payload.kind != payload_kind_init_poly){
+            return std::unexpected(dg::network_exception::BAD_FORMAT);
+        }
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<InitPolyPayLoad, dg::string>)(payload.content, INIT_POLY_PAYLOAD_SERIALIZATION_SECRET);
+    }
+
     auto devirtualize_init_msgrfwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<InitMsgrFwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_init_msgrfwd){
@@ -5530,6 +5545,15 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<OrphanImmuPayLoad, dg::string>)(payload.content, ORPHAN_IMMU_PAYLOAD_SERIALIZATION_SECRET);
     }
 
+    auto devirtualize_orphan_poly_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanPolyPayLoad, exception_t>{
+        
+        if (payload.kind != payload_kind_orphan_poly){
+            return std::unexpected(dg::network_exception::BAD_FORMAT);
+        }
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<OrphanPolyPayLoad, dg::string>)(payload.content, ORPHAN_POLY_PAYLOAD_SERIALIZATION_SECRET);
+    }
+
     auto devirtualize_orphan_msgrfwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<OrphanMsgrFwdPayLoad, exception_t>{
 
         if (payload.kind != payload_kind_orphan_msgrfwd){
@@ -5656,6 +5680,15 @@ namespace dg::network_tile_lifetime::concurrent_safe_poly{
         }
 
         return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<DeinitImmuPayLoad, dg::string>)(payload.content, DEINIT_IMMU_PAYLOAD_SERIALIZATION_SECRET);
+    }
+
+    auto devirtualize_deinit_poly_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitPolyPayLoad, exception_t>{
+
+        if (payload.kind != payload_kind_deinit_poly){
+            return std::unexpected(dg::network_exception::BAD_FORMAT);
+        }
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<DeinitPolyPayLoad, dg::string>)(payload.content, DEINIT_POLY_PAYLOAD_SERIALIZATION_SECRET);
     }
 
     auto devirtualize_deinit_msgrfwd_payload(const VirtualPayLoad& payload) noexcept -> std::expected<DeinitMsgrFwdPayLoad, exception_t>{
