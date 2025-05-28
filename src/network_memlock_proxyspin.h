@@ -70,6 +70,11 @@ namespace dg::network_memlock_proxyspin{
     //we are using very fat tiles, 32KB -> 64KB containing a compressed crit dataset of 1MM training data points, we are searching the coordinate on CUDA -> convert to the "traditional backward" value
     //we are very limited by the technology of our times, we'd hope that we could deploy this on 1BB devices in a forseeable future
     //we can't really do search + set absolute values because of certain training constraints
+    //the only problem is that we need to keep the search operation complexity under certain threshold so we aren't waiting on a memregion forever, we've been finding a way to do this (we are thinking of clone -> search -> clone -> search)
+    //the operation complexity must not exceed 1 microsecond of dispatch or 10 microseconds of dispatch, we are relying on our cuda friends + heavily optimized implementation to achieve the magic
+    //it's not just hard to outlive cuda, it's extremely hard to outlive cuda, memory synchronization corruption is not recoverable
+    //we have talked about this the 1024th time literally, we decide to compromise the software at the cuda synchronization corruption point
+    //even if we implemented that, we don't know if that is worth it
 
     struct increase_reference_tag{}; 
 
