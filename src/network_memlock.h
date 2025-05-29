@@ -49,7 +49,7 @@ namespace dg::network_memlock{
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto acquire_transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
 
-            return T::transfer_try(new_ptr, old_ptr);
+            return T::acquire_transfer_try(new_ptr, old_ptr);
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
@@ -156,7 +156,17 @@ namespace dg::network_memlock{
 
     //there is not a single more confusing implementation of locks than this
     //try_guard -> .has_value() or not has_value(), default initializable
-    //guard -> a mysterious default initializable datatype that does RAII (we dont know what, why, interfaces)
+    //guard -> a mysterious default initializable datatype that does RAII (we dont know what, why, how interfaces)
+    //Chinaman has shown me the way of doing locks
+
+    //we'll move on to the second implementation of search
+    //a heavily optimized search on cuda has to involve random + statistical branching (imagine that we keep track of "good decisions" statistically, and randomize in the direction)
+    //this is somewhat like a branch prediction, except for we improvising the community detection + advanced pattern detections
+
+    //we'll implement this next month after our flings with the framework
+    //we dont have time fellas, this if runs at all on 1B devices is our proudest achievement in this lifetime
+    //I wish I could tell you briefly how easy it is to break thru a symmetric coding technique in 2025
+    //yet yall have to stay through the lectures for now
 
     template <class T>
     struct RecursiveLockResource{};
@@ -215,8 +225,8 @@ namespace dg::network_memlock{
         using lock_ptr_t    = typename memlock_ins::ptr_t<>;
         using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
 
-        lock_ptr_t ptr_region = dg::memult::region(ptr, memlock_ins::memregion_size());
-        auto destructor = [](lock_ptr_t arg) noexcept{
+        lock_ptr_t ptr_region   = dg::memult::region(ptr, memlock_ins::memregion_size());
+        auto destructor         = [](lock_ptr_t arg) noexcept{
             resource_ins::get().erase(arg);
             memlock_ins::acquire_release(arg);
         };
@@ -227,6 +237,7 @@ namespace dg::network_memlock{
 
         memlock_ins::acquire_wait(ptr_region);
         resource_ins::get().insert(ptr_region);
+
         return dg::unique_resource<lock_ptr_t, decltype(destructor)>(ptr_region, std::move(destructor));
     }
 
@@ -588,7 +599,8 @@ namespace dg::network_memlock_impl1{
 
             static void deinit() noexcept{
 
-                lck_table = nullptr;
+                lck_table       = nullptr;
+                region_first    = {};
             }
 
             static auto memregion_size() noexcept -> size_t{
