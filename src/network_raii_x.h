@@ -61,13 +61,11 @@ namespace dg{
             unique_resource(ResourceType resource, ResourceDeallocator deallocator) noexcept: resource(resource),
                                                                                               deallocator(std::move(deallocator)),
                                                                                               responsibility_flag(true){}
-            
+
             unique_resource(const self&) = delete;
             unique_resource(self&& other) noexcept: resource(other.resource),
                                                     deallocator(std::move(other.deallocator)),
-                                                    responsibility_flag(other.responsibility_flag){
-                other.responsibility_flag = false;
-            }
+                                                    responsibility_flag(std::exchange(other.responsibility_flag, false)){}
 
             ~unique_resource() noexcept{
 
@@ -80,14 +78,14 @@ namespace dg{
 
             self& operator =(self&& other) noexcept{
 
-                if (this != &other){
+                if (this != std::addressof(other)){
                     if (this->responsibility_flag){
                         this->deallocator(this->resource);
-                    }      
+                    }
+
                     this->resource              = other.resource;
                     this->deallocator           = std::move(other.deallocator);
-                    this->responsibility_flag   = other.responsibility_flag;
-                    other.responsibility_flag   = false;
+                    this->responsibility_flag   = std::exchange(other.responsibility_flag, false);
                 }
 
                 return *this;

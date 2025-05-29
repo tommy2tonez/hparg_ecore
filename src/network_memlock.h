@@ -154,6 +154,10 @@ namespace dg::network_memlock{
             self& operator =(self&&) = delete;
     };
 
+    //there is not a single more confusing implementation of locks than this
+    //try_guard -> .has_value() or not has_value(), default initializable
+    //guard -> a mysterious default initializable datatype that does RAII (we dont know what, why, interfaces)
+
     template <class T>
     struct RecursiveLockResource{};
 
@@ -184,8 +188,8 @@ namespace dg::network_memlock{
         using lock_ptr_t    = typename memlock_ins::ptr_t<>;
         using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
 
-        lock_ptr_t ptr_region = dg::memult::region(ptr, memlock_ins::memregion_size());
-        auto destructor = [](lock_ptr_t arg) noexcept{
+        lock_ptr_t ptr_region   = dg::memult::region(ptr, memlock_ins::memregion_size());
+        auto destructor         = [](lock_ptr_t arg) noexcept{
             resource_ins::get().erase(arg);
             memlock_ins::acquire_release(arg);
         };
@@ -207,49 +211,118 @@ namespace dg::network_memlock{
     template <class T>
     auto recursive_lock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
 
-        decltype(recursive_trylock_guard(lock_ins, ptr)) rs{}; 
+        using memlock_ins   = dg::network_memlock::MemoryRegionLockInterface<T>;
+        using lock_ptr_t    = typename memlock_ins::ptr_t<>;
+        using resource_ins  = RecursiveLockResource<dg::network_memlock::MemoryRegionLockInterface<T>>;
 
-        auto lambda = [&]() noexcept{
-            rs = recursive_trylock_guard(lock_ins, ptr);
-            return static_cast<bool>(rs);
+        lock_ptr_t ptr_region = dg::memult::region(ptr, memlock_ins::memregion_size());
+        auto destructor = [](lock_ptr_t arg) noexcept{
+            resource_ins::get().erase(arg);
+            memlock_ins::acquire_release(arg);
         };
 
-        stdx::eventloop_spin_expbackoff(lambda);
-        return rs;
+        if (resource_ins::get().contains(ptr_region)){
+            return dg::unique_resource<lock_ptr_t, decltype(destructor)>();
+        }
+
+        memlock_ins::acquire_wait(ptr_region);
+        resource_ins::get().insert(ptr_region);
+        return dg::unique_resource<lock_ptr_t, decltype(destructor)>(ptr_region, std::move(destructor));
+    }
+
+    template <class T, size_t SZ>
+    auto recursive_trylock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
+                                       const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& lock_ptr_arr){
+
+        static_assert(SZ != 0u);
+
+        using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
+        using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}));
+        auto resource_arr       = std::array<lock_resource_t, SZ>{};
+
+        for (size_t i = 0u; i < SZ; ++i){
+            resource_arr[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+
+            if (!static_cast<bool>(resource_arr[i])){
+                return std::optional<std::array<lock_resource_t, SZ>>(std::nullopt);
+            }
+        }
+
+        return std::optional<std::array<lock_resource_t, SZ>>(std::move(resource_arr));
     }
 
     template <class T, class ...Args>
     auto recursive_trylock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
 
         using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
-        using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}));
-
         auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...};
-        auto resource_arr       = std::array<lock_resource_t, sizeof...(Args)>{};
 
-        for (size_t i = 0u; i < sizeof...(Args); ++i){
-            resource_arr[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+        return recursive_trylock_guard_array(lock_ins, lock_ptr_arr);
+    }
 
-            if (!static_cast<bool>(resource_arr[i])){
-                return std::optional<std::array<lock_resource_t, sizeof...(Args)>>(std::nullopt);
+    template <class T, size_t SZ>
+    auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
+                                    const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& lock_ptr_arr){
+
+        static_assert(SZ != 0u);
+
+        if constexpr(SZ == 1u){
+            return recursive_lock_guard(lock_ins, lock_ptr_arr[0]);
+        } else{
+            using waiting_lock_guard_resource_t     = decltype(recursive_lock_guard(lock_ins, lock_ptr_arr[0]));
+            using spinning_lock_guard_resource_t    = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+
+            auto waiting_lock_guard_resource        = waiting_lock_guard_resource_t{};
+            auto spinning_lock_guard_resource_array = std::array<spinning_lock_guard_resource_t, SZ>{};
+            size_t waitable_idx                     = {}; 
+            bool was_thru                           = true;
+
+            for (size_t i = 0u; i < SZ; ++i){
+                spinning_lock_guard_resource_array[i] = recursive_lock_guard(lock_ins, lock_ptr_arr[i]);
+
+                if (!spinning_lock_guard_resource_array[i].has_value()){
+                    waitable_idx    = i; 
+                    was_thru        = false;
+                    break;
+                }
+            }
+
+            if (was_thru){
+                return std::make_pair(std::move(waiting_lock_guard_resource), std::move(spinning_lock_guard_resource_array));
+            }
+
+            while (true){
+                waiting_lock_guard_resource         = {};
+                spinning_lock_guard_resource_array  = {};
+                waiting_lock_guard_resource         = recursive_lock_guard(lock_ins, lock_ptr_arr[waitable_idx]);
+                was_thru                            = true; 
+
+                for (size_t i = 0u; i < SZ; ++i){
+                    if (i != waitable_idx){
+                        spinning_lock_guard_resource_array[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+
+                        if (!spinning_lock_guard_resource_array[i].has_value()){
+                            waitable_idx    = i;
+                            was_thru        = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (was_thru){
+                    return std::make_pair(std::move(waiting_lock_guard_resource), std::move(spinning_lock_guard_resource_array));
+                }
             }
         }
-
-        return std::optional<std::array<lock_resource_t, sizeof...(Args)>>(std::move(resource_arr));
     }
 
     template <class T, class ...Args>
     auto recursive_lock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
 
-        decltype(recursive_trylock_guard_many(lock_ins, args...)) rs{};
+        using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
+        auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...};
 
-        auto lambda = [&]() noexcept{
-            rs = recursive_trylock_guard_many(lock_ins, args...);
-            return static_cast<bool>(rs);
-        };
-
-        stdx::eventloop_spin_expbackoff(lambda);
-        return rs;
+        return recursive_lock_guard_array(lock_ins, lock_ptr_arr);
     }
 
     template <class T, class ...Args>

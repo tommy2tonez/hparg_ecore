@@ -671,6 +671,36 @@ namespace stdx{
         return rs;
     }
 
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto is_pow2(T value){
+
+        return value != 0u && (value & static_cast<T>(value - 1)) == 0u;
+    }
+
+    constexpr auto align_ptr(char * buf, uintptr_t alignment_sz) noexcept -> char *{
+
+        assert(is_pow2(alignment_sz));
+
+        uintptr_t arithmetic_buf        = reinterpret_cast<uintptr_t>(buf);
+        uintptr_t FWD_SZ                = alignment_sz - 1u;
+        uintptr_t MASK_VALUE            = ~FWD_SZ;
+        uintptr_t fwd_arithmetic_buf    = (arithmetic_buf + FWD_SZ) & MASK_VALUE;
+
+        return reinterpret_cast<char *>(fwd_arithmetic_buf);
+    }
+
+    constexpr auto align_ptr(const char * buf, uintptr_t alignment_sz) noexcept -> const char *{
+
+        assert(is_pow2(alignment_sz));
+
+        uintptr_t arithmetic_buf        = reinterpret_cast<uintptr_t>(buf);
+        uintptr_t FWD_SZ                = alignment_sz - 1u;
+        uintptr_t MASK_VALUE            = ~FWD_SZ;
+        uintptr_t fwd_arithmetic_buf    = (arithmetic_buf + FWD_SZ) & MASK_VALUE;
+
+        return reinterpret_cast<const char *>(fwd_arithmetic_buf);
+    }
+
     template <class T>
     inline __attribute__((always_inline)) auto to_const_reference(T& obj) noexcept -> decltype(auto){
 
@@ -721,12 +751,6 @@ namespace stdx{
             T uplog_value = ulog2(static_cast<T>(val - 1u)) + 1u;
             return T{1u} << uplog_value;
         }
-    }
-
-    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
-    constexpr auto is_pow2(T val) noexcept -> bool{
-
-        return val != 0u && (val & (val - 1)) == 0u;
     }
 
     template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
