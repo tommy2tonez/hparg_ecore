@@ -263,15 +263,19 @@ namespace dg::network_memlock_proxyspin{
                                                                                                  //                                                                                                                true => the next guy's gonna take the responsibility of decrementing the queue -> 0 after decrementing the queue => notify)
                                                                                                  //                                                                                                                        the next guy does not take the cmpexch right, other guy's gonna take the responsibility, cyclic recursive definition => 1
                                                                                                  //                                                                                                                        the next guy takes the cmpexch right, the guy's gonna take the responsibility
-
+                              
                                                                                                  //after the notify_one() will be self woken
                                                                                                  //proof by contradiction, assume that after the notify_one() is false
                                                                                                  //then there guaranteed to be a notify_one() after the point, the notify_one() is not the last notify_one()
                                                                                                  //this exercise if not tackled by the right angle would definitely ruin the scholarability of yall fellas
                                                                                                  //it is very important to find the hinges to prove these exercises
-                                                                                                 
-                                                                                                 //this morning, I was proving the false -> guarantee notify
-                                                                                                 
+
+                                                                                                 //this is the question of Morgan Stanley (or JP Morgan), we are in a room of prisoners, we have 1 bullet, how do we keep them under control?
+                                                                                                 //our bullet is notify(), the trying to break free is the chain reaction of notify(), and the interuption of the chain reaction is a mishap along the way (either the notify got coruppted or cmpexch right is stolen)
+                                                                                                 //such dude takes the chain reaction responsibility
+
+                                                                                                 //this morning, I was proving the false => guarantee notify
+
                                                                                                  //looking at the atomic memevents, prove that last set(false) is sequenced before a set(true)
 
                                                                                                  //proof set(false) is the last instruction

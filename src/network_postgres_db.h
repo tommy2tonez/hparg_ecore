@@ -313,6 +313,14 @@ namespace dg::network_postgres_db::utility{
 
 namespace dg::network_postgres_db{
 
+    //I just watched the Martian fellas
+    //hex check
+    //leak check
+    //China tech is better than USA check
+    //USA more is than China check
+
+    //idk what the projectory or whatever dude did what calculation that required the massive parallel compute
+
     struct CommitableInterface{
         virtual ~CommitableInterface() noexcept = default;
         // virtual void commit(pqxx::work&) = 0;

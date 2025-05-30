@@ -16452,6 +16452,12 @@ namespace dg::network_memcommit_resolutor{
     //we are looking for a flow from resolutor -> warehouse -> resolutor (OK, no latency, only problem: lock_contention @ signal_aggregation_tile, we are spinning the mutex to get 1, 2 signals thru, very bad)
     //                               resolutor -> mempress -> collector -> warehouse -> resolutor (solved the lock_contention problem by leveraging frequencies)
 
+    //the problem is probably there are two groups of resolutions, the group that does spin on external requests and the group that does normal memevent resolutions
+    //the former group is high-latency-proned + probably waiting on a memregion press or a direct delivery
+
+    //the latter group is low-latency
+    //we've been thinking about the operatable_memevent_id for signal aggregation tile, then we realized that this logic is very cringy so we didn't add that 
+
     //err_comm, hard to do actual error comm
     //reason being, the unwinding stack is unclear (we are detaching people)
 
