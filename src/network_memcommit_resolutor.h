@@ -58,18 +58,20 @@ namespace dg::network_memcommit_resolutor{
         std::unique_ptr<dg::network_exception::ExceptionHandlerInterface> exception_handler;
     };
 
-    //alright, our agenda today is to implement region keyvalue + any (poly) type
+    //I was thinking about the movie
+    //there were orders from the strings (in binaries???) after an analytic of the string a 
+    //there were observers
+    //there were dispatchers
 
-    //region keyvalue specs, linear probe, suffix swap (success -> thru, not success, swap with front), keep count of probing, retry once changed to wait (wait is only performed if all the elements in the queue reached the MAGIC NUMBER + wait time)  
-    //extensions of kv_delvrsrv, linear container to "contain" the network_producer_consumer::delvrsrv_kv
-    //a boolean to denote if the container is actually needed to be emptied before further delvrsrv_kv_deliver
-    
-    //a key vector alongside with the corresponding positions
-    //a competitive try_lock flips a boolean to true if thru, false -> to front if false
-    //every false try would result in a wait
+    //it seems like a branch prediction on cuda is not a good idea
+    //a deterministic plan of randomization is
+    //it seems like a just in time cuda dispatch code is not a bad idea after all
+    //we'll build something like a serialized search instruction code (this is an instruction buffer runs directly on cuda), (0) -> ballistic -> est range, range uncertainty, newton order, etc.
+    //we'll run the search on cuda, we are having the fp8 fp16 problems, our searching missions are very precise and we need the support of multi-precision on CUDA
+    //we dont know if that's possible to crunch 70 TB of computes like Jensen Sales Campaign, we will definitely try that
 
-    //poly specs
-    //leaf + immu + mono + pair
+    //we'll build a cuda immutable + mutable compute tree optimization along the way (cuda is so mysterious that it is worth building a project about compiler optimization than to write cuda code)
+    //we'll linger on the design of the search operations because that's the major point of all these forwards + backwards
 
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
@@ -116,11 +118,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }    
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_blkr_rcu_addr_nothrow(event_arr[i].dst);
@@ -229,11 +233,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, std::integral_constant<size_t, 1u>{}, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_rstr_rcu_addr_nothrow(event_arr[i].dst);
@@ -340,11 +346,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_mono_rcu_addr_nothrow(event_arr[i].dst);
@@ -455,11 +463,13 @@ namespace dg::network_memcommit_resolutor{
                     auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
 
                     for (size_t i = 0u; i < sz; ++i){
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
 
-                        if (!ptrchk.has_value()){
-                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(ptrchk.error()));
-                            continue;
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
                         }
 
                         uma_ptr_t rcu_addr      = dg::network_tile_member_getsetter::get_pair_rcu_addr_nothrow(event_arr[i].dst);
@@ -898,7 +908,7 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    class ForwardPingImmuResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
+    class ForwardPingImmuSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         public:
 
@@ -1041,9 +1051,9 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t ptr                               = event_arr[i].dst;
                         operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_poly_init_status_nothrow(ptr);
-                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_poly_operatable_memevent_id_nothrow(ptr);
+                        operatable_id_set_t current_ops_id          = dg::network_tile_member_getsetter::get_poly_operatable_memevent_id_set_nothrow(ptr);
                         poly_tile_t poly_type                       = dg::network_tile_member_getsetter::get_poly_poly_type_nothrow(ptr);
-                        
+
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
                             case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
@@ -1054,7 +1064,7 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_ADOPTED:
                             {
-                                if (current_ops_id != expected_ops_id){
+                                if (!is_subset_id(expected_ops_id, current_ops_id)){
                                     break;
                                 }
 
@@ -1356,7 +1366,7 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
-    class ForwardPingMsgrFwdResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
+    class ForwardPingMsgrFwdSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         private:
 
@@ -1366,11 +1376,11 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardPingMsgrFwdResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                        size_t delivery_capacity,
-                                        size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                           delivery_capacity(delivery_capacity),
-                                                                           vectorization_sz(vectorization_sz){}
+            ForwardPingMsgrFwdSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                              size_t delivery_capacity,
+                                              size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                 delivery_capacity(delivery_capacity),
+                                                                                 vectorization_sz(vectorization_sz){}
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
                 
@@ -1470,7 +1480,7 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    class ForwardPingMsgrBwdResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
+    class ForwardPingMsgrBwdSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         private:
 
@@ -1480,11 +1490,11 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardPingMsgrBwdResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                        size_t delivery_capacity,
-                                        size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                           delivery_capacity(delivery_capacity),
-                                                                           vectorization_sz(vectorization_sz){}
+            ForwardPingMsgrBwdSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                              size_t delivery_capacity,
+                                              size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                 delivery_capacity(delivery_capacity),
+                                                                                 vectorization_sz(vectorization_sz){}
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -1756,19 +1766,16 @@ namespace dg::network_memcommit_resolutor{
                 auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst); 
 
-                    if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){ //optimizables
-                        dg::network_log_stackdump::error_fast_optional("BAD TILE PING OPERATION");
-                        continue;
+                    //because we are not returning errors, its best for the caller to do the precond
+                    if constexpr(DEBUG_MODE_FLAG){
+                        std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst); 
+
+                        if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){ //optimizables
+                            dg::network_log_stackdump::critical("BAD TILE PING OPERATION");
+                            std::abort();
+                        }
                     }
-
-                    // if constexpr(DEBUG_MODE_FLAG){
-                    //     if (!tile_kind.has_value()){
-                    //         dg::network_log_stackdump::critical(dg::network_exception::verbose(tile_kind.error())); //we are too unforgiving yet susceptible to a serious leak, the precond of the function is not met, and there is no way to communicate
-                    //         std::abort();
-                    //     }
-                    // }
 
                     switch (tile_kind.value()){
                         case TILE_KIND_LEAF:
@@ -2940,7 +2947,107 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
+                const size_t EVENT_SCALE_FACTOR     = 1u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event_arr[i].requestee);
+
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_poly_rcu_addr_nothrow(event_arr[i].requestee);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_memops_uma::delvrsrv_regionkv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
             }
+        
+        private:
+            
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPongRequestEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(const uma_ptr_t& rcu_addr, std::move_iterator<ForwardPongRequestEvent *> org_event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    ForwardPongRequestEvent * event_arr = org_event_arr.base();
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_poly_init_status_nothrow(requestee);
+                        operatable_id_set_t current_ops_id          = dg::network_tile_member_getsetter::get_poly_operatable_memevent_id_set_nothrow(requestee);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED:
+                            {
+                                if (!is_subset_id(expected_ops_id, current_ops_id)){
+                                    break;
+                                }
+
+                                dg::network_tile_member_getsetter::controller_poly_push_observer(requestee, requestor, signal_smph_addr);
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                if (!is_subset_id(expected_ops_id, current_ops_id)){
+                                    break;
+                                }
+
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
     };
 
     class ForwardPongExtnSrcRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>{
@@ -3001,7 +3108,7 @@ namespace dg::network_memcommit_resolutor{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
 
-                void push(const uma_ptr_t& key, std::move_iterator<ForwardPongRequestEvent *> org_event_arr, size_t sz) noexcept{
+                void push(const uma_ptr_t& rcu_addr, std::move_iterator<ForwardPongRequestEvent *> org_event_arr, size_t sz) noexcept{
 
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
@@ -3025,7 +3132,7 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
-                                    continue;
+                                    break;
                                 }
 
                                 dg::network_tile_member_getsetter::controller_extnsrc_push_observer(requestee, requestor, signal_smph_addr);
@@ -3545,6 +3652,10 @@ namespace dg::network_memcommit_resolutor{
                                                                               msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
                                                                               msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
+            constexpr auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> bool{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 size_t trimmed_leaf_dispatch_sz = std::min(this->leaf_dispatch_sz, sz);
@@ -3614,11 +3725,13 @@ namespace dg::network_memcommit_resolutor{
                 auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].requestee);
+                    if constexpr(DEBUG_MODE_FLAG){
+                        std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].requestee);
 
-                    if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){ //optimizables
-                        dg::network_log_stackdump::error_fast_optional("BAD TILE PONG OPERATION");
-                        continue;
+                        if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
+                            dg::network_log_stackdump::critical("BAD TILE PONG OPERATION");
+                            std::abort();
+                        }
                     }
 
                     switch (tile_kind.value()){
@@ -3797,115 +3910,6 @@ namespace dg::network_memcommit_resolutor{
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 if (!is_subset_id(expected_ops_id, current_ops_id)){
-                                    break;
-                                }
-
-                                if (!signal_smph_addr.has_value()){
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
-                                } else{
-                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
-                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
-
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
-                                }
-
-                                break;
-                            }
-                            default:
-                            {
-                                if constexpr(DEBUG_MODE_FLAG){
-                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                    std::abort();
-                                } else{
-                                    std::unreachable();
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-    };
-
-    class ForwardPingPongImmuRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
-
-        private:
-
-            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
-            const size_t delivery_capacity;
-            const size_t vectorization_sz;
-
-        public:
-
-            ForwardPingPongImmuRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                                size_t delivery_capacity,
-                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                   delivery_capacity(delivery_capacity),
-                                                                                   vectorization_sz(vectorization_sz){}
-
-            void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
-
-                const size_t EVENT_SCALE_FACTOR         = 1u;
-                size_t max_possible_event_sz            = sz * EVENT_SCALE_FACTOR;
-                size_t trimmed_delivery_capacity        = std::min(this->delivery_capacity, max_possible_event_sz);
-                size_t dh_allocation_cost               = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
-                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
-
-                {
-                    InternalResolutor internal_resolutor        = {};
-                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
-
-                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
-                    size_t vdh_allocation_cost                  = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
-                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
-                                std::abort();
-                            }
-                        }
-
-                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
-                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
-
-                        dg::network_memops_uma::delvrsrv_regionkv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
-                    }
-                }
-            }
-
-        private:
-
-            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingPongRequestEvent>{
-
-                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
-
-                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t> * event_arr, size_t sz) noexcept{
-
-                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        uma_ptr_t requestee                         = event_arr[i].requestee;
-                        uma_ptr_t requestor                         = event_arr[i].requestor;
-                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
-                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
-                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
-                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
-
-                        switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED:
-                            {
-                                break;
-                            }
-                            case TILE_INIT_STATUS_INITIALIZED:
-                            {
-                                if (current_ops_id != expected_ops_id){
                                     break;
                                 }
 
@@ -4587,12 +4591,6 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    class ForwardPingPongPolyRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
-
-    };
-
-    //
-
     class ForwardPingPongUACMRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
 
         private:
@@ -5097,6 +5095,346 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
+    class ForwardPingPongImmuRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+
+        public:
+
+            ForwardPingPongImmuRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                                size_t delivery_capacity,
+                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                   delivery_capacity(delivery_capacity),
+                                                                                   vectorization_sz(vectorization_sz){}
+
+            void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR         = 1u;
+                size_t max_possible_event_sz            = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity        = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost               = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
+                auto delivery_handle                    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event_arr[i].requestee);
+
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_immu_rcu_addr_nothrow(event_arr[i].requestee);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_memops_uma::delvrsrv_regionkv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingPongRequestEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void push(uma_ptr_t rcu_addr, std::tuple<uma_ptr_t, uma_ptr_t> * event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t requestee                         = event_arr[i].requestee;
+                        uma_ptr_t requestor                         = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id             = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
+                        init_status_t init_status                   = dg::network_tile_member_getsetter::get_immu_init_status_nothrow(requestee);
+                        operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                if (current_ops_id != expected_ops_id){
+                                    break;
+                                }
+
+                                if (!signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+    };
+
+    class ForwardPingPongPolyRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+        
+        public:
+
+            ForwardPingPongPolyRequestResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                                size_t delivery_capacity,
+                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                   delivery_capacity(delivery_capacity),
+                                                                                   vectorization_sz(vectorization_sz){}
+            
+            void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR     = 2u;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+                
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_getsetter::safecthrow_poly_ptr_access(event_arr[i].requestee);
+
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                                std::abort();
+                            }
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_poly_rcu_addr_nothrow(event_arr[i].requestee);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_memops_uma::delvrsrv_regionkv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+        
+        private:
+            
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, ForwardPingPongRequestEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void do_mono_notification(const ForwardPingSignalEvent& event) noexcept{
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        poly_tile_t poly_type = dg::network_tile_member_getsetter::get_poly_poly_type_nothrow(event.dst);
+
+                        if (poly_type != POLY_TILE_MONO){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_poly_signal_smph_addr_nothrow(event.dst);
+                    uma_ptr_t descendant                        = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(event.dst, 0u);
+                    operatable_id_t expected_ops_id             = event.operatable_id;
+
+                    if (!signal_smph_addr.has_value()){
+                        auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(descendant, event.dst, expected_ops_id, signal_smph_addr));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                    } else{
+                        auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), descendant, event.dst,
+                                                                                                                                                                       expected_ops_id, signal_smph_addr));
+                        auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(sigagg);
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                    }
+                }
+
+                void do_pair_notification(const ForwardPingSignalEvent& event) noexcept{
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        poly_tile_t poly_type = dg::network_tile_member_getsetter::get_poly_poly_type_nothrow(event.dst);
+
+                        if (poly_type != POLY_TILE_PAIR){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_poly_signal_smph_addr_nothrow(event.dst);
+                    uma_ptr_t lhs_descendant                    = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(event.dst, 0u);
+                    uma_ptr_t rhs_descendant                    = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(event.dst, 1u);
+                    operatable_id_t expected_ops_id             = event.operatable_id;
+
+                    if (!signal_smph_addr.has_value()){
+                        auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(lhs_descendant, event.dst, expected_ops_id, signal_smph_addr));
+                        auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_pingpong_request(rhs_descendant, event.dst, expected_ops_id, signal_smph_addr));
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
+                    } else{
+                        auto sigagg_1               = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), lhs_descendant, event.dst, expected_ops_id, signal_smph_addr));
+                        auto sigagg_2               = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), rhs_descendant, event.dst, expected_ops_id, signal_smph_addr));
+                        auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(sigagg_1);
+                        auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(sigagg_2);
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
+                    }
+                }
+
+                void push(const uma_ptr_t& rcu_addr, std::move_iterator<ForwardPingPongRequestEvent *> org_event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t requestee                             = event_arr[i].requestee;
+                        uma_ptr_t requestor                             = event_arr[i].requestor;
+                        operatable_id_t expected_ops_id                 = event_arr[i].operatable_id;
+                        std::optional<uma_ptr_t> pong_signal_smph_addr  = event_arr[i].notify_addr;
+
+                        init_status_t init_status                       = dg::network_tile_member_getsetter::get_poly_init_status_nothrow(requestee);
+                        operatable_id_set_t current_ops_id              = dg::network_tile_member_getsetter::get_poly_operatable_memevent_id_set_nothrow(requestee);
+                        poly_tile_t poly_type                           = dg::network_tile_member_getsetter::get_poly_poly_type_nothrow(requestee);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED:
+                            {
+                                if (!is_subset_id(expected_ops_id, current_ops_id)){
+                                    break;
+                                }
+
+                                dg::network_tile_member_getsetter::controller_poly_push_observer(requestee, requestor, pong_signal_smph_addr);
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                if (!is_subset_id(expected_ops_id, current_ops_id)){
+                                    break;
+                                }
+
+                                if (!pong_signal_smph_addr.has_value()){
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_forward_do_signal(requestor, expected_ops_id));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event)); 
+                                } else{
+                                    auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_do_signal(pong_signal_smph_addr.value(), requestor, expected_ops_id));
+                                    auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                }
+
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_ADOPTED:
+                            {
+                                if (!is_subset_id(expected_ops_id, current_ops_id)){
+                                    break;
+                                }
+
+                                switch (poly_type){
+                                    case POLY_TILE_MONO:
+                                    {
+                                        this->do_mono_notification(event_arr[i]);
+                                        break;
+                                    }
+                                    case POLY_TILE_PAIR:
+                                    {
+                                        this->do_pair_notification(event_arr[i]);
+                                        break;
+                                    }
+                                    default:
+                                    {
+                                        if constexpr(DEBUG_MODE_FLAG){
+                                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                            std::abort();
+                                        } else{
+                                            std::unreachable();
+                                        }
+                                    }
+                                }
+
+                                dg::network_tile_member_getsetter::set_poly_init_status_nothrow(ptr, TILE_INIT_STATUS_DECAYED);
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+    };
+
     class ForwardPingPongExtnSrcRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
 
         private:
@@ -5262,7 +5600,6 @@ namespace dg::network_memcommit_resolutor{
 
     };
 
-    //
     class ForwardPingPongExtnDstRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
 
         private:
@@ -5878,6 +6215,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                   msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
                                                                                   msgrbwd_pingpong_resolutor(std::move(msgrbwd_pingpong_resolutor)),
                                                                                   msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
+
+        constexpr auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> bool{
+
+        }
 
         void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -8200,7 +8541,7 @@ namespace dg::network_memcommit_resolutor{
                     cuda_internal_resolutor.allocator               = this->allocator; 
 
                     auto host_synchronizer                          = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_host_asynchronous::Synchronizer>());
-                    auto host_restrict_synchronizer                 = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::networK_host_asynchronous::RestrictPointerSynchrinizer>(&synchronizer));
+                    auto host_restrict_synchronizer                 = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_host_asynchronous::RestrictPointerSynchrinizer>(&synchronizer));
                     auto host_internal_resolutor                    = InternalHostResolutor{};
                     host_internal_resolutor.async_device            = this->host_async_device;
                     host_internal_resolutor.synchronizer            = &host_synchronizer;
@@ -10591,6 +10932,10 @@ namespace dg::network_memcommit_resolutor{
                                                                            msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
                                                                            msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
+            constexpr auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            } 
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 size_t trimmed_leaf_dispatch_sz     = std::min(this->leaf_dispatch_sz, sz);
@@ -10660,11 +11005,13 @@ namespace dg::network_memcommit_resolutor{
                 auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
+                    if constexpr(DEBUG_MODE_FLAG){
+                        std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
 
-                    if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
-                        dg::network_log_stackdump::error_fast_optional("BAD FORWARD OPERATION");
-                        continue;
+                        if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
+                            dg::network_log_stackdump::error_fast_optional("BAD FORWARD OPERATION");
+                            continue;
+                        }
                     }
 
                     switch (tile_kind.value()){
@@ -15925,6 +16272,10 @@ namespace dg::network_memcommit_resolutor{
                                                                             msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
                                                                             msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            } 
+
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 size_t trimmed_leaf_dispatch_sz     = std::min(this->leaf_dispatch_sz, sz);
@@ -15976,7 +16327,7 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
 
                 auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
-                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihanlde(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
+                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
                 auto rstr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz, rstr_dh_mem.get()));
                 auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
                 auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
@@ -15994,11 +16345,13 @@ namespace dg::network_memcommit_resolutor{
                 auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
+                    if constexpr(DEBUG_MODE_FLAG){
+                        std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
 
-                    if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
-                        dg::network_log_stackdump::error_fast_optional("BAD BACKWARD OPERATION");
-                        continue;
+                        if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
+                            dg::network_log_stackdump::critical("BAD BACKWARD OPERATION");
+                            std::abort();
+                        }
                     }
 
                     switch (tile_kind.value()){
@@ -16096,108 +16449,192 @@ namespace dg::network_memcommit_resolutor{
             }
     };
 
+    //we are looking for a flow from resolutor -> warehouse -> resolutor (OK, no latency, only problem: lock_contention @ signal_aggregation_tile, we are spinning the mutex to get 1, 2 signals thru, very bad)
+    //                               resolutor -> mempress -> collector -> warehouse -> resolutor (solved the lock_contention problem by leveraging frequencies)
+
+    //err_comm, hard to do actual error comm
+    //reason being, the unwinding stack is unclear (we are detaching people)
+
+    //solutions: try to compromise the err_comm @ the workorder recv site, bad tile signals + bad initializations or bad references should be eliminated at the initialization + signal_dispatch phase (only check the internals, because bad externals will return request errors, which will be logged -> the database alongside with user_id)
+    //this is an accepted answer
+    //it is incredibly hard to write this
+    //we'll try to leverage hyperthreading to reduce the waiting time, regionkv is to reduce the cost of hyperthreading (because actual waittime does not utilize CPU, yet incurs context switching + hyperthreading kernel management cost)
+    //all the heavy lifting are delivered -> the asynchronous device, whether that is host asynchronous device or cuda asynchronous device
+
+    //we'll try to bottleneck RAM (by delivering as many tasks as possible -> asynchronous devices, all the other workers that dont use asynchronous device will be limited -> certain cores + hyperthreading to bottleneck the RAM usage)
+    //DDR4 will solve some of the problem, not all
+
+    //cuda problems: search problems
+    //               search can only be performed within a cetain window, 1us -> 10us, because we can't hold the lock on the memregion forever
+    //               search by using an instruction payload (specific enough to point where, when, the direction, the operation, the exponential steps + etc)
+    //               it seems to me that the search problem is a hard problem to solve, we dont yet know to head in the internal branch-prediction direction or external branch-prediction direction
+    //               external branch-prediction direction? why?
+    //               internal branch-prediction direction? why?
+    //               or both (there are no whys), the two does not actually cancel out each other
+
     //clear
     class MemCommitResolutor: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            const std::shared_ptr<dg::network_producer_consumer::ProducerInterface<virtual_memory_event_t>> producer;
-            const size_t producer_consume_capacity;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> fwd_ping_signal_resolutor;
+            const std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> producer;
+            const std::unique_ptr<ForwardPingSignalResolutor> fwd_ping_signal_resolutor;
             const size_t fwd_ping_signal_delivery_capacity; 
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> fwd_pong_request_resolutor;
+            const std::unique_ptr<ForwardPongRequestResolutor> fwd_pong_request_resolutor;
             const size_t fwd_pong_request_delivery_capacity;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> fwd_pingpong_request_resolutor;
+            const std::unique_ptr<ForwardPingPongRequestResolutor> fwd_pingpong_request_resolutor;
             const size_t fwd_pingpong_request_delivery_capacity;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> fwd_do_resolutor;
+            const std::unique_ptr<ForwardDoSignalResolutor> fwd_do_resolutor;
             const size_t fwd_do_delivery_capacity;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> bwd_do_resolutor;
+            const std::unique_ptr<BackwardDoSignalResolutor> bwd_do_resolutor;
             const size_t bwd_do_delivery_capacity;
+            const std::unique_ptr<SignalAggregationSignalResolutor> sigagg_signal_resolutor;
+            const size_t sigagg_signal_delivery_capacity; 
 
         public:
 
-            MemCommitResolutor(std::shared_ptr<dg::network_producer_consumer::ProducerInterface<virtual_memory_event_t>> producer,
-                               size_t producer_consume_capacity,
-                               std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>> fwd_ping_signal_resolutor,
+            MemCommitResolutor(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> producer,
+                               std::unique_ptr<ForwardPingSignalResolutor> fwd_ping_signal_resolutor,
                                size_t fwd_ping_signal_delivery_capacity,
-                               std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> fwd_pong_request_resolutor,
+                               std::unique_ptr<ForwardPongRequestResolutor> fwd_pong_request_resolutor,
                                size_t fwd_pong_request_delivery_capacity,
-                               std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> fwd_pingpong_request_resolutor,
+                               std::unique_ptr<ForwardPingPongRequestResolutor> fwd_pingpong_request_resolutor,
                                size_t fwd_pingpong_request_delivery_capacity,
-                               std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> fwd_do_resolutor,
+                               std::unique_ptr<ForwardDoSignalResolutor> fwd_do_resolutor,
                                size_t fwd_do_delivery_capacity,
-                               std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> bwd_do_resolutor,
-                               size_t bwd_do_delivery_capacity) noexcept: producer(std::move(producer)),
-                                                                          producer_consume_capacity(producer_consume_capacity),
-                                                                          fwd_ping_signal_resolutor(std::move(fwd_ping_signal_resolutor)),
-                                                                          fwd_ping_signal_delivery_capacity(fwd_ping_signal_delivery_capacity),
-                                                                          fwd_pong_request_resolutor(std::move(fwd_pong_request_resolutor)),
-                                                                          fwd_pong_request_delivery_capacity(fwd_pong_request_delivery_capacity),
-                                                                          fwd_pingpong_request_resolutor(std::move(fwd_pingpong_request_resolutor)),
-                                                                          fwd_pingpong_request_delivery_capacity(fwd_pingpong_request_delivery_capacity),
-                                                                          fwd_do_resolutor(std::move(fwd_do_resolutor)),
-                                                                          fwd_do_delivery_capacity(fwd_do_delivery_capacity),
-                                                                          bwd_do_resolutor(std::move(bwd_do_resolutor)),
-                                                                          bwd_do_delivery_capacity(bwd_do_delivery_capacity){}
+                               std::unique_ptr<BackwardDoSignalResolutor> bwd_do_resolutor,
+                               size_t bwd_do_delivery_capacity,
+                               std::unique_ptr<SignalAggregationSignalResolutor> sigagg_signal_resolutor,
+                               size_t sigagg_signal_delivery_capacity) noexcept: producer(std::move(producer)),
+                                                                                 fwd_ping_signal_resolutor(std::move(fwd_ping_signal_resolutor)),
+                                                                                 fwd_ping_signal_delivery_capacity(fwd_ping_signal_delivery_capacity),
+                                                                                 fwd_pong_request_resolutor(std::move(fwd_pong_request_resolutor)),
+                                                                                 fwd_pong_request_delivery_capacity(fwd_pong_request_delivery_capacity),
+                                                                                 fwd_pingpong_request_resolutor(std::move(fwd_pingpong_request_resolutor)),
+                                                                                 fwd_pingpong_request_delivery_capacity(fwd_pingpong_request_delivery_capacity),
+                                                                                 fwd_do_resolutor(std::move(fwd_do_resolutor)),
+                                                                                 fwd_do_delivery_capacity(fwd_do_delivery_capacity),
+                                                                                 bwd_do_resolutor(std::move(bwd_do_resolutor)),
+                                                                                 bwd_do_delivery_capacity(bwd_do_delivery_capacity),
+                                                                                 sigagg_signal_resolutor(std::move(sigagg_signal_resolutor)),
+                                                                                 sigagg_signal_delivery_capacity(sigagg_signal_delivery_capacity){}
 
             bool run_one_epoch() noexcept{
 
-                dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<virtual_memory_event_t[]> virtual_memory_event_arr(this->producer_consume_capacity);
-                size_t virtual_memory_event_sz = {};
-                this->producer->get(virtual_memory_event_arr.get(), virtual_memory_event_sz, this->producer_consume_capacity);
+                dg::vector<virtual_memory_event_t> memevent_vec = this->producer->pop();
 
-                if (virtual_memory_event_sz == 0u){
-                    return false;
-                }
-
-                auto fwd_ping_signal_lambda_consumer = [this](virtual_memory_event_t * event_arr, size_t arr_sz) noexcept{
+                auto fwd_ping_signal_lambda_consumer = [this](std::move_iterator<virtual_memory_event_t *> event_arr, size_t arr_sz) noexcept{
                     dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<ForwardPingSignalEvent[]> tmp_arr(arr_sz);
+                    size_t tmp_arr_dispatch_sz = 0u; 
 
                     for (size_t i = 0u; i < arr_sz; ++i){
-                        tmp_arr[i] = dg::network_memcommit_factory::devirtualize_forward_ping_signal_event(event_arr[i]);
+                        ForwardPingSignalEvent fwd_ping_signal  = dg::network_memcommit_factory::devirtualize_forward_ping_signal_event(event_arr[i]);
+                        exception_t err                         = this->fwd_ping_signal_resolutor->is_met_dispatch_requirements(fwd_ping_signal);
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err)); //we cant unwind the stacks, so it's our responsibility to log, the other guys can unwind the stack, so it's not their responsibility to log
+                            continue;
+                        }
+
+                        tmp_arr[tmp_arr_dispatch_sz++] = std::move(fwd_ping_signal);
                     }
 
-                    this->fwd_ping_signal_resolutor->push(tmp_arr.get(), arr_sz);
+                    this->fwd_ping_signal_resolutor->push(tmp_arr.get(), tmp_arr_dispatch_sz);
                 };
 
-                auto fwd_pong_request_lambda_consumer = [this](virtual_memory_event_t * event_arr, size_t arr_sz) noexcept{
+                auto fwd_pong_request_lambda_consumer = [this](std::move_iterator<virtual_memory_event_t *> event_arr, size_t arr_sz) noexcept{
                     dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<ForwardPongRequestEvent[]> tmp_arr(arr_sz);
+                    size_t tmp_arr_dispatch_sz = 0u; 
 
                     for (size_t i = 0u; i < arr_sz; ++i){
-                        tmp_arr[i] = dg::network_memcommit_factory::devirtualize_forward_pong_request_event(event_arr[i]);
+                        ForwardPongRequestEvent fwd_pong_request    = dg::network_memcommit_factory::devirtualize_forward_pong_request_event(event_arr[i]);
+                        exception_t err                             = this->fwd_pong_request_resolutor->is_met_dispatch_requirements(fwd_pong_request); 
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                            continue;
+                        }
+
+                        tmp_arr[tmp_arr_dispatch_sz++] = std::move(fwd_pong_request);
                     }
 
-                    this->fwd_pong_request_resolutor->push(tmp_arr.get(), arr_sz);
+                    this->fwd_pong_request_resolutor->push(tmp_arr.get(), tmp_arr_dispatch_sz);
                 };
 
-                auto fwd_pingpong_request_lambda_consumer = [this](virtual_memory_event_t * event_arr, size_t arr_sz) noexcept{
+                auto fwd_pingpong_request_lambda_consumer = [this](std::move_iterator<virtual_memory_event_t *> event_arr, size_t arr_sz) noexcept{
                     dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<ForwardPingPongRequestEvent[]> tmp_arr(arr_sz);
+                    size_t tmp_arr_dispatch_sz = 0u;
 
                     for (size_t i = 0u; i < arr_sz; ++i){
-                        tmp_arr[i] = dg::network_memcommit_factory::devirtualize_forward_pingpong_request_event(event_arr[i]);
+                        ForwardPingPongRequestEvent fwd_pingpong_request    = dg::network_memcommit_factory::devirtualize_forward_pingpong_request_event(event_arr[i]);
+                        exception_t err                                     = this->fwd_pingpong_request_resolutor->is_met_dispatch_requirements(fwd_pingpong_request);
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                            continue;
+                        }
+
+                        tmp_arr[tmp_arr_dispatch_sz++] = std::move(fwd_pingpong_request);
                     }
 
-                    this->fwd_pingpong_request_resolutor->push(tmp_arr.get(), arr_sz);
+                    this->fwd_pingpong_request_resolutor->push(tmp_arr.get(), tmp_arr_dispatch_sz);
                 };
 
-                auto fwd_do_lambda_consumer = [this](virtual_memory_event_t * event_arr, size_t arr_sz) noexcept{
+                auto fwd_do_lambda_consumer = [this](std::move_iterator<virtual_memory_event_t *> event_arr, size_t arr_sz) noexcept{
                     dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<ForwardDoSignalEvent[]> tmp_arr(arr_sz);
+                    size_t tmp_arr_dispatch_sz = 0u; 
 
                     for (size_t i = 0u; i < arr_sz; ++i){
-                        tmp_arr[i] = dg::network_memcommit_factory::devirtualize_forward_do_signal_event(event_arr[i]);
+                        ForwardDoSignalEvent fwd_do_signal  = dg::network_memcommit_factory::devirtualize_forward_do_signal_event(event_arr[i]);
+                        exception_t err                     = this->fwd_do_resolutor->is_met_dispatch_requirements(fwd_do_signal);
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                            continue;
+                        }
+
+                        tmp_arr[tmp_arr_dispatch_sz++]      = std::move(fwd_do_signal);
                     }
 
-                    this->fwd_do_resolutor->push(tmp_arr.get(), arr_sz);
+                    this->fwd_do_resolutor->push(tmp_arr.get(), tmp_arr_dispatch_sz);
                 };
 
-                auto bwd_do_lambda_consumer = [this](virtual_memory_event_t * event_arr, size_t arr_sz) noexcept{
+                auto bwd_do_lambda_consumer = [this](std::move_iterator<virtual_memory_event_t *> event_arr, size_t arr_sz) noexcept{
                     dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<BackwardDoSignalEvent[]> tmp_arr(arr_sz);
+                    size_t tmp_arr_dispatch_sz = 0u; 
 
                     for (size_t i = 0u; i < arr_sz; ++i){
-                        tmp_arr[i] = dg::network_memcommit_factory::devirtualize_backward_do_signal_event(event_arr[i]);
+                        BackwardDoSignalEvent bwd_do_signal = dg::network_memcommit_factory::devirtualize_backward_do_signal_event(event_arr[i]);
+                        exception_t err                     = this->bwd_do_resolutor->is_met_dispatch_requirements(bwd_do_signal);
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                            continue;
+                        }
+
+                        tmp_arr[tmp_arr_dispatch_sz++]      = std::move(bwd_do_signal);
                     }
 
-                    this->bwd_do_resolutor->push(tmp_arr.get(), arr_sz);
+                    this->bwd_do_resolutor->push(tmp_arr.get(), tmp_arr_dispatch_sz);
+                };
+
+                auto sigagg_signal_lambda_consumer = [this](std::move_iterator<virtual_memory_event_t *> event_arr, size_t arr_sz) noexcept{
+                    dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<VirtualSignalAggregationEvent[]> tmp_arr(arr_sz);
+                    size_t tmp_arr_dispatch_sz = 0u;
+
+                    for (size_t i = 0u; i < arr_sz; ++i){
+                        VirtualSignalAggregationEvent sigagg_signal = dg::network_memcommit_factory::devirtualize_sigagg_event(event_arr[i]);
+                        exception_t err                             = this->sigagg_signal_resolutor->is_met_dispatch_requirements(sigagg_signal);
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                            continue;
+                        }
+
+                        tmp_arr[tmp_arr_dispatch_sz++]      = std::move(sigagg_signal);
+                    }
+
+                    this->sigagg_signal_resolutor->push(tmp_arr.get(), tmp_arr_dispatch_sz);
                 };
 
                 auto fwd_ping_signal_virtual_consumer               = dg::network_producer_consumer::LambdaWrappedConsumer<virtual_memory_event_t, decltype(fwd_ping_signal_lambda_consumer)>(fwd_ping_signal_lambda_consumer);
@@ -16230,33 +16667,44 @@ namespace dg::network_memcommit_resolutor{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> bddh_mem(bddh_allocation_cost); 
                 auto bwd_do_delivery_handle                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&bwd_do_virtual_consumer, trimmed_bwd_do_delivery_capacity, bddh_mem.get()));
 
-                for (size_t i = 0u; i < virtual_memory_event_sz; ++i){
-                    memory_event_kind_t event_kind = dg::network_memcommit_factory::read_event_kind(virtual_memory_event_arr[i]);
+                auto sigagg_signal_virtual_consumer                 = dg::network_producer_consumer::LambdaWrappedConsumer<virtual_memory_event_t, decltype(sigagg_signal_lambda_consumer)>(sigagg_signal_lambda_consumer);
+                size_t trimmed_sigagg_signal_delivery_capacity      = std::min(this->sigagg_signal_delivery_capacity, sz);
+                size_t ssdh_allocaiton_cost                         = dg::network_producer_consumer::delvrsrv_allocation_cost(&sigagg_signal_virtual_consumer, trimmed_sigagg_signal_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> ssdh_mem(ssdh_allocaiton_cost);
+                auto sigagg_signal_delivery_handle                  = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&sigagg_signal_virtual_consumer, trimmed_sigagg_signal_delivery_capacity, ssdh_mem.get()));
+
+                for (virtual_memory_event_t& memevent: memevent_vec){
+                    memory_event_kind_t event_kind = dg::network_memcommit_factory::read_event_kind(memevent);
 
                     switch (event_kind){
                         case dg::network_memcommit_factory::event_kind_forward_ping_signal:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_ping_signal_delivery_handle.get(), std::move(virtual_memory_event_arr[i]));
+                            dg::network_producer_consumer::delvrsrv_deliver(fwd_ping_signal_delivery_handle.get(), std::move(memevent));
                             break;
                         }
                         case dg::network_memcommit_factory::event_kind_forward_pong_request:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_pong_request_delivery_handle.get(), std::move(virtual_memory_event_arr[i]));
+                            dg::network_producer_consumer::delvrsrv_deliver(fwd_pong_request_delivery_handle.get(), std::move(memevent));
                             break;
                         }
                         case dg::network_memcommit_factory::event_kind_forward_pingpong_request:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_pingpong_request_delivery_handle.get(), std::move(virtual_memory_event_arr[i]));
+                            dg::network_producer_consumer::delvrsrv_deliver(fwd_pingpong_request_delivery_handle.get(), std::move(memevent));
                             break;
                         }
                         case dg::network_memcommit_factory::event_kind_forward_do_signal:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(fwd_do_delivery_handle.get(), std::move(virtual_memory_event_arr[i]));
+                            dg::network_producer_consumer::delvrsrv_deliver(fwd_do_delivery_handle.get(), std::move(memevent));
                             break;
                         }
                         case dg::network_memcommit_factory::event_kind_backward_do_signal:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(bwd_do_delivery_handle.get(), std::move(virtual_memory_event_arr[i]));
+                            dg::network_producer_consumer::delvrsrv_deliver(bwd_do_delivery_handle.get(), std::move(memevent));
+                            break;
+                        }
+                        case dg::network_memcommit_factory::event_kind_signal_aggregation_signal:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(sigagg_signal_delivery_handle.get(), std::move(memevent));
                             break;
                         }
                         default:

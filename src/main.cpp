@@ -111,12 +111,14 @@ consteval auto some_foo() -> size_t{
     return sz;
 }
 
-//this is hard!!!
-//why does this work?
-//alright, remember the clue, the very last guy notifying must wake up at least one dude waiting, this is the most important point
-//we dont care if wrong dudes get thru or right dudes get thru or whatever
-
 int main(){
+
+    //BM_BitsetSort_uint32_Random_262144
+    //42467328	16.4134	16.4128	ns
+    //BM_PdqSort_uint32_Random_262144
+    //28835840	24.0294	24.0289	ns
+
+    //16/24 == 2/3 
 
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},

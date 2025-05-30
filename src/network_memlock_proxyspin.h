@@ -269,6 +269,18 @@ namespace dg::network_memlock_proxyspin{
                                                                                                  //then there guaranteed to be a notify_one() after the point, the notify_one() is not the last notify_one()
                                                                                                  //this exercise if not tackled by the right angle would definitely ruin the scholarability of yall fellas
                                                                                                  //it is very important to find the hinges to prove these exercises
+                                                                                                 
+                                                                                                 //this morning, I was proving the false -> guarantee notify
+                                                                                                 
+                                                                                                 //looking at the atomic memevents, prove that last set(false) is sequenced before a set(true)
+
+                                                                                                 //proof set(false) is the last instruction
+                                                                                                 //there exists a set(true) for every set(false) (acquire)
+                                                                                                 //there exists at least one set(true) for a set of set(false) (reference)
+
+                                                                                                 //set(false) is not the last instruction
+
+                                                                                                 //set(true) is always followed by a notify_one(), so a read of false value guarantees a notify_one() instruction
 
                                                                                                  //how about notify all, the only difference is that there are not only before or after for notify all, there are also in between notify all
                                                                                                  //if inbetween notify all => false => the notify_all() is not the last notify all

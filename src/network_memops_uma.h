@@ -218,7 +218,6 @@ namespace dg::network_memops_uma{
         key_t key;
         event_t * event_ptr;
         size_t event_ptr_sz;
-        size_t retry_count;
     };
 
     template <class key_t, class event_t>
@@ -553,6 +552,17 @@ namespace dg::network_memops_uma{
                 + (alignof(RegionKVDeliveryHandle<key_t, event_t>) * sizeof(RegionKVDeliveryHandle<key_t, event_t>));
     }
 
+    template <class T>
+    void nothrow_defaultize(T * arr, size_t arr_sz) noexcept{
+
+        static_assert(std::is_nothrow_default_constructible_v<T>);
+        static_assert(std::is_nothrow_move_assignable_v<T>);
+
+        for (size_t i = 0u; i < arr_sz; ++i){
+            arr[i] = T{};            
+        }
+    }
+
     template <class key_t, class event_t>
     __attribute__((noinline)) void delvrsrv_regionkv_internal_clear_callback(RegionKVDeliveryHandle<key_t, event_t> * handle) noexcept{
 
@@ -575,7 +585,6 @@ namespace dg::network_memops_uma{
             stdx::eventloop_spin_expbackoff(trylock_eventloop, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
 
             if (!trylock_resource.has_value()){
-                handle->retry_entry_arr[i].retry_count += 1u;
                 std::swap(handle->retry_entry_arr[bad_trylock_sz++], handle->retry_entry_arr[i]);
                 continue;
             }

@@ -517,13 +517,13 @@ namespace dg::network_memcommit_factory{
     using memory_event_kind_t = uint8_t;
 
     enum enum_memory_event: memory_event_kind_t{
-        event_kind_forward_ping_signal      = 0u,
-        event_kind_forward_pong_request     = 1u,
-        event_kind_forward_pingpong_request = 2u,
-        event_kind_forward_pong_signal      = 3u,
-        event_kind_forward_do_signal        = 4u,
-        event_kind_backward_do_signal       = 5u,
-        event_kind_signal_aggregation       = 6u
+        event_kind_forward_ping_signal          = 0u,
+        event_kind_forward_pong_request         = 1u,
+        event_kind_forward_pingpong_request     = 2u,
+        event_kind_forward_pong_signal          = 3u,
+        event_kind_forward_do_signal            = 4u,
+        event_kind_backward_do_signal           = 5u,
+        event_kind_signal_aggregation_signal    = 6u
     };
 
     struct VirtualEvent{
@@ -614,7 +614,7 @@ namespace dg::network_memcommit_factory{
         static_assert(dg::network_trivial_serializer::size(VirtualSignalAggregationEvent{}) <= VIRTUAL_EVENT_BUFFER_SZ);
 
         VirtualEvent rs;
-        rs.event_kind = event_kind_signal_aggregation;
+        rs.event_kind = event_kind_signal_aggregation_signal;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
@@ -718,7 +718,7 @@ namespace dg::network_memcommit_factory{
     constexpr auto devirtualize_sigagg_event(const VirtualEvent& event) noexcept -> VirtualSignalAggregationEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (event.event_kind != event_kind_signal_aggregation){
+            if (event.event_kind != event_kind_signal_aggregation_signal){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
