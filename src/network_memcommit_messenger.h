@@ -7,36 +7,26 @@
 
 namespace dg::network_memcommit_messenger{
 
-    //mempress covers all the region press range, we'll implement an ExpressRangeVerifierInterface
-    //we have to combine the memregion metadata -> a struct or sth
-
-    class ExpressMemregionVerifierInterface{
-
-        public:
-
-            virtual ~ExpressMemregionVerifierInterface() noexcept = default;
-            virtual auto is_express(uma_ptr_t) noexcept -> std::expected<bool, exception_t> = 0;
-    };
-
-    class MemregionLatencyRadixerInterface{
+    class MemregionRadixerInterface{
 
         public:
 
             using memregion_kind_t = uint8_t;
 
-            static inline constexpr uint8_t HIGH_LATENCY_REGION = 0u;
-            static inline constexpr uint8_t MID_LATENCY_REGION  = 1u;
-            static inline constexpr uint8_t LOW_LATENCY_REGION  = 2u;
+            static inline constexpr uint8_t EXPRESS_HIGH_LATENCY_REGION = 0u;
+            static inline constexpr uint8_t EXPRESS_MID_LATENCY_REGION  = 1u;
+            static inline constexpr uint8_t EXPRESS_LOW_LATENCY_REGION  = 2u;
+            static inline constexpr uint8_t NOMRAL_REGION               = 3u;
 
-            virtual ~MemregionLatencyRadixerInterface() noexcept = default;
+            virtual ~MemregionRadixerInterface() noexcept = default;
             virtual auto radix(uma_ptr_t) noexcept -> std::expected<memregion_kind_t, exception_t> = 0;
     };
 
-    class WarehouseIngestionConnectorInterface{
+    class WareHouseIngestionConnectorInterface{
 
         public:
 
-            virtual ~WarehouseIngestionConnectorInterface() noexcept = defautl;
+            virtual ~WareHouseIngestionConnectorInterface() noexcept = defautl;
             virtual auto push(dg::vector<virtual_memory_event_t>&&) noexcept -> std::expected<bool, exception_t> = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -44,7 +34,7 @@ namespace dg::network_memcommit_messenger{
     //the problem with software is that we just keep writing literally, build abstraction, keep writing
     //we dont really have time to ask why this why that
 
-    class NormalWarehouseConnector: public virtual WarehouseIngestionConnectorInterface{
+    class NormalWarehouseConnector: public virtual WareHouseIngestionConnectorInterface{
 
         private:
 
@@ -65,7 +55,7 @@ namespace dg::network_memcommit_messenger{
             }
     };
 
-    class ExhaustionControlledWarehouseConnector: public virtual WarehouseIngestionConnectorInterface{
+    class ExhaustionControlledWarehouseConnector: public virtual WareHouseIngestionConnectorInterface{
 
         private:
 
@@ -108,30 +98,27 @@ namespace dg::network_memcommit_messenger{
 
         private:
 
-            std::shared_ptr<ExpressMemregionVerifierInterface> memregion_verifier;
-            std::shared_ptr<MemregionLatencyRadixerInterface> memregion_express_radixer;
+            std::shared_ptr<MemregionRadixerInterface> memregion_express_radixer;
             std::shared_ptr<dg::network_mempress::MemoryPressInterface> press;
             size_t press_vectorization_sz;
-            std::unique_ptr<WarehouseIngestionConnectorInterface> high_latency_warehouse;
+            std::unique_ptr<WareHouseIngestionConnectorInterface> high_latency_warehouse;
             size_t high_latency_warehouse_feed_cap;
-            std::unique_ptr<WarehouseIngestionConnectorInterface> mid_latency_warehouse;
+            std::unique_ptr<WareHouseIngestionConnectorInterface> mid_latency_warehouse;
             size_t mid_latency_warehouse_feed_cap;
-            std::unique_ptr<WarehouseIngestionConnectorInterface> low_latency_warehouse;
+            std::unique_ptr<WareHouseIngestionConnectorInterface> low_latency_warehouse;
             size_t low_latency_warehouse_feed_cap;
 
         public:
 
-            MemeventMessenger(std::shared_ptr<ExpressMemregionVerifierInterface> memregion_verifier,
-                              std::shared_ptr<MemregionLatencyRadixerInterface> memregion_express_radixer,
+            MemeventMessenger(std::shared_ptr<MemregionRadixerInterface> memregion_express_radixer,
                               std::shared_ptr<dg::network_mempress::MemoryPressInterface> press,
                               size_t press_vectorization_sz,
-                              std::unique_ptr<WarehouseIngestionConnectorInterface> high_latency_warehouse,
+                              std::unique_ptr<WareHouseIngestionConnectorInterface> high_latency_warehouse,
                               size_t high_latency_warehouse_feed_cap,
-                              std::unique_ptr<WarehouseIngestionConnectorInterface> mid_latency_warehouse,
+                              std::unique_ptr<WareHouseIngestionConnectorInterface> mid_latency_warehouse,
                               size_t mid_latency_warehouse_feed_cap,
-                              std::unique_ptr<WarehouseIngestionConnectorInterface> low_latency_warehouse,
-                              size_t low_latency_warehouse_feed_cap) noexcept: memregion_verifier(std::move(memregion_verifier)),
-                                                                               memregion_express_radixer(std::move(memregion_express_radixer)),
+                              std::unique_ptr<WareHouseIngestionConnectorInterface> low_latency_warehouse,
+                              size_t low_latency_warehouse_feed_cap) noexcept: memregion_express_radixer(std::move(memregion_express_radixer)),
                                                                                press(std::move(press)),
                                                                                press_vectorization_sz(press_vectorization_sz),
                                                                                high_latency_warehouse(std::move(high_latency_warehouse)),
@@ -197,28 +184,8 @@ namespace dg::network_memcommit_messenger{
                                                                                                                                                                                           low_latency_warehouse_feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
-                    uma_ptr_t notifying_region                              = this->extract_notifying_region(base_data_arr[i]);  
-                    std::expected<bool, exception_t> is_express_delivery    = this->memregion_verifier->is_express(notifying_region);
-
-                    if (!is_express_delivery.has_value()){
-                        //we are having a leak that we can't unwind the stack due to our virtue of memregion notifying, it's fine
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(is_express_delivery.error()));
-                        continue;
-                    }
-
-                    //mempress covers the express lanes and no-express lanes
-
-                    if (notifying_region < this->press->first() || notifying_region >= this->press->last()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(dg::network_exception::BAD_REGION_ACCESS));
-                        continue;
-                    }
-
-                    if (!is_express_delivery.value()){
-                        dg::network_producer_consumer::delvrsrv_kv_deliver(press_feeder.get(), notifying_region, std::move(base_data_arr[i]));
-                        continue;
-                    }
-
-                    std::expected<MemregionLatencyRadixerInterface::memregion_kind_t, exception_t> memregion_kind = this->memregion_express_radixer->radix(notifying_region);
+                    uma_ptr_t notifying_addr = this->extract_notifying_addr(base_data_arr[i]);
+                    std::expected<MemregionLatencyRadixerInterface::memregion_kind_t, exception_t> memregion_kind = this->memregion_express_radixer->radix(notifying_addr);
 
                     if (!memregion_kind.has_value()){
                         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(memregion_kind.error())); //better to error than to resolute -> mempress delivery
@@ -241,6 +208,12 @@ namespace dg::network_memcommit_messenger{
                             dg::network_producer_consumer::delvrsrv_deliver(low_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
                             break;
                         }
+                        case MemregionLatencyRadixerInterface::NOMRAL_REGION
+                        {
+                            uma_ptr_t notifying_region = dg::memult::region(notifying_addr, this->press->memregion_size());
+                            dg::network_producer_consumer::delvrsrv_kv_deliver(press_feeder.get(), notifying_region, std::move(base_data_arr[i]));
+                            break;
+                        }
                         default:
                         {
                             if constexpr(DEBUG_MODE_FLAG){
@@ -256,7 +229,7 @@ namespace dg::network_memcommit_messenger{
 
         private:
 
-            static constexpr auto extract_notifying_region(const virtual_memory_event_t& memevent) noexcept -> uma_ptr_t{
+            static constexpr auto extract_notifying_addr(const virtual_memory_event_t& memevent) noexcept -> uma_ptr_t{
 
                 memory_event_kind_t event_kind = dg::network_memcommit_factory::read_virtual_event_kind(memevent);
 
@@ -329,12 +302,12 @@ namespace dg::network_memcommit_messenger{
 
                 void push(const uma_ptr_t& region, std::move_iterator<virtual_memory_event_t *> event_arr, size_t sz) noexcept{
 
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (region < this->dst->first() || region >= this->dst->last()){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
+                    if (region < this->dst->first() || region >= this->dst->last()){
+                        dg::network_log_stackdump::error(dg::network_exception::verbose(dg::network_exception::OUT_OF_BOUND_ACCESS));
+                        return;
+                    }
 
+                    if constexpr(DEBUG_MODE_FLAG){
                         if (sz > this->dst->max_consume_size()){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                             std::abort();
@@ -354,7 +327,7 @@ namespace dg::network_memcommit_messenger{
 
             struct InternalWareHouseFeedResolutor: dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>{
 
-                WarehouseIngestionConnectorInterface * dst;
+                WareHouseIngestionConnectorInterface * dst;
 
                 void push(std::move_iterator<virtual_emmory_event_t *> event_arr, size_t sz) noexcept{
 

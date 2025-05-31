@@ -74,10 +74,15 @@ namespace dg::network_memcommit_resolutor{
     //we'll linger on the design of the search operations because that's the major point of all these forwards + backwards
 
     //today we'll build a linker between this -> memregion or to warehouse
+    //this has been dragging for months, we'll solve this problem this week, because I think this has a sufficient set of features that we won't try to improve anytime soon 
 
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         public:
+
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -100,6 +105,10 @@ namespace dg::network_memcommit_resolutor{
                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent&) const noexcept -> exception_t{
+
+            } 
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -215,6 +224,10 @@ namespace dg::network_memcommit_resolutor{
                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
+            
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -328,6 +341,10 @@ namespace dg::network_memcommit_resolutor{
                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
+            
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -445,6 +462,10 @@ namespace dg::network_memcommit_resolutor{
                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
+            
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent&) const noexcept -> exception_t{
+
+            } 
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -569,6 +590,10 @@ namespace dg::network_memcommit_resolutor{
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = UACM_ACM_SZ;
@@ -685,6 +710,10 @@ namespace dg::network_memcommit_resolutor{
                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
+            
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
                 
@@ -812,6 +841,10 @@ namespace dg::network_memcommit_resolutor{
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -914,6 +947,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -936,6 +973,10 @@ namespace dg::network_memcommit_resolutor{
                                            size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                               delivery_capacity(delivery_capacity),
                                                                               vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -1125,6 +1166,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                  delivery_capacity(delivery_capacity),
                                                                                  vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -1227,6 +1272,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -1254,6 +1303,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                  request_box(std::move(request_box)),
                                                                                  delivery_capacity(delivery_capacity),
                                                                                  vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -1362,6 +1415,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -1383,6 +1440,10 @@ namespace dg::network_memcommit_resolutor{
                                               size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                  delivery_capacity(delivery_capacity),
                                                                                  vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
                 
@@ -1497,6 +1558,10 @@ namespace dg::network_memcommit_resolutor{
                                               size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                  delivery_capacity(delivery_capacity),
                                                                                  vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
+                
+            }
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -1699,6 +1764,10 @@ namespace dg::network_memcommit_resolutor{
                                                                              msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
                                                                              msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingSignalEvent&) const noexcept -> exception_t{
+
+            } 
+
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
                 size_t trimmed_leaf_dispatch_sz = std::min(this->leaf_dispatch_sz, sz);
@@ -1892,6 +1961,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -2004,6 +2077,10 @@ namespace dg::network_memcommit_resolutor{
                                             size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -2124,6 +2201,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -2242,6 +2323,10 @@ namespace dg::network_memcommit_resolutor{
                                             size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -2362,6 +2447,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -2480,6 +2569,10 @@ namespace dg::network_memcommit_resolutor{
                                             size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -2600,6 +2693,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -2718,6 +2815,10 @@ namespace dg::network_memcommit_resolutor{
                                             size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -2838,6 +2939,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -2946,6 +3051,10 @@ namespace dg::network_memcommit_resolutor{
                                             size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                delivery_capacity(delivery_capacity),
                                                                                vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -3068,6 +3177,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                  delivery_capacity(delivery_capacity),
                                                                                  vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -3177,6 +3290,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -3198,6 +3315,10 @@ namespace dg::network_memcommit_resolutor{
                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                   delivery_capacity(delivery_capacity),
                                                                                   vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -3306,6 +3427,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -3327,6 +3452,10 @@ namespace dg::network_memcommit_resolutor{
                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                   delivery_capacity(delivery_capacity),
                                                                                   vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -3446,6 +3575,10 @@ namespace dg::network_memcommit_resolutor{
                                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                   delivery_capacity(delivery_capacity),
                                                                                   vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -3654,7 +3787,7 @@ namespace dg::network_memcommit_resolutor{
                                                                               msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
                                                                               msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
-            constexpr auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> bool{
+            auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
             }
 
@@ -3849,6 +3982,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 size_t EVENT_SCALE_FACTOR           = 1u;
@@ -3957,6 +4094,10 @@ namespace dg::network_memcommit_resolutor{
                                                 size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -4119,6 +4260,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR         = 1u;
@@ -4279,6 +4424,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR         = 1u;
@@ -4438,6 +4587,10 @@ namespace dg::network_memcommit_resolutor{
                                                 size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -4609,6 +4762,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = UACM_ACM_SZ;
@@ -4775,6 +4932,10 @@ namespace dg::network_memcommit_resolutor{
                                                 size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -4953,6 +5114,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 1u;
@@ -5113,6 +5278,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR         = 1u;
@@ -5221,7 +5390,11 @@ namespace dg::network_memcommit_resolutor{
                                                 size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                    delivery_capacity(delivery_capacity),
                                                                                    vectorization_sz(vectorization_sz){}
-            
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR     = 2u;
@@ -5453,6 +5626,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       delivery_capacity(delivery_capacity),
                                                                                       vectorization_sz(vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
                 const size_t EVENT_SCALE_FACTOR         = 1u;
@@ -5600,6 +5777,15 @@ namespace dg::network_memcommit_resolutor{
 
     class ForwardPingPongExtnSrxRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
 
+        public:
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
+            void push(ForwardPingPongRequestEvent *, size_t) noexcept{
+
+            }
     };
 
     class ForwardPingPongExtnDstRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
@@ -5629,6 +5815,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       request_delivery_capacity(request_delivery_capacity),
                                                                                       outbound_delivery_capacity(outbound_delivery_capacity),
                                                                                       vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -5792,6 +5982,15 @@ namespace dg::network_memcommit_resolutor{
 
     class ForwardPingPongExtnDsxRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
 
+        public:
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
+
+            void push(ForwardPingPongRequestEvent *, size_t) noexcept{
+
+            }
     };
 
     class ForwardPingPongMsgrFwdRequestResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>{
@@ -5809,6 +6008,10 @@ namespace dg::network_memcommit_resolutor{
                                                    size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                       delivery_capacity(delivery_capacity),
                                                                                       vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -5970,6 +6173,10 @@ namespace dg::network_memcommit_resolutor{
                                                    size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
                                                                                       delivery_capacity(delivery_capacity),
                                                                                       vectorization_sz(vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
 
@@ -6218,7 +6425,7 @@ namespace dg::network_memcommit_resolutor{
                                                                                   msgrbwd_pingpong_resolutor(std::move(msgrbwd_pingpong_resolutor)),
                                                                                   msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
-        constexpr auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> bool{
+        auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent&) const noexcept -> exception_t{
 
         }
 
@@ -6392,6 +6599,160 @@ namespace dg::network_memcommit_resolutor{
         }
     };
 
+    //
+
+    //this sounds very WEIRD
+    //
+
+    //I have yet to know how to do this cron fling without literally exploding the mempress container, I guess that is unavoidable
+    //I guess that is HARD to implement, wait smph is the sound logics because we cant really implement a cron job for these guys
+    //what'd want to do is actually to flush the tile, signal can get stucked, and it is very expected, this is why we invalidate the signal by using three values (operatable_memevent_id, operatable_forward_id and operatable_backward_id)
+
+    class CronSmphSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<VirtualSignalAggregationEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+
+    };
+
+    class SignalAggregationSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<VirtualSignalAggregationEvent>{
+
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const size_t delivery_capacity;
+            const size_t vectorization_sz;
+
+        public:
+
+            SignalAggregationSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> requets_box,
+                                             size_t delivery_capacity,
+                                             size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                delivery_capacity(delivery_capacity),
+                                                                                vectorization_sz(vectorization_sz){}
+
+            constexpr auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> bool{
+
+            } 
+
+            //the single most confusing thing is to make this a precond instead of an exception
+            //I'd love to change this to an exception really !!!
+            //yet it would introduce tons of bad memory access that is not in L1 or L2, would mess up the RAM very badly
+            //so for now, we'd stick with the precond as a separate function
+            //these tiles are not initialized, we'd want to have a fixed number of aggregation that simply holds the signals and release when a certain signal_cap has been reached
+            //there are definitely problems, the problems being that we dont know if certain number of signals have been reached
+            //so it's better to initialize these tiles as normal tiles just for the sake of civility
+
+            void push(VirtualSignalAggregationEvent * event_arr, size_t sz) noexcept{
+
+                const size_t EVENT_SCALE_FACTOR     = MAX_VIRTUAL_SIGNAL_AGGREGATION_PER_TILE;
+                size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
+                size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
+                size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
+                auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->request_box.get(), trimmed_delivery_capacity, dh_mem.get()));
+
+                {
+                    InternalResolutor internal_resolutor        = {};
+                    internal_resolutor.request_delivery_handle  = delivery_handle.get();
+
+                    size_t trimmed_vectorization_sz             = std::min(this->vectorization_sz, sz);
+                    size_t vdh_allocation_cost                  = dg::network_memops_uma::delvrsrv_regionkv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> vdh_mem(vdh_allocation_cost);
+                    auto vectorized_delivery_handle             = dg::network_exception_handler::nothrow_log(dg::network_memops_uma::delvrsrv_regionkv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, vdh_mem.get()));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if constexpr(DEBUG_MODE_FLAG){
+                            auto ptrchk = dg::network_tile_member_access::safecthrow_smph_ptr_access(event_arr[i].smph_addr);
+
+                            if (!ptrchk.has_value()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            }
+                        }
+
+                        uma_ptr_t rcu_addr  = dg::network_tile_member_getsetter::get_smph_rcu_addr_nothrow(event_arr[i].smph_addr);
+                        uma_ptr_t lck_addr  = dg::memult::region(rcu_addr, dg::network_memops_uma::memlock_region_size());
+
+                        dg::network_memops_uma::delvrsrv_regionkv_deliver(vectorized_delivery_handle.get(), lck_addr, event_arr[i]);
+                    }
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, VirtualSignalAggregationEvent>{
+
+                dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void dump_sigagg(uma_ptr_t smph_addr) noexcept{
+
+                    size_t memevent_arr_cap = MAX_VIRTUAL_SIGNAL_AGGREGATION_PER_TILE;
+                    size_t memevent_arr_sz  = {};
+                    dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<virtual_memory_event_t[]> memevent_arr(memevent_arr_cap);
+                    dg::network_tile_member_getsetter::controller_get_smph_sigagg(smph_addr, memevent_arr.get(), memevent_arr_sz);
+
+                    for (size_t i = 0u; i < memevent_arr_sz; ++i){
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, memevent_arr[i]);
+                    }
+
+                    dg::network_tile_member_getsetter::controller_clear_smph_sigagg(ptr);
+                }
+
+                void push(const uma_ptr_t& rcu_addr, std::move_iterator<VirtualSignalAggregationEvent *> event_arr, size_t sz) noexcept{
+
+                    dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
+
+                    VirtualSignalAggregationEvent * base_event_arr = event_arr.base();
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t ptr                       = base_event_arr[i].smph_addr;
+                        operatable_id_t expected_ops_id     = base_event_arr[i].operatable_id;
+                        init_status_t init_status           = dg::network_tile_member_getsetter::get_smph_init_status_nothrow(ptr);
+                        operatable_id_t cur_operatable_id   = dg::network_tile_member_getsetter::get_smph_operatable_memevent_id_nothrow(ptr);
+
+                        switch (init_status){
+                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_ORPHANED:
+                            {
+                                break;
+                            }
+                            case TILE_INIT_STATUS_INITIALIZED:
+                            {
+                                if (cur_operatable_id != expected_ops_id){
+                                    break;
+                                }
+
+                                size_t smph_sigagg_cap  = dg::network_tile_member_getsetter::get_smph_sigagg_capacity_nothrow(ptr);
+                                size_t smph_sigagg_sz   = dg::network_tile_member_getsetter::get_smph_sigagg_size_nothrow(ptr);
+
+                                if (smph_sigagg_sz == smph_sigagg_cap){
+                                    this->dump_sigagg(ptr);
+                                }
+
+                                dg::network_tile_member_getsetter::controller_smph_push_sigagg(ptr, base_event_arr[i].memevent);
+                                break;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else{
+                                    std::unreachable();
+                                }
+                            }
+                        }
+                    } 
+                }
+            };
+    };
+
+    //
+    
     constexpr auto convert_grad_status_to_cuda_write_option(grad_status_t grad_status) noexcept -> cuda_write_option_t{
 
         if (grad_status == TILE_GRAD_STATUS_HAS_VALUE){
@@ -6427,6 +6788,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -6461,6 +6826,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                     radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                     region_vectorization_sz(region_vectorization_sz),
                                                                                     forward_vectorization_sz(forward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -6896,6 +7265,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       region_vectorization_sz(region_vectorization_sz),
                                                                                       forward_vectorization_sz(forward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
@@ -7319,6 +7692,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                       region_vectorization_sz(region_vectorization_sz),
                                                                                       forward_vectorization_sz(forward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -7848,6 +8225,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                     region_vectorization_sz(region_vectorization_sz),
                                                                                     forward_vectorization_sz(forward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 // constexpr size_t LCK_ADDR_SZ_PER_DISPATCH   = UACM_ACM_SZ + 1u;
@@ -8256,6 +8637,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                     radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                     region_vectorization_sz(region_vectorization_sz),
                                                                                     forward_vectorization_sz(forward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -8672,6 +9057,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                        region_vectorization_sz(region_vectorization_sz),
                                                                                        forward_vectorization_sz(forward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
@@ -9048,6 +9437,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -9082,6 +9475,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                        radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                        region_vectorization_sz(region_vectorization_sz),
                                                                                        forward_vectorization_sz(forward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -9483,10 +9880,16 @@ namespace dg::network_memcommit_resolutor{
     //clear
     class ForwardDoExtnDsxSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
-        void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
+        public:
 
-            (void) event_arr;
-        }
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
+            void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+                (void) event_arr;
+            }
     };
 
     //clear
@@ -9517,6 +9920,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                     request_delivery_capacity(request_delivery_capacity),
                                                                                     region_vectorization_sz(region_vectorization_sz),
                                                                                     forward_vectorization_sz(forward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -9990,6 +10397,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                          region_vectorization_sz(region_vectorization_sz),
                                                                                          forward_vectorization_sz(forward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
@@ -10423,6 +10834,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                        region_vectorization_sz(region_vectorization_sz),
                                                                                        forward_vectorization_sz(forward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
@@ -10824,6 +11239,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -10934,9 +11353,9 @@ namespace dg::network_memcommit_resolutor{
                                                                            msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
                                                                            msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
 
-            constexpr auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
-            } 
+            }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -11135,6 +11554,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                           radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                           region_vectorization_sz(region_vectorization_sz),
                                                                                           gradupdate_vectorization_sz(gradupdate_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -11506,6 +11929,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                         region_vectorization_sz(region_vectorization_sz),
                                                                                         backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -11939,6 +12366,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
                 
                 (void) event_arr;
@@ -11977,6 +12408,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                         region_vectorization_sz(region_vectorization_sz),
                                                                                         backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -12573,6 +13008,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       region_vectorization_sz(region_vectorization_sz),
                                                                                       backward_vectorization_sz(backward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 // constexpr size_t LCK_ADDR_SZ_PER_DISPATCH   = UACM_ACM_SZ + 1u;
@@ -12991,6 +13430,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                       region_vectorization_sz(region_vectorization_sz),
                                                                                       backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -13527,6 +13970,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                       region_vectorization_sz(region_vectorization_sz),
                                                                                       backward_vectorization_sz(backward_vectorization_sz){}
 
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
@@ -13959,6 +14406,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -13993,6 +14444,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                            radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                            region_vectorization_sz(region_vectorization_sz),
                                                                                            backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -14425,6 +14880,10 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 (void) event_arr;
@@ -14459,6 +14918,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                            radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                            region_vectorization_sz(region_vectorization_sz),
                                                                                            gradmove_vectorization_sz(gradmove_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -14809,6 +15272,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                          radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                          region_vectorization_sz(region_vectorization_sz),
                                                                                          backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -15253,6 +15720,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                            radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                            region_vectorization_sz(region_vectorization_sz),
                                                                                            backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -15710,6 +16181,10 @@ namespace dg::network_memcommit_resolutor{
                                                                                            radxfetch_vectorization_sz(radxfetch_vectorization_sz),
                                                                                            region_vectorization_sz(region_vectorization_sz),
                                                                                            backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -16276,7 +16751,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
-            } 
+            }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
@@ -16458,7 +16933,7 @@ namespace dg::network_memcommit_resolutor{
     //the former group is high-latency-proned + probably waiting on a memregion press or a direct delivery
 
     //the latter group is low-latency
-    //we've been thinking about the operatable_memevent_id for signal aggregation tile, then we realized that this logic is very cringy so we didn't add that 
+    //we've been thinking about the operatable_memevent_id for signal aggregation tile, then we realized that this logic is very cringy so we didn't add that (this is a bad idea)
 
     //err_comm, hard to do actual error comm
     //reason being, the unwinding stack is unclear (we are detaching people)
@@ -16479,6 +16954,28 @@ namespace dg::network_memcommit_resolutor{
     //               external branch-prediction direction? why?
     //               internal branch-prediction direction? why?
     //               or both (there are no whys), the two does not actually cancel out each other
+
+    //cuda blessings: pushing 10 ** 13 fp8 operations/ second, problems, cuda's trying to fatten the internal memory storage due to engineering laziness, we can solve the problem here by using pinned_memory + fsys + ram as backed memories
+    //                there are literally no performance constraints as we are doing heavy search + linear-liked operation on cuda
+    //                there are no alignment problems also (all memory segments are pre-linked at compile-time)
+    //                only problem: cuda might crash, compromises this core, thats precisely the reason for sockets (compute engines involve cuda, persitent engines do not involve cuda, they communicate via sockets)
+    //                problems of fp8 operations: (1): fp8 precision is way off
+    //                                            (2): we are working on search for cuda platforms
+    //                                            (3): multi-precision does not involve fp8 precision
+
+    //                ETA of search implementation: next month
+    //                                              focusing on: internal-branch-prediction-supported search (this involves tons of engineering to get a 10x faster search time)
+    //                                                           external-branch-prediction-supported (search instruction payload, hard to implement correctly)
+
+    //persistent storage: will version control like github, try to rollback the version control if bad evaluation kicks in 
+    //problems of Taylor Series: cannot parrot the cos + sin + sqrt + etc complex semantic space
+    //resolutions: Wanted approach, fast commit + uncommit of exotic patterns (external analysis of projection space + another machine learning to steer the direction (sounds like Taylor Series polynomial + coefficients))
+
+    //final goal: the engine is sufficient to extend and sufficient to P2P, does not block (by imposing a stingent requirement of dispatch runtime complexity), does not tie the further decisions
+    //            msgrfwd + msgrbwd will be used to analyze the string patterns externally
+    //            a coordinator will coordinate our searching mission by using external payloads
+
+    //est to reach final goal, 1-2 years (this is insanely hard to implement)
 
     //clear
     class MemCommitResolutor: public virtual dg::network_concurrency::WorkerInterface{
