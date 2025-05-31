@@ -1092,6 +1092,7 @@ namespace stdx{
     //what happens to the point and the arg value thereafter is ... in the mercy of the compiler
     //how do we make this official, by using a volatile container, such is every operation must be through the volatile container to be defined
     //this is hard
+    //this is undefined as specified by Dad, we dont have a better approach
 
     template <class T, class ...ConsumingArgs>
     __attribute__((noipa)) auto volatile_access(T * volatile arg, ConsumingArgs& ...consuming_args) noexcept -> T *{

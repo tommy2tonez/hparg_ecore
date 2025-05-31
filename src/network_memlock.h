@@ -303,10 +303,10 @@ namespace dg::network_memlock{
             }
 
             while (true){
-                waiting_lock_guard_resource         = {};
-                spinning_lock_guard_resource_array  = {};
-                was_thru                            = true; 
+                waiting_lock_guard_resource = {};
+                was_thru = true; 
 
+                *stdx::volatile_access(&spinning_lock_guard_resource_array, waiting_lock_guard_resource) = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that 
                 *stdx::volatile_access(&waiting_lock_guard_resource, spinning_lock_guard_resource_array) = recursive_lock_guard(lock_ins, lock_ptr_arr[wait_idx]);
 
                 for (size_t i = 0u; i < SZ; ++i){

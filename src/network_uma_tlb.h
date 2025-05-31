@@ -268,7 +268,7 @@ namespace dg::network_uma_tlb::rec_lck{
             return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_resource, std::move(destructor)));
         }
 
-        std::optional<map_resource_t> map_rs = tlb_ins::map_try(device_id, ptr);
+        std::optional<map_resource_t> map_rs = tlb_ins::map_try(device_id, region);
 
         if (map_rs.has_value()){
             controller_ins::insert(region, std::make_pair(device_id, map_rs.value()));
@@ -321,8 +321,9 @@ namespace dg::network_uma_tlb::rec_lck{
             return dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_resource, std::move(destructor));
         }
 
-        map_resource_t map_rs = tlb_ins::map_wait(device_id, ptr);
+        map_resource_t map_rs = tlb_ins::map_wait(device_id, region);
         controller_ins::insert(region, std::make_pair(device_id, map_rs));
+
         recursive_map_resource_t recursive_resource{.region                 = region,
                                                     .map_resource           = map_rs,
                                                     .responsibility_flag    = true,
@@ -380,12 +381,12 @@ namespace dg::network_uma_tlb::rec_lck{
             if (was_thru){
                 return std::make_pair(std::move(wait_resource), std::move(try_resource));
             }
-    
-            while (true){
-                wait_resource   = {};
-                try_resource    = {};
-                was_thru        = true;
 
+            while (true){
+                wait_resource = {};
+                was_thru = true;
+
+                *stdx::volatile_access(&try_resource, wait_resource) = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that
                 *stdx::volatile_access(&wait_resource, try_resource) = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
 
                 for (size_t i = 0u; i < SZ; ++i){

@@ -34,7 +34,7 @@ namespace dg::network_memcommit_messenger{
     //the problem with software is that we just keep writing literally, build abstraction, keep writing
     //we dont really have time to ask why this why that
 
-    class NormalWarehouseConnector: public virtual WareHouseIngestionConnectorInterface{
+    class NormalWareHouseConnector: public virtual WareHouseIngestionConnectorInterface{
 
         private:
 
@@ -42,7 +42,7 @@ namespace dg::network_memcommit_messenger{
         
         public:
 
-            NormalWarehouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse) noexcept: warehouse(std::move(warehouse)){}
+            NormalWareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse) noexcept: warehouse(std::move(warehouse)){}
 
             auto push(dg::vector<virtual_memory_event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
 
@@ -55,7 +55,7 @@ namespace dg::network_memcommit_messenger{
             }
     };
 
-    class ExhaustionControlledWarehouseConnector: public virtual WareHouseIngestionConnectorInterface{
+    class ExhaustionControlledWareHouseConnector: public virtual WareHouseIngestionConnectorInterface{
 
         private:
 
@@ -64,7 +64,7 @@ namespace dg::network_memcommit_messenger{
 
         public:
 
-            ExhaustionControlledWarehouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+            ExhaustionControlledWareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
                                                    std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) noexcept: warehouse(std::move(warehouse)),
                                                                                                                                                      infretry_device(std::move(infretry_device)){}
 
@@ -188,22 +188,22 @@ namespace dg::network_memcommit_messenger{
                     std::expected<MemregionLatencyRadixerInterface::memregion_kind_t, exception_t> memregion_kind = this->memregion_express_radixer->radix(notifying_addr);
 
                     if (!memregion_kind.has_value()){
-                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(memregion_kind.error())); //better to error than to resolute -> mempress delivery
+                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(memregion_kind.error()));
                         continue;
                     }
 
                     switch (memregion_kind.value()){
-                        case MemregionLatencyRadixerInterface::HIGH_LATENCY_REGION:
+                        case MemregionLatencyRadixerInterface::EXPRESS_HIGH_LATENCY_REGION:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(high_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
                             break;
                         }
-                        case MemregionLatencyRadixerInterface::MID_LATENCY_REGION:
+                        case MemregionLatencyRadixerInterface::EXPRESS_MID_LATENCY_REGION:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(mid_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
                             break;
                         }
-                        case MemregionLatencyRadixerInterface::LOW_LATENCY_REGION:
+                        case MemregionLatencyRadixerInterface::EXPRESS_LOW_LATENCY_REGION:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(low_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
                             break;
@@ -259,35 +259,35 @@ namespace dg::network_memcommit_messenger{
                     }
                     case dg::network_memcommit_factory::event_kind_signal_aggregation_signal:
                     {
-                        virtual_sigagg_event_t sigagg_event     = dg::network_memcommit_factory::devirtualize_sigagg_signal_event(memevent);
-                        sigagg_event_kind_t sigagg_kind         = dg::network_memcommit_factory::read_aggregation_kind(sigagg_event);
+                        // virtual_sigagg_event_t sigagg_event     = dg::network_memcommit_factory::devirtualize_sigagg_signal_event(memevent);
+                        // sigagg_event_kind_t sigagg_kind         = dg::network_memcommit_factory::read_aggregation_kind(sigagg_event);
 
-                        switch (sigagg_kind){
-                            case dg::network_memcommit_factory::aggregation_kind_forward_ping_signal:
-                            {
-                                return dg::network_memcommit_factory::devirtualize_forward_ping_signal_aggregation_event(sigagg_event).sigagg_addr;
-                            }
-                            case dg::network_memcommit_factory::aggregation_kind_forward_pong_request:
-                            {
-                                return dg::network_memcommit_factory::devirtualize_forward_pong_signal_aggregation_event(sigagg_event).sigagg_addr;
-                            }
-                            case dg::network_memcommit_factory::aggregation_kind_forward_pingpong_request:
-                            {
-                                return dg::network_memcommit_factory::devirtualize_forward_pingpong_request_aggregation_event(sigagg_event).sigagg_addr;
-                            }
-                            case dg::network_memcommit_factory::aggregation_kind_forward_do_signal:
-                            {
-                                return dg::network_memcommit_factory::devirtualize_forward_do_signal_aggregation_event(sigagg_event).sigagg_addr;
-                            }
-                            case dg::network_memcommit_factory::aggregation_kind_backward_do_signal:
-                            {
-                                return dg::network_memcommit_factory::devirtualize_backward_do_signal_aggregation_event(sigagg_event).sigagg_addr;
-                            }
-                            default:
-                            {
-                                std::unreachable();
-                            }
-                        }
+                        // switch (sigagg_kind){
+                        //     case dg::network_memcommit_factory::aggregation_kind_forward_ping_signal:
+                        //     {
+                        //         return dg::network_memcommit_factory::devirtualize_forward_ping_signal_aggregation_event(sigagg_event).sigagg_addr;
+                        //     }
+                        //     case dg::network_memcommit_factory::aggregation_kind_forward_pong_request:
+                        //     {
+                        //         return dg::network_memcommit_factory::devirtualize_forward_pong_signal_aggregation_event(sigagg_event).sigagg_addr;
+                        //     }
+                        //     case dg::network_memcommit_factory::aggregation_kind_forward_pingpong_request:
+                        //     {
+                        //         return dg::network_memcommit_factory::devirtualize_forward_pingpong_request_aggregation_event(sigagg_event).sigagg_addr;
+                        //     }
+                        //     case dg::network_memcommit_factory::aggregation_kind_forward_do_signal:
+                        //     {
+                        //         return dg::network_memcommit_factory::devirtualize_forward_do_signal_aggregation_event(sigagg_event).sigagg_addr;
+                        //     }
+                        //     case dg::network_memcommit_factory::aggregation_kind_backward_do_signal:
+                        //     {
+                        //         return dg::network_memcommit_factory::devirtualize_backward_do_signal_aggregation_event(sigagg_event).sigagg_addr;
+                        //     }
+                        //     default:
+                        //     {
+                        //         std::unreachable();
+                        //     }
+                        // }
                     }
                     default:
                     {
@@ -360,7 +360,6 @@ namespace dg::network_memcommit_messenger{
                 }
             };
     };
-
 } 
 
 #endif
