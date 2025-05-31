@@ -260,7 +260,7 @@ namespace dg::network_memcommit_messenger{
 
                 memory_event_kind_t event_kind = dg::network_memcommit_factory::read_virtual_event_kind(memevent);
 
-                //switch case branch prediciton is really good because of the locality of msgr context
+                //switch case branch prediction is really good because of the locality of msgr context
                 //
 
                 switch (event_kind){

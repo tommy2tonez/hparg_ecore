@@ -166,7 +166,7 @@ namespace dg::network_uma_tlb::rec_lck{
     struct MapResource{
         typename TLBInterface::uma_ptr_t<> region;
         typename TLBInterface::map_resource_handle_t<> map_resource;
-        bool responsibility_flag; 
+        bool responsibility_flag;
         size_t offset;
     };
 
@@ -223,10 +223,16 @@ namespace dg::network_uma_tlb::rec_lck{
     };
 
     template <class T>
-    constexpr auto recursive_resource_type(const MutexRegionTLBInterface<T>) noexcept -> MapResource<MutexRegionTLBInterface<T>>;
+    auto recursive_resource_type(const MutexRegionTLBInterface<T>) -> MapResource<MutexRegionTLBInterface<T>>;
+
+    //this implementation is literally complicated
+    //this implementation sounds very not sane
+    //region <-> MapResource
 
     template <class T>
-    auto recursive_lockmap_try(const MutexRegionTLBInterface<T>, typename MutexRegionTLBInterface<T>::device_id_t<> device_id, typename MutexRegionTLBInterface<T>::uma_ptr_t<> ptr) noexcept{
+    auto recursive_lockmap_try(const MutexRegionTLBInterface<T>, 
+                               typename MutexRegionTLBInterface<T>::device_id_t<> device_id,
+                               typename MutexRegionTLBInterface<T>::uma_ptr_t<> ptr) noexcept{
 
         using tlb_ins                   = MutexRegionTLBInterface<T>;
         using controller_ins            = RecursiveMapController<MutexRegionTLBInterface<T>>;
@@ -247,19 +253,32 @@ namespace dg::network_uma_tlb::rec_lck{
         };
 
         if (mapped.has_value()){
-            if (mapped->first != device_id){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
+            if constexpr(DEBUG_MODE_FLAG){
+                if (mapped->first != device_id){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }    
             }
 
-            return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_map_resource_t{region, mapped->second, false, offset}, std::move(destructor)));
+            recursive_map_resource_t recursive_resource{.region                 = region,
+                                                        .map_resource           = mapped->second,
+                                                        .responsibility_flag    = false,
+                                                        .offset                 = offset};  
+
+            return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_resource, std::move(destructor)));
         }
 
         std::optional<map_resource_t> map_rs = tlb_ins::map_try(device_id, ptr);
 
         if (map_rs.has_value()){
             controller_ins::insert(region, std::make_pair(device_id, map_rs.value()));
-            return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_map_resource_t{region, map_rs.value(), true, offset}, std::move(destructor)));
+            
+            recursive_map_resource_t recursive_resource{.region                 = region,
+                                                        .map_resource           = map_rs.value(),
+                                                        .responsibility_flag    = true,
+                                                        .offset                 = offset};
+
+            return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_resource, std::move(destructor)));
         }
 
         return std::optional<dg::unique_resource<recursive_map_resource_t, decltype(destructor)>>(std::nullopt);
@@ -268,44 +287,122 @@ namespace dg::network_uma_tlb::rec_lck{
     template <class T>
     auto recursive_lockmap_wait(const MutexRegionTLBInterface<T> tlb, typename MutexRegionTLBInterface<T>::device_id_t<> device_id, typename MutexRegionTLBInterface<T>::uma_ptr_t<> ptr) noexcept{
 
-        while (true){
-            if (auto rs = recursive_lockmap_try(tlb, device_id, ptr); rs.has_value()){
-                using ret_t = dg::network_type_traits_x::remove_optional_t<decltype(rs)>;
-                return ret_t{std::move(rs.value())};
+        using tlb_ins                   = MutexRegionTLBInterface<T>;
+        using controller_ins            = RecursiveMapController<MutexRegionTLBInterface<T>>;
+        using map_ptr_t                 = typename tlb_ins::uma_ptr_t<>;
+        using device_id_t               = typename tlb_ins::device_id_t<>;
+        using map_resource_t            = typename tlb_ins::map_resource_handle_t<>; 
+        using recursive_map_resource_t  = MapResource<tlb_ins>;
+
+        map_ptr_t region                                                = dg::memult::region(ptr, tlb_ins::memregion_size());
+        size_t offset                                                   = dg::memult::region_offset(ptr, tlb_ins::memregion_size());
+        std::optional<std::pair<device_id_t, map_resource_t>> mapped    = controller_ins::map(region);
+
+        auto destructor = [](recursive_map_resource_t arg) noexcept{
+            if (arg.responsibility_flag){
+                controller_ins::erase(arg.region);
+                tlb_ins::map_release(arg.map_resource);
             }
+        };
+
+        if (mapped.has_value()){
+            if constexpr(DEBUG_MODE_FLAG){
+                if (mapped->first != device_id){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }    
+            }
+
+            recursive_map_resource_t recursive_resource{.region                 = region,
+                                                        .map_resource           = mapped->second,
+                                                        .responsibility_flag    = false,
+                                                        .offset                 = offset};  
+
+            return dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_resource, std::move(destructor));
         }
+
+        map_resource_t map_rs = tlb_ins::map_wait(device_id, ptr);
+        controller_ins::insert(region, std::make_pair(device_id, map_rs));
+        recursive_map_resource_t recursive_resource{.region                 = region,
+                                                    .map_resource           = map_rs,
+                                                    .responsibility_flag    = true,
+                                                    .offset                 = offset};
+
+        return dg::unique_resource<recursive_map_resource_t, decltype(destructor)>(recursive_resource, std::move(destructor));
     }
 
     template <size_t SZ, class T>
-    auto recursive_lockmap_try_many(const MutexRegionTLBInterface<T> tlb, const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
+    auto recursive_lockmap_try_array(const MutexRegionTLBInterface<T> tlb, 
+                                     const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
 
-        using opt_element_t     = decltype(recursive_lockmap_try(tlb, {}, {}));
-        using element_t         = dg::network_type_traits_x::remove_optional_t<opt_element_t>;
+        using element_t         = decltype(recursive_lockmap_try(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{}));
         using resource_arr_t    = std::array<element_t, SZ>;
-        using ret_t             = std::optional<resource_arr_t>;
-
-        resource_arr_t rs{};
+        resource_arr_t rs       = {};
 
         for (size_t i = 0u; i < args.size(); ++i){
-            auto tmp = recursive_lockmap_try(tlb, args[i].first, args[i].second);
+            rs[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
 
-            if (!tmp.has_value()){
-                return ret_t{std::nullopt};
+            if (!rs[i].has_value()){
+                return std::optional<resource_arr_t>(std::nullopt);
             }
-
-            rs[i] = std::move(tmp.value());
         }
 
-        return ret_t{std::move(rs)};
+        return std::optional<resource_arr_t>(std::move(rs));
     }
 
     template <size_t SZ, class T>
-    auto recursive_lockmap_wait_many(const MutexRegionTLBInterface<T> tlb, const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
+    auto recursive_lockmap_wait_many(const MutexRegionTLBInterface<T> tlb,
+                                     const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
 
-        while (true){
-            if (auto rs = recursive_lockmap_try_many(tlb, args); rs.has_value()){
-                using ret_t = dg::network_type_traits_x::remove_optional_t<decltype(rs)>; 
-                return ret_t{std::move(rs.value())};
+        static_assert(SZ != 0u);
+
+        if constexpr(SZ == 1u){
+            return recursive_lock_guard(tlb, args[0].first, args[0].second);
+        } else{
+            using try_element_t                         = decltype(recursive_lockmap_try(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{})); 
+            using wait_element_t                        = decltype(recursive_lockmap_wait(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{}));
+    
+            std::optional<wait_element_t> wait_resource = {};
+            std::array<try_element_t, SZ> try_resource  = {};
+            size_t wait_idx                             = {};
+            bool was_thru                               = true;
+
+            for (size_t i = 0u; i < args.size(); ++i){
+                try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
+    
+                if (!try_resource[i].has_value()){
+                    wait_idx    = i;
+                    was_thru    = false;
+                    break;
+                }
+            }
+    
+            if (was_thru){
+                return std::make_pair(std::move(wait_resource), std::move(try_resource));
+            }
+    
+            while (true){
+                wait_resource   = {};
+                try_resource    = {};
+                was_thru        = true;
+
+                *stdx::volatile_access(&wait_resource, try_resource) = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
+
+                for (size_t i = 0u; i < SZ; ++i){
+                    if (i != wait_idx){
+                        try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
+                        
+                        if (!try_resource[i].has_value()){
+                            wait_idx    = i;
+                            was_thru    = false;
+                            break;
+                        }
+                    }
+                }
+    
+                if (was_thru){
+                    return std::make_pair(std::move(wait_resource), std::move(try_resource));
+                }
             }
         }
     }

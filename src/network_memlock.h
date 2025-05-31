@@ -280,20 +280,20 @@ namespace dg::network_memlock{
         if constexpr(SZ == 1u){
             return recursive_lock_guard(lock_ins, lock_ptr_arr[0]);
         } else{
-            using waiting_lock_guard_resource_t     = decltype(recursive_lock_guard(lock_ins, lock_ptr_arr[0]));
+            using waiting_lock_guard_resource_t     = std::optional<decltype(recursive_lock_guard(lock_ins, lock_ptr_arr[0]))>;
             using spinning_lock_guard_resource_t    = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
 
             auto waiting_lock_guard_resource        = waiting_lock_guard_resource_t{};
             auto spinning_lock_guard_resource_array = std::array<spinning_lock_guard_resource_t, SZ>{};
-            size_t waitable_idx                     = {}; 
+            size_t wait_idx                         = {}; 
             bool was_thru                           = true;
 
             for (size_t i = 0u; i < SZ; ++i){
-                spinning_lock_guard_resource_array[i] = recursive_lock_guard(lock_ins, lock_ptr_arr[i]);
+                spinning_lock_guard_resource_array[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
 
                 if (!spinning_lock_guard_resource_array[i].has_value()){
-                    waitable_idx    = i; 
-                    was_thru        = false;
+                    wait_idx    = i; 
+                    was_thru    = false;
                     break;
                 }
             }
@@ -305,16 +305,17 @@ namespace dg::network_memlock{
             while (true){
                 waiting_lock_guard_resource         = {};
                 spinning_lock_guard_resource_array  = {};
-                waiting_lock_guard_resource         = recursive_lock_guard(lock_ins, lock_ptr_arr[waitable_idx]);
                 was_thru                            = true; 
 
+                *stdx::volatile_access(&waiting_lock_guard_resource, spinning_lock_guard_resource_array) = recursive_lock_guard(lock_ins, lock_ptr_arr[wait_idx]);
+
                 for (size_t i = 0u; i < SZ; ++i){
-                    if (i != waitable_idx){
+                    if (i != wait_idx){
                         spinning_lock_guard_resource_array[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
 
                         if (!spinning_lock_guard_resource_array[i].has_value()){
-                            waitable_idx    = i;
-                            was_thru        = false;
+                            wait_idx    = i;
+                            was_thru    = false;
                             break;
                         }
                     }
