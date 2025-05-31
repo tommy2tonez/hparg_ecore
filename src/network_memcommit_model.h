@@ -36,21 +36,6 @@ namespace dg::network_memcommit_factory{
         }
     };
 
-    struct ForwardPongSignalEvent{
-        uma_ptr_t dst;
-        operatable_id_t operatable_id;
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(dst, operatable_id);
-        }
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(dst, operatable_id);
-        }
-    };
-
     struct ForwardPongRequestEvent{
         uma_ptr_t requestee;
         uma_ptr_t requestor;
@@ -122,13 +107,6 @@ namespace dg::network_memcommit_factory{
                                       .operatable_id = operatable_id};
     }
 
-    constexpr auto make_event_forward_pong_signal(uma_ptr_t dst, 
-                                                  operatable_id_t operatable_id) noexcept -> ForwardPongSignalEvent{
-
-        return ForwardPongSignalEvent{.dst = dst, 
-                                      .operatable_id = operatable_id};
-    } 
-
     constexpr auto make_event_forward_pong_request(uma_ptr_t requestee, 
                                                    uma_ptr_t requestor, 
                                                    operatable_id_t operatable_id, 
@@ -170,21 +148,6 @@ namespace dg::network_memcommit_factory{
     struct ForwardPingSignalAggregationEvent{
         uma_ptr_t sigagg_addr;
         ForwardPingSignalEvent event;
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(sigagg_addr, event);
-        }
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(sigagg_addr, event);
-        }
-    };
-
-    struct ForwardPongSignalAggregationEvent{
-        uma_ptr_t sigagg_addr;
-        ForwardPongSignalEvent event;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
@@ -266,15 +229,6 @@ namespace dg::network_memcommit_factory{
                                                                                          .operatable_id = operatable_id}};
     }
 
-    constexpr auto make_sigagg_forward_pong_signal(uma_ptr_t sigagg_addr, 
-                                                   uma_ptr_t dst, 
-                                                   operatable_id_t operatable_id) noexcept -> ForwardPongSignalAggregationEvent{
-        
-        return ForwardPongSignalAggregationEvent{.sigagg_addr  = sigagg_addr,
-                                                 .event        = ForwardPongSignalEvent{.dst            = dst,
-                                                                                        .operatable_id  = operatable_id}};
-    }
-
     constexpr auto make_sigagg_forward_pong_request(uma_ptr_t sigagg_addr, 
                                                     uma_ptr_t requestee, 
                                                     uma_ptr_t requestor,
@@ -329,9 +283,8 @@ namespace dg::network_memcommit_factory{
         aggregation_kind_forward_ping_signal        = 0u,
         aggregation_kind_forward_pong_request       = 1u,
         aggregation_kind_forward_pingpong_request   = 2u,
-        aggregation_kind_forward_pong_signal        = 3u,
-        aggregation_kind_forward_do_signal          = 4u,
-        aggregation_kind_backward_do_signal         = 5u
+        aggregation_kind_forward_do_signal          = 3u,
+        aggregation_kind_backward_do_signal         = 4u
     };
 
     struct VirtualSignalAggregationEvent{
@@ -355,17 +308,6 @@ namespace dg::network_memcommit_factory{
 
         VirtualSignalAggregationEvent rs;
         rs.aggregation_kind = aggregation_kind_forward_ping_signal;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
-
-        return rs;
-    }
-
-    constexpr auto virtualize_sigagg(const ForwardPongSignalAggregationEvent& event) noexcept -> VirtualSignalAggregationEvent{
-
-        static_assert(dg::network_trivial_serializer::size(ForwardPongSignalAggregationEvent{}) <= VIRTUAL_AGGREGATION_BUFFER_SZ);
-
-        VirtualSignalAggregationEvent rs;
-        rs.aggregation_kind = aggregation_kind_forward_pong_signal;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
@@ -430,21 +372,6 @@ namespace dg::network_memcommit_factory{
         }
 
         ForwardPingSignalAggregationEvent rs;
-        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
-
-        return rs;
-    }
-
-    constexpr auto devirtualize_forward_pong_signal_aggregation_event(const VirtualSignalAggregationEvent& event) noexcept -> ForwardPongSignalAggregationEvent{
-
-        if constexpr(DEBUG_MODE_FLAG){
-            if (event.aggregation_kind != aggregation_kind_forward_pong_signal){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
-        }
-
-        ForwardPongSignalAggregationEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
@@ -520,10 +447,9 @@ namespace dg::network_memcommit_factory{
         event_kind_forward_ping_signal          = 0u,
         event_kind_forward_pong_request         = 1u,
         event_kind_forward_pingpong_request     = 2u,
-        event_kind_forward_pong_signal          = 3u,
-        event_kind_forward_do_signal            = 4u,
-        event_kind_backward_do_signal           = 5u,
-        event_kind_signal_aggregation_signal    = 6u
+        event_kind_forward_do_signal            = 3u,
+        event_kind_backward_do_signal           = 4u,
+        event_kind_signal_aggregation_signal    = 5u
     };
 
     struct VirtualEvent{
@@ -549,17 +475,6 @@ namespace dg::network_memcommit_factory{
 
         VirtualEvent rs;
         rs.event_kind = event_kind_forward_ping_signal;
-        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
-
-        return rs;
-    }
-
-    constexpr auto virtualize_event(const ForwardPongSignalEvent& event) noexcept -> VirtualEvent{
-
-        static_assert(dg::network_trivial_serializer::size(ForwardPongSignalEvent{}) <= VIRTUAL_EVENT_BUFFER_SZ);
-
-        VirtualEvent rs;
-        rs.event_kind = event_kind_forward_pong_signal;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
@@ -640,21 +555,6 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
-    constexpr auto devirtualize_forward_pong_signal_event(const VirtualEvent& event) noexcept -> ForwardPongSignalEvent{
-
-        if constexpr(DEBUG_MODE_FLAG){
-            if (event.event_kind != event_kind_forward_pong_signal){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                std::abort();
-            }
-        }
-
-        ForwardPongSignalEvent rs;
-        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
-
-        return rs;
-    }
-
     constexpr auto devirtualize_forward_pong_request_event(const VirtualEvent& event) noexcept -> ForwardPongRequestEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
@@ -715,7 +615,7 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
-    constexpr auto devirtualize_sigagg_event(const VirtualEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    constexpr auto devirtualize_sigagg_signal_event(const VirtualEvent& event) noexcept -> VirtualSignalAggregationEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (event.event_kind != event_kind_signal_aggregation_signal){

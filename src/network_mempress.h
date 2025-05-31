@@ -31,6 +31,8 @@ namespace dg::network_mempress{
         virtual auto first() const noexcept -> uma_ptr_t = 0;
         virtual auto last() const noexcept -> uma_ptr_t = 0;
         virtual auto memregion_size() const noexcept -> size_t = 0;
+        virtual auto try_push() noexcept = 0;
+
         virtual void push(uma_ptr_t, std::move_iterator<event_t *>, size_t, exception_t *) noexcept = 0; //the problem is here, yet I think this is the right decision in terms of resolutor, not the interface,
                                                                                                          //we cant really log the exhaustion (-> user_id) due to performance + technical constraints
                                                                                                          //yet we could log the exhaustion as a global error (because that's not a performance contraint)

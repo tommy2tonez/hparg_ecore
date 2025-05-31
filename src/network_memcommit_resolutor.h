@@ -73,6 +73,8 @@ namespace dg::network_memcommit_resolutor{
     //we'll build a cuda immutable + mutable compute tree optimization along the way (cuda is so mysterious that it is worth building a project about compiler optimization than to write cuda code)
     //we'll linger on the design of the search operations because that's the major point of all these forwards + backwards
 
+    //today we'll build a linker between this -> memregion or to warehouse
+
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         public:

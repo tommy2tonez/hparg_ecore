@@ -1,7 +1,7 @@
 #ifndef __DG_NETWORK_COMPACT_SERIALIZER_H__
 #define __DG_NETWORK_COMPACT_SERIALIZER_H__
 
-//define HEADER_CONTROL 2
+//define HEADER_CONTROL 0
 
 #include <string>
 #include <memory>
@@ -15,24 +15,370 @@
 #include <bit>
 #include <optional>
 #include <numeric>
-#include "network_hash.h"
 #include <type_traits>
 #include <array>
+
+//I was thinking of making the trivial serializer an internal dependency to solve the VERSION_CONTROL problems
+// 
+
+namespace dg::network_compact_serializer::network_trivial_serializer::constants{
+
+    static constexpr auto endianness = std::endian::little;
+}
+
+namespace dg::network_compact_serializer::network_trivial_serializer::types{
+
+    using size_type = uint64_t;
+}
+
+namespace dg::network_compact_serializer::network_trivial_serializer::types_space{
+
+    static constexpr auto nil_lambda = [](...){}; 
+
+    template <class T, class = void>
+    struct is_tuple: std::false_type{};
+    
+    template <class T>
+    struct is_tuple<T, std::void_t<decltype(std::tuple_size<T>::value)>>: std::true_type{};
+
+    template <class T>
+    struct is_optional: std::false_type{};
+
+    template <class ...Args>
+    struct is_optional<std::optional<Args...>>: std::true_type{}; 
+
+    template <class T, class = void>
+    struct is_reflectible: std::false_type{};
+
+    template <class T>
+    struct is_reflectible<T, std::void_t<decltype(std::declval<T>().dg_reflect(nil_lambda))>>: std::true_type{};
+    
+    template <class T, class = void>
+    struct is_dg_arithmetic: std::is_arithmetic<T>{};
+
+    template <class T>
+    struct is_dg_arithmetic<T, std::void_t<std::enable_if_t<std::is_floating_point_v<T>>>>: std::bool_constant<std::numeric_limits<T>::is_iec559>{}; 
+
+    template <class T>
+    static constexpr bool is_tuple_v        = is_tuple<T>::value; 
+
+    template <class T>
+    static constexpr bool is_optional_v     = is_optional<T>::value;
+
+    template <class T>
+    static constexpr bool is_reflectible_v  = is_reflectible<T>::value;
+
+    template <class T>
+    static constexpr bool is_dg_arithmetic_v = is_dg_arithmetic<T>::value;
+
+    template <class T>
+    struct base_type: std::enable_if<true, T>{};
+
+    template <class T>
+    struct base_type<const T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<volatile T>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&>: base_type<T>{};
+
+    template <class T>
+    struct base_type<T&&>: base_type<T>{};
+
+    template <class T>
+    using base_type_t = typename base_type<T>::type;
+}
+
+namespace dg::network_compact_serializer::network_trivial_serializer::utility{
+
+    using namespace dg::network_compact_serializer::network_trivial_serializer::types;
+
+    template <size_t N>
+    static constexpr void memcpy(char * dst, const char * src, const std::integral_constant<size_t, N>){
+
+        [=]<size_t ...IDX>(const std::index_sequence<IDX...>){
+            ((dst[IDX] = src[IDX]), ...);
+        }(std::make_index_sequence<N>());
+    }  
+
+    struct SyncedEndiannessService{
+        
+        static constexpr auto is_native_big      = bool{std::endian::native == std::endian::big};
+        static constexpr auto is_native_little   = bool{std::endian::native == std::endian::little};
+        static constexpr auto precond            = bool{(is_native_big ^ is_native_little) != 0};
+        static constexpr auto deflt              = dg::network_compact_serializer::network_trivial_serializer::constants::endianness; 
+        static constexpr auto native_uint8       = is_native_big ? uint8_t{0} : uint8_t{1}; 
+
+        static_assert(precond); //xor
+
+        template <class T, std::enable_if_t<std::disjunction_v<std::is_integral<T>, std::is_floating_point<T>>, bool> = true>
+        static constexpr T bswap(T value){
+            
+            auto src = std::array<char, sizeof(T)>{};
+            auto dst = std::array<char, sizeof(T)>{};
+            const auto idx_seq  = std::make_index_sequence<sizeof(T)>();
+            
+            src = std::bit_cast<decltype(src)>(value);
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                ((dst[IDX] = src[sizeof(T) - IDX - 1]), ...);
+            }(idx_seq);
+            value = std::bit_cast<T>(dst);
+
+            return value;
+        }
+
+        template <class T, std::enable_if_t<std::disjunction_v<std::is_integral<T>, std::is_floating_point<T>>, bool> = true>
+        static constexpr void dump(char * dst, T data) noexcept{    
+
+            if constexpr(std::endian::native != deflt){
+                data = bswap(data);
+            }
+
+            std::array<char, sizeof(T)> data_buf{};
+            data_buf = std::bit_cast<decltype(data_buf)>(data);
+            memcpy(dst, data_buf.data(), std::integral_constant<size_t, sizeof(T)>());
+        }
+
+        template <class T, std::enable_if_t<std::disjunction_v<std::is_integral<T>, std::is_floating_point<T>>, bool> = true>
+        static constexpr T load(const char * src) noexcept{
+            
+            std::array<char, sizeof(T)> tmp{};
+            memcpy(tmp.data(), src, std::integral_constant<size_t, sizeof(T)>());
+            T rs = std::bit_cast<T>(tmp);
+
+            if constexpr(std::endian::native != deflt){
+                rs = bswap(rs);
+            }
+
+            return rs;
+        }
+    };
+}
+
+namespace dg::network_compact_serializer::network_trivial_serializer::archive{
+    
+    struct IsSerializable{
+
+        template <class T>
+        constexpr auto is_serializable(T&& data) const noexcept -> bool{
+
+            using btype = types_space::base_type_t<T>;
+            
+            if constexpr(types_space::is_dg_arithmetic_v<btype>){
+                return true;
+            } else if constexpr(types_space::is_optional_v<btype>){
+                return is_serializable(data.value());
+            } else if constexpr(types_space::is_tuple_v<btype>){
+                return [&]<size_t ...IDX>(const std::index_sequence<IDX...>) noexcept{
+                    return (IsSerializable{}.is_serializable(std::get<IDX>(data)) && ...);
+                }(std::make_index_sequence<std::tuple_size_v<btype>>{});
+            } else if constexpr(types_space::is_reflectible_v<btype>){
+                bool rs = true;
+                auto archiver = [&rs]<class ...Args>(Args&& ...args) noexcept{
+                    rs &= (IsSerializable().is_serializable(std::forward<Args>(args)) && ...);
+                };
+                data.dg_reflect(archiver);
+                return rs;
+            } else{
+                return false;
+            }
+        }
+    };
+
+    struct Counter{
+        
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(T&& data) const noexcept -> size_t{
+
+            return sizeof(types_space::base_type_t<T>);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(T&& data) const noexcept -> size_t{
+
+            using value_type = typename types_space::base_type_t<T>::value_type;
+            return count(bool{}) + count(value_type());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(T&& data) const noexcept -> size_t{
+
+            using btype         = types_space::base_type_t<T>;
+            const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<btype>>{};
+
+            return []<size_t ...IDX>(T&& data, const std::index_sequence<IDX...>) noexcept{
+                return (Counter{}.count(std::get<IDX>(data)) + ...);
+            }(std::forward<T>(data), idx_seq);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(T&& data) const noexcept -> size_t{
+
+            size_t rs{};
+            auto archiver = [&rs]<class ...Args>(Args&& ...args) noexcept{
+                rs += (Counter{}.count(std::forward<Args>(args)) + ...);
+            };
+
+            static_assert(noexcept(data.dg_reflect(archiver)));
+            data.dg_reflect(archiver);
+
+            return rs;
+        }
+    };
+
+    struct Forward{
+
+        using Self = Forward;
+
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, T&& data) const noexcept{
+
+            using _MemIO = utility::SyncedEndiannessService;
+            _MemIO::dump(buf, data);
+            buf += sizeof(types_space::base_type_t<T>);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, T&& data) const noexcept{
+
+            using value_type = typename types_space::base_type_t<T>::value_type;
+            char * tmp = buf;
+            put(tmp, static_cast<bool>(data));
+
+            if (data){
+                put(tmp, data.value());
+            }
+
+            buf += Counter{}.count(data);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, T&& data) const noexcept{
+
+            using btype = types_space::base_type_t<T>;
+            const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<btype>>{};
+
+            []<size_t ...IDX>(char *& buf, T&& data, const std::index_sequence<IDX...>) noexcept{
+                (Self{}.put(buf, std::get<IDX>(data)), ...);
+            }(buf, std::forward<T>(data), idx_seq);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, T&& data) const noexcept{
+
+            auto archiver = [&buf]<class ...Args>(Args&& ...args) noexcept{
+                (Self{}.put(buf, std::forward<Args>(args)), ...);
+            };
+
+            static_assert(noexcept(data.dg_reflect(archiver)));
+            data.dg_reflect(archiver);
+        }
+    };
+
+    struct Backward{
+
+        using Self  = Backward;
+
+        template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const noexcept{
+
+            using btype     = types_space::base_type_t<T>;
+            using _MemIO    = utility::SyncedEndiannessService;
+            data            = _MemIO::load<btype>(buf);
+            buf             += sizeof(btype);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const noexcept{
+
+            using obj_type  = std::remove_reference_t<decltype(*data)>;
+            auto tmp        = buf;
+            bool status     = {}; 
+            put(tmp, status);
+
+            if (status){
+                // static_assert(noexcept(obj_type()));
+                auto obj = obj_type();
+                put(tmp, obj);
+                data = std::move(obj);
+            } else{
+                data = {};
+            }
+
+            buf += Counter{}.count(data);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const noexcept{
+
+            using btype         = types_space::base_type_t<T>;
+            const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<btype>>{};
+
+            []<size_t ...IDX>(const Self& _self, const char *& buf, T&& data, const std::index_sequence<IDX...>){
+                (_self.put(buf, std::get<IDX>(data)), ...);
+            }(*this, buf, std::forward<T>(data), idx_seq);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const noexcept{
+
+            auto archiver   = [&buf]<class ...Args>(Args&& ...args){
+                (Self().put(buf, std::forward<Args>(args)), ...);
+            };
+
+            static_assert(noexcept(data.dg_reflect(archiver)));
+            data.dg_reflect(archiver);
+        }
+    };
+}
+
+namespace dg::network_compact_serializer::network_trivial_serializer{
+
+    template <class T, class = void>
+    struct is_serializable: std::false_type{};
+
+    template <class T>
+    struct is_serializable<T, std::void_t<std::enable_if_t<archive::IsSerializable().is_serializable(T{})>>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_serializable_v = is_serializable<T>::value;
+
+    template <class T>
+    constexpr auto size(T&& obj) noexcept -> size_t{
+
+        return dg::network_compact_serializer::network_trivial_serializer::archive::Counter{}.count(std::forward<T>(obj));
+    }
+
+    template <class T>
+    constexpr auto serialize_into(char * buf, const T& obj) noexcept -> char *{
+
+        dg::network_compact_serializer::network_trivial_serializer::archive::Forward().put(buf, obj);
+        return buf;
+    }
+
+    template <class T>
+    constexpr auto deserialize_into(T& obj, const char * buf) noexcept -> const char *{
+
+        dg::network_compact_serializer::network_trivial_serializer::archive::Backward().put(buf, obj);
+        return buf;
+    }
+}
 
 namespace dg::network_compact_serializer::constants{
 
     static constexpr auto endianness                                = std::endian::little;
     static constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED        = true;
     static constexpr bool DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT = true;
+    static constexpr uint8_t SERIALIZATION_VERSION_CONTROL          = 1;
 }
 
 namespace dg::network_compact_serializer::types{
 
-    using hash_type     = std::pair<uint64_t, uint64_t>; //alright this seems silly, we are to increase the chances of 10 ** 18 -> 10 ** 39 (never gonna happen), we actually chance better than RAM https://www.cs.toronto.edu/~bianca/papers/sigmetrics09.pdf, https://en.wikipedia.org/wiki/ECC_memory
-                                                         //the only way to be successful in the career is to not trust everything, assume we are to deploy a massive 1 billion devices training system, we are gonna see errors very often
-    using size_type     = uint64_t;
-
+    using hash_type                             = std::pair<uint64_t, uint64_t>;
+    using size_type                             = uint64_t;
     using dgstd_unsigned_serialization_header_t = uint8_t;
+    using version_control_t                     = uint8_t;
 }
 
 namespace dg::network_compact_serializer::exception_space{
@@ -42,6 +388,14 @@ namespace dg::network_compact_serializer::exception_space{
         inline auto what() const noexcept -> const char *{
 
             return "corrupted_format";
+        }
+    };
+
+    struct bad_version_control: std::exception{
+
+        inline auto what() const noexcept -> const char *{
+
+            return "bad version control";
         }
     };
 }
@@ -310,9 +664,91 @@ namespace dg::network_compact_serializer::utility{
         }
     };
 
+    static constexpr auto rotl64(uint64_t x, int8_t r) -> uint64_t{
+    
+        return (x << r) | (x >> (64 - r));
+    }
+
+    static constexpr auto fmix64(uint64_t k) -> uint64_t{
+        
+        k ^= k >> 33;
+        k *= 0xff51afd7ed558ccd;
+        k ^= k >> 33;
+        k *= 0xc4ceb9fe1a85ec53;
+        k ^= k >> 33;
+
+        return k;
+    }
+
+    static constexpr auto murmur_hash_base(const char * buf, size_t len, const uint32_t seed = 0xFF) -> std::pair<uint64_t, uint64_t>{
+
+        const size_t nblocks = len / 16;
+
+        uint64_t h1 = seed;
+        uint64_t h2 = seed;
+
+        const uint64_t c1 = 0x87c37b91114253d5;
+        const uint64_t c2 = 0x4cf5ad432745937f;
+
+        for(size_t i = 0; i < nblocks; i++)
+        {   
+            uint64_t k1{};
+            uint64_t k2{};
+
+            dg::network_compact_serializer::network_trivial_serializer::deserialize_into(k1, buf + (i * 2 + 0) * sizeof(uint64_t));
+            dg::network_compact_serializer::network_trivial_serializer::deserialize_into(k2, buf + (i * 2 + 1) * sizeof(uint64_t));
+
+            k1 *= c1; k1  = rotl64(k1,31); k1 *= c2; h1 ^= k1;
+            h1 = rotl64(h1,27); h1 += h2; h1 = h1*5+0x52dce729;
+            k2 *= c2; k2  = rotl64(k2,33); k2 *= c1; h2 ^= k2;
+            h2 = rotl64(h2,31); h2 += h1; h2 = h2*5+0x38495ab5;
+        }
+
+        const char * tail = buf + nblocks*16;
+
+        uint64_t k1 = 0;
+        uint64_t k2 = 0;
+
+        switch(len & 15)
+        {
+            case 15: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[14])) << 48;
+            case 14: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[13])) << 40;
+            case 13: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[12])) << 32;
+            case 12: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[11])) << 24;
+            case 11: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[10])) << 16;
+            case 10: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[9])) << 8;
+            case  9: k2 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[8])) << 0;
+                    k2 *= c2; k2  = rotl64(k2,33); k2 *= c1; h2 ^= k2;
+
+            case  8: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[7])) << 56;
+            case  7: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[6])) << 48;
+            case  6: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[5])) << 40;
+            case  5: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[4])) << 32;
+            case  4: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[3])) << 24;
+            case  3: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[2])) << 16;
+            case  2: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[1])) << 8;
+            case  1: k1 ^= static_cast<uint64_t>(std::bit_cast<uint8_t>(tail[0])) << 0;
+                    k1 *= c1; k1  = rotl64(k1,31); k1 *= c2; h1 ^= k1;
+        };
+
+        h1 ^= static_cast<uint64_t>(len); 
+        h2 ^= static_cast<uint64_t>(len);
+
+        h1 += h2;
+        h2 += h1;
+
+        h1 = fmix64(h1);
+        h2 = fmix64(h2);
+
+        h1 += h2;
+        h2 += h1;
+
+        return {h1, h2};
+    } 
+
     auto hash(const char * buf, size_t sz, uint32_t secret) noexcept -> hash_type{
 
-        return dg::network_hash::murmur_hash_base(buf, sz, secret);
+        return murmur_hash_base(buf, sz, secret);
     }
 
     template <class T, std::enable_if_t<std::disjunction_v<types_space::is_vector<T>, 
@@ -1266,6 +1702,22 @@ namespace dg::network_compact_serializer::archive{
 
 namespace dg::network_compact_serializer{
 
+    //I was thinking about the namespace, overriding + logics fling (https://leetcode.com/problems/simplify-path/description/)
+    //assume we have a dependency, the dependency logic is correct
+    //assume we join dependencies, one of the dependency logic is corrupted
+
+    //what might have happened? ambiguous resolution, we are referencing types:exception_t or dg::network_compact_serializer::types::exception_t, C++ guarantees that we are referencing the dg::network_compact_serializer::types::exception_t, without explicit ambiguous error (this is very buggy), it seems like somebody could have two different dependencies and try to override the logics of types::exception_t by declaring a dg::network_compact_serializer::types::exception_t
+    //global function names, immediate scope of overriding, nothing happens
+    //global scope of overriding, something happens 
+
+    //assume the current logic is correct, nothing happens, assume the current logic is altered (only because our referencing function is altered, it cannot be the inscope overrided functions, inscope is from the ifndef -> endif)
+    //the problem that we see often is the write() + read() global functions
+
+    //vulnerable points when writing code, references types::exception_t instead of dg::network_compact_serializer::types::exception_t
+    //references a global function (without namespace)
+
+    //other than that, we are fine
+
     template <class T>
     constexpr auto size(const T& obj) noexcept -> size_t{
 
@@ -1359,6 +1811,12 @@ namespace dg::network_compact_serializer{
 
         uint64_t obj_sz     = {};
         const char * first  = dg::network_compact_serializer::deserialize_into(obj_sz, buf);
+        size_t remaining_sz = std::distance(first, std::next(buf, sz));
+        
+        if (obj_sz > remaining_sz){
+            throw dg::network_compact_serializer::exception_space::corrupted_format();
+        }
+
         dg::network_compact_serializer::integrity_deserialize_into(obj, first, obj_sz, secret);
 
         return std::next(first, obj_sz);
@@ -1367,7 +1825,7 @@ namespace dg::network_compact_serializer{
     template <class T>
     constexpr auto dgstd_size(const T& obj) noexcept -> size_t{
 
-        return dg::network_compact_serializer::archive::DgStdCounter{}.count(obj) + network_compact_serializer::size(types::hash_type{});
+        return dg::network_compact_serializer::archive::DgStdCounter{}.count(obj) + network_compact_serializer::size(types::hash_type{}) + network_compact_serializer::size(types::version_control_t{});
     }
 
     template <class T>
@@ -1378,25 +1836,36 @@ namespace dg::network_compact_serializer{
         dg::network_compact_serializer::archive::DgStdForward{}.put(last, obj);
         types::hash_type hashed     = dg::network_compact_serializer::utility::hash(first, std::distance(first, last), secret);
         char * llast                = dg::network_compact_serializer::serialize_into(last, hashed);
+        char * lllast               = dg::network_compact_serializer::serialize_into(llast, dg::network_compact_serializer::constants::SERIALIZATION_VERSION_CONTROL); 
 
-        return llast;
+        return lllast;
     }
 
     template <class T>
     constexpr void dgstd_deserialize_into(T& obj, const char * buf, size_t sz, uint32_t secret = 0u){
 
-        if (sz < dg::network_compact_serializer::size(types::hash_type{})){
+        if (sz < dg::network_compact_serializer::size(types::hash_type{}) + dg::network_compact_serializer::size(types::version_control_t{})){
             throw dg::network_compact_serializer::exception_space::corrupted_format();
         }
 
-        size_t content_sz                   = sz - dg::network_compact_serializer::size(types::hash_type{});
-        const char * content_first          = buf;
-        const char * content_last           = std::next(content_first, content_sz);
-        const char * hash_first             = content_last;
-        types::hash_type expecting_value    = {};
-        types::hash_type reality_value      = dg::network_compact_serializer::utility::hash(content_first, content_sz, secret);
+        size_t content_sz                       = sz - (dg::network_compact_serializer::size(types::hash_type{}) + dg::network_compact_serializer::size(types::version_control_t{}));
 
-        dg::network_compact_serializer::deserialize_into(expecting_value, hash_first);
+        const char * content_first              = buf;
+        const char * content_last               = std::next(content_first, content_sz);
+
+        const char * hash_first                 = content_last;
+        types::hash_type expecting_value        = {};
+        types::hash_type reality_value          = dg::network_compact_serializer::utility::hash(content_first, content_sz, secret);
+
+        const char * version_control_first      = dg::network_compact_serializer::deserialize_into(expecting_value, hash_first);
+        types::version_control_t cur_ver        = {};
+        types::version_control_t expected_ver   = constants::SERIALIZATION_VERSION_CONTROL;
+
+        dg::network_compact_serializer::deserialize_into(cur_ver, version_control_first);
+
+        if (cur_ver != expected_ver){
+            throw dg::network_compact_serializer::exception_space::bad_version_control();
+        }
 
         if (expecting_value != reality_value){
             throw dg::network_compact_serializer::exception_space::corrupted_format();
