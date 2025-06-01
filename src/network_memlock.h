@@ -530,6 +530,11 @@ namespace dg::network_memlock_impl1{
 
                 size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
                 lck_table           = std::make_unique<stdx::hdi_container<std::atomic_flag>[]>(lck_table_sz);
+
+                for (size_t i = 0u; i < lck_table_sz; ++i){
+                    lck_table[i].value.clear(std::memory_order_relaxed);
+                }
+
                 region_first        = first;
                 segcheck_ins::init(first, last);
             }
@@ -717,13 +722,6 @@ namespace dg::network_memlock_impl1{
             } 
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
-
-                // auto lambda = [&]() noexcept{
-                    // atomic_lock_t expected = MEMREGION_EMP_STATE;
-                    // return lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
-                // };
-
-                // stdx::eventloop_expbackoff_spin(lambda);
                 
                 auto lambda     = [&]() noexcept{
                     return internal_acquire_try(table_idx);
@@ -746,7 +744,7 @@ namespace dg::network_memlock_impl1{
                 }
             }
 
-            static void internal_acquire_wait_nolock(size_t table_idx) noexcept{
+            static void internal_acquire_waitnolock(size_t table_idx) noexcept{
 
                 if (this->acquirability_table[table_idx].value.load(std::memory_order_relaxed)){
                     return;
@@ -877,10 +875,8 @@ namespace dg::network_memlock_impl1{
 
                 for (size_t i = 0u; i < lck_table_sz; ++i){
                     lck_table[i].value              = MEMREGION_EMP_STATE;
-                    acquirability_table[i].value    = false;
-                    acquirability_table[i].value    = true;
-                    referenceability_table[i].value = false;
-                    referenceability_table[i].value = true;
+                    acquirability_table[i].value.test_and_set(true, std::memory_order_seq_cst);
+                    referenceability_table[i].value.test_and_set(true, std::memory_order_seq_cst);
                 }
 
                 segcheck_ins::init(first, last);
@@ -909,6 +905,11 @@ namespace dg::network_memlock_impl1{
             static void acquire_release(ptr_t ptr) noexcept{
 
                 internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)));
+            }
+
+            static void acquire_waitnolock(ptr_t ptr) noexcept{
+
+                internal_acquire_waitnolock(memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
