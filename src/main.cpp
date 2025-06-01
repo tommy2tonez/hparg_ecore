@@ -131,6 +131,13 @@ int main(){
     //there is a real reason for why China could launch the rocket while the US could not
     //China technology is far more advanced than US (what???)
 
+    //we are extremely frustrated by the current progress of technology, people are heading in the wrong direction very aggressively (and they actually celebrated that for 20 years in a row)
+    //not a single guy on the planet is trying to do middle-layer compression by using randomization (Dr.Brand actually showed me the way)
+    //they used the GPT model with 512 vocabs like it's alien technology, it's ... char char char
+    //I'm telling you that this is the top mind ideas (IQ 130, ...), from top institutions for 30 years in a row
+    //not a single soul does multi-precision on CUDA, nor wants to head in the direction
+    //I dont really know why they are doing fp8 (with the precision + numerical range that is hard to reason)
+
     //we'll try to standardize the 256x256 square tile, 64KB of linear/ dispatch => 64KB ^ 3 complexity (we wont be cho-col-late, we'll be cho-row-late)
     //compressed to 8KB of external comm (to fit in a transportation unit (we'll come up with a very fat dictionary, ...))
     //we'll be fine
