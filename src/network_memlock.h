@@ -480,8 +480,14 @@ namespace dg::network_memlock_impl1{
                     return lck_table[table_idx].value.test_and_set(std::memory_order_relaxed) == false;
                 };
 
+                bool is_success = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+
+                if (is_success){
+                    return;
+                }
+
                 while (true){
-                    bool is_success = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                    is_success = stdx::eventloop_expbackoff_spin(lambda, 1u);
 
                     if (is_success){
                         return;
@@ -927,9 +933,9 @@ namespace dg::network_memlock_impl1{
                 acquire_wait(new_ptr);
             }
 
-            static auto reference_try(ptr_t ptr, std::memory_order success = std::memory_order_seq_cst) noexcept -> bool{
+            static auto reference_try(ptr_t ptr) noexcept -> bool{
 
-                return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)), success);
+                return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void reference_wait(ptr_t ptr) noexcept{
