@@ -7051,7 +7051,7 @@ namespace dg::network_memcommit_resolutor{
                     }
 
                     dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_vec.get(), std::next(host_ptr_vec.get(), host_ptr_vec_sz)));
-                    auto synchroniable = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(virtual_wo_vec), total_complexity)); //
+                    auto synchronizable = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(virtual_wo_vec), total_complexity)); //
                     dg::network_exception_handler::nothrow_log(this->synchronizer->add(std::move(synchronizable)));
                 }
             };
@@ -7826,10 +7826,10 @@ namespace dg::network_memcommit_resolutor{
                                 }
 
                                 pong_count_t pong_count = dg::network_tile_member_getsetter::get_pair_pong_count_nothrow(data_arr[i].root);
-                                pong_count += 1u; //has to be unsigned otherwise we risk signed wraparound
+                                pong_count              = std::min(static_cast<pong_count_t>(dg::network_tile_metadata::PAIR_DESCENDANT_COUNT), static_cast<pong_count_t>(pong_count + 1u)); //has to be unsigned otherwise we risk signed wraparound
                                 dg::network_tile_member_getsetter::set_pair_pong_count_nothrow(data_arr[i].root, pong_count);
 
-                                if (pong_count >= dg::network_tile_metadata::PAIR_DESCENDANT_COUNT){ //TODOs: optimizables
+                                if (pong_count == dg::network_tile_metadata::PAIR_DESCENDANT_COUNT){
                                     auto dispatch_radix                 = DispatchRadixArgument{};
                                     auto dispatch_control               = dg::network_tile_member_getsetter::get_pair_forward_dispatch_control_nothrow(data_arr[i].root);
                                     dispatch_radix.lhs                  = dg::network_tile_member_getsetter::get_pair_left_descendant_nothrow(data_arr[i].root);
@@ -8061,13 +8061,7 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        if (dst_lhs != lhs){
-                            continue;
-                        }
-
-                        if (dst_rhs != rhs){
-                            continue;
-                        }
+                        if (dst_lhs != lhs){set_pair
 
                         if (dst_operatable_id != expected_ops_id){
                             continue;
@@ -8397,17 +8391,24 @@ namespace dg::network_memcommit_resolutor{
                                     }
                                     case POLY_TILE_PAIR:
                                     {
-                                        auto dispatch_radix                 = PairDispatchRadixArgument{};
-                                        auto dispatch_control               = dg::network_tile_member_getsetter::get_poly_forward_dispatch_control_nothrow(data_arr[i].root);
-                                        dispatch_radix.lhs                  = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(data_arr[i].root, 0u);
-                                        dispatch_radix.rhs                  = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(data_arr[i].root, 1u);
-                                        auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_forward_pair_dispatch(dispatch_control));
-                                        dispatch_radix.dst_vd_id            = dispatch_info.dst_vd_id;
-                                        dispatch_radix.lhs_vd_id            = dispatch_info.lhs_vd_id;
-                                        dispatch_radix.rhs_vd_id            = dispatch_info.rhs_vd_id;
-                                        dispatch_radix.dispatch_platform    = dispatch_info.dispatch_platform;
+                                        pong_count_t pong_count = dg::network_tile_member_getsetter::get_poly_pong_count_nothrow(data_arr[i].root);
+                                        pong_count              = std::min(static_cast<pong_count_t>(dg::network_tile_metadata::PAIR_DESCENDANT_COUNT), static_cast<pong_count_t>(pong_count + 1u));
+                                        dg::network_tile_member_getsetter::set_poly_pong_count_nothrow(data_arr[i].root, pong_count);
 
-                                        *data_arr[i].fetching_addr          = DispatchRadixArgument{.dispatch_argument = dispatch_radix};
+                                        if (pong_count == dg::network_tile_metadata::PAIR_DESCENDANT_COUNT){
+                                            auto dispatch_radix                 = PairDispatchRadixArgument{};
+                                            auto dispatch_control               = dg::network_tile_member_getsetter::get_poly_forward_dispatch_control_nothrow(data_arr[i].root);
+                                            dispatch_radix.lhs                  = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(data_arr[i].root, 0u);
+                                            dispatch_radix.rhs                  = dg::network_tile_member_getsetter::get_poly_descendant_nothrow(data_arr[i].root, 1u);
+                                            auto dispatch_info                  = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::decode_forward_pair_dispatch(dispatch_control));
+                                            dispatch_radix.dst_vd_id            = dispatch_info.dst_vd_id;
+                                            dispatch_radix.lhs_vd_id            = dispatch_info.lhs_vd_id;
+                                            dispatch_radix.rhs_vd_id            = dispatch_info.rhs_vd_id;
+                                            dispatch_radix.dispatch_platform    = dispatch_info.dispatch_platform;
+    
+                                            *data_arr[i].fetching_addr          = DispatchRadixArgument{.dispatch_argument = dispatch_radix};    
+                                        }
+
                                         break;
                                     }
                                     default:
@@ -8462,6 +8463,51 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(CudaResolutorArgument * data_arr, size_t sz) noexcept{
 
+                    size_t cuda_ptr_vec_cap     = sz * 3;
+                    size_t cuda_ptr_vec_sz      = 0u;
+                    dg::network_stack_allocation::NoExceptAllocation<cuda_ptr_t[]> cuda_ptr_vec(cuda_ptr_vec_cap);
+                    size_t total_complexity     = 0u;
+                    auto virtual_wo_vec         = dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::make_virtual_workorder_sequential_container(cuda_ptr_vec_cap)); 
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (std::holds_alternative<CudaPairResolutorArgument>(data_arr[i].arg)){
+                            auto& devirtualized             = std::get<CudaPairResolutorArgument>(data_arr[i].arg); 
+
+                            cuda_ptr_vec[cuda_ptr_vec_sz++] = devirtualized.dst;
+                            cuda_ptr_vec[cuda_ptr_vec_sz++] = devirtualized.lhs;
+                            cuda_ptr_vec[cuda_ptr_vec_sz++] = devirtualized.rhs;
+                            total_complexity                += dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_pair_forward_dispatch_control(devirtualized.dispatch_control)).runtime_complexity;
+                            auto work_order                 = [e = devirtualized]() noexcept{
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_pair(e.dst, e.lhs, e.rhs, e.dispatch_control));
+                            };
+                            auto virtual_wo                 = dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::make_virtual_async_task(std::move(work_order)));
+
+                            dg::network_exception_handler::nothrow_log(virtual_wo_vec->add(std::move(virtual_wo)));
+                        } else if (std::holds_alternative<CudaMonoResolutorArgument>(data_arr[i].arg)){
+                            auto& devirtualized             = std::get<CudaMonoResolutorArgument>(data_arr[i].arg);
+
+                            cuda_ptr_vec[cuda_ptr_vec_sz++] = devirtualized.dst;
+                            cuda_ptr_vec[cuda_ptr_vec_sz++] = devirtualized.src;
+                            total_complexity                = dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::decode_mono_forward_dispatch_control(devirtualized.dispatch_control)).runtime_complexity;
+                            auto work_order                 = [e = devirtualized]() noexcept{
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_cuda_poly::forward_mono(e.dst, e.src, e.dispatch_control));
+                            };
+                            auto virtual_wo                 = dg::network_exception_handler::nothrow_log(dg::network_cuda_controller::make_virtual_async_task(std::move(work_order)));
+
+                            dg::network_exception_handler::nothrow_log(virtual_wo_vec->add(std::move(virtual_wo)));
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(cuda_ptr_vec.get(), std::next(cuda_ptr_vec.get(), cuda_ptr_vec_sz)));
+                    auto synchronizable = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(virtual_wo_vec), total_complexity));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(std::move(synchronizable)));
                 }
             };
 
@@ -8490,6 +8536,51 @@ namespace dg::network_memcommit_resolutor{
 
                 void push(HostResolutorArgument * data_arr, size_t sz) noexcept{
 
+                    size_t host_ptr_vec_cap     = sz * 3;
+                    size_t host_ptr_vec_sz      = 0u;
+                    dg::network_stack_allocation::NoExceptAllocation<host_ptr_t[]> host_ptr_vec(host_ptr_vec_cap);
+                    size_t total_complexity     = 0u;
+                    auto virtual_wo_vec         = dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::make_virtual_workorder_sequential_container(host_ptr_vec_cap));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (std::holds_alternative<HostPairResolutorArgument>(data_arr[i].arg)){
+                            auto& devirtualized             = std::get<HostPairResolutorArgument>(data_arr[i].arg);
+
+                            host_ptr_vec[host_ptr_vec_sz++] = devirtualized.dst;
+                            host_ptr_vec[host_ptr_vec_sz++] = devirtualized.lhs;
+                            host_ptr_vec[host_ptr_vec_sz++] = devirtualized.rhs;
+                            total_complexity                += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_pair_forward_dispatch_control(devirtualized.dispatch_control)).runtime_complexity;
+                            auto work_order                 = [e = devirtualized]() noexcept{
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_pair(e.dst, e.lhs, e.rhs, e.dispatch_control));
+                            };
+                            auto virtual_wo                 = dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::make_virtual_async_task(std::move(work_order)));
+
+                            dg::network_exception_handler::nothrow_log(virtual_wo_vec->add(std::move(virtual_wo)));
+                        } else if (std::holds_alternative<HostMonoResolutorArgument>(data_arr[i].arg)){
+                            auto& devirtualized             = std::get<HostMonoResolutorArgument>(data_arr[i].arg);
+
+                            host_ptr_vec[host_ptr_vec_sz++] = devirtualized.dst;
+                            host_ptr_vec[host_ptr_vec_sz++] = devirtualized.src;
+                            total_complexity                += dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::decode_mono_forward_dispatch_control(devirtualized.dispatch_control)).runtime_complexity;
+                            auto work_order                 = [e = devirtualized]() noexcept{
+                                dg::network_exception_handler::nothrow_log(dg::network_tileops_host_poly::forward_mono(e.dst, e.src, e.dispatch_control));
+                            };
+                            auto virtual_wo                 = dg::network_exception_handler::nothrow_log(dg::network_host_asynchronous::make_virtual_async_task(std::move(work_order)));
+
+                            dg::network_exception_handler::nothrow_log(virtual_wo_vec->add(std::move(virtual_wo)));
+                        } else{
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->restrict_synchronizer->add(host_ptr_vec.get(), std::next(host_ptr_vec.get(), host_ptr_vec_sz)));
+                    auto synchronizable = dg::network_exception_handler::nothrow_log(this->async_device->exec(std::move(virtual_wo_vec), total_complexity));
+                    dg::network_exception_handler::nothrow_log(this->synchronizer->add(std::move(synchronizable)));
                 }
             };
     };

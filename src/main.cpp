@@ -133,6 +133,13 @@ int main(){
     //we'll try to standardize the 256x256 square tile, 64KB of linear/ dispatch => 64KB ^ 3 complexity (we wont be cho-col-late, we'll be cho-row-late)
     //compressed to 8KB of external comm (to fit in a transportation unit (we'll come up with a very fat dictionary, ...))
     //we'll be fine
+    //the only person going crazy is you
+
+    //we've been solving the search problem for the longest time
+    //we just know that it's a mixed of gradient + linearity hints + search, somewhat a unit vector inching in the right direction
+    //the three actually works very well and does not cancel out each other
+
+    //what we are missing is a way to extract the data from the virtual machine at the right frequency, we'll come up with a way
 
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},

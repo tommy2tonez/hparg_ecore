@@ -47,6 +47,12 @@ namespace dg::network_memlock{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_waitnolock(typename T1::ptr_t ptr) noexcept{
+
+            T::acquire_waitnolock(ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto acquire_transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
 
             return T::acquire_transfer_try(new_ptr, old_ptr);
@@ -191,27 +197,16 @@ namespace dg::network_memlock{
             }
     };
 
-    //there is not a good proof another than a good old induction
-    //assume that unordered_set contains the correct set of the up-to-date acquired lock stack and the lock_guard<> will acquire + release the locks in the appropriate first met orders
+    template <class T, size_t SZ>
+    constexpr auto sort_ptr_array(const std::array<T, SZ>& inp) noexcept -> std::array<T, SZ>{
 
-    //the next acquisition
-    //  - assume that acquiring the previously acquired lock, the previously acquired lock lifetime is guaranteed to contain the current lock lifetime (due to stackness), no action is performed for the lock acquisition (in and out of the transaction as if the transaction does not exist)
-    //  - assume that acquiring the newly acquired lock, the unordered_set of the up-to-date stack is updated with the newly acquired lock + the resource is responsible for releasing the lock + update the unordered_set after stack unwind
+        static_assert(dg::ptr_info<T>::is_pointer);
 
-    //  - why the reverse operation is correct again, this is due to one assumption, the assumption that the state at the deallocation is the state right after the allocation (we can prove this by using further induction)
-    //      - the next state is guaranteed to be the previous state (which is a correct state according to our induction assumption + stack stillness) as if the transaction does not happen
-    //      - which also furthers the latter induction assumption
+        std::array<T, SZ> rs = inp;
+        std::sort(rs.begin(), rs.end());
 
-    //assume we have a back inserting and back removing array
-    //at every point pre and post a push_back() and pop(), we can guarantee the correctness of the state, such is unordered set contains the correct set of the ...
-
-    //this got stuck in my head because I dont have the word for processing this logic naturally
-    //the problem is probably the stillness of the stack, because a reordering of the deallocations would mess up the logic very badly
-
-    //enforcing the stillness requires more than just a call to the function, it involves complex mechanism that only the actual lock_guard could provide
-    //the lock_guard responsibility is to (1): memory transaction in and out of the stack, (2): stillness of stack, (3): invoked by client only
-    //the internal memory orderings must be relaxed, because it is incorrect otherwise according to compiler compiling virtues, if the caller does not see the callee code, the callee code is free to be moved around
-    //this is the new std proposal for lock implementation that does not involve compiler's magics
+        return rs;
+    } 
 
     template <class T>
     auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
@@ -265,13 +260,14 @@ namespace dg::network_memlock{
 
     template <class T, size_t SZ>
     auto recursive_trylock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
-                                       const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& lock_ptr_arr){
+                                       const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
 
         static_assert(SZ != 0u);
 
         using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
         using lock_resource_t   = decltype(recursive_trylock_guard(lock_ins, lock_ptr_t{}));
         auto resource_arr       = std::array<lock_resource_t, SZ>{};
+        auto lock_ptr_arr       = sort_ptr_array(arg_lock_ptr_arr);
 
         for (size_t i = 0u; i < SZ; ++i){
             resource_arr[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
@@ -288,65 +284,63 @@ namespace dg::network_memlock{
     auto recursive_trylock_guard_many(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, Args... args) noexcept{
 
         using lock_ptr_t        = typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>;
-        auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...};
+        auto lock_ptr_arr       = std::array<lock_ptr_t, sizeof...(Args)>{args...}; 
 
         return recursive_trylock_guard_array(lock_ins, lock_ptr_arr);
     }
 
+    //we'll implement the sort
+    //because that's the stable way of doing this
+    //we need to be able to prove that the last sequence in the sorted sequences must be able to take global lead in the racing process (this is the major point)
+
+    //in order to prove so, we must have a predefined acquisition sequence (in ascending order), not wait on a random idx
+    //even then, we are only reducing the chances of acquiring an intersected set of memregions -> the first element
+    //this is very hard to implement
+    //without further instruction like wait_lock() and then transfer_notify_responsibility(), I dont think we could work this out
+    //this is a HARD implementation without changing the fundamental interfaces
+
+    //worst case, is the last sequence in the sorted sequences has fragmented intersected pieces
+    //each has 50% chance of success, reduce our chance -> 0%
+    //we have to do eventloop_expbackoff to increase the chances of sequential runs
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
-                                    const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& lock_ptr_arr){
+                                    const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
 
         static_assert(SZ != 0u);
 
         if constexpr(SZ == 1u){
-            return recursive_lock_guard(lock_ins, lock_ptr_arr[0]);
+            return recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]);
         } else{
-            using waiting_lock_guard_resource_t     = std::optional<decltype(recursive_lock_guard(lock_ins, lock_ptr_arr[0]))>;
-            using spinning_lock_guard_resource_t    = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+            using try_lock_guard_resource_t = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+            auto lock_ptr_arr               = sort_ptr_array(arg_lock_ptr_arr); 
+            size_t wait_idx                 = 0u;
 
-            auto waiting_lock_guard_resource        = waiting_lock_guard_resource_t{};
-            auto spinning_lock_guard_resource_array = std::array<spinning_lock_guard_resource_t, SZ>{};
-            size_t wait_idx                         = {}; 
-            bool was_thru                           = true;
+            std::array<try_lock_guard_resource_t, SZ> rs;
 
-            for (size_t i = 0u; i < SZ; ++i){
-                spinning_lock_guard_resource_array[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+            auto task = [&]() noexcept{
+                rs              = {};
+                bool was_thru   = true;
 
-                if (!spinning_lock_guard_resource_array[i].has_value()){
-                    wait_idx    = i; 
-                    was_thru    = false;
-                    break;
-                }
-            }
-
-            if (was_thru){
-                return std::make_pair(std::move(waiting_lock_guard_resource), std::move(spinning_lock_guard_resource_array));
-            }
-
-            while (true){
-                *stdx::volatile_access(&waiting_lock_guard_resource) = {};
-                *stdx::volatile_access(&spinning_lock_guard_resource_array, waiting_lock_guard_resource) = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that 
-                *stdx::volatile_access(&waiting_lock_guard_resource, spinning_lock_guard_resource_array) = recursive_lock_guard(lock_ins, lock_ptr_arr[wait_idx]);
-
-                was_thru = true; 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock(*stdx::volatile_access(&lock_ptr_arr[wait_idx], rs)); //this is volatile access, because notify() if not seen can be moved around, very dangerous
+                std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 for (size_t i = 0u; i < SZ; ++i){
-                    if (i != wait_idx){
-                        spinning_lock_guard_resource_array[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+                    rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
 
-                        if (!spinning_lock_guard_resource_array[i].has_value()){
-                            wait_idx    = i;
-                            was_thru    = false;
-                            break;
-                        }
+                    if (!rs[i].has_value()){
+                        wait_idx    = i;
+                        was_thru    = false;
+                        break;
                     }
                 }
 
-                if (was_thru){
-                    return std::make_pair(std::move(waiting_lock_guard_resource), std::move(spinning_lock_guard_resource_array));
-                }
-            }
+                return was_thru;
+            };
+
+            stdx::eventloop_spin_expbackoff(task);
+            return rs;
         }
     }
 
@@ -497,6 +491,12 @@ namespace dg::network_memlock_impl1{
                 }
             }
 
+            static void internal_acquire_waitnolock(size_t table_idx) noexcept{
+
+                lck_table[table_idx].value.wait(true, std::memory_order_relaxed);
+                lck_table[table_idx].value.notify_one(); //transfer the responsibility right away, because this waitnolock guy does not empty the subcripted queue, so we have to pass the responsibility to the guy who does, maybe another waitnolock, continues until acquire_wait gets the order
+            }
+
             static void internal_acquire_release(size_t table_idx) noexcept{
 
                 lck_table[table_idx].value.clear(std::memory_order_relaxed);
@@ -548,7 +548,12 @@ namespace dg::network_memlock_impl1{
             static void acquire_wait(ptr_t ptr) noexcept{
 
                 internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
-            } 
+            }
+
+            static void acquire_waitnolock(ptr_t ptr) noexcept[
+
+                internal_acquire_waitnolock(ptr);
+            ]
 
             static void acquire_release(ptr_t ptr) noexcept{
 
