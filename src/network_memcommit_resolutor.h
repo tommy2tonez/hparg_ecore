@@ -8106,8 +8106,6 @@ namespace dg::network_memcommit_resolutor{
     //we'll be row-major people row x row for fast forward
 
     //we'll be performing search + convert to gradient semantic space + inch in the direction
-    //gradient has its uses as sum accumulator, it is not very bad after all
-
     //we have solved the problem of synchronizations (backprop + friends)
 
     class ForwardDoPolySignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{

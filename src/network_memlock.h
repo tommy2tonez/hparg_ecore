@@ -493,6 +493,10 @@ namespace dg::network_memlock_impl1{
 
             static void internal_acquire_waitnolock(size_t table_idx) noexcept{
 
+                if (lck_table[table_idx].value.test(std::memory_order_relaxed)){
+                    return;
+                }
+
                 lck_table[table_idx].value.wait(true, std::memory_order_relaxed);
                 lck_table[table_idx].value.notify_one(); //transfer the responsibility right away, because this waitnolock guy does not empty the subcripted queue, so we have to pass the responsibility to the guy who does, maybe another waitnolock, continues until acquire_wait gets the order
             }
@@ -684,10 +688,14 @@ namespace dg::network_memlock_impl1{
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>; 
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
 
-            static inline constexpr atomic_lock_t MEMREGION_EMP_STATE = 0u;
-            static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE = std::numeric_limits<atomic_lock_t>::max();
+            static inline constexpr atomic_lock_t MEMREGION_EMP_STATE   = 0u;
+            static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE   = std::numeric_limits<atomic_lock_t>::max();
+            static inline constexpr atomic_lock_t MEMREGION_MID_STATE   = std::numeric_limits<atomic_lock_t>::max() - 1u;
 
             static inline std::unique_ptr<stdx::hdi_container<std::atomic<atomic_lock_t>>[]> lck_table{};    
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>> acquirability_table{};
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>> referenceability_table{};
+
             static inline ptr_t region_first{};
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
@@ -698,24 +706,68 @@ namespace dg::network_memlock_impl1{
             static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
 
                 atomic_lock_t expected = MEMREGION_EMP_STATE;
-                bool rs = lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE);
+                bool rs = lck_table[table_idx].value.compare_exchange_strong(expected, MEMREGION_ACQ_STATE);
+
+                if (rs){
+                    acquirability_table[table_idx].value.clear(std::memory_order_relaxed);
+                    referenceability_table[table_idx].value.clear(std::memory_order_relaxed);
+                }
 
                 return rs;
             } 
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
 
-                auto lambda = [&]() noexcept{
-                    atomic_lock_t expected = MEMREGION_EMP_STATE;
-                    return lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
+                // auto lambda = [&]() noexcept{
+                    // atomic_lock_t expected = MEMREGION_EMP_STATE;
+                    // return lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
+                // };
+
+                // stdx::eventloop_expbackoff_spin(lambda);
+                
+                auto lambda     = [&]() noexcept{
+                    return internal_acquire_try(table_idx);
                 };
 
-                stdx::eventloop_expbackoff_spin(lambda);
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+
+                if (was_thru){
+                    return;
+                }
+
+                while (true){
+                    was_thru = stdx::eventloop_expbackoff_spin(lambda, 1u);
+
+                    if (was_thru){
+                        break;
+                    }
+
+                    this->acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+                }
+            }
+
+            static void internal_acquire_wait_nolock(size_t table_idx) noexcept{
+
+                if (this->acquirability_table[table_idx].value.load(std::memory_order_relaxed)){
+                    return;
+                }
+
+                this->acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed); //buggy
+                this->acquirability_table[table_idx].value.notify_one();
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
 
+                acquirability_table[table_idx].value.test_and_set(std::memory_order_relaxed);
+                referenceability_table[table_idx].value.test_and_test(std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
                 lck_table[table_idx].value.exchange(MEMREGION_EMP_STATE, std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                acquirability_table[table_idx].value.notify_one();
+                referenceability_table[table_idx].value.notify_all();
+
+                std::atomic_signal_fence(std::memory_order_seq_cst); //not necessary
             }
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
@@ -726,8 +778,16 @@ namespace dg::network_memlock_impl1{
                     return false;
                 }
 
+                if (cur_state == MEMREGION_MID_STATE){
+                    return false;
+                }
+
                 atomic_lock_t nxt_state  = cur_state + 1;
-                bool rs = lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
+                bool rs = lck_table[table_idx].value.compare_exchange_strong(cur_state, nxt_state, std::memory_order_relaxed);
+
+                if (rs){
+                    acquirability_table[table_idx].clear(std::memory_order_relaxed);
+                }
 
                 return rs;
             }
@@ -735,18 +795,57 @@ namespace dg::network_memlock_impl1{
             static void internal_reference_wait(size_t table_idx) noexcept{
 
                 auto lambda = [&]() noexcept{
-                    atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
-                    atomic_lock_t nxt_state  = cur_state + 1;
-
-                    return cur_state != MEMREGION_ACQ_STATE && lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
+                    return internal_reference_try(table_idx);
                 };
 
-                stdx::eventloop_expbackoff_spin(lambda);
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+
+                if (was_thru){
+                    return;
+                }
+
+                while (true){
+                    was_thru = stdx::eventloop_expbackoff_spin(lambda, 1u);
+
+                    if (was_thru){
+                        break;
+                    }
+
+                    this->referenceability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+                }
+            }
+
+            static void internal_acquire_waitnolock(size_t table_idx) noexcept{
+
+                if (acquirability_table[table_idx].value.test(std::memory_order_relaxed)){
+                    return;
+                }
+
+                acquirability_table[table_idx].value.wait(true, std::memory_order_relaxed);
+                acquirability_table[table_idx].value.notify_one();
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{
 
-                lck_table[table_idx].value.fetch_sub(1, std::memory_order_relaxed);
+                //attempt to buf -> acquired, 
+                // lck_table[table_idx].value.fetch_sub(1, std::memory_order_relaxed);
+
+                lock_state_t old_value = {};
+
+                auto lambda = [&]() noexcept{
+                    old_value = lck_table[table_idx].value.exchange(MEMREGION_MID_STATE);
+                    return old_value != MEMREGION_MID_STATE;
+                };
+
+                stdx::eventloop_expbackoff_spin(lambda);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                acquirability_table[table_idx].value.test_and_set(std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                lck_table[table_idx].value.exchange(old_value - 1u, std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                acquirability_table[table_idx].value.notify_one();
+                std::atomic_signal_fence(std::memory_order_seq_cst); //not necessary
             }
 
         public:
@@ -770,12 +869,18 @@ namespace dg::network_memlock_impl1{
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table           = std::make_unique<stdx::hdi_container<std::atomic<atomic_lock_t>>[]>(lck_table_sz);
-                region_first        = first;
+                size_t lck_table_sz     = (ulast - ufirst) / MEMREGION_SZ;
+                lck_table               = std::make_unique<stdx::hdi_container<std::atomic<atomic_lock_t>>[]>(lck_table_sz);
+                acquirability_table     = std::make_unique<stdx::hdi_container<std::atomic_flag>[]>(lck_table_sz);
+                referenceability_table  = std::make_unique<stdx::hdi_container<std::atomic_flag>[]>(lck_table_sz);
+                region_first            = first;
 
                 for (size_t i = 0u; i < lck_table_sz; ++i){
-                    lck_table[i].value = MEMREGION_EMP_STATE;
+                    lck_table[i].value              = MEMREGION_EMP_STATE;
+                    acquirability_table[i].value    = false;
+                    acquirability_table[i].value    = true;
+                    referenceability_table[i].value = false;
+                    referenceability_table[i].value = true;
                 }
 
                 segcheck_ins::init(first, last);

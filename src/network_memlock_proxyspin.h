@@ -241,8 +241,14 @@ namespace dg::network_memlock_proxyspin{
                     return true;
                 };
 
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+
+                if (was_thru){
+                    break;
+                }
+
                 while (true){
-                    bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                    was_thru = stdx::eventloop_expbackoff_spin(lambda, 1u);
 
                     if (was_thru){
                         break;
