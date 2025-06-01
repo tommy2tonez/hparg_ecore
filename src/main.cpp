@@ -113,12 +113,9 @@ consteval auto some_foo() -> size_t{
 
 int main(){
 
-    //BM_BitsetSort_uint32_Random_262144
-    //42467328	16.4134	16.4128	ns
-    //BM_PdqSort_uint32_Random_262144
-    //28835840	24.0294	24.0289	ns
-
-    //16/24 == 2/3 
+    //we'll try that the 101st time Murph
+    //this time we'll mine the logit density on Virtual Machine (picking a thread) + synthetic data
+    //because we literally dont have a set of superior data (unless we can somehow trigger the chain of self-generated synthetic data)
 
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},

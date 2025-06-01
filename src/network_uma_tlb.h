@@ -383,11 +383,11 @@ namespace dg::network_uma_tlb::rec_lck{
             }
 
             while (true){
-                wait_resource = {};
-                was_thru = true;
-
+                *stdx::volatile_access(&wait_resource) = {};
                 *stdx::volatile_access(&try_resource, wait_resource) = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that
                 *stdx::volatile_access(&wait_resource, try_resource) = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
+
+                was_thru = true;
 
                 for (size_t i = 0u; i < SZ; ++i){
                     if (i != wait_idx){

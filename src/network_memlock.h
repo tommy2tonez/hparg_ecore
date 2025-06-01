@@ -191,6 +191,21 @@ namespace dg::network_memlock{
             }
     };
 
+    //there is not a good proof another than a good old induction
+    //assume that unordered_set contains the correct set of the up-to-date acquired lock stack and the lock_guard<> will acquire + release the locks in the appropriate first met orders
+
+    //the next acquisition
+    //  - assume that acquiring the previously acquired lock, the previously acquired lock lifetime is guaranteed to contain the current lock lifetime (due to stackness), no action is performed for the lock acquisition (in and out of the transaction as if the transaction does not exist)
+    //  - assume that acquiring the newly acquired lock, the unordered_set of the up-to-date stack is updated with the newly acquired lock + the resource is responsible for releasing the lock + update the unordered_set after stack unwind
+
+    //this got stuck in my head because I dont have the word for processing this logic naturally
+    //the problem is probably the stillness of the stack, because a reordering of the deallocations would mess up the logic very badly
+
+    //enforcing the stillness requires more than just a call to the function, it involves complex mechanism that only the actual lock_guard could provide
+    //the lock_guard responsibility is to (1): memory transaction in and out of the stack, (2): stillness of stack, (3): invoked by client only
+    //the internal memory orderings must be relaxed, because it is incorrect otherwise according to compiler compiling virtues, if the caller does not see the callee code, the callee code is free to be moved around
+    //this is the new std proposal for lock implementation that does not involve compiler's magics
+
     template <class T>
     auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
 
@@ -303,11 +318,11 @@ namespace dg::network_memlock{
             }
 
             while (true){
-                waiting_lock_guard_resource = {};
-                was_thru = true; 
-
+                *stdx::volatile_access(&waiting_lock_guard_resource) = {};
                 *stdx::volatile_access(&spinning_lock_guard_resource_array, waiting_lock_guard_resource) = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that 
                 *stdx::volatile_access(&waiting_lock_guard_resource, spinning_lock_guard_resource_array) = recursive_lock_guard(lock_ins, lock_ptr_arr[wait_idx]);
+
+                was_thru = true; 
 
                 for (size_t i = 0u; i < SZ; ++i){
                     if (i != wait_idx){
@@ -352,7 +367,7 @@ namespace dg::network_memlock{
                                                                               Args... args) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                this->resource = recursive_lock_guard_many(ins, std::memory_order_relaxed, args...);
+                this->resource = recursive_lock_guard_many(ins, args...);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 if constexpr(STRONG_MEMORY_ORDERING_FLAG){
