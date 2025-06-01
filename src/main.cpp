@@ -117,6 +117,23 @@ int main(){
     //this time we'll mine the logit density on Virtual Machine (picking a thread) + synthetic data
     //because we literally dont have a set of superior data (unless we can somehow trigger the chain of self-generated synthetic data)
 
+    //I got an email from our std friends, the search implementation is actually 10000x faster than our current implementation ...
+    //how, why, what, they removed some of the decimal accuracy (they are searching in a different space ..., I dont know what that's supposed to mean)
+
+    //they probably talked about compression (which I have been desperately trying to compress by using middle layer compression + search)
+    //the problem is not the compression rate, the problem is the logit density of the compression
+    //we'd want to have an extremely high logit density of compressed semantic space before we are trying to train our next word prediction
+
+    //assume a vocabulary set + language that is correct at all times, can be adjusted, altered + appended by back-inserting
+    //this is not a coding language
+    //such buffer with sliding window is called consciousness
+
+    //
+
+    //we'll try to standardize the 256x256 square tile, 64KB of linear/ dispatch => 64KB ^ 3 complexity (we wont be cho-col-late, we'll be cho-row-late)
+    //compressed to 8KB of external comm (to fit in a transportation unit (we'll come up with a very fat dictionary, ...))
+    //we'll be fine
+
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},
             {{1, 2}, {2, 3}, {3, 4}},

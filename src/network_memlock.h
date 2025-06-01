@@ -198,6 +198,13 @@ namespace dg::network_memlock{
     //  - assume that acquiring the previously acquired lock, the previously acquired lock lifetime is guaranteed to contain the current lock lifetime (due to stackness), no action is performed for the lock acquisition (in and out of the transaction as if the transaction does not exist)
     //  - assume that acquiring the newly acquired lock, the unordered_set of the up-to-date stack is updated with the newly acquired lock + the resource is responsible for releasing the lock + update the unordered_set after stack unwind
 
+    //  - why the reverse operation is correct again, this is due to one assumption, the assumption that the state at the deallocation is the state right after the allocation (we can prove this by using further induction)
+    //      - the next state is guaranteed to be the previous state (which is a correct state according to our induction assumption + stack stillness) as if the transaction does not happen
+    //      - which also furthers the latter induction assumption
+
+    //assume we have a back inserting and back removing array
+    //at every point pre and post a push_back() and pop(), we can guarantee the correctness of the state, such is unordered set contains the correct set of the ...
+
     //this got stuck in my head because I dont have the word for processing this logic naturally
     //the problem is probably the stillness of the stack, because a reordering of the deallocations would mess up the logic very badly
 

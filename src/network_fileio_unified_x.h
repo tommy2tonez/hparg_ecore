@@ -36,6 +36,8 @@ namespace dg::network_fileio_unified_x{
     //https://www.ibm.com/support/pages/ibm-spectrum-scale-512-513-levels-alert-file-truncation-file-open-otrunc-flag-may-fail-take-effect-leading-undetected-data-corruption
     //we don't O_CREATE the file yet it's better be safe than sorry
     //there is not a single harder thing in comp_sci than to read + write files
+    //this is the file descriptor final destination
+    //we solved the 100% of the issues
 
     static inline constexpr bool HAS_DOUBLE_METADATA_WRITE          = true; //this is important to unfault the file error, RAM cannot fault
     static inline constexpr bool HAS_REVIST_METADATA_WRITE          = true; //this is very necessary, RAM cannot fault yet file can fault, O_TRUNC
