@@ -321,7 +321,7 @@ namespace stdx{
                                            std::mutex>; 
 
     template <class Lambda>
-    inline void eventloop_spin_expbackoff(Lambda&& lambda) noexcept(noexcept(lambda())){
+    inline void eventloop_expbackoff_spin(Lambda&& lambda) noexcept(noexcept(lambda())){
 
         const size_t BASE                   = 2u;
         const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
@@ -341,7 +341,7 @@ namespace stdx{
     }
 
     template <class Lambda>
-    inline bool eventloop_spin_expbackoff(Lambda&& lambda, size_t spin_sz) noexcept(noexcept(lambda())){
+    inline bool eventloop_expbackoff_spin(Lambda&& lambda, size_t spin_sz) noexcept(noexcept(lambda())){
 
         const size_t BASE                   = 2u;
         const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
@@ -393,7 +393,7 @@ namespace stdx{
 
         if (!job()){ //fast_path
             while (true){
-                if (eventloop_spin_expbackoff(job, SPINLOCK_SIZE_MAGIC_VALUE)){
+                if (eventloop_expbackoff_spin(job, SPINLOCK_SIZE_MAGIC_VALUE)){
                     break;
                 }
 

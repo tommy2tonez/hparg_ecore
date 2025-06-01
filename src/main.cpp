@@ -128,7 +128,8 @@ int main(){
     //this is not a coding language
     //such buffer with sliding window is called consciousness
 
-    //
+    //there is a real reason for why China could launch the rocket while the US could not
+    //China technology is far more advanced than US (what???)
 
     //we'll try to standardize the 256x256 square tile, 64KB of linear/ dispatch => 64KB ^ 3 complexity (we wont be cho-col-late, we'll be cho-row-late)
     //compressed to 8KB of external comm (to fit in a transportation unit (we'll come up with a very fat dictionary, ...))

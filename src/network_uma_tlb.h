@@ -351,6 +351,11 @@ namespace dg::network_uma_tlb::rec_lck{
         return std::optional<resource_arr_t>(std::move(rs));
     }
 
+    //we have yet want to do the waiting + frens here YET
+    //it's extremely very complicated to change that
+    //we wont be super greedy for now
+    //eventloop should solve the problem
+
     template <size_t SZ, class T>
     auto recursive_lockmap_wait_many(const MutexRegionTLBInterface<T> tlb,
                                      const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
@@ -382,10 +387,13 @@ namespace dg::network_uma_tlb::rec_lck{
                 return std::make_pair(std::move(wait_resource), std::move(try_resource));
             }
 
-            while (true){
-                *stdx::volatile_access(&wait_resource) = {};
-                *stdx::volatile_access(&try_resource, wait_resource) = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that
-                *stdx::volatile_access(&wait_resource, try_resource) = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
+            using rs_t = decltype(std::make_pair(std::move(wait_resource), std::move(try_resource))); 
+            rs_t rs;
+
+            auto task = [&]() noexcept{
+                *stdx::volatile_access(&wait_resource)                  = {};
+                *stdx::volatile_access(&try_resource, wait_resource)    = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that
+                *stdx::volatile_access(&wait_resource, try_resource)    = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
 
                 was_thru = true;
 
@@ -400,11 +408,16 @@ namespace dg::network_uma_tlb::rec_lck{
                         }
                     }
                 }
-    
+
                 if (was_thru){
-                    return std::make_pair(std::move(wait_resource), std::move(try_resource));
+                    rs = std::make_pair(std::move(wait_resource), std::move(try_resource));
                 }
-            }
+
+                return was_thru;
+            };
+
+            stdx::eventloop_expbackoff_spin(task);
+            return rs;
         }
     }
 

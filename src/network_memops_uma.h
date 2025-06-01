@@ -582,7 +582,7 @@ namespace dg::network_memops_uma{
                 return trylock_resource.has_value();
             };
 
-            stdx::eventloop_spin_expbackoff(trylock_eventloop, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+            stdx::eventloop_expbackoff_spin(trylock_eventloop, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
 
             if (!trylock_resource.has_value()){
                 std::swap(handle->retry_entry_arr[bad_trylock_sz++], handle->retry_entry_arr[i]);

@@ -242,7 +242,7 @@ namespace dg::network_memlock_proxyspin{
                 };
 
                 while (true){
-                    bool was_thru = stdx::eventloop_spin_expbackoff(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                    bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
 
                     if (was_thru){
                         break;
@@ -378,7 +378,7 @@ namespace dg::network_memlock_proxyspin{
                     return true;    
                 };
 
-                stdx::eventloop_spin_expbackoff(lambda);
+                stdx::eventloop_expbackoff_spin(lambda);
                 return strong_result;
             }
 
@@ -404,7 +404,7 @@ namespace dg::network_memlock_proxyspin{
                     return true;
                 };
 
-                stdx::eventloop_spin_expbackoff(lambda);
+                stdx::eventloop_expbackoff_spin(lambda);
                 acquirability_table[table_idx].value.notify_one();
                 std::atomic_signal_fence(std::memory_order_seq_cst); //this is unnecessary
             }

@@ -339,7 +339,7 @@ namespace dg::network_memlock{
                 return was_thru;
             };
 
-            stdx::eventloop_spin_expbackoff(task);
+            stdx::eventloop_expbackoff_spin(task);
             return rs;
         }
     }
@@ -481,7 +481,7 @@ namespace dg::network_memlock_impl1{
                 };
 
                 while (true){
-                    bool is_success = stdx::eventloop_spin_expbackoff(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                    bool is_success = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
 
                     if (is_success){
                         return;
@@ -710,7 +710,7 @@ namespace dg::network_memlock_impl1{
                     return lck_table[table_idx].value.compare_exchange_weak(expected, MEMREGION_ACQ_STATE, std::memory_order_relaxed);
                 };
 
-                stdx::eventloop_spin_expbackoff(lambda);
+                stdx::eventloop_expbackoff_spin(lambda);
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
@@ -741,7 +741,7 @@ namespace dg::network_memlock_impl1{
                     return cur_state != MEMREGION_ACQ_STATE && lck_table[table_idx].value.compare_exchange_weak(cur_state, nxt_state, std::memory_order_relaxed);
                 };
 
-                stdx::eventloop_spin_expbackoff(lambda);
+                stdx::eventloop_expbackoff_spin(lambda);
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{
