@@ -53,6 +53,12 @@ namespace dg::network_memlock{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_waitnolock_release_responsibility(typename T1::ptr_t ptr) noexcept{
+
+            T::acquire_waitnolock_release_responsibility(ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto acquire_transfer_try(typename T1::ptr_t new_ptr, typename T1::ptr_t old_ptr) noexcept -> bool{
 
             return T::acquire_transfer_try(new_ptr, old_ptr);
@@ -303,6 +309,21 @@ namespace dg::network_memlock{
     //each has 50% chance of success, reduce our chance -> 0%
     //we have to do eventloop_expbackoff to increase the chances of sequential runs
 
+    //Chinaman gave me the source
+    //what does this do?
+    //sort the array, get the weakly connected component ID by using the smallest ID
+
+    //acquiring the ID == acquiring the intersected set
+    //thus reducing the friction of acquiring the set by size(intersection(set1, set2)) folds
+
+    //the ascending acquisition is very important (in the high frequency + low latency applications)
+    //we need to be able to prove that there is at least one guy gets thru, global lead in the racing process (in the case of no guy has been able to acquire any locks)
+
+    //greedy case, the ascending order would eliminate MOST of the bad cases
+    //worst case, each guy only has one element intersected => very bad
+    //in the worst case, the eventloop_expbackoff_spin would kick in, wait 1ms and let the other dudes "complete" all the acquisition within 1 microseconds
+    //the eventloop expbackoff MUST be able to allow such leeway for the worst case scenerio
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -312,19 +333,22 @@ namespace dg::network_memlock{
         if constexpr(SZ == 1u){
             return recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]);
         } else{
-            using try_lock_guard_resource_t = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
-            auto lock_ptr_arr               = sort_ptr_array(arg_lock_ptr_arr); 
-            size_t wait_idx                 = 0u;
+            using try_lock_guard_resource_t         = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+            auto lock_ptr_arr                       = sort_ptr_array(arg_lock_ptr_arr); 
+            std::optional<size_t> wait_idx          = std::nullopt;
 
             std::array<try_lock_guard_resource_t, SZ> rs;
 
             auto task = [&]() noexcept{
-                rs              = {};
-                bool was_thru   = true;
+                rs                                      = {};
+                bool was_thru                           = true;
+                std::optional<size_t> responsible_idx   = std::nullopt; 
 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-                dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock(*stdx::volatile_access(&lock_ptr_arr[wait_idx], rs)); //this is volatile access, because notify() if not seen can be moved around, very dangerous
-                std::atomic_signal_fence(std::memory_order_seq_cst);
+                if (wait_idx.has_value()){
+                    dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock(lock_ptr_arr[wait_idx.value()]);
+                    responsible_idx = wait_idx;
+                    wait_idx        = std::nullopt;
+                }
 
                 for (size_t i = 0u; i < SZ; ++i){
                     rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
@@ -333,6 +357,12 @@ namespace dg::network_memlock{
                         wait_idx    = i;
                         was_thru    = false;
                         break;
+                    }
+                }
+
+                if (!was_thru){
+                    if (responsible_idx.has_value()){
+                        dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]);
                     }
                 }
 
@@ -406,48 +436,6 @@ namespace dg::network_memlock_impl1{
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
     struct AtomicFlagLock{}; 
 
-    //I was trying to get the hinge of lock + schedules
-    //I was proving the notify + nodeadlocks
-
-    //it is the problem of having at least 1 guy to continue the process after release
-    //what does that even mean?
-
-    //assume notify()
-    //assume another guy got in the way before notify() + got the lock -> OK
-
-    //assume notify() is notifying a list of subscribed subscribers
-    //notify() -> subscriber, not triggered because of false -> OK, another guy got in the way
-    //notify() -> subscriber, triggered because of true, guy is spinning loop -> OK, another guy got in the way (cmpexch_strong is precisely for this)
-    //                                                   guy is not spinning loop -> OK, we got in 
-
-    //notify() -> no_subscriber -> next guy's gonna read false -> OK, another guy got in the way
-    //                          -> next guy's gonna read true -> OK, the lucky guy got in the way
-
-    //is there a possiblity of wait() deadlock
-    //no, why?
-
-    //we need to look at the very important hinge, the last notify() and the wait() invoke
-
-    //if the wait() is sequenced before the notify(), it is subscribed, then we are guaranteed to have 1 guy to continue the process (as explained above)
-    //can we prove that the wait() will be woken (in the case of tentatively_freed_lock) if it is sequenced before the notify()?
-
-    //if it is sequenced before the notify, then it is guaranteeing the subscriber list to be >= 1
-    //<the not having a next guy to continue the process> (tentatively_freed_lock) only happens when the subscriber list == 0, which means the wait() has been woken
-    //so there is no such case of tentatively_freed_lock + not_woke_already_subscribed
-
-    //this is complicated 
-
-    //if the wait() is sequenced after the notify(), then we are guaranteed to read true, as unblocked by the notifier
-
-    //this is a very important note
-
-    //due to technical constraints of UMA proxyspin locks (we cant find a clean implementation of that)
-    //we would want to reduce the lock contention by making the memlock_region_sz == uma_region_sz
-    //recall that we are not actually processing the WO
-    //we are offloading that -> the asynchronous devices
-    //so the pros of acquiring different parts of a region is not actually a quantifiable plus  
-    //we dont want to excuse our implementation, yet we'd invest our time in improving the UMA proxy spinlock implementation should there be usecases
-
     template <class ID, size_t MEMREGION_SZ, class PtrT>
     struct AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<AtomicFlagLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
 
@@ -499,12 +487,12 @@ namespace dg::network_memlock_impl1{
 
             static void internal_acquire_waitnolock(size_t table_idx) noexcept{
 
-                if (lck_table[table_idx].value.test(std::memory_order_relaxed)){
-                    return;
-                }
-
                 lck_table[table_idx].value.wait(true, std::memory_order_relaxed);
-                lck_table[table_idx].value.notify_one(); //transfer the responsibility right away, because this waitnolock guy does not empty the subcripted queue, so we have to pass the responsibility to the guy who does, maybe another waitnolock, continues until acquire_wait gets the order
+            }
+
+            static void internal_acquire_waitnolock_release_responsibility(size_t table_idx) noexcept{
+
+                lck_table[table_idx].value.notify_one();
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
@@ -569,6 +557,11 @@ namespace dg::network_memlock_impl1{
 
                 internal_acquire_waitnolock(ptr);
             ]
+
+            static void acquire_waitnolock_release_responsibility(ptr_t ptr) noexcept{
+
+                internal_acquire_waitnolock_release_responsibility(memregion_slot(segcheck_ins::access(ptr)));
+            }
 
             static void acquire_release(ptr_t ptr) noexcept{
 
@@ -752,11 +745,11 @@ namespace dg::network_memlock_impl1{
 
             static void internal_acquire_waitnolock(size_t table_idx) noexcept{
 
-                if (this->acquirability_table[table_idx].value.load(std::memory_order_relaxed)){
-                    return;
-                }
+                this->acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+            }
 
-                this->acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed); //buggy
+            static void internal_acquire_waitnolock_release_responsibility(size_t table_idx) noexcept{
+
                 this->acquirability_table[table_idx].value.notify_one();
             }
 
@@ -776,24 +769,35 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_reference_try(size_t table_idx) noexcept -> bool{
 
-                atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
+                bool was_referenced = {}; 
 
-                if (cur_state == MEMREGION_ACQ_STATE){
-                    return false;
-                }
+                auto task = [&]() noexcept{
+                    atomic_lock_t cur_state  = lck_table[table_idx].value.load(std::memory_order_relaxed);
 
-                if (cur_state == MEMREGION_MID_STATE){
-                    return false;
-                }
+                    if (cur_state == MEMREGION_ACQ_STATE){
+                        was_referenced = false;
+                        return true;
+                    }
 
-                atomic_lock_t nxt_state  = cur_state + 1;
-                bool rs = lck_table[table_idx].value.compare_exchange_strong(cur_state, nxt_state, std::memory_order_relaxed);
+                    if (cur_state == MEMREGION_MID_STATE){
+                        return false;
+                    }
 
-                if (rs){
+                    atomic_lock_t nxt_state  = cur_state + 1;
+                    bool rs = lck_table[table_idx].value.compare_exchange_strong(cur_state, nxt_state, std::memory_order_relaxed);
+
+                    if (!rs){
+                        return false;
+                    }
+
+                    was_referenced = true;
                     acquirability_table[table_idx].clear(std::memory_order_relaxed);
-                }
 
-                return rs;
+                    return true;
+                };
+
+                stdx::eventloop_expbackoff_spin(task);
+                return was_referenced;
             }
 
             static void internal_reference_wait(size_t table_idx) noexcept{
@@ -817,16 +821,6 @@ namespace dg::network_memlock_impl1{
 
                     this->referenceability_table[table_idx].value.wait(false, std::memory_order_relaxed);
                 }
-            }
-
-            static void internal_acquire_waitnolock(size_t table_idx) noexcept{
-
-                if (acquirability_table[table_idx].value.test(std::memory_order_relaxed)){
-                    return;
-                }
-
-                acquirability_table[table_idx].value.wait(true, std::memory_order_relaxed);
-                acquirability_table[table_idx].value.notify_one();
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{
