@@ -185,6 +185,7 @@ int main(){
     //there are only two Brands (I dont know why there isn't a third Brand)
 
     //what we are missing is a way to extract the data from the virtual machine at the right frequency, we'll come up with a way
+    //alrighty fellas, mark my words, in roughly 3 montths of continuous writing, we'll smack YOUR ASS
 
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},
