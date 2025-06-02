@@ -353,16 +353,16 @@ namespace dg::network_memlock{
                 for (size_t i = 0u; i < SZ; ++i){
                     rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
 
-                    if (!rs[i].has_value()){
-                        wait_idx    = i;
-                        was_thru    = false;
-                        break;
-                    }
-
                     if (wait_idx.has_value()){
                         if (i == wait_idx.value()){
                             responsible_idx = std::nullopt;
                         }
+                    }
+
+                    if (!rs[i].has_value()){
+                        wait_idx    = i;
+                        was_thru    = false;
+                        break;
                     }
                 }
 
@@ -516,7 +516,7 @@ namespace dg::network_memlock_impl1{
             static_assert(stdx::is_pow2(MEMREGION_SZ));
 
             static void init(ptr_t first, ptr_t last){ 
-                
+
                 uptr_t ufirst   = pointer_cast<uptr_t>(first);
                 uptr_t ulast    = pointer_cast<uptr_t>(last);
 
