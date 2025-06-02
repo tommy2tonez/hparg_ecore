@@ -330,6 +330,12 @@ namespace dg::network_memlock{
     //in the worst case, the eventloop_expbackoff_spin would kick in, wait 1ms and let the other dudes "complete" all the acquisition within 1 microseconds
     //the eventloop expbackoff MUST be able to allow such leeway for the worst case scenerio
 
+    //this is our proudest lock_guard achievement in recent years (it really is)
+    //the problem is that we could turn the competing intersected set -> {the first element}
+    //{1, 2, 3}, {2, 3} -> {1, 2}, {2}
+    //we dont want to overstep this into the uma implementation, though we desperately wanted to change that, because it would decrease our software value
+    //we'll attempt to solve the problem by closing the gap of the uma_memregion_size() and uma_memlock_memregion_size()
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -373,7 +379,7 @@ namespace dg::network_memlock{
                 }
 
                 if (!was_thru){
-                    rs = {}; //reversing the acquisition commits
+                    rs = {}; //reversing the acquisition commits, the stillness of the stack is not guaranteed, we dont really care at this lock_guard_array
 
                     if (responsible_idx.has_value()){
                         dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]); //we are still responsible for the waitnolock, we need to release the responsibility
