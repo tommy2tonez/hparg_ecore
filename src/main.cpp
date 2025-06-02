@@ -179,6 +179,15 @@ int main(){
     //adaptive => runtime statistical discoveries
     //hybrid => static + adaptive
 
+    //static navigator => branch-prediction liked
+    //adaptive navigator => runtime external branch-prediction, estimating 1 payload -> another payload of randomization, absolute unit of randomization is 1024 ballistic operations (without loss of generality)
+
+    //we'll confine the static navigator => 8KB projection buffer, we'll use extreme compression + fast multi_dimensional_projection of conscious buffer on cuda
+    //let's say we have a sequence of straight ballistic -> melee -> magnetic ballistic -> circumscribing -> ...  
+
+    //we'd want to have two operations, randomization by payload or default randomization (which is defaulted to be steered by the static navigator)
+    //
+
     //we'd split the search implementation => 2 dispatches: - serialized instruction payload
     //                                                      - random random payload
 
