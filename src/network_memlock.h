@@ -35,6 +35,12 @@ namespace dg::network_memlock{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto acquire_try_strong(typename T1::ptr_t ptr) noexcept -> bool{
+
+            return T::acquire_try_strong(ptr);
+        } 
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static void acquire_wait(typename T1::ptr_t ptr) noexcept{
 
             T::acquire_wait(ptr);
@@ -233,7 +239,7 @@ namespace dg::network_memlock{
             return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>());
         }
 
-        if (memlock_ins::acquire_try(ptr_region)){
+        if (memlock_ins::acquire_try_strong(ptr_region)){
             resource_ins::get().insert(ptr_region);
             return rs_type(dg::unique_resource<lock_ptr_t, decltype(destructor)>(ptr_region, std::move(destructor)));
         }
@@ -353,30 +359,30 @@ namespace dg::network_memlock{
                 for (size_t i = 0u; i < SZ; ++i){
                     rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
 
-                    if (wait_idx.has_value()){
-                        if (i == wait_idx.value()){
-                            responsible_idx = std::nullopt;
+                    if (responsible_idx.has_value()){
+                        if (responsible_idx.value() == i){
+                            responsible_idx = std::nullopt; //responsibility of reversing the acquire_waitnolock transferred -> the rs[i], whether that was thru or not thru, we need to guarantee acquire_try is strong, this is very important
                         }
                     }
 
                     if (!rs[i].has_value()){
-                        wait_idx    = i;
+                        wait_idx    = i; //acquire_try strong acquisition does not thru, wait_idx == i, hint the next iteration of the waiting idx 
                         was_thru    = false;
                         break;
                     }
                 }
 
                 if (!was_thru){
+                    rs = {}; //reversing the acquisition commits
+
                     if (responsible_idx.has_value()){
-                        dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]);
-                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]); //we are still responsible for the waitnolock, we need to release the responsibility
                     }
 
-                    rs = {};
                     return false;
                 }
 
-                return true;
+                return true; //OK, good
             };
 
             stdx::eventloop_expbackoff_spin(task);
@@ -472,6 +478,11 @@ namespace dg::network_memlock_impl1{
                 return lck_table[table_idx].value.test_and_set(std::memory_order_relaxed) == false;
             }
 
+            static auto internal_acquire_try_strong(size_t table_idx) noexcept -> bool{
+    
+                return internal_acquire_try(table_idx);
+            }
+
             static void internal_acquire_wait(size_t table_idx) noexcept{
 
                 auto lambda = [&]() noexcept{
@@ -556,6 +567,11 @@ namespace dg::network_memlock_impl1{
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
+            }
+
+            static auto acquire_try_strong(ptr_t ptr) noexcept -> bool{
+
+                return internal_acquire_try_strong(memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
@@ -728,7 +744,12 @@ namespace dg::network_memlock_impl1{
                 }
 
                 return rs;
-            } 
+            }
+
+            static auto internal_acquire_try_strong(size_t table_idx) noexcept -> bool{
+
+                return internal_acquire_try(table_idx);
+            }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
                 
@@ -905,6 +926,11 @@ namespace dg::network_memlock_impl1{
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
                 return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
+            }
+
+            static auto acquire_try_strong(ptr_t ptr) noexcept -> bool{
+    
+                return internal_acquire_try_strong(memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
