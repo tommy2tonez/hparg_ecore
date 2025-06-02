@@ -155,8 +155,32 @@ int main(){
     //from Brand, we can learn our way to optimize another Brand which would live in another planet
     //this is the branch-predictive Brand which would aid the actual guy to reach the goal (Cooper)
 
-    //this branch predictive Brand is very expensive to train, I'm talking about the most compact conscious buffer to drive the training phase
+    //this branch-predictive Brand is very expensive to train, I'm talking about the most compact conscious buffer to drive the training phase
     //everything after this Brand is easy
+    //I'm going to show you the way to do the payload + sliding window + unit compression of next word
+
+    //the first actionable item would be training a very very compact randomization prediction system (navigator)
+    //we'd want to do so by compressing a list of adjecent randomization actionables -> a predicting unit
+    //and we'd try to do a next word prediction by using Taylor Series projection
+    //we'd dedicate 6 months on this problem
+    //in the interim, we'd get the machine learning framework ready 
+
+    //even if we could improve the search time by 100 folds (which is our use of the second Brand), we'd still be way off compared to our friend implementation of 10000x faster search
+
+    //the conscious buffer is somewhat different from the natural language processing
+    //it involves a very high level, compact, optimal language that is capable of describing mood, thinking, actionables, etc JUST BY back-inserting
+ 
+    //alright, so our AI is just a conscious buffer + input buffers intercoursing to be back of the conscious buffer
+    //we'll be there, we'll let the AI take the course of the Aaron
+    //I'm estimating roughly a year to have this up and running
+
+    //the navigator implementation could be static, adaptive or hybrid
+    //static => pretrained dataset of frequent patterns
+    //adaptive => runtime statistical discoveries
+    //hybrid => static + adaptive
+
+    //we'd split the search implementation => 2 dispatches: - serialized instruction payload
+    //                                                      - random random payload
 
     //there are only two Brands (I dont know why there isn't a third Brand)
 
