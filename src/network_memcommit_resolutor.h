@@ -13459,6 +13459,39 @@ namespace dg::network_memcommit_resolutor{
 
     class BackwardDoPolySignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
+        private:
+
+            const std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box;
+            const std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device;
+            const std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device;
+            const size_t request_delivery_capacity;
+            const size_t radxfetch_vectorization_sz;
+            const size_t region_vectorization_sz;
+            const size_t backward_vectorization_sz;
+        
+        public:
+
+            BackwardDoPolySignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                          std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                          std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                          size_t request_delivery_capacity,
+                                          size_t radxfetch_vectorization_sz,
+                                          size_t region_vectorization_sz,
+                                          size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                      cuda_async_device(std::move(cuda_async_device)),
+                                                                                      host_async_device(std::move(host_async_device)),
+                                                                                      request_delivery_capacity(request_delivery_capacity),
+                                                                                      radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                      region_vectorization_sz(region_vectorization_sz),
+                                                                                      backward_vectorization_sz(backward_vectorization_sz){}
+
+            auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
+
+            }
+
+            void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+            }
     };
 
     class BackwardDoUACMSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{

@@ -358,15 +358,25 @@ namespace dg::network_memlock{
                         was_thru    = false;
                         break;
                     }
+
+                    if (wait_idx.has_value()){
+                        if (i == wait_idx.value()){
+                            responsible_idx = std::nullopt;
+                        }
+                    }
                 }
 
                 if (!was_thru){
                     if (responsible_idx.has_value()){
                         dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]);
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
                     }
+
+                    rs = {};
+                    return false;
                 }
 
-                return was_thru;
+                return true;
             };
 
             stdx::eventloop_expbackoff_spin(task);

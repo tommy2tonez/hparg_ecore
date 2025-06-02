@@ -147,6 +147,19 @@ int main(){
     //we just know that it's a mixed of gradient + linearity hints + search, somewhat a unit vector inching in the right direction
     //the three actually works very well and does not cancel out each other
 
+    //alright bad things, Brand on Earth died in the Interstellar, Brand on Edmund planet lived in Interstellar
+    //let me ask Aaron about this
+    //what does Aaron have to say?
+    //everything starts with Brand, the base case of randomization, the naive randomization
+
+    //from Brand, we can learn our way to optimize another Brand which would live in another planet
+    //this is the branch-predictive Brand which would aid the actual guy to reach the goal (Cooper)
+
+    //this branch predictive Brand is very expensive to train, I'm talking about the most compact conscious buffer to drive the training phase
+    //everything after this Brand is easy
+
+    //there are only two Brands (I dont know why there isn't a third Brand)
+
     //what we are missing is a way to extract the data from the virtual machine at the right frequency, we'll come up with a way
 
     Bar bar{{Foo{1, std::nullopt},
