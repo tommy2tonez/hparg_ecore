@@ -409,11 +409,14 @@ namespace dg::network_uma_tlb::rec_lck{
                     }
                 }
 
-                if (was_thru){
-                    rs = std::make_pair(std::move(wait_resource), std::move(try_resource));
+                if (!was_thru){
+                    *stdx::volatile_access(&wait_resource)                  = {};
+                    *stdx::volatile_access(&try_resource, wait_resource)    = {};
+                    return false;
                 }
-
-                return was_thru;
+                
+                rs = std::make_pair(std::move(wait_resource), std::move(try_resource));
+                return true;
             };
 
             stdx::eventloop_expbackoff_spin(task);
