@@ -6599,6 +6599,10 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
+                                if (cur_operatable_id != expected_ops_id){
+                                    break;
+                                }
+
                                 std::chrono::time_point<std::chrono::utc_clock> cron_expiry_time = dg::network_tile_member_getsetter::get_cron_expiry_time_nothrow(ptr);
                                 
                                 //we'll attempt to devirtualize the content of the VirtualSignalAggreggationEvent
@@ -6893,6 +6897,10 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
+                                if (cur_operatable_id != expected_ops_id){
+                                    break;
+                                }
+
                                 std::chrono::time_point<std::chrono::utc_clock> last_signal_time    = dg::network_tile_member_getsetter::get_fsmph_last_updated_nothrow(ptr);
                                 std::chrono::nanoseconds successive_expiry_interval                 = dg::network_tile_member_getsetter::get_fsmph_release_latency_nothrow(ptr);
                                 std::chrono::time_point<std::chrono::utc_clock> expiry_time         = last_signal_time + successive_expiry_interval;
