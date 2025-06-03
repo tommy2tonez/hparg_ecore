@@ -337,8 +337,11 @@ namespace dg::network_memlock{
     //we'll attempt to solve the problem by closing the gap of the uma_memregion_size() and uma_memlock_memregion_size()
 
     //the optimization of the weakly connected component is actually very useful in real life scenerios, the compete, acquire of the first wait index == eliminating every competing set that involves the waiting idx (this has virtually no cost as we are waiting for this), the acquire of the not waiting idx is reduced significantly as if we could eliminate all the involving set containing the idx just by acquiring the idx
+    //this optimization only guarantees the waitability of the first region, what does this mean? we have to exploit the first region to actually serialize accesses, we need to allow user to specify THAT serialization region, we dont go there yet, we just backlog this to the actionable item (this is the 10/10 point, we are only 9/10 which is good enough)
     //yet this breaks a lot of practices of encapsulations and exposes low low level code
     //that is why we only want to do that here, at the memlock
+    //we dont do shared mutex to do read only, its not maintainable and it actually has bad FIFO priority
+    //this is good enough for now
 
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
