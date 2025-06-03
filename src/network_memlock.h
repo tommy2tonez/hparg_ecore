@@ -336,6 +336,10 @@ namespace dg::network_memlock{
     //we dont want to overstep this into the uma implementation, though we desperately wanted to change that, because it would decrease our software value
     //we'll attempt to solve the problem by closing the gap of the uma_memregion_size() and uma_memlock_memregion_size()
 
+    //the optimization of the weakly connected component is actually very useful in real life scenerios, the compete, acquire of the first wait index == eliminating every competing set that involves the waiting idx (this has virtually no cost as we are waiting for this), the acquire of the not waiting idx is reduced significantly as if we could eliminate all the involving set containing the idx just by acquiring the idx
+    //yet this breaks a lot of practices of encapsulations and exposes low low level code
+    //that is why we only want to do that here, at the memlock
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
