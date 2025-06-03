@@ -1265,6 +1265,23 @@ namespace dg::network_kernel_mailbox_impl1::semaphore_impl{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
+    //we can't really solve all of the connectivity problems
+    //yet this would reduce some of the connectivity problems
+    //ideally, we'd want to call connect() and wait for response before literally doing ANYTHING, that would be called connection-oriented, which introduces tons of latency which we really dont know how to solve
+    //we'll consider the approach, for now, this is fine
+
+    //the problem is that sometimes, an IP in a green list is not thru for various reasons, being blocked, bad traffic, sharks, or saturated bandwidth, etc.
+    //we dont want to further worsen the problem by being not diplomatic (keep sending requests with no responses)
+
+    //so we'd do a 120s interval reset, 10 seconds latency response
+    //which would, on average put the other 110s in the diplomatic range, which is 11/12 of the time, which is mostly diplomatic
+    //for this protocol, we assume that the transmission bandwidth is uniform
+    //there is no 2.5 MB/s and 10GB/s for one connection and another
+    //alright, this is hard to grasp but we'd attempt to control that at the cron job of extnsrc + extnsrx + extndsx + extndst, because every transmission controlled protocol is very short-sighted
+
+    //we'd do something called a convoluted + controlled + optimized plan of forward + backward
+    //such the plan would accurate every transmission of network from A -> B, see the network from the hollistic perspective to make the rightest decision
+
     class ConnectivityController: public virtual ConnectivityControllerInterface,
                                   public virtual UpdatableInterface{
         
@@ -1277,7 +1294,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
-                                    
+            
+            static inline constexpr size_t TICKING_CLOCK_RESOLUTION = 1024u;
+
             ConnectivityController(dg::unordered_unstable_map<model::Address, model::ConnectivityEntry> connectivity_table,
                                    size_t connectivity_table_cap,
                                    std::chrono::nanoseconds connectivity_lost_threshold,
@@ -1292,7 +1311,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                std::chrono::time_point<std::chrono::utc_clock> now = std::chrono::utc_clock::now();
+                auto clock = dg::ticking_clock<std::chrono::utc_clock>(TICKING_CLOCK_RESOLUTION); 
 
                 for (size_t i = 0u; i < addr_arr_sz; ++i){
                     auto map_ptr = this->connectivity_table.find(addr_arr[i]); 
@@ -1309,7 +1328,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                     std::chrono::timepoint<std::chrono::utc_clock> expiry_threshold = map_ptr->second.connect_attempt_ts + this->connectivity_lost_threshold;
                     
-                    if (now < expiry_threshold){
+                    if (clock.get() < expiry_threshold){
                         output_arr[i] = true;
                         continue;
                     }
@@ -1322,7 +1341,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                std::chrono::time_point<std::chrono::utc_clock> now = std::chrono::utc_clock::now();
+                auto clock = dg::ticking_clock<std::chrono::utc_clock>(TICKING_CLOCK_RESOLUTION); 
 
                 for (size_t i = 0u; i < addr_arr_sz; ++i){
                     auto map_ptr = this->connectivity_table.find(addr_arr[i]);
@@ -1337,7 +1356,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         continue;
                     }
 
-                    auto [insert_status, _] = this->connectivity_table.insert(std::make_pair(addr_arr[i], model::ConnectivityEntry{.connect_attempt_ts  = now,
+                    auto [insert_status, _] = this->connectivity_table.insert(std::make_pair(addr_arr[i], model::ConnectivityEntry{.connect_attempt_ts  = clock.get(),
                                                                                                                                    .was_repsonded       = false}));
 
                     if constexpr(DEBUG_MODE_FLAG){
@@ -1355,7 +1374,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                std::chrono::time_point<std::chrono::utc_clock> now = std::chrono::utc_clock::now();
+                auto clock = dg::ticking_clock<std::chrono::utc_clock>(TICKING_CLOCK_RESOLUTION); 
 
                 for (size_t i = 0u; i < addr_arr_sz; ++i){
                     auto map_ptr = this->connectivity_table.find(addr_arr[i]);
@@ -1371,7 +1390,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         continue;
                     }
 
-                    auto [insert_status, _] = this->connectivity_table.insert(std::make_pair(addr_arr[i], model::ConnectivityEntry{.connect_attempt_ts  = now,
+                    auto [insert_status, _] = this->connectivity_table.insert(std::make_pair(addr_arr[i], model::ConnectivityEntry{.connect_attempt_ts  = clock.get(),
                                                                                                                                    .was_responded       = true}));
 
                     if constexpr(DEBUG_MODE_FLAG){
