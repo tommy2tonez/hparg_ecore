@@ -6394,12 +6394,14 @@ namespace dg::network_memcommit_resolutor{
             auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_pingpong_resolutor.get(), this->msgrbwd_dispatch_sz));
 
             for (size_t i = 0u; i < sz; ++i){
-                std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].requestee);
-
-                if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){ //optimizables
-                    dg::network_log_stackdump::error_fast_optional("BAD TILE PINGPONG OPERATION");
-                    continue;
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!is_met_dispatch_requirements(event_arr[i])){
+                        dg::network_log_stackdump::critical("BAD FORWARD PINGPONG REQUEST OPERATION");
+                        std::abort();
+                    }
                 }
+
+                tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].requestee);
 
                 switch (tile_kind.value()){
                     case TILE_KIND_LEAF:
@@ -6532,13 +6534,13 @@ namespace dg::network_memcommit_resolutor{
                                                                    delivery_capacity(delivery_capacity),
                                                                    vectorization_sz(vectorization_sz){}
 
-            constexpr auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
+            auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
 
             }
 
             void push(VirtualSignalAggregationEvent * event_arr, size_t sz) noexcept{
 
-                const size_t EVENT_SCALE_FACTOR     = MAX_VIRTUAL_SIGNAL_AGGREGATION_PER_CRON_TILE;
+                const size_t EVENT_SCALE_FACTOR     = CRON_TILE_MAX_VIRTUAL_SIGNAL_AGGREGATION_SIZE;
                 size_t max_possible_event_sz        = sz * EVENT_SCALE_FACTOR;
                 size_t trimmed_delivery_capacity    = std::min(this->delivery_capacity, max_possible_event_sz);
                 size_t dh_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(this->request_box.get(), trimmed_delivery_capacity);
@@ -6577,6 +6579,20 @@ namespace dg::network_memcommit_resolutor{
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, VirtualSignalAggregationEvent>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void dump_sigagg(uma_ptr_t smph_addr) noexcept{
+
+                    size_t memevent_arr_cap = CRON_TILE_MAX_VIRTUAL_SIGNAL_AGGREGATION_SIZE;
+                    size_t memevent_arr_sz  = {};
+                    dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<virtual_memory_event_t[]> memevent_arr(memevent_arr_cap);
+                    dg::network_tile_member_getsetter::controller_cron_get_sigagg(smph_addr, memevent_arr.get(), memevent_arr_sz);
+
+                    for (size_t i = 0u; i < memevent_arr_sz; ++i){
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, memevent_arr[i]);
+                    }
+
+                    dg::network_tile_member_getsetter::controller_cron_clear_sigagg(smph_addr);
+                }
 
                 void push(const uma_ptr_t& rcu_addr, std::move_iterator<VirtualSignalAggregationEvent *> event_arr, size_t sz) noexcept{
 
@@ -6695,7 +6711,7 @@ namespace dg::network_memcommit_resolutor{
                                                                                 delivery_capacity(delivery_capacity),
                                                                                 vectorization_sz(vectorization_sz){}
 
-            constexpr auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> bool{
+            constexpr auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
 
             } 
 
@@ -6751,16 +6767,16 @@ namespace dg::network_memcommit_resolutor{
 
                 void dump_sigagg(uma_ptr_t smph_addr) noexcept{
 
-                    size_t memevent_arr_cap = MAX_VIRTUAL_SIGNAL_AGGREGATION_PER_TILE;
+                    size_t memevent_arr_cap = SMPH_TILE_MAX_VIRTUAL_SIGNAL_AGGREGATION_SIZE;
                     size_t memevent_arr_sz  = {};
                     dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<virtual_memory_event_t[]> memevent_arr(memevent_arr_cap);
-                    dg::network_tile_member_getsetter::controller_get_smph_sigagg(smph_addr, memevent_arr.get(), memevent_arr_sz);
+                    dg::network_tile_member_getsetter::controller_smph_get_sigagg(smph_addr, memevent_arr.get(), memevent_arr_sz);
 
                     for (size_t i = 0u; i < memevent_arr_sz; ++i){
                         dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, memevent_arr[i]);
                     }
 
-                    dg::network_tile_member_getsetter::controller_clear_smph_sigagg(ptr);
+                    dg::network_tile_member_getsetter::controller_smph_clear_sigagg(smph_addr);
                 }
 
                 void push(const uma_ptr_t& rcu_addr, std::move_iterator<VirtualSignalAggregationEvent *> event_arr, size_t sz) noexcept{
@@ -6794,7 +6810,23 @@ namespace dg::network_memcommit_resolutor{
                                     this->dump_sigagg(ptr);
                                 }
 
-                                dg::network_tile_member_getsetter::controller_smph_push_sigagg(ptr, base_event_arr[i].memevent);
+                                switch (base_event_arr[i].aggregation_kind){
+                                    case dg::network_memcommit_factory::AGGREGATION_KIND_VIRTUAL_EVENT:
+                                    {
+                                        dg::network_tile_member_getsetter::controller_smph_push_sigagg(ptr, dg::network_memcommit_model::devirtualize_aggregation_virtual_event(base_event_arr[i]));
+                                        break;
+                                    }
+                                    default:
+                                    {
+                                        if constexpr(DEBUG_MODE_FLAG){
+                                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                            std::abort();
+                                        } else{
+                                            std::unreachable();
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                             default:
@@ -6871,10 +6903,24 @@ namespace dg::network_memcommit_resolutor{
             }
 
         private:
-            
+
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, VirtualSignalAggregationEvent>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
+
+                void dump_sigagg(uma_ptr_t smph_addr) noexcept{
+
+                    size_t memevent_arr_cap = FSMPH_TILE_MAX_VIRTUAL_SIGNAL_AGGREGATION_SIZE;
+                    size_t memevent_arr_sz  = {};
+                    dg::network_stack_allocation::NoExceptRawIfPossibleAllocation<virtual_memory_event_t[]> memevent_arr(memevent_arr_cap);
+                    dg::network_tile_member_getsetter::controller_fsmph_get_sigagg(smph_addr, memevent_arr.get(), memevent_arr_sz);
+
+                    for (size_t i = 0u; i < memevent_arr_sz; ++i){
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, memevent_arr[i]);
+                    }
+
+                    dg::network_tile_member_getsetter::controller_fsmph_clear_sigagg(smph_addr);
+                }
 
                 void push(const uma_ptr_t& rcu_addr, std::move_iterator<VirtualSignalAggregationEvent *> event_arr, size_t sz) noexcept{
 
@@ -6973,6 +7019,86 @@ namespace dg::network_memcommit_resolutor{
 
     class AggregationSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<VirtualSignalAggregationEvent>{
 
+        private:
+
+            const std::shared_ptr<CronSignalResolutor> cron_resolutor;
+            const size_t cron_dispatch_sz;
+            const std::shared_ptr<SmphSignalResolutor> smph_resolutor;
+            const size_t smph_dispatch_sz;
+            const std::shared_ptr<FrequencizedSmphSignalResolutor> fsmph_resolutor;
+            const size_t fsmph_dispatch_sz;
+        
+        public:
+
+            AggregationSignalResolutor(std::shared_ptr<CronSignalResolutor> cron_resolutor,
+                                       size_t cron_dispatch_sz,
+                                       std::shared_ptr<SmphSignalResolutor> smph_resolutor,
+                                       size_t smph_dispatch_sz,
+                                       std::shared_ptr<FrequencizedSmphSignalResolutor> fsmph_resolutor,
+                                       size_t fsmph_dispatch_sz) noexcept: cron_resolutor(std::move(cron_resolutor)),
+                                                                           cron_dispatch_sz(cron_dispatch_sz),
+                                                                           smph_resolutor(std::move(smph_resolutor)),
+                                                                           smph_dispatch_sz(smph_dispatch_sz),
+                                                                           fsmph_resolutor(fsmph_resolutor),
+                                                                           fsmph_dispatch_sz(fsmph_dispatch_sz){}
+
+            auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
+
+            }
+
+            void push(VirtualSignalAggregationEvent * event_arr, size_t sz) noexcept{
+
+                size_t trimmed_cron_dispatch_sz     = std::min(this->cron_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> cron_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->cron_resolutor.get(), trimmed_cron_dispatch_sz));
+
+                size_t trimmed_smph_dispatch_sz     = std::min(this->smph_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> smph_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->smph_resolutor.get(), trimmed_smph_dispatch_sz));
+
+                size_t trimmed_fsmph_dispatch_sz    = std::min(this->fsmph_dispatch_sz, sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> fsmph_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->fsmph_resolutor.get(), trimmed_fsmph_dispatch_sz));
+                
+                auto cron_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->cron_resolutor.get(), trimmed_cron_dispatch_sz, cron_dh_mem.get()));
+                auto smph_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->smph_resolutor.get(), trimmed_smph_dispatch_sz, smph_dh_mem.get()));
+                auto fsmph_delivery_handle      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->fsmph_resolutor.get(), trimmed_fsmph_dispatch_sz, fsmph_dh_mem.get()));
+                
+                for (size_t i = 0u; i < sz; ++i){
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!is_met_dispatch_requirements(event_arr[i])){
+                            dg::network_log_stackdump::critical("BAD AGGREGATION SIGNAL OPERATION");
+                            std::abort();
+                        }
+                    }
+
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].smph_addr);
+
+                    switch (tile_kind){
+                        case TILE_KIND_CRON:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(cron_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_SMPH:
+                        {   
+                            dg::network_producer_consumer::delvrsrv_deliver(smph_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_FSMPH:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(fsmph_delivery_handle.get(), event_arr[i]);
+                            break;
+                        }
+                        default:
+                        {
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        } 
+                    }
+                }
+            }
     };
 
     //

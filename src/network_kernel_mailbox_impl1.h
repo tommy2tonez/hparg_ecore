@@ -1282,6 +1282,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     //we'd do something called a convoluted + controlled + optimized plan of forward + backward
     //such the plan would accurate every transmission of network from A -> B, see the network from the hollistic perspective to make the rightest decision
 
+    //we have considered every possible scenerio of doing sockets
+    //this is the right approach for the tile transportation
+
+    //we'll talk about the preplanned broadcast later
+    //like stock broadcast or movie broadcast or whatever broadcast that involves a predeterministic path of transportation
+    //this broadcast needs to compress (0.01% compression rate)
+    //this is the superior cache that people talked about
+    //in the sense that everything cache could do, we can do it better, by actually keeping the node on the filesystem to do cache retrival at a later time
+
+    //we are doing 10GB of socket/s with 10.000 memory orderings/s with literally no latency overhead (even though we could offset the cost by using NUMA affinity, we still need to decrease the number of total memory orderings) 
+    //we just need to pad the number of socket packet/s, we'll be fine
+
     class ConnectivityController: public virtual ConnectivityControllerInterface,
                                   public virtual UpdatableInterface{
         
