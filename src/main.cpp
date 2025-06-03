@@ -196,6 +196,11 @@ int main(){
     //what we are missing is a way to extract the data from the virtual machine at the right frequency, we'll come up with a way
     //alrighty fellas, mark my words, in roughly 3 montths of continuous writing, we'll smack YOUR ASS
 
+    //i received a gray code from one of my std friends
+    //that we should search in the taylor series space also
+    //imagine that we are randomizing the coefficients + operations + x variables as if we are mining an optimal taylor sequence but not a taylor sequence
+    //this space is not continuous, this is the problem
+    
     Bar bar{{Foo{1, std::nullopt},
              Foo{2, uint64_t{2}}},
             {{1, 2}, {2, 3}, {3, 4}},
