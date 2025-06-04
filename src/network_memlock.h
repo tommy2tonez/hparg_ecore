@@ -344,6 +344,18 @@ namespace dg::network_memlock{
     //this is good enough for now
     //alright Chinaman contacted me again
     //he said only wait if it is in progress, and competitive try if it is not in progress. we need to specify the threshold like in Cabal upgrade
+
+    //we need to store more informations (this would definitely decrease our software value), specifically a state that is not acquired yet acquired to denote whether the lock will be held for a purpose other than multiple spinning, because this lock implementation is very important
+    //a sequential run should be increasing the trylock_sz
+    //a busyloop with exponential backoff waiting is not acceptable, 
+    //we'll improvise that later, we still use an exponential base to increase the trylock sz
+
+    //this is the single most complex lock implementation that requires too much neurons from me
+    //OK, it looks simple, yet this is probably the best that one could write without further information
+    //client was willing to pay $10 BB for this framework if we could get the density mining up + running within a year
+    //alright, it's very very complicated to write the randomization
+    //I'm telling you that 100 years later, human kind is still spinning to mine the best logit density
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -353,16 +365,18 @@ namespace dg::network_memlock{
         if constexpr(SZ == 1u){
             return recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]);
         } else{
-            using try_lock_guard_resource_t         = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
-            auto lock_ptr_arr                       = sort_ptr_array(arg_lock_ptr_arr); 
-            std::optional<size_t> wait_idx          = std::nullopt;
+            using try_lock_guard_resource_t                     = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT  = 5u;
 
+            auto lock_ptr_arr                                   = sort_ptr_array(arg_lock_ptr_arr); 
+            std::optional<size_t> wait_idx                      = std::nullopt;
             std::array<try_lock_guard_resource_t, SZ> rs;
 
             auto task = [&]() noexcept{
                 rs                                      = {};
                 bool was_thru                           = true;
                 std::optional<size_t> responsible_idx   = std::nullopt; 
+                size_t retry_exponent                   = 0u; 
 
                 if (wait_idx.has_value()){
                     dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock(lock_ptr_arr[wait_idx.value()]);
@@ -371,7 +385,17 @@ namespace dg::network_memlock{
                 }
 
                 for (size_t i = 0u; i < SZ; ++i){
-                    rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+                    if (i != 0u && lock_ptr_arr[i] != lock_ptr_arr[i - 1]){
+                        retry_exponent += 1u; //border index detection
+                    }
+
+                    auto inner_loop_task = [&]() noexcept{
+                        rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
+                        return rs[i].has_value();
+                    };
+
+                    size_t retry_sz = size_t{1} << std::min(retry_exponent, INNER_LOOP_BUSY_WAIT_MAX_EXPONENT);
+                    stdx::eventloop_competitive_spin(inner_loop_task, retry_sz);
 
                     if (responsible_idx.has_value()){
                         if (responsible_idx.value() == i){
