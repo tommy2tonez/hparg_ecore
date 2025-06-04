@@ -342,7 +342,8 @@ namespace dg::network_memlock{
     //that is why we only want to do that here, at the memlock
     //we dont do shared mutex to do read only, its not maintainable and it actually has bad FIFO priority
     //this is good enough for now
-
+    //alright Chinaman contacted me again
+    //he said only wait if it is in progress, and competitive try if it is not in progress. we need to specify the threshold like in Cabal upgrade
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
