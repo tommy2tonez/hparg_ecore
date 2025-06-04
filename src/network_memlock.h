@@ -215,7 +215,7 @@ namespace dg::network_memlock{
         static_assert(dg::ptr_info<T>::is_pointer);
 
         std::array<T, SZ> rs = inp;
-        std::sort(rs.begin(), rs.end());
+        // std::sort(rs.begin(), rs.end());
 
         return rs;
     } 

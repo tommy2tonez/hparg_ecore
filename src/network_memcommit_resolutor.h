@@ -82,7 +82,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -115,7 +115,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.dst);
                 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -144,7 +144,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -239,7 +239,7 @@ namespace dg::network_memcommit_resolutor{
             
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_meber_getsetter::safecthrow_rstr_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_meber_getsetter::safecthrow_rstr_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -268,7 +268,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -361,7 +361,7 @@ namespace dg::network_memcommit_resolutor{
             
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -390,7 +390,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -487,7 +487,7 @@ namespace dg::network_memcommit_resolutor{
             
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -516,7 +516,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -619,7 +619,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.dst);
 
                 if (!ptrchk.has_value())[
                     return ptrchk.error();
@@ -648,7 +648,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -745,7 +745,7 @@ namespace dg::network_memcommit_resolutor{
             
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -774,7 +774,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -880,7 +880,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -909,7 +909,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -991,7 +991,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1025,7 +1025,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1054,7 +1054,7 @@ namespace dg::network_memcommit_resolutor{
                     
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -1169,7 +1169,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1198,7 +1198,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -1280,7 +1280,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1319,7 +1319,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1350,7 +1350,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -1435,7 +1435,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1468,7 +1468,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1497,7 +1497,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -1591,7 +1591,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
                 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.dst);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.dst);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -1620,7 +1620,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -1904,7 +1904,7 @@ namespace dg::network_memcommit_resolutor{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
-                        if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                        if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                             std::abort();
                         }
@@ -2025,7 +2025,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::networK_tile_member_access::safecthrow_leaf_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::networK_tile_member_access::safecthrow_leaf_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2054,7 +2054,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2147,7 +2147,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2176,7 +2176,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2275,7 +2275,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2304,7 +2304,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2403,7 +2403,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2432,7 +2432,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2531,7 +2531,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2560,7 +2560,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2659,7 +2659,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2688,7 +2688,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2787,7 +2787,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2816,7 +2816,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -2915,7 +2915,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -2944,7 +2944,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -3043,7 +3043,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3072,7 +3072,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -3161,7 +3161,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3190,7 +3190,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -3291,7 +3291,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3320,7 +3320,7 @@ namespace dg::network_memcommit_resolutor{
                     
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -3409,7 +3409,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3442,7 +3442,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3471,7 +3471,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -3558,7 +3558,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3591,7 +3591,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3620,7 +3620,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -3719,7 +3719,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -3748,7 +3748,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -4038,7 +4038,7 @@ namespace dg::network_memcommit_resolutor{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
-                        if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                        if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                             std::abort();
                         }
@@ -4159,7 +4159,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -4188,7 +4188,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -4277,7 +4277,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -4306,7 +4306,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -4447,7 +4447,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -4476,7 +4476,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -4616,7 +4616,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.requestee);
                 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -4645,7 +4645,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -4785,7 +4785,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -4814,7 +4814,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -4964,7 +4964,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -4993,7 +4993,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -5140,7 +5140,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pacm_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -5169,7 +5169,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -5326,7 +5326,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -5355,7 +5355,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -5495,7 +5495,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -5524,7 +5524,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -5613,7 +5613,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -5642,7 +5642,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -5805,7 +5805,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -5834,7 +5834,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -5963,7 +5963,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -6008,7 +6008,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -6047,7 +6047,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -6181,7 +6181,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -6214,7 +6214,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -6243,7 +6243,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -6384,7 +6384,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.requestee);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.requestee);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -6413,7 +6413,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -6539,72 +6539,72 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> leaf_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongLeafRequestResolutor> leaf_pingpong_resolutor;
             const size_t leaf_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> blkr_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongBlkrRequestResolutor> blkr_pingpong_resolutor;
             const size_t blkr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> rstr_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongRstrRequestResolutor> rstr_pingpong_resolutor;
             const size_t rstr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> mono_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongMonoRequestResolutor> mono_pingpong_resolutor;
             const size_t mono_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> pair_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongPairRequestResolutor> pair_pingpong_resolutor;
             const size_t pair_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> uacm_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongUACMRequestResolutor> uacm_pingpong_resolutor;
             const size_t uacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> pacm_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongPACMRequestResolutor> pacm_pingpong_resolutor;
             const size_t pacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> crit_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongCritRequestResolutor> crit_pingpong_resolutor;
             const size_t crit_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> immu_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongImmuRequestResolutor> immu_pingpong_resolutor;
             const size_t immu_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> poly_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongPolyRequestResolutor> poly_pingpong_resolutor;
             const size_t poly_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrc_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongExtnSrcRequestResolutor> extnsrc_pingpong_resolutor;
             const size_t extnsrc_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrx_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongExtnSrxRequestResolutor> extnsrx_pingpong_resolutor;
             const size_t extnsrx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndst_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongExtnDstRequestResolutor> extndst_pingpong_resolutor;
             const size_t extndst_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndsx_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongExtnDsxRequestResolutor> extndsx_pingpong_resolutor;
             const size_t extndsx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrfwd_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongMsgrFwdRequestResolutor> msgrfwd_pingpong_resolutor;
             const size_t msgrfwd_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrbwd_pingpong_resolutor;
+            const std::unique_ptr<ForwardPingPongMsgrBwdRequestResolutor> msgrbwd_pingpong_resolutor;
             const size_t msgrbwd_dispatch_sz;
 
         public:
 
-            ForwardPingPongRequestResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> leaf_pingpong_resolutor,
+            ForwardPingPongRequestResolutor(std::unique_ptr<ForwardPingPongLeafRequestResolutor> leaf_pingpong_resolutor,
                                             size_t leaf_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> blkr_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongBlkrRequestResolutor> blkr_pingpong_resolutor,
                                             size_t blkr_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> rstr_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongRstrRequestResolutor> rstr_pingpong_resolutor,
                                             size_t rstr_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> mono_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongMonoRequestResolutor> mono_pingpong_resolutor,
                                             size_t mono_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> pair_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongPairRequestResolutor> pair_pingpong_resolutor,
                                             size_t pair_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> uacm_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongUACMRequestResolutor> uacm_pingpong_resolutor,
                                             size_t uacm_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> pacm_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongPACMRequestResolutor> pacm_pingpong_resolutor,
                                             size_t pacm_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> crit_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongCritRequestResolutor> crit_pingpong_resolutor,
                                             size_t crit_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> immu_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongImmuRequestResolutor> immu_pingpong_resolutor,
                                             size_t immu_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> poly_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongPolyRequestResolutor> poly_pingpong_resolutor,
                                             size_t poly_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrc_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongExtnSrcRequestResolutor> extnsrc_pingpong_resolutor,
                                             size_t extnsrc_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extnsrx_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongExtnSrxRequestResolutor> extnsrx_pingpong_resolutor,
                                             size_t extnsrx_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndst_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongExtnDstRequestResolutor> extndst_pingpong_resolutor,
                                             size_t extndst_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> extndsx_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongExtnDsxRequestResolutor> extndsx_pingpong_resolutor,
                                             size_t extndsx_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrfwd_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongMsgrFwdRequestResolutor> msgrfwd_pingpong_resolutor,
                                             size_t msgrfwd_dispatch_sz,
-                                            std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent>> msgrbwd_pingpong_resolutor,
+                                            std::unique_ptr<ForwardPingPongMsgrBwdRequestResolutor> msgrbwd_pingpong_resolutor,
                                             size_t msgrbwd_dispatch_sz) noexcept: leaf_pingpong_resolutor(std::move(leaf_pingpong_resolutor)),
                                                                                   leaf_dispatch_sz(leaf_dispatch_sz),
                                                                                   blkr_pingpong_resolutor(std::move(blkr_pingpong_resolutor)),
@@ -6742,7 +6742,7 @@ namespace dg::network_memcommit_resolutor{
 
             for (size_t i = 0u; i < sz; ++i){
                 if constexpr(DEBUG_MODE_FLAG){
-                    if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                    if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                         std::abort();
                     }
@@ -6867,7 +6867,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_cron_ptr_access(event.smph_addr);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_cron_ptr_access(event.smph_addr);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -6896,7 +6896,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -7049,7 +7049,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_smph_ptr_access(event_arr[i].smph_addr);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_smph_ptr_access(event_arr[i].smph_addr);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -7078,7 +7078,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -7197,7 +7197,7 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
 
-                auto ptrchk = dg::network_tile_member_access::safecthrow_fsmp_ptr_access(event.smph_addr);
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_fsmp_ptr_access(event.smph_addr);
 
                 if (!ptrchk.has_value()){
                     return ptrchk.error();
@@ -7226,7 +7226,7 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            if (auto err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
@@ -7490,12 +7490,20 @@ namespace dg::network_memcommit_resolutor{
     //we know that the problem of finding the optimal storage (Taylor Series pattern) is a programming program + finding problem
     //             and the problem of "parroting" the projection space is the search problem
 
+    //we'll thru the forward do + backward do + ping + pong + pingpong for all the trivial tiles for now
     class ForwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         public:
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -7535,6 +7543,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -7558,10 +7573,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -7940,6 +7953,23 @@ namespace dg::network_memcommit_resolutor{
 
     class ForwardDoRstrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
+        public:
+
+            auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
+
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_rstr_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
+
+                (void) event_arr;
+            }
     };
 
     //clear
@@ -7973,6 +8003,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -7996,10 +8033,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -8401,6 +8436,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -8424,10 +8466,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -8947,6 +8987,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event_arr[i].dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             } 
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -8970,10 +9017,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -9538,7 +9583,7 @@ namespace dg::network_memcommit_resolutor{
 
                 //     for (size_t i = 0u; i < sz; ++i){
                 //         if constexpr(DEBUG_MODE_FLAG){
-                //             auto ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
+                //             std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event_arr[i].dst);
 
                 //             if (!ptrchk.has_value()){
                 //                 dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
@@ -10324,6 +10369,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -10347,10 +10399,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -10704,6 +10754,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -10743,6 +10800,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -10766,10 +10830,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -11149,6 +11211,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -11188,6 +11257,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS:
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -11211,10 +11287,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -11664,6 +11738,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -11694,10 +11775,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -12101,6 +12180,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -12124,10 +12210,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -12506,6 +12590,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -12620,6 +12711,37 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event.dst);
+
+                if (!tile_kind.has_value()){
+                    return tile_kind.error();
+                }
+
+                switch (tile_kind.value()){
+                    case TILE_KIND_LEAF: [[fallthrough]]
+                    case TILE_KIND_BLKR: [[fallthrough]]
+                    case TILE_KIND_RSTR: [[fallthrough]]
+                    case TILE_KIND_MONO: [[fallthrough]]
+                    case TILE_KIND_PAIR: [[fallthrough]]
+                    case TILE_KIND_UACM: [[fallthrough]]
+                    case TILE_KIND_PACM: [[fallthrough]]
+                    case TILE_KIND_CRIT: [[fallthrough]]
+                    case TILE_KIND_IMMU: [[fallthrough]]
+                    case TILE_KIND_POLY: [[fallthrough]]
+                    case TILE_KIND_EXTNSRC: [[fallthrough]]
+                    case TILE_KIND_EXTNSRX: [[fallthrough]]
+                    case TILE_KIND_EXTNDST: [[fallthrough]]
+                    case TILE_KIND_EXTNDSX: [[fallthrough]]
+                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_MSGRBWD:
+                    {
+                        return dg::network_exception::SUCCESS;
+                    }
+                    default:
+                    {
+                        return dg::network_exception::BAD_TILE_ACCESS;
+                    }
+                }
             }
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -12692,15 +12814,15 @@ namespace dg::network_memcommit_resolutor{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
-                        std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
-
-                        if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
-                            dg::network_log_stackdump::error_fast_optional("BAD FORWARD OPERATION");
-                            continue;
+                        if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
+                            std::abort();
                         }
                     }
 
-                    switch (tile_kind.value()){
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst); 
+
+                    switch (tile_kind){
                         case TILE_KIND_LEAF:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
@@ -12822,6 +12944,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -12838,10 +12967,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_leaf_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -13197,6 +13324,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -13220,10 +13354,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_mono_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -13633,6 +13765,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_blkr_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -13676,6 +13815,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -13699,10 +13845,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_pair_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -14278,6 +14422,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -14301,10 +14452,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_poly_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -15864,6 +16013,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -15887,10 +16043,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_crit_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -16300,6 +16454,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_immu_ptr_access(event.dst);
+                
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -16339,6 +16500,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -16362,10 +16530,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -16774,6 +16940,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrx_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -16813,6 +16986,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -16836,10 +17016,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndst_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -17167,6 +17345,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event_arr[i].dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -17190,10 +17375,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_extndsx_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -17482,7 +17665,7 @@ namespace dg::network_memcommit_resolutor{
                         grad_status_t dst_grad_status       = dg::network_tile_member_getsetter::get_extndsx_grad_status_nothrow(dst);
                         dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_extndsx_backward_dispatch_control_nothrow(dst);
 
-                        auto ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(src);
+                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(src);
 
                         if (!ptrchk.has_value()){
                             continue;
@@ -17615,6 +17798,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -17638,10 +17828,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrfwd_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -18076,13 +18264,18 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
                 dg::network_stack_allocation::NoExceptAllocation<std::optional<DispatchRadixArgument>[]> dispatch_radix_arg_arr(sz);
-
-                // auto arena_allocator                        = {};
 
                 const size_t REQUEST_EVENT_SCALE_FACTOR     = 1u;
                 size_t max_possible_request_event_sz        = sz * REQUEST_EVENT_SCALE_FACTOR;
@@ -18108,10 +18301,8 @@ namespace dg::network_memcommit_resolutor{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if constexpr(DEBUG_MODE_FLAG){
-                            auto ptrchk = dg::network_tile_member_access::safecthrow_msgrbwd_ptr_access(event_arr[i].dst);
-
-                            if (!ptrchk.has_value()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(ptrchk.error()));
+                            if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                                 std::abort();
                             }
                         }
@@ -18542,72 +18733,72 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> leaf_resolutor;
+            const std::unique_ptr<BackwardDoLeafSignalResolutorV2> leaf_resolutor;
             const size_t leaf_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> blkr_resolutor;
+            const std::unique_ptr<BackwardDoBlkrSignalResolutorV2> blkr_resolutor;
             const size_t blkr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> rstr_resolutor;
+            const std::unique_ptr<BackwardDoRstrSignalResolutorV2> rstr_resolutor;
             const size_t rstr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> mono_resolutor;
+            const std::unique_ptr<BackwardDoMonoSignalResolutorV2> mono_resolutor;
             const size_t mono_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> pair_resolutor;
+            const std::unique_ptr<BackwardDoPairSignalResolutorV2> pair_resolutor;
             const size_t pair_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> uacm_resolutor;
+            const std::unique_ptr<BackwardDoUACMSignalResolutor> uacm_resolutor;
             const size_t uacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> pacm_resolutor;
+            const std::unique_ptr<BackwardDoPACMSignalResolutor> pacm_resolutor;
             const size_t pacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> crit_resolutor;
+            const std::unique_ptr<BackwardDoCritSignalResolutor> crit_resolutor;
             const size_t crit_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> immu_resolutor;
+            const std::unique_ptr<BackwardDoImmuSignalResolutor> immu_resolutor;
             const size_t immu_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> poly_resolutor;
+            const std::unique_ptr<BackwardDoPolySignalResolutor> poly_resolutor;
             const size_t poly_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extnsrc_resolutor;
+            const std::unique_ptr<BackwardDoExtnSrcSignalResolutorV2> extnsrc_resolutor;
             const size_t extnsrc_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extnsrx_resolutor;
+            const std::unique_ptr<BackwardDoExtnSrxSignalResolutor> extnsrx_resolutor;
             const size_t extnsrx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extndst_resolutor;
+            const std::unique_ptr<BackwardDoExtnDstSignalResolutorV2> extndst_resolutor;
             const size_t extndst_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extndsx_resolutor;
+            const std::unique_ptr<BackwardDoExtnDsxSignalResolutor> extndsx_resolutor;
             const size_t extndsx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> msgrfwd_resolutor;
+            const std::unique_ptr<BackwardDoMsgrFwdSignalResolutorV2> msgrfwd_resolutor;
             const size_t msgrfwd_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> msgrbwd_resolutor;
+            const std::unique_ptr<BackwardDoMsgrBwdSignalResolutorV2> msgrbwd_resolutor;
             const size_t msgrbwd_dispatch_sz;
 
         public:
 
-            BackwardDoSignalResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> leaf_resolutor,
+            BackwardDoSignalResolutor(std::unique_ptr<BackwardDoLeafSignalResolutorV2> leaf_resolutor,
                                       size_t leaf_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> blkr_resolutor,
+                                      std::unique_ptr<BackwardDoBlkrSignalResolutorV2> blkr_resolutor,
                                       size_t blkr_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> rstr_resolutor,
+                                      std::unique_ptr<BackwardDoRstrSignalResolutorV2> rstr_resolutor,
                                       size_t rstr_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> mono_resolutor,
+                                      std::unique_ptr<BackwardDoMonoSignalResolutorV2> mono_resolutor,
                                       size_t mono_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> pair_resolutor,
+                                      std::unique_ptr<BackwardDoPairSignalResolutorV2> pair_resolutor,
                                       size_t pair_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> uacm_resolutor,
+                                      std::unique_ptr<BackwardDoUACMSignalResolutor> uacm_resolutor,
                                       size_t uacm_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> pacm_resolutor,
+                                      std::unique_ptr<BackwardDoPACMSignalResolutor> pacm_resolutor,
                                       size_t pacm_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> crit_resolutor,
+                                      std::unique_ptr<BackwardDoCritSignalResolutor> crit_resolutor,
                                       size_t crit_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> immu_resolutor,
+                                      std::unique_ptr<BackwardDoImmuSignalResolutor> immu_resolutor,
                                       size_t immu_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> poly_resolutor,
+                                      std::unique_ptr<BackwardDoPolySignalResolutor> poly_resolutor,
                                       size_t poly_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extnsrc_resolutor,
+                                      std::unique_ptr<BackwardDoExtnSrcSignalResolutorV2> extnsrc_resolutor,
                                       size_t extnsrc_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extnsrx_resolutor,
+                                      std::unique_ptr<BackwardDoExtnSrxSignalResolutor> extnsrx_resolutor,
                                       size_t extnsrx_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extndst_resolutor,
+                                      std::unique_ptr<BackwardDoExtnDstSignalResolutorV2> extndst_resolutor,
                                       size_t extndst_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> extndsx_resolutor,
+                                      std::unique_ptr<BackwardDoExtnDsxSignalResolutor> extndsx_resolutor,
                                       size_t extndsx_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> msgrfwd_resolutor,
+                                      std::unique_ptr<BackwardDoMsgrFwdSignalResolutorV2> msgrfwd_resolutor,
                                       size_t msgrfwd_dispatch_sz,
-                                      std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>> msgrbwd_resolutor,
+                                      std::unique_ptr<BackwardDoMsgrBwdSignalResolutorV2> msgrbwd_resolutor,
                                       size_t msgrbwd_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
                                                                             leaf_dispatch_sz(leaf_dispatch_sz),
                                                                             blkr_resolutor(std::move(blkr_resolutor)),
@@ -18643,6 +18834,37 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event.dst);
+
+                if (!tile_kind.has_value()){
+                    return tile_kind.error();
+                }
+
+                switch (tile_kind.value()){
+                    case TILE_KIND_LEAF: [[fallthrough]]
+                    case TILE_KIND_BLKR: [[fallthrough]]
+                    case TILE_KIND_RSTR: [[fallthrough]]
+                    case TILE_KIND_MONO: [[fallthrough]]
+                    case TILE_KIND_PAIR: [[fallthrough]]
+                    case TILE_KIND_UACM: [[fallthrough]]
+                    case TILE_KIND_PACM: [[fallthrough]]
+                    case TILE_KIND_CRIT: [[fallthrough]]
+                    case TILE_KIND_IMMU: [[fallthrough]]
+                    case TILE_KIND_POLY: [[fallthrough]]
+                    case TILE_KIND_EXTNSRC: [[fallthrough]]
+                    case TILE_KIND_EXTNSRX: [[fallthrough]]
+                    case TILE_KIND_EXTNDST: [[fallthrough]]
+                    case TILE_KIND_EXTNDSX: [[fallthrough]]
+                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_MSGRBWD:
+                    {
+                        return dg::network_exception::SUCCESS;
+                    }
+                    default:
+                    {
+                        return dg::network_exception::BAD_TILE_ACCESS;
+                    }
+                }
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -18715,15 +18937,15 @@ namespace dg::network_memcommit_resolutor{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
-                        std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event_arr[i].dst);
-
-                        if (!tile_kind.has_value() || !this->is_met_tile_kind_requirements(tile_kind.value())){
-                            dg::network_log_stackdump::critical("BAD BACKWARD OPERATION");
+                        if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                             std::abort();
                         }
                     }
 
-                    switch (tile_kind.value()){
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst); 
+
+                    switch (tile_kind){
                         case TILE_KIND_LEAF:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);

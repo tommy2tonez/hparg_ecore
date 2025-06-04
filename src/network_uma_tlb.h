@@ -355,6 +355,8 @@ namespace dg::network_uma_tlb::rec_lck{
     //it's extremely very complicated to change that
     //we wont be super greedy for now
     //eventloop should solve the problem
+    //we'll try to do uma_tlb_memregion_sz == memlock_memregion_sz, because the reference is fishy in the sense of fifo
+    //so we'll do our best to make things worked, yet we'll offload this responsibility to the memlock shoulder
 
     template <size_t SZ, class T>
     auto recursive_lockmap_wait_many(const MutexRegionTLBInterface<T> tlb,
@@ -368,10 +370,11 @@ namespace dg::network_uma_tlb::rec_lck{
             using try_element_t                         = decltype(recursive_lockmap_try(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{})); 
             using wait_element_t                        = decltype(recursive_lockmap_wait(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{}));
     
-            std::optional<wait_element_t> wait_resource = {};
-            std::array<try_element_t, SZ> try_resource  = {};
-            size_t wait_idx                             = {};
-            bool was_thru                               = true;
+            std::optional<wait_element_t> wait_resource         = {};
+            std::array<try_element_t, SZ> try_resource          = {};
+            size_t wait_idx                                     = {};
+            bool was_thru                                       = true;
+            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT  = 4u;
 
             for (size_t i = 0u; i < args.size(); ++i){
                 try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
@@ -395,12 +398,20 @@ namespace dg::network_uma_tlb::rec_lck{
                 *stdx::volatile_access(&try_resource, wait_resource)    = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that
                 *stdx::volatile_access(&wait_resource, try_resource)    = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
 
-                was_thru = true;
+                was_thru                = true;
+                size_t retry_exponent   = 0u;
 
                 for (size_t i = 0u; i < SZ; ++i){
                     if (i != wait_idx){
-                        try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
-                        
+                        auto inner_loop_task [&]() noexcept{
+                            try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
+                            return try_resource[i].has_value();
+                        };
+
+                        size_t retry_sz     = size_t{1} << std::min(retry_exponent, INNER_LOOP_BUSY_WAIT_MAX_EXPONENT);
+                        stdx::eventloop_competitive_spin(inner_loop_task, retry_sz);
+                        retry_exponent      += 1u;
+
                         if (!try_resource[i].has_value()){
                             wait_idx    = i;
                             was_thru    = false;
