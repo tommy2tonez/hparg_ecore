@@ -40,6 +40,12 @@ namespace dg::network_uma_tlb::interface{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto map_try_strong(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept -> std::optional<typename T1::map_resource_handle_t>{
+
+            return T::map_try_strong(device_id, host_ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto map_wait(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept -> typename T1::map_resource_handle_t{
 
             return T::map_wait(device_id, host_ptr);
@@ -49,6 +55,18 @@ namespace dg::network_uma_tlb::interface{
         static void map_release(typename T1::map_resource_handle_t map_resource) noexcept{
 
             T::map_release(map_resource);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void map_waitonly(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept{
+
+            T::map_waitonly(device_id, host_ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void map_waitonly_release_responsibility(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept{
+
+            T::map_waitonly_release_responsibility(device_id, host_ptr);
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
@@ -64,7 +82,7 @@ namespace dg::network_uma_tlb::interface{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
-        static auto get_vma_ptr(typename T1::map_resource_handle_t map_resource) noexcept -> typename T1::vma_ptr_t{
+        static auto get_vma_ptr(stdx::add_const_reference_t<typename T1::map_resource_handle_t> map_resource) noexcept -> typename T1::vma_ptr_t{
 
             return T::get_vma_ptr(map_resource);
         }
@@ -222,12 +240,19 @@ namespace dg::network_uma_tlb::rec_lck{
             }
     };
 
+    template <class device_id_t, class arg_ptr_t, size_t SZ>
+    constexpr auto sort_ptr_array(const std::array<std::pair<device_id_t, arg_ptr_t>, SZ>& inp) noexcept -> std::array<std::pair<device_id_t, arg_ptr_t>, SZ>{
+
+        static_assert(dg::ptr_info<T>::is_pointer);
+
+        // std::array<T, SZ> rs = inp;
+        // std::sort(rs.begin(), rs.end());
+
+        return rs;
+    }
+
     template <class T>
     auto recursive_resource_type(const MutexRegionTLBInterface<T>) -> MapResource<MutexRegionTLBInterface<T>>;
-
-    //this implementation is literally complicated
-    //this implementation sounds very not sane
-    //region <-> MapResource
 
     template <class T>
     auto recursive_lockmap_try(const MutexRegionTLBInterface<T>, 
@@ -336,12 +361,13 @@ namespace dg::network_uma_tlb::rec_lck{
     auto recursive_lockmap_try_array(const MutexRegionTLBInterface<T> tlb, 
                                      const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
 
-        using element_t         = decltype(recursive_lockmap_try(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{}));
+        using element_t         = decltype(rec_lck::recursive_lockmap_try(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{}));
         using resource_arr_t    = std::array<element_t, SZ>;
         resource_arr_t rs       = {};
+        auto sorted_args        = rec_lck::sort_ptr_array(args);
 
-        for (size_t i = 0u; i < args.size(); ++i){
-            rs[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
+        for (size_t i = 0u; i < sorted_args.size(); ++i){
+            rs[i] = rec_lck::recursive_lockmap_try(tlb, sorted_args[i].first, sorted_args[i].second);
 
             if (!rs[i].has_value()){
                 return std::optional<resource_arr_t>(std::nullopt);
@@ -358,76 +384,79 @@ namespace dg::network_uma_tlb::rec_lck{
     //we'll try to do uma_tlb_memregion_sz == memlock_memregion_sz, because the reference is fishy in the sense of fifo
     //so we'll do our best to make things worked, yet we'll offload this responsibility to the memlock shoulder
 
+    //we have not solved the fifo problems of this guy
+    //such is the very common case of shared_lock + exclusive lock for databases 
+    //this is precisely why we always want the exclusive lock for the FIFO fling
+    //YET we'd want to leverage shared_lock here for the reason being that we are mostly on the region and the priority of the sameregionness should be prioritized because the transfer is really very extra expensive 
+    //this is extremely hard to implement, so we'd just tackle problems by problems, we'll try to compromise that at some point (the memlock)
+
     template <size_t SZ, class T>
     auto recursive_lockmap_wait_many(const MutexRegionTLBInterface<T> tlb,
                                      const std::array<std::pair<typename MutexRegionTLBInterface<T>::device_id_t<>, typename MutexRegionTLBInterface<T>::uma_ptr_t<>>, SZ>& args){
 
+
         static_assert(SZ != 0u);
 
         if constexpr(SZ == 1u){
-            return recursive_lock_guard(tlb, args[0].first, args[0].second);
+            return rec_lck::recursive_lockmap_wait(tlb, args[0].first, args[0].second);
         } else{
-            using try_element_t                         = decltype(recursive_lockmap_try(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{})); 
-            using wait_element_t                        = decltype(recursive_lockmap_wait(tlb, typename MutexRegionTLBInterface<T>::device_id_t<>{}, typename MutexRegionTLBInterface<T>::uma_ptr_t<>{}));
-    
-            std::optional<wait_element_t> wait_resource         = {};
-            std::array<try_element_t, SZ> try_resource          = {};
-            size_t wait_idx                                     = {};
-            bool was_thru                                       = true;
-            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT  = 4u;
+            using try_lockmap_resource_t                        = decltype(rec_lck::recursive_lockmap_try(tlb, args[0].first, args[0].second));
+            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT  = 5u;
 
-            for (size_t i = 0u; i < args.size(); ++i){
-                try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
-    
-                if (!try_resource[i].has_value()){
-                    wait_idx    = i;
-                    was_thru    = false;
-                    break;
-                }
-            }
-    
-            if (was_thru){
-                return std::make_pair(std::move(wait_resource), std::move(try_resource));
-            }
-
-            using rs_t = decltype(std::make_pair(std::move(wait_resource), std::move(try_resource))); 
-            rs_t rs;
+            auto sorted_args                                    = rec_lck::sort_ptr_array(args);
+            std::optional<size_t> wait_idx                      = std::nullopt;
+            std::array<try_lockmap_resource_t, SZ> rs;
 
             auto task = [&]() noexcept{
-                *stdx::volatile_access(&wait_resource)                  = {};
-                *stdx::volatile_access(&try_resource, wait_resource)    = {}; //all sorts of bad things could happen, the logic of lock_guard is the still scope which guarantees the deallocation orders, we built everything on top of the logic, so it's better to adhere to that
-                *stdx::volatile_access(&wait_resource, try_resource)    = recursive_lockmap_wait(tlb, args[wait_idx].first, args[wait_idx].second); //compiler might reorder things which is very dangerous
+                rs                                      = {};
+                bool was_thru                           = true;
+                std::optional<size_t> responsible_idx   = std::nullopt;
+                size_t retry_exponent                   = 0u;
 
-                was_thru                = true;
-                size_t retry_exponent   = 0u;
+                if (wait_idx.has_value()){
+                    MutexRegionTLBInterface<T>::map_waitonly(sorted_args[wait_idx.value()].first, sorted_args[wait_idx.value()].second);
+                    responsible_idx = wait_idx;
+                    wait_idx        = std::nullopt;
+                }
 
                 for (size_t i = 0u; i < SZ; ++i){
-                    if (i != wait_idx){
-                        auto inner_loop_task [&]() noexcept{
-                            try_resource[i] = recursive_lockmap_try(tlb, args[i].first, args[i].second);
-                            return try_resource[i].has_value();
-                        };
+                    if (i != 0u && sorted_args[i] != sorted_args[i - 1]){ //
+                        retry_exponent += 1u; //border index detection
+                    }
 
-                        size_t retry_sz     = size_t{1} << std::min(retry_exponent, INNER_LOOP_BUSY_WAIT_MAX_EXPONENT);
-                        stdx::eventloop_competitive_spin(inner_loop_task, retry_sz);
-                        retry_exponent      += 1u;
+                    auto inner_loop_task = [&]() noexcept{
+                        rs[i] = rec_lck::recursive_lockmap_try(tlb, sorted_args[i].first, sorted_args[i].second);
+                        return rs[i].has_value();
+                    };
 
-                        if (!try_resource[i].has_value()){
-                            wait_idx    = i;
-                            was_thru    = false;
-                            break;
+                    size_t retry_sz = size_t{1} << std::min(retry_exponent, INNER_LOOP_BUSY_WAIT_MAX_EXPONENT);
+                    stdx::eventloop_competitive_spin(inner_loop_task, retry_sz);
+
+                    if (responsible_idx.has_value()){
+                        if (responsible_idx.value() == i){
+                            responsible_idx = std::nullopt;
                         }
+                    }
+
+                    if (!rs[i].has_value()){
+                        wait_idx    = i;
+                        was_thru    = false;
+                        break;
                     }
                 }
 
                 if (!was_thru){
-                    *stdx::volatile_access(&wait_resource)                  = {};
-                    *stdx::volatile_access(&try_resource, wait_resource)    = {};
+                    rs = {};
+
+                    if (responsible_idx.has_value()){
+                        MutexRegionTLBInterface<T>::map_waitonly_release_responsibility(sorted_args[responsible_idx.value()].first, sorted_args[responsible_idx.value()].second);
+                        responsible_idx = std::nullopt;
+                    }
+
                     return false;
                 }
-                
-                rs = std::make_pair(std::move(wait_resource), std::move(try_resource));
-                return true;
+
+                return true; //OK, good
             };
 
             stdx::eventloop_expbackoff_spin(task);
@@ -436,7 +465,7 @@ namespace dg::network_uma_tlb::rec_lck{
     }
 
     template <class TLBInterface>
-    auto get_vma_ptr(MapResource<TLBInterface> resource) noexcept -> typename TLBInterface::vma_ptr_t<>{
+    auto get_vma_ptr(const MapResource<TLBInterface>& resource) noexcept -> typename TLBInterface::vma_ptr_t<>{
 
         auto region = dg::memult::region(TLBInterface::get_vma_ptr(resource.map_resource), TLBInterface::memregion_size()); 
         auto rs     = dg::memult::advance(region, resource.offset);

@@ -42,6 +42,12 @@ namespace dg::network_uma_tlb_impl1::interface{
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static auto map_try_strong(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept -> typename T1::vma_ptr_t{
+
+            return T::map_try_strong(device_id, host_ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto map_wait(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept -> typename T1::vma_ptr_t{
 
             return T::map_wait(device_id, host_ptr);
@@ -51,6 +57,18 @@ namespace dg::network_uma_tlb_impl1::interface{
         static void map_release(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept{
 
             T::map_release(device_id, host_ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void map_waitonly(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept{
+
+            T::map_waitonly(device_id, host_ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void map_waitonly_release_responsibility(typename T1::device_id_t device_id, typename T1::uma_ptr_t host_ptr) noexcept{
+
+            T::map_waitonly_release_responsibility(device_id, host_ptr);
         }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
@@ -282,10 +300,10 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto steal_try(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept -> bool{
 
-                uma_ptr_t host_region = memregion(host_ptr);
+                uma_ptr_t host_region = self::memregion(host_ptr);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
-                std::optional<device_id_t> potential_stealee_id = uma_proxy_lock::acquire_try(host_region);  
+                std::optional<device_id_t> potential_stealee_id = uma_proxy_lock::acquire_try_strong(host_region);  
 
                 if (!potential_stealee_id.has_value()){
                     return false;
@@ -314,7 +332,7 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto steal_wait(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept -> bool{
 
-                uma_ptr_t host_region = memregion(host_ptr);
+                uma_ptr_t host_region = self::memregion(host_ptr);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 device_id_t potential_stealee_id = uma_proxy_lock::acquire_wait(host_region);  
@@ -336,6 +354,18 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 uma_proxy_lock::acquire_release(host_region, stealer_id, dg::network_memlock_proxyspin::increase_reference_tag{}); //make sure to release this post the payload, by calling the signal_fence_seq_cst
                 std::atomic_signal_fence(std::memory_order_seq_cst);
+            }
+
+            static void steal_waitonly(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept{
+
+                uma_ptr_t host_region = self::memregion(host_ptr);
+                uma_proxy_lock::acquire_waitnolock(host_region);
+            }
+
+            static void steal_waitonly_release_responsibility(device_id_t stealer_id, uma_ptr_t host_ptr) noexcept{
+
+                uma_ptr_t host_region = self::memregion(host_ptr);
+                uma_proxy_lock::acquire_waitnolock_release_responsibility(host_region);
             }
 
         public:
@@ -372,11 +402,16 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                     return translation_table::translate(device_id, host_ptr);
                 }
 
-                if (steal_try(device_id, host_ptr)){
+                if (self::steal_try(device_id, host_ptr)){
                     return translation_table::translate(device_id, host_ptr);
                 }
 
                 return dg::ptr_limits<vma_ptr_t>::null_value();
+            }
+
+            static auto map_try_strong(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+
+                return self::map_try(device_id, host_ptr);
             }
 
             static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
@@ -385,29 +420,29 @@ namespace dg::network_uma_tlb_impl1::exclusive{
                     return translation_table::translate(device_id, host_ptr);
                 }
 
-                steal_wait(device_id, host_ptr);
+                self::steal_wait(device_id, host_ptr);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 return translation_table::translate(device_id, host_ptr);
+            } 
+
+            static void map_waitonly(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
+
+                self::steal_waitonly(device_id, host_ptr);
+            } 
+
+            static void map_waitonly_release_responsibility(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
+
+                self::steal_waitonly_release_responsibility(device_id, host_ptr);
             }
 
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
-
-                // std::atomic_thread_fence(std::memory_order_release);
-                // std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                //we are not doing memmory safe operations
-                //because this is a reference operation, which does not guarantee anything except for returning the pointer, another serialization instruction is not this component responsibility
-                //this is an accepted answer, because if this component is doing locks + releases operation, then the memory ordering is this guy responsibility, it is actually still not this guy responsibility, but the lock_guard responsibility
-                //we have been working on this problem for the longest time EVER
-                //I'm telling you that this is harder to split than we think
-                //if we are to put a memory ordering here, it's entirely wrong
 
                 uma_proxy_lock::reference_release(host_ptr);
             }
 
             static auto remap_try(device_id_t device_id, uma_ptr_t new_host_ptr, device_id_t old_device_id, uma_ptr_t old_host_ptr) noexcept -> vma_ptr_t{
 
-                if (memregion(old_host_ptr) == memregion(new_host_ptr) && device_id == old_device_id){
+                if (self::memregion(old_host_ptr) == self::memregion(new_host_ptr) && device_id == old_device_id){
                     return translation_table::translate(device_id, new_host_ptr);
                 }
 
@@ -416,12 +451,12 @@ namespace dg::network_uma_tlb_impl1::exclusive{
 
             static auto remap_wait(device_id_t device_id, uma_ptr_t new_host_ptr, device_id_t old_device_id, uma_ptr_t old_host_ptr) noexcept -> vma_ptr_t{
 
-                if (auto rs = remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
+                if (auto rs = self::remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
                     return rs;
                 }
 
-                map_release(old_device_id, old_host_ptr);
-                return map_wait(device_id, new_host_ptr);
+                self::map_release(old_device_id, old_host_ptr);
+                return self::map_wait(device_id, new_host_ptr);
             }
     };
 }
@@ -459,20 +494,35 @@ namespace dg::network_uma_tlb_impl1::direct{
                 translation_table::deinit();
             }
 
-            static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
-
-                translation_table::translate(device_id, host_ptr);
-            }
-
             static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
                 return translation_table::translate(device_id, host_ptr);
+            }
+
+            static auto map_try_strong(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+
+                return self::map_try(device_id, host_ptr);
+            }
+
+            static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+
+                translation_table::translate(device_id, host_ptr);
             }
 
             static void map_release(device_id_t arg, uma_ptr_t) noexcept{
 
                 (void) arg;
             } 
+
+            static void map_waitonly(device_id_t arg, uma_ptr_t) noexcept{
+
+                (void) arg;
+            }
+
+            static void map_waitonly_release_responsibility(device_id_t arg, uma_ptr_t) noexcept{
+
+                (void) arg;
+            }
 
             static auto remap_try(device_id_t device_id, uma_ptr_t new_host_ptr, device_id_t old_device_id, uma_ptr_t old_host_ptr) noexcept -> vma_ptr_t{
 
@@ -519,17 +569,32 @@ namespace dg::network_uma_tlb_impl1::bijective{
                 translation_table::deinit();
             }
 
-            static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
-
-                return translation_table::translate(host_ptr);
-            }
-
             static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
                 return translation_table::translate(host_ptr);
             }
 
+            static auto map_try_strong(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+
+                return self::map_try(device_id, host_ptr);
+            }
+
+            static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+
+                return translation_table::translate(host_ptr);
+            }
+ 
             static void map_release(device_id_t arg, uma_ptr_t) noexcept{
+
+                (void) arg;
+            }
+
+            static void map_waitonly(device_id_t arg, uma_ptr_t) noexcept{
+
+                (void) arg;
+            }
+
+            static void map_waitonly_release_responsibility(device_id_t arg, uma_ptr_t) noexcept{
 
                 (void) arg;
             }
@@ -642,42 +707,116 @@ namespace dg::network_uma_tlb_impl1::biex{
 
             static auto map_try(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                uint8_t dispatch_code = dispatch_table[memregion_slot(segcheck_ins::access(host_ptr))];
+                uint8_t dispatch_code = dispatch_table[self::memregion_slot(segcheck_ins::access(host_ptr))];
 
                 if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
                     return bijective_tlb::map_try(device_id, host_ptr);
+                } else if (dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    return exclusive_tlb::map_try(device_id, host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
                 }
+            }
 
-                return exclusive_tlb::map_try(device_id, host_ptr);
+            static auto map_try_strong(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
+
+                uint8_t dispatch_code = dispatch_table[self::memregion_slot(segcheck_ins::access(host_ptr))];
+
+                if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
+                    return bijective_tlb::map_try_strong(device_id, host_ptr);
+                } else if (dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    return exclusive_tlb::map_try_strong(device_id, host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
             }
 
             static auto map_wait(device_id_t device_id, uma_ptr_t host_ptr) noexcept -> vma_ptr_t{
 
-                uint8_t dispatch_code = dispatch_table[memregion_slot(segcheck_ins::access(host_ptr))];
+                uint8_t dispatch_code = dispatch_table[self::memregion_slot(segcheck_ins::access(host_ptr))];
 
                 if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
                     return bijective_tlb::map_wait(device_id, host_ptr);
+                } else if (dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    return exclusive_tlb::map_wait(device_id, host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
                 }
-
-                return exclusive_tlb::map_wait(device_id, host_ptr);
             }
 
             static void map_release(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
 
-                uint8_t dispatch_code = dispatch_table[memregion_slot(segcheck_ins::access(host_ptr))];
+                uint8_t dispatch_code = dispatch_table[self::memregion_slot(segcheck_ins::access(host_ptr))];
 
                 if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
                     bijective_tlb::map_release(device_id, host_ptr);
-                    return;
+                } else if (dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    exclusive_tlb::map_release(device_id, host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
                 }
+            }
 
-                exclusive_tlb::map_release(device_id, host_ptr);
+            static void map_waitonly(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
+
+                uint8_t dispatch_code = dispatch_table[self::memregion_slot(segcheck_ins::access(host_ptr))];
+
+                if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
+                    bijective_tlb::map_waitonly(device_id, host_ptr);
+                } else if (dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    exclusive_tlb::map_waitonly(device_id, host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+            }
+
+            static void map_waitonly_release_responsibility(device_id_t device_id, uma_ptr_t host_ptr) noexcept{
+
+                uint8_t dispatch_code = dispatch_table[self::memregion_slot(segcheck_ins::access(host_ptr))];
+
+                if (dispatch_code == DISPATCH_CODE_BIJECTIVE){
+                    bijective_tlb::map_waitonly_release_responsibility(device_id, host_ptr);
+                } else if (dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    exclusive_tlb::map_waitonly_release_responsibility(device_id, host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
             }
 
             static auto remap_try(device_id_t device_id, uma_ptr_t new_host_ptr, device_id_t old_device_id, uma_ptr_t old_host_ptr) noexcept -> vma_ptr_t{
                 
-                uint8_t old_dispatch_code   = dispatch_table[memregion_slot(segcheck_ins::access(old_host_ptr))];
-                uint8_t new_dispatch_code   = dispatch_table[memregion_slot(segcheck_ins::access(new_host_ptr))];
+                uint8_t old_dispatch_code   = dispatch_table[self::memregion_slot(segcheck_ins::access(old_host_ptr))];
+                uint8_t new_dispatch_code   = dispatch_table[self::memregion_slot(segcheck_ins::access(new_host_ptr))];
 
                 if (old_dispatch_code != new_dispatch_code){
                     return dg::ptr_limits<vma_ptr_t>::null_value(); 
@@ -685,19 +824,26 @@ namespace dg::network_uma_tlb_impl1::biex{
 
                 if (old_dispatch_code == DISPATCH_CODE_BIJECTIVE){
                     return bijective_tlb::remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr);
+                } else if (old_dispatch_code == DISPATCH_CODE_EXCLUSIVE){
+                    return exclusive_tlb::remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
                 }
-
-                return exclusive_tlb::remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr);
             }
 
             static auto remap_wait(device_id_t device_id, uma_ptr_t new_host_ptr, device_id_t old_device_id, uma_ptr_t old_host_ptr) noexcept -> vma_ptr_t{
 
-                if (auto rs = remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
+                if (auto rs = self::remap_try(device_id, new_host_ptr, old_device_id, old_host_ptr); rs != dg::ptr_limits<vma_ptr_t>::null_value()){
                     return rs;
                 }
 
-                map_release(old_device_id, old_host_ptr);
-                return map_wait(device_id, new_host_ptr);
+                self::map_release(old_device_id, old_host_ptr);
+                return self::map_wait(device_id, new_host_ptr);
             }
     };
 }
@@ -774,12 +920,29 @@ namespace dg::network_uma_tlb_impl1::generic{
                     return std::nullopt;
                 }
 
-                return MapResource{device_id, ptr, rs};
+                return MapResource{.device_id   = device_id, 
+                                   .mapping_ptr = ptr, 
+                                   .mapped_ptr  = rs};
+            }
+
+            static auto map_try_strong(device_id_t device_id, uma_ptr_t ptr) noexcept -> std::optional<MapResource>{
+
+                vma_ptr_t rs = base::map_try_strong(device_id, ptr);
+
+                if (rs == dg::ptr_limits<vma_ptr_t>::null_value()){
+                    return std::nullopt;
+                }
+
+                return MapResource{.device_id   = device_id,
+                                   .mapping_ptr = ptr,
+                                   .mapped_ptr  = rs};
             }
 
             static auto map_wait(device_id_t device_id, uma_ptr_t ptr) noexcept -> MapResource{
 
-                return MapResource{device_id, ptr, base::map_wait(device_id, ptr)};
+                return MapResource{.device_id   = device_id, 
+                                   .mapping_ptr = ptr,
+                                   .mapped_ptr  = base::map_wait(device_id, ptr)};
             }
 
             static void map_release(MapResource map_resource) noexcept{
@@ -788,14 +951,16 @@ namespace dg::network_uma_tlb_impl1::generic{
             }
 
             static auto remap_try(device_id_t device_id, uma_ptr_t ptr, MapResource resource) noexcept -> std::optional<MapResource>{
-                
+
                 vma_ptr_t rs = base::remap_try(device_id, ptr, resource.device_id, resource.mapping_ptr);
                 
                 if (rs == dg::ptr_limits<vma_ptr_t>::null_value()){
                     return std::nullopt;
                 }
 
-                return MapResource{device_id, ptr, rs};
+                return MapResource{.device_id   = device_id,
+                                   .mapping_ptr = ptr,
+                                   .mapped_ptr  = rs};
             }
 
             static auto remap_wait(device_id_t device_id, uma_ptr_t ptr, MapResource resource) noexcept -> MapResource{
@@ -804,7 +969,7 @@ namespace dg::network_uma_tlb_impl1::generic{
                 return MapResource{device_id, ptr, rs};
             }
 
-            static auto get_vma_ptr(MapResource resource) noexcept -> vma_ptr_t{
+            static auto get_vma_ptr(const MapResource& resource) noexcept -> vma_ptr_t{
 
                 return resource.mapped_ptr;
             }

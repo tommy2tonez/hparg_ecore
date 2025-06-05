@@ -15,71 +15,11 @@
 
 namespace dg::network_memlock_proxyspin{
 
-    //I've been working on the notify + lock features for acquire + acquire reference + acquire_reference
-
-    //can we prove that for every state change, from false -> true, true -> false, a notification in between is sufficient?
-    //this proof is hard to write, we already proved that the atomic_lock + notify + cmp_exch_strong would work, how about that in this case?
-    //it seems like the logic of that is carried over to this
-    //the China-man keymaker came to me in my dream
-
-    //except for that we need a dedicated boolean for each of the feature, and making sure that the acquisition has the reverse operation (such responsibility is created upon acquisition)
-    //today we are implementing a very hard implementation
-
-    //alright guys, I got a curse such that I could not see more than the immediate obvious, due to certain environmental problems within recent years
-
-    //we'll attempt to implement this notify_one() and we'll prove the completeness such that if we notify after every true -> false border cross, we'll be fine
-    //this is you weak on the floor so you call her cell
-    //we aren't weak fellas, we are stronk
-    //why a notification every post border cross is sufficient?
-    //assume that notify_one() successfully wakes up one of the waitee - fine
-    //assume that notify_one() does not successfully wake up one of the waitee, then there is another guy in progress (this can only be guaranteed by compare exchange stronk), which would guarantee that our next wait() would be before or after the last notifying event
-
-    //we'll be focusing on acquirability + referenceability
-
-    //acquirability after demoted will have two values acquirable or not acquirable
-    //referenceability after demoted will also have two values referenceable and not referenceable
-
-    //in another approach
-    //we need to be able to prove the if state1 => state2
-    //state1 being the acquirability or referencebility, state2 means the future promise of calling notify(), false => promise will notify, true => does not promise notifability, we are to thru
-    //the problem is that we need to be able to do the state1 in between the state2
-
-    //alright fellas, I think the only way that this would work is to do the traditional approach
-    //if this is implemented correctly
-    //all the memlocks + uma_locks
-    //memlock retried 3 times for each memregion + wait for the 4th times ...
-    //uma_lock wait (we have not found a better way to do this than to match the memregion_lock -> uma_region)
-    //we'd be blazingly fast
-
-    //we are looking for an implementation such that: memevents -> warehouse (direct, without signal_smph_addr)
-    //                                                                       (direct, with signal_smph_addr)
-
-    //                                                memevents -> mempress (only for signal_smph_addr)
-
-    //forward only (by implementing observer_data * + observer_arr_sz)
-    //search implementation... how to???
-    //this uma_region is our most proud product, from the CUTF -> CUDA -> HOST -> SSD_FILE_SYSTEM -> etc.
-    //as long as every operation on the uma region is through, we can prove that this has no deadlocks 
-    //this solves so many problems that the cuda unified memory address could not solve, namely the bottlenecked MEMBUS 
-    //we are having the full CUDA speed + platform transferability without actually compromising the speed !!!
-
-    //we have yet to convert the logics of green despair -> desert scream or bloody dice YET
-    //we are hopeful because we know that the logic is inter-convertible
-
-    //we are searching + moving towards the coordinate by using unit displacement vector
-    //we are using very fat tiles, 32KB -> 64KB containing a compressed crit dataset of 1MM training data points, we are searching the coordinate on CUDA -> convert to the "traditional backward" value
-    //we are very limited by the technology of our times, we'd hope that we could deploy this on 1BB devices in a forseeable future
-    //we can't really do search + set absolute values because of certain training constraints
-    //the only problem is that we need to keep the search operation complexity under certain threshold so we aren't waiting on a memregion forever, we've been finding a way to do this (we are thinking of clone -> search -> clone -> search)
-    //the operation complexity must not exceed 1 microsecond of dispatch or 10 microseconds of dispatch, we are relying on our cuda friends + heavily optimized implementation to achieve the magic
-    //it's not just hard to outlive cuda, it's extremely hard to outlive cuda, memory synchronization corruption is not recoverable
-    //we have talked about this the 1024th time literally, we decide to compromise the software at the cuda synchronization corruption point
-    //even if we implemented that, we don't know if that is worth it
-
     struct increase_reference_tag{}; 
 
-    //I have never implemented a single more confusing thing than this lock 
-    //I admit the heap allocation is very confusing
+    //just got a feedback guys
+    //we have to implement that acquire_waitnolock + acquire_waitnolock_release_responsibility
+    //this is not my decision, I would rather do that at the memlock yet this does not solve the problem of acquiring memregions
 
     template <class T>
     struct ReferenceLockInterface{
@@ -119,6 +59,18 @@ namespace dg::network_memlock_proxyspin{
 
             T::acquire_release(ptr, new_proxy_id, increase_reference_tag{});
         } 
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_waitnolock(typename T1::ptr_t ptr) noexcept{
+
+            T::acquire_waitnolock(ptr);
+        }
+
+        template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
+        static void acquire_waitnolock_release_responsibility(typename T1::ptr_t ptr) noexcept{
+
+            T::acquire_waitnolock_release_responsibility(ptr);
+        }
 
         template <class T1 = T, std::enable_if_t<std::is_same_v<T, T1>, bool> = true>
         static auto reference_try(typename T1::ptr_t ptr, typename T1::proxy_id_t expected_proxy_id) noexcept -> bool{
@@ -244,7 +196,7 @@ namespace dg::network_memlock_proxyspin{
                 bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
 
                 if (was_thru){
-                    break;
+                    return;
                 }
 
                 while (true){
@@ -254,55 +206,13 @@ namespace dg::network_memlock_proxyspin{
                         break;
                     }
 
-                    acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed); //can we, you, me prove that this is thru ?, assume that notify_one() does not wake up, last value is true, current value is false, other dude will notify, it is fine to not thru
-                                                                                                 //assume that current value is true, last value is false, we are to take the "call of duty", compare exchange strong is thru => OK, compare exchange strong is not thru
-                                                                                                 //compare exchange strong is only for the FIRST GUY, that's why the you weak on the floor so you call her cell, 8 calls all you
-                                                                                                 //=> other guy is in progress, the next wait is gonna be guaranteed to be woken up by the last notify_one(), assume wait() is before last notify_one() => at worst woken by last notify_one() 
-                                                                                                 //assume wait() is after the last notify_one(), guaranteed to be woken up by the self wait(false)
-
-                                                                                                 //the overview of this fling is a guy taking responsibily of decrementing the waiting queue
-                                                                                                 //this responsibility is notify_one(), if another guy got in the way, then the guy is taking the responsibility of decrementing the queue
-
-                                                                                                 //the most important hinge of this exercise is the last notifying guy and the current wait()
-                                                                                                 //the punchline is the notify_one(), before the notify_one() will be at worst woken by the notify_one(), proof above, false => will notify, true => does not guarantee notifiability
-                                                                                                 //                                                                                                       at call: false (other guy will take the responsibility of decrementing the queue -> 0 => converge to case number 2 (prove this) => notify), 
-                                                                                                 //                                                                                                                true => the next guy's gonna take the responsibility of decrementing the queue -> 0 after decrementing the queue => notify)
-                                                                                                 //                                                                                                                        the next guy does not take the cmpexch right, other guy's gonna take the responsibility, cyclic recursive definition => 1
-                                                                                                 //                                                                                                                        the next guy takes the cmpexch right, the guy's gonna take the responsibility
-                              
-                                                                                                 //after the notify_one() will be self woken
-                                                                                                 //proof by contradiction, assume that after the notify_one() is false
-                                                                                                 //then there guaranteed to be a notify_one() after the point, the notify_one() is not the last notify_one()
-                                                                                                 //this exercise if not tackled by the right angle would definitely ruin the scholarability of yall fellas
-                                                                                                 //it is very important to find the hinges to prove these exercises
-
-                                                                                                 //this is the question of Morgan Stanley (or JP Morgan), we are in a room of prisoners, we have 1 bullet, how do we keep them under control?
-                                                                                                 //our bullet is notify(), the trying to break free is the chain reaction of notify(), and the interuption of the chain reaction is a mishap along the way (either the notify got coruppted or cmpexch right is stolen)
-                                                                                                 //such dude takes the chain reaction responsibility
-
-                                                                                                 //this morning, I was proving the false => guarantee notify
-
-                                                                                                 //looking at the atomic memevents, prove that last set(false) is sequenced before a set(true)
-
-                                                                                                 //proof set(false) is the last instruction
-                                                                                                 //there exists a set(true) for every set(false) (acquire)
-                                                                                                 //there exists at least one set(true) for a set of set(false) (reference)
-
-                                                                                                 //set(false) is not the last instruction
-
-                                                                                                 //set(true) is always followed by a notify_one(), so a read of false value guarantees a notify_one() instruction
-
-                                                                                                 //how about notify all, the only difference is that there are not only before or after for notify all, there are also in between notify all
-                                                                                                 //if inbetween notify all => false => the notify_all() is not the last notify all
-                                                                                                 //the last notify_all() would wake all the waiting fellas 
+                    acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
                 }
 
                 return rs;
             }
 
             static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id) noexcept{
-
-                //this is the punchline
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 acquirability_table[table_idx].value.test_and_set(std::memory_order_relaxed);
@@ -312,14 +222,24 @@ namespace dg::network_memlock_proxyspin{
 
                 acquirability_table[table_idx].value.notify_one();
 
-                std::atomic_signal_fence(std::memory_order_seq_cst); //this is unnecessary
+                std::atomic_signal_fence(std::memory_order_seq_cst);
             }
 
-            static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id, const increase_reference_tag){
+            static void internal_acquire_release(size_t table_idx, proxy_id_t new_proxy_id, const increase_reference_tag) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 lck_table[table_idx].value.exchange(controller::make(new_proxy_id, 1u), std::memory_order_relaxed);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
+            }
+
+            static void internal_acquire_waitnolock(size_t table_idx) noexcept{
+
+                acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+            }
+
+            static void internal_acquire_waitnolock_release_responsibility(size_t table_idx) noexcept{
+
+                acquirability_table[table_idx].value.notify_one();
             }
 
             static auto internal_reference_try(size_t table_idx, proxy_id_t expected_proxy_id) noexcept -> bool{
@@ -481,6 +401,16 @@ namespace dg::network_memlock_proxyspin{
             static void acquire_release(ptr_t ptr, proxy_id_t new_proxy_id, const increase_reference_tag) noexcept{
 
                 internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)), new_proxy_id, increase_reference_tag{});
+            }
+
+            static void acquire_waitnolock(ptr_t ptr) noexcept{
+                
+                internal_acquire_waitnolock(memregion_slot(segcheck_ins::access(ptr)));
+            }
+
+            static void acquire_waitnolock_release_responsibility(ptr_t ptr) noexcept{
+
+                internal_acquire_waitnolock_release_responsibility(segcheck_ins::access(ptr));
             }
 
             static auto reference_try(ptr_t ptr, proxy_id_t expected_proxy_id) noexcept -> bool{

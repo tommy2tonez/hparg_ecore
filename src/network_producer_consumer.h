@@ -631,21 +631,11 @@ namespace dg::network_producer_consumer{
     }
 
     //clear
-    //this is not std
-    //because according to the std, open = except, actions = except, clear = noexcept, close = noexcept
-
-    //yet the complexity of handling leaks is too great if we are to except this function, imagine that we have allocated the container, we make the container, now it throws, we are to unallocate the allocated chunk, which is not feasible in the case of bump allocator (it is no longer bump allocator)
-    //or we have made the container, we are to push the container to our map, our map throws, now we have to unmake the container, unallocate the allocated chunk
-    //why dont we use finite pool of memory, decide everything at the time of initialization | construction, and make delvrsrv noexcept ?
-    //we are aiming at a very minute sub cases of delvrsrv except, yet this works
-    //this is not std-std, this is application-std, if you are to use delvrsrv_kv_deliver, you have to make sure certain things to be noexcept, because we guarantee no-leaks for you in our acceptable implementation complexity + manpower
-
-    //the keyvalue feed is probably the most important feed that we are going to use from time to time
-    //we are to limit the memory footprint because CPU has great cache, not great memory
-    //if the memory is far out in the wild, we are saturating the RAM bandwidth, which is not good
+    
+    //
 
     template <class key_t, class event_t>
-    inline void delvrsrv_kv_deliver(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
+    __attribute__((noinline)) void delvrsrv_kv_deliver_slow_path(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
 
         handle = stdx::safe_ptr_access(handle);
 
@@ -733,6 +723,22 @@ namespace dg::network_producer_consumer{
         handle->deliverable_sz += 1;
     }
 
+    template <class key_t, class event_t>
+    inline void delvrsrv_kv_deliver(KVDeliveryHandle<key_t, event_t> * handle, const key_t& key, event_t event) noexcept{
+
+        static_assert(std::is_nothrow_move_constructible_v<event_t>);
+
+        handle          = stdx::safe_ptr_access(handle);
+        auto map_ptr    = handle->key_event_map.find(key);
+
+        if (handle->deliverable_sz == handle->deliverable_cap || map_ptr == handle->key_event_map.end() || map_ptr->second.sz == map_ptr->second.cap) [[unlikely]]{
+            delvrsrv_kv_deliver_slow_path(handle, key, std::move(event));
+        } else [[likely]]{
+            dg::network_exception_handler::nothrow_log(delvrsrv_kv_push_event_container(map_ptr->second, std::move(event)));
+            handle->deliverable_sz += 1;
+        }
+    } 
+   
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{

@@ -218,7 +218,7 @@ namespace dg::network_memlock{
         // std::sort(rs.begin(), rs.end());
 
         return rs;
-    } 
+    }
 
     template <class T>
     auto recursive_trylock_guard(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins, typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<> ptr) noexcept{
@@ -301,61 +301,6 @@ namespace dg::network_memlock{
         return recursive_trylock_guard_array(lock_ins, lock_ptr_arr);
     }
 
-    //we'll implement the sort
-    //because that's the stable way of doing this
-    //we need to be able to prove that the last sequence in the sorted sequences must be able to take global lead in the racing process (this is the major point)
-
-    //in order to prove so, we must have a predefined acquisition sequence (in ascending order), not wait on a random idx
-    //even then, we are only reducing the chances of acquiring an intersected set of memregions -> the first element
-    //this is very hard to implement
-    //without further instruction like wait_lock() and then transfer_notify_responsibility(), I dont think we could work this out
-    //this is a HARD implementation without changing the fundamental interfaces
-
-    //worst case, is the last sequence in the sorted sequences has fragmented intersected pieces
-    //each has 50% chance of success, reduce our chance -> 0%
-    //we have to do eventloop_expbackoff to increase the chances of sequential runs
-
-    //Chinaman gave me the source
-    //what does this do?
-    //sort the array, get the weakly connected component ID by using the smallest ID
-
-    //acquiring the ID == acquiring the intersected set
-    //thus reducing the friction of acquiring the set by size(intersection(set1, set2)) folds
-
-    //the ascending acquisition is very important (in the high frequency + low latency applications)
-    //we need to be able to prove that there is at least one guy gets thru, global lead in the racing process (in the case of no guy has been able to acquire any locks)
-
-    //greedy case, the ascending order would eliminate MOST of the bad cases
-    //worst case, each guy only has one element intersected => very bad
-    //in the worst case, the eventloop_expbackoff_spin would kick in, wait 1ms and let the other dudes "complete" all the acquisition within 1 microseconds
-    //the eventloop expbackoff MUST be able to allow such leeway for the worst case scenerio
-
-    //this is our proudest lock_guard achievement in recent years (it really is)
-    //the problem is that we could turn the competing intersected set -> {the first element}
-    //{1, 2, 3}, {2, 3} -> {1, 2}, {2}
-    //we dont want to overstep this into the uma implementation, though we desperately wanted to change that, because it would decrease our software value
-    //we'll attempt to solve the problem by closing the gap of the uma_memregion_size() and uma_memlock_memregion_size()
-
-    //the optimization of the weakly connected component is actually very useful in real life scenerios, the compete, acquire of the first wait index == eliminating every competing set that involves the waiting idx (this has virtually no cost as we are waiting for this), the acquire of the not waiting idx is reduced significantly as if we could eliminate all the involving set containing the idx just by acquiring the idx
-    //this optimization only guarantees the waitability of the first region, what does this mean? we have to exploit the first region to actually serialize accesses, we need to allow user to specify THAT serialization region, we dont go there yet, we just backlog this to the actionable item (this is the 10/10 point, we are only 9/10 which is good enough)
-    //yet this breaks a lot of practices of encapsulations and exposes low low level code
-    //that is why we only want to do that here, at the memlock
-    //we dont do shared mutex to do read only, its not maintainable and it actually has bad FIFO priority
-    //this is good enough for now
-    //alright Chinaman contacted me again
-    //he said only wait if it is in progress, and competitive try if it is not in progress. we need to specify the threshold like in Cabal upgrade
-
-    //we need to store more informations (this would definitely decrease our software value), specifically a state that is not acquired yet acquired to denote whether the lock will be held for a purpose other than multiple spinning, because this lock implementation is very important
-    //a sequential run should be increasing the trylock_sz
-    //a busyloop with exponential backoff waiting is not acceptable, 
-    //we'll improvise that later, we still use an exponential base to increase the trylock sz
-
-    //this is the single most complex lock implementation that requires too much neurons from me
-    //OK, it looks simple, yet this is probably the best that one could write without further information
-    //client was willing to pay $10 BB for this framework if we could get the density mining up + running within a year
-    //alright, it's very very complicated to write the randomization
-    //I'm telling you that 100 years later, human kind is still spinning to mine the best logit density
-
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -385,7 +330,7 @@ namespace dg::network_memlock{
                 }
 
                 for (size_t i = 0u; i < SZ; ++i){
-                    if (i != 0u && lock_ptr_arr[i] != lock_ptr_arr[i - 1]){
+                    if (i != 0u && lock_ptr_arr[i] != lock_ptr_arr[i - 1]){ //bad logics, people dont like this for etc. reasons
                         retry_exponent += 1u; //border index detection
                     }
 
@@ -415,6 +360,7 @@ namespace dg::network_memlock{
 
                     if (responsible_idx.has_value()){
                         dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]); //we are still responsible for the waitnolock, we need to release the responsibility
+                        responsible_idx = std::nullopt;
                     }
 
                     return false;

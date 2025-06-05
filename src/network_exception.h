@@ -249,7 +249,7 @@ namespace dg::network_exception{
         }
     }
 
-    template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same_v<Args, exception_t>...>, bool> = true>
+    template <class ...Args, std::enable_if_t<std::conjunction_v<std::is_same<Args, exception_t>...>, bool> = true>
     inline auto disjunction(Args... args) noexcept -> exception_t{
         
         exception_t rs = SUCCESS; 
