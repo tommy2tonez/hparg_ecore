@@ -76,6 +76,10 @@ namespace dg::network_memcommit_resolutor{
     //today we'll build a linker between this -> memregion or to warehouse
     //this has been dragging for months, we'll solve this problem this week, because I think this has a sufficient set of features that we won't try to improve anytime soon 
 
+    //alright, clients requested one feature
+    //process
+    //it sounds funny but we could write that by using the compiler that we once wrote, the stack frame compiler, with careful optimizations, and appropriate spaced out stack calling, we can actually make the process-liked feature for asynchronous devices
+
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         public:

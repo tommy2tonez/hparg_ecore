@@ -1400,7 +1400,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                          size_type bucket_count,
                                          const Allocator& allocator): unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
 
-            constexpr void rehash(size_type tentative_new_cap){
+            __attribute__((noinline)) constexpr void rehash(size_type tentative_new_cap){
 
                 if (tentative_new_cap <= this->capacity()){
                     return;
@@ -1788,7 +1788,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()) [[unlikely]]{ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
                     this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
                 }
-
+ 
                 virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){

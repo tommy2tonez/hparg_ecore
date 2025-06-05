@@ -6,36 +6,6 @@ import random
 from typing import Protocol
 import sys
 
-#new operations
-
-#2sum
-#3sum
-#4sum
-
-#the problem is that we have to make the best sequence of intercourse 
-
-#4 sum -> group 4 sum -> group 2 sum of two groups
-#then we'd kinda want to dice from there
-
-#we dont have faith in ReLu SiLu SquareReLu, etc LU
-#or multi-layer perceptrons or whatever the cool kids do
-#we have an unshattered faith in continuity, things that are discontinued are anomalies, blackholes, etc. things that God himself does not know how to solve
-#we'll post the result within one month, stay tuned
-
-#we'll build what we called a navigator of randomization system
-#navigator is a 2KB conscious buffer that is sitting comfortably in the CUDA device
-#we'll be doing projections of the best next possible move
-
-#though the very first intellectual being can exist at 64KB of conscious buffer
-#imagine we are mining the "best language" to be back_inserted to the conscious buffer, such language is capable of solving + projecting the next best move
-#we'll be talking about the goals of next best move later
-#in shorts, we'd want to predict the virtual machine next state, yet we are on finite resources, so we have to be collectively choose what to remember or what to emphasize in our conscious buffer
-#this is a mining operation
-
-#yet the problem of compression of the reality involves more than just that
-#we need an engine to do forward all the tesseracts and predicts people next move
-#we wont be the pilot, our friend is
-
 def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: float = 0.000001) -> float:
 
     if derivative_order == 0:
@@ -892,26 +862,6 @@ def make_2d_arr(x_sz: int, y_sz: int, initial_value: object):
 
     return [[copy.deepcopy(initial_value) for __ in range(y_sz)] for _ in range(x_sz)]
 
-#I was proving the completeness + most compactness of this approximation in terms of <there exists no better representation, only equivalent representations>
-#it's hard to prove, in order to do so, we must infer that s, v, a, j, ... are not logically-tangled in terms of entropy
-#we'll port this code to C for quant proof of concept tomorrow, it's gonna be a bumpy low-level code
-
-#alright, the only implementable optimization we could do for our current model is directional optimization 
-#we have a crazy amount of output, we have the <magnetic_direction> for all of the logits, we find the <gradient_update> benefits, and we maxwell those 
-
-#the problem is: how could we possibly pass such information backwardly or we pass it forwardly?
-#unless we do random sampling of directions for backwarding tiles
-
-#alright consider this flow
-#we randomize the <projectile> or the cursor, we allocate computing tiles out of leafs inching in the direction, we compute the results, we crit the results, we maxwell the results (uacm + pacm), and we backprop those guys to the leafs 
-#what about our Newton approx? its the msgr_forward responsibility, we compute the deviation projection externally + add to the compute queue later on 
-#point is we have tons of compute, yet not a parallel algorithm to do this
-#client is asking for $BB if we could get this correctly from A to Z
-#there is no just in time or fancy accelerated linear, etc.
-#like Agent Smith once told, we multiply
-#alright fellas, embrace Taylor Swift, not delusions
-#we have so many variables to compute from virtual machine snapshots that our AI's gonna know literally everything, and we could read our Sunday newspaper through our AI
-
 def make_taylor_model(in_variable_sz: int, out_variable_sz: int, derivative_order_sz: int) -> TaylorApprox:
 
     if in_variable_sz == 0:
@@ -1045,35 +995,12 @@ def train(taylor_coeff: list[float],
 
 def main():
 
-    #I dont know if yall see what I see yet we are very hopeful about the future (for the very first time (1990s), we have solved the problem of stable diffusion + sound-alike effect from naive linear)
-
-    #Taylor Series is actually the way
-    #I was thinking of 1 var, 2 var, 4 var, 8 var
-    #the sequence of those Taylor Series' length, the centrality add operation, rotate, rinse and repeat
-    #we are gonna need a shii (I dont know why people pronounce it that way) ton of compute, a platform to run this on, yet I think its gonna be very compact, we are heading in the right direction
-
-    #I was proving the difference between a multivariate projection vs 1 dimensional projections + add operation
-    #here is the twist, add operation is another projection, alright I know this sounds silly, so is it all Taylor Series, yes, it's possible to create everything out of Taylor Series
-
-    #proof by induction:
-
-    #assume 1 dimensional projection + add suffice f(x) + f(x1) == f(x, x1)
-    #assume we are to train new variable <x> such that <x, y> -> C and <x, y1> -> C1 for y and y1 are two points c <the_already_trained_set>
-    #x now has to be of two values to keep the induction going
-
-    #its the art of variable intercourse, we give off <DNA> information by doing multidimensional projections or add operation
-    #we dont really know the exact formula for this operation, we just know the regex form of all centrality-differential-intellect-based, maybe we'll balance between reality (compute limits, resource, money vs benefits, overheads, etc.) and theoretical from there
-
-    #recall when we noticed the problem of centrality, creating a new word, that word numerical range is not always within the computable model range, such creates anomaly + skewness + requires attention to solve the problem
-    #we attempt to solve the problem by using water, we pour water over the projection space + take deviation to steer the course
-
     taylor_approx: TaylorApprox                         = make_taylor_model(3, 3, 3)
     taylor_coeff: list[list[float]]                     = taylor_approx.coeff_dump()
     flattened_coeff: list[float]                        = flatten(taylor_coeff)
 
     range_arr: list[float]                              = [float(16), float(16), float(16)]
     sampling_sz: int                                    = 64
-    # deviation_calculator: DeviationCalculatorInterface  = RandomDiscreteDeviationCalculator(range_arr, sampling_sz)
     directional_optimization_sz: int                    = 128
     training_epoch_sz: int                              = 1 << 20
 
