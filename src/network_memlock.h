@@ -464,7 +464,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try_strong(size_t table_idx) noexcept -> bool{
     
-                return internal_acquire_try(table_idx);
+                return self::internal_acquire_try(table_idx);
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
@@ -480,7 +480,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 while (true){
-                    is_success = stdx::eventloop_expbackoff_spin(lambda, 1u);
+                    is_success = lambda();
 
                     if (is_success){
                         return;
@@ -550,47 +550,47 @@ namespace dg::network_memlock_impl1{
 
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
-                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
+                return self::internal_acquire_try(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static auto acquire_try_strong(ptr_t ptr) noexcept -> bool{
 
-                return internal_acquire_try_strong(memregion_slot(segcheck_ins::access(ptr)));
+                return self::internal_acquire_try_strong(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
 
-                internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_acquire_wait(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_waitnolock(ptr_t ptr) noexcept[
 
-                internal_acquire_waitnolock(ptr);
+                self::internal_acquire_waitnolock(ptr);
             ]
 
             static void acquire_waitnolock_release_responsibility(ptr_t ptr) noexcept{
 
-                internal_acquire_waitnolock_release_responsibility(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_acquire_waitnolock_release_responsibility(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_release(ptr_t ptr) noexcept{
 
-                internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_acquire_release(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
-                return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
+                return self::memregion_slot(segcheck_ins::access(new_ptr)) == self::memregion_slot(segcheck_ins::access(old_ptr));
             } 
 
             static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
-                if (acquire_transfer_try(new_ptr, old_ptr)){
+                if (self::acquire_transfer_try(new_ptr, old_ptr)){
                     return;
                 }
 
-                acquire_release(old_ptr);
-                acquire_wait(new_ptr);
+                self::acquire_release(old_ptr);
+                self::acquire_wait(new_ptr);
             }
     };
 
@@ -732,13 +732,13 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try_strong(size_t table_idx) noexcept -> bool{
 
-                return internal_acquire_try(table_idx);
+                return self::internal_acquire_try(table_idx);
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
                 
                 auto lambda     = [&]() noexcept{
-                    return internal_acquire_try(table_idx);
+                    return self::internal_acquire_try(table_idx);
                 };
 
                 bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
@@ -748,7 +748,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 while (true){
-                    was_thru = stdx::eventloop_expbackoff_spin(lambda, 1u);
+                    was_thru = lambda();
 
                     if (was_thru){
                         break;
@@ -818,7 +818,7 @@ namespace dg::network_memlock_impl1{
             static void internal_reference_wait(size_t table_idx) noexcept{
 
                 auto lambda = [&]() noexcept{
-                    return internal_reference_try(table_idx);
+                    return self::internal_reference_try(table_idx);
                 };
 
                 bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
@@ -828,7 +828,7 @@ namespace dg::network_memlock_impl1{
                 }
 
                 while (true){
-                    was_thru = stdx::eventloop_expbackoff_spin(lambda, 1u);
+                    was_thru = lambda();
 
                     if (was_thru){
                         break;
@@ -904,77 +904,77 @@ namespace dg::network_memlock_impl1{
 
             static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
-                return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
+                return self::memregion_slot(segcheck_ins::access(new_ptr)) == self::memregion_slot(segcheck_ins::access(old_ptr));
             }
 
             static auto acquire_try(ptr_t ptr) noexcept -> bool{
 
-                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
+                return self::internal_acquire_try(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static auto acquire_try_strong(ptr_t ptr) noexcept -> bool{
     
-                return internal_acquire_try_strong(memregion_slot(segcheck_ins::access(ptr)));
+                return self::internal_acquire_try_strong(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_wait(ptr_t ptr) noexcept{
 
-                internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_acquire_wait(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_release(ptr_t ptr) noexcept{
 
-                internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_acquire_release(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void acquire_waitnolock(ptr_t ptr) noexcept{
 
-                internal_acquire_waitnolock(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_acquire_waitnolock(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
-                return transfer_try(new_ptr, old_ptr);
+                return self::transfer_try(new_ptr, old_ptr);
             } 
 
             static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
-                if (acquire_transfer_try(new_ptr, old_ptr)){
+                if (self::acquire_transfer_try(new_ptr, old_ptr)){
                     return;
                 }
 
-                acquire_release(old_ptr);
-                acquire_wait(new_ptr);
+                self::acquire_release(old_ptr);
+                self::acquire_wait(new_ptr);
             }
 
             static auto reference_try(ptr_t ptr) noexcept -> bool{
 
-                return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)));
+                return self::internal_reference_try(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static void reference_wait(ptr_t ptr) noexcept{
 
-                internal_reference_wait(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_reference_wait(self::memregion_slot(segcheck_ins::access(ptr)));
             } 
 
             static void reference_release(ptr_t ptr) noexcept{
 
-                internal_reference_release(memregion_slot(segcheck_ins::access(ptr)));
+                self::internal_reference_release(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
             static auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
 
-                return transfer_try(new_ptr, old_ptr);
+                return self::transfer_try(new_ptr, old_ptr);
             } 
 
             static void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
 
-                if (reference_transfer_try(new_ptr, old_ptr)){
+                if (self::reference_transfer_try(new_ptr, old_ptr)){
                     return;
                 }
 
-                reference_release(old_ptr);
-                reference_wait(new_ptr);
+                self::reference_release(old_ptr);
+                self::reference_wait(new_ptr);
             }
     };
 

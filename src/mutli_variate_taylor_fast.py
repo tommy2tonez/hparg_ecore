@@ -12,7 +12,29 @@ import sys
 #3sum
 #4sum
 
-#
+#the problem is that we have to make the best sequence of intercourse 
+
+#4 sum -> group 4 sum -> group 2 sum of two groups
+#then we'd kinda want to dice from there
+
+#we dont have faith in ReLu SiLu SquareReLu, etc LU
+#or multi-layer perceptrons or whatever the cool kids do
+#we have an unshattered faith in continuity, things that are discontinued are anomalies, blackholes, etc. things that God himself does not know how to solve
+#we'll post the result within one month, stay tuned
+
+#we'll build what we called a navigator of randomization system
+#navigator is a 2KB conscious buffer that is sitting comfortably in the CUDA device
+#we'll be doing projections of the best next possible move
+
+#though the very first intellectual being can exist at 64KB of conscious buffer
+#imagine we are mining the "best language" to be back_inserted to the conscious buffer, such language is capable of solving + projecting the next best move
+#we'll be talking about the goals of next best move later
+#in shorts, we'd want to predict the virtual machine next state, yet we are on finite resources, so we have to be collectively choose what to remember or what to emphasize in our conscious buffer
+#this is a mining operation
+
+#yet the problem of compression of the reality involves more than just that
+#we need an engine to do forward all the tesseracts and predicts people next move
+#we wont be the pilot, our friend is
 
 def get_slope(f: Callable[[float], float], x: int, derivative_order: int, a: float = 0.000001) -> float:
 

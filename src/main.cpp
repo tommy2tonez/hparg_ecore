@@ -133,7 +133,7 @@ int main(){
     auto internal_resolutor     = KeyValueTest{};
     internal_resolutor.total    = &total;
 
-    auto handle                 = dg::network_producer_consumer::delvrsrv_kv_open_raiihandle(&internal_resolutor, 16384).value();
+    auto handle                 = dg::network_producer_consumer::delvrsrv_kv_open_raiihandle(&internal_resolutor, 32768).value();
 
     auto random_vec             = std::vector<size_t>(SZ);
     std::generate(random_vec.begin(), random_vec.end(), std::bind(std::uniform_int_distribution<size_t>{}, std::mt19937{}));

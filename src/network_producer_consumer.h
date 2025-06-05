@@ -461,6 +461,26 @@ namespace dg::network_producer_consumer{
         dg::network_producer_consumer::inplace_destruct_array(event_container.ptr, event_container.cap);
     }
 
+    //this is wrong? how why ?
+    //assume a + b + c + d == sz
+
+    //a <= ceil2(a), ...
+    //actual_storage_size(a) <= ceil2(a) * 2 - 1, ...
+    //ceil2(a) * 2 - 1 <= 4 * a
+
+    //actual_storage_size(a) + ... <= 4 * (a + b + ...) == 4sz
+
+    //x^0 + x^1 + x^2 + x^n = f(x)
+    //f(x)*(x - 1) = x^(n + 1) - 1 / (x - 1)
+    //x == 2
+    //=> f(x) = x^(n + 1) - 1
+
+    //we are definitely wasting a lot of memory YET we only need the memory during the delvrsrv_kv_deliver phase (the accumulation phase)
+    //we'll try to reduce the memory consumption later
+    //this is the most optimized version of unordered_map keyvalue feed that we could write
+    //we can actually converge the delvrsrv_kv_deliver() -> delvrsrv_deliver() time by increasing the GROWTH_FACTOR -> 4
+    //there are probably some optimizables here and there that we could further do, we'll be sitting comfortably within the 2x the delvrsrv_deliver() range 
+
     static inline constexpr size_t DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP      = size_t{1}; 
     static inline constexpr size_t DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR    = size_t{2};
 
@@ -487,7 +507,9 @@ namespace dg::network_producer_consumer{
             return 0u;
         }
 
-        size_t worst_case_cap   = deliverable_cap * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR;
+        static_assert(DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR == 2u);
+
+        size_t worst_case_cap   = deliverable_cap * (DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR);
         size_t minimum_cap      = DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP;
         size_t cap              = std::max(worst_case_cap, minimum_cap);  
         size_t bsz              = inplace_construct_size<EventType[]>(cap);

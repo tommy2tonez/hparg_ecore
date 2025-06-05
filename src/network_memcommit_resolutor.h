@@ -1701,103 +1701,58 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             const std::unique_ptr<ForwardPingLeafSignalResolutor> leaf_resolutor;
-            const size_t leaf_dispatch_sz;
             const std::unique_ptr<ForwardPingBlkrSignalResolutor> blkr_resolutor;
-            const size_t blkr_dispatch_sz;
             const std::unique_ptr<ForwardPingRstrSignalResolutor> rstr_resolutor;
-            const size_t rstr_dispatch_sz;
             const std::unique_ptr<ForwardPingMonoSignalResolutor> mono_resolutor;
-            const size_t mono_dispatch_sz;
             const std::unique_ptr<ForwardPingPairSignalResolutor> pair_resolutor;
-            const size_t pair_dispatch_sz;
             const std::unique_ptr<ForwardPingUACMSignalResolutor> uacm_resolutor;
-            const size_t uacm_dispatch_sz;
             const std::unique_ptr<ForwardPingPACMSignalResolutor> pacm_resolutor;
-            const size_t pacm_dispatch_sz;
             const std::unique_ptr<ForwardPingCritSignalResolutor> crit_resolutor;
-            const size_t crit_dispatch_sz;
             const std::unique_ptr<ForwardPingImmuSignalResolutor> immu_resolutor;
-            const size_t immu_dispatch_sz;
             const std::unique_ptr<ForwardPingPolySignalResolutor> poly_resolutor;
-            const size_t poly_dispatch_sz;
             const std::unique_ptr<ForwardPingExtnSrcSignalResolutor> extnsrc_resolutor;
-            const size_t extnsrc_dispatch_sz;
             const std::unique_ptr<ForwardPingExtnSrxSignalResolutor> extnsrx_resolutor;
-            const size_t extnsrx_dispatch_sz;
             const std::unique_ptr<ForwardPingExtnDstSignalResolutor> extndst_resolutor;
-            const size_t extndst_dispatch_sz;
             const std::unique_ptr<ForwardPingExtnDsxSignalResolutor> extndsx_resolutor;
-            const size_t extndsx_dispatch_sz;
             const std::unique_ptr<ForwardPingMsgrFwdSignalResolutor> msgrfwd_resolutor;
-            const size_t msgrfwd_dispatch_sz;
             const std::unique_ptr<ForwardPingMsgrBwdSignalResolutor> msgrbwd_resolutor;
-            const size_t msgrbwd_dispatch_sz;
+            const size_t kvfeed_vectorization_sz; 
 
         public:
 
             ForwardPingSignalResolutor(std::unique_ptr<ForwardPingLeafSignalResolutor> leaf_resolutor,
-                                       size_t leaf_dispatch_sz,
                                        std::unique_ptr<ForwardPingBlkrSignalResolutor> blkr_resolutor,
-                                       size_t blkr_dispatch_sz,
                                        std::unique_ptr<ForwardPingRstrSignalResolutor> rstr_resolutor,
-                                       size_t rstr_dispatch_sz,
                                        std::unique_ptr<ForwardPingMonoSignalResolutor> mono_resolutor,
-                                       size_t mono_dispatch_sz,
                                        std::unique_ptr<ForwardPingPairSignalResolutor> pair_resolutor,
-                                       size_t pair_dispatch_sz,
                                        std::unique_ptr<ForwardPingUACMSignalResolutor> uacm_resolutor,
-                                       size_t uacm_dispatch_sz,
                                        std::unique_ptr<ForwardPingPACMSignalResolutor> pacm_resolutor,
-                                       size_t pacm_dispatch_sz,
                                        std::unique_ptr<ForwardPingCritSignalResolutor> crit_resolutor,
-                                       size_t crit_dispatch_sz,
                                        std::unique_ptr<ForwardPingImmuSignalResolutor> immu_resolutor,
-                                       size_t immu_dispatch_sz,
                                        std::unique_ptr<ForwardPingPolySignalResolutor> poly_resolutor,
-                                       size_t poly_dispatch_sz,
                                        std::unique_ptr<ForwardPingExtnSrcSignalResolutor> extnsrc_resolutor,
-                                       size_t extnsrc_dispatch_sz,
                                        std::unique_ptr<ForwardPingExtnSrxSignalResolutor> extnsrx_resolutor,
-                                       size_t extnsrx_dispatch_sz,
                                        std::unique_ptr<ForwardPingExtnDstSignalResolutor> extndst_resolutor,
-                                       size_t extndst_dispatch_sz,
                                        std::unique_ptr<ForwardPingExtnDsxSignalResolutor> extndsx_resolutor,
-                                       size_t extndsx_dispatch_sz,
                                        std::unique_ptr<ForwardPingMsgrFwdSignalResolutor> msgrfwd_resolutor,
-                                       size_t msgrfwd_dispatch_sz,
                                        std::unique_ptr<ForwardPingMsgrBwdSignalResolutor> msgrbwd_resolutor,
-                                       size_t msgrbwd_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
-                                                                             leaf_dispatch_sz(leaf_dispatch_sz),
-                                                                             blkr_resolutor(std::move(blkr_resolutor)),
-                                                                             blkr_dispatch_sz(blkr_dispatch_sz),
-                                                                             rstr_resolutor(std::move(rstr_resolutor)),
-                                                                             rstr_dispatch_sz(rstr_dispatch_sz),
-                                                                             mono_resolutor(std::move(mono_resolutor)),
-                                                                             mono_dispatch_sz(mono_dispatch_sz),
-                                                                             pair_resolutor(std::move(pair_resolutor)),
-                                                                             pair_dispatch_sz(pair_dispatch_sz),
-                                                                             uacm_resolutor(std::move(uacm_resolutor)),
-                                                                             uacm_dispatch_sz(uacm_dispatch_sz),
-                                                                             pacm_resolutor(std::move(pacm_resolutor)),
-                                                                             pacm_dispatch_sz(pacm_dispatch_sz),
-                                                                             crit_resolutor(std::move(crit_resolutor)),
-                                                                             crit_dispatch_sz(crit_dispatch_sz),
-                                                                             immu_resolutor(std::move(immu_resolutor)),
-                                                                             immu_dispatch_sz(immu_dispatch_sz),
-                                                                             poly_resolutor(std::move(poly_resolutor)),
-                                                                             poly_dispatch_sz(poly_dispatch_sz),
-                                                                             extnsrc_resolutor(std::move(extnsrc_resolutor)),
-                                                                             extnsrc_dispatch_sz(extnsrc_dispatch_sz),
-                                                                             extnsrx_resolutor(std::move(extnsrx_resolutor)),
-                                                                             extnsrx_dispatch_sz(extnsrx_dispatch_sz),
-                                                                             extndst_resolutor(std::move(extndst_resolutor)),
-                                                                             extndst_dispatch_sz(extndst_dispatch_sz),
-                                                                             extndsx_resolutor(std::move(extndsx_resolutor)),
-                                                                             extndsx_dispatch_sz(extndsx_dispatch_sz),
-                                                                             msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
-                                                                             msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
-                                                                             msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
-                                                                             msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
+                                       size_t kvfeed_vectorization_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
+                                                                                 blkr_resolutor(std::move(blkr_resolutor)),
+                                                                                 rstr_resolutor(std::move(rstr_resolutor)),
+                                                                                 mono_resolutor(std::move(mono_resolutor)),
+                                                                                 pair_resolutor(std::move(pair_resolutor)),
+                                                                                 uacm_resolutor(std::move(uacm_resolutor)),
+                                                                                 pacm_resolutor(std::move(pacm_resolutor)),
+                                                                                 crit_resolutor(std::move(crit_resolutor)),
+                                                                                 immu_resolutor(std::move(immu_resolutor)),
+                                                                                 poly_resolutor(std::move(poly_resolutor)),
+                                                                                 extnsrc_resolutor(std::move(extnsrc_resolutor)),
+                                                                                 extnsrx_resolutor(std::move(extnsrx_resolutor)),
+                                                                                 extndst_resolutor(std::move(extndst_resolutor)),
+                                                                                 extndsx_resolutor(std::move(extndsx_resolutor)),
+                                                                                 msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
+                                                                                 msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
+                                                                                 kvfeed_vectorization_sz(kvfeed_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const ForwardPingSignalEvent& event) const noexcept -> exception_t{
 
@@ -1836,71 +1791,29 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPingSignalEvent * event_arr, size_t sz) noexcept{
 
-                size_t trimmed_leaf_dispatch_sz = std::min(this->leaf_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz));
+                auto internal_resolutor                 = InternalResolutor{};
 
-                size_t trimmed_blkr_dispatch_sz = std::min(this->blkr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz));
+                internal_resolutor.leaf_resolutor       = this->leaf_resolutor.get();
+                internal_resolutor.blkr_resolutor       = this->blkr_resolutor.get();
+                internal_resolutor.rstr_resolutor       = this->rstr_resolutor.get();
+                internal_resolutor.mono_resolutor       = this->mono_resolutor.get();
+                internal_resolutor.pair_resolutor       = this->pair_resolutor.get();
+                internal_resolutor.uacm_resolutor       = this->uacm_resolutor.get();
+                internal_resolutor.pacm_resolutor       = this->pacm_resolutor.get();
+                internal_resolutor.crit_resolutor       = this->crit_resolutor.get();
+                internal_resolutor.immu_resolutor       = this->immu_resolutor.get();
+                internal_resolutor.poly_resolutor       = this->poly_resolutor.get();
+                internal_resolutor.extnsrc_resolutor    = this->extnsrc_resolutor.get();
+                internal_resolutor.extnsrx_resolutor    = this->extnsrx_resolutor.get();
+                internal_resolutor.extndst_resolutor    = this->extndst_resolutor.get();
+                internal_resolutor.extndsx_resolutor    = this->extndsx_resolutor.get();
+                internal_resolutor.msgrfwd_resolutor    = this->msgrfwd_resolutor.get();
+                internal_resolutor.msgrbwd_resolutor    = this->msgrbwd_resolutor.get();
 
-                size_t trimmed_rstr_dispatch_sz = std::min(this->rstr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rstr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz));
-
-                size_t trimmed_mono_dispatch_sz = std::min(this->mono_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_resolutor.get(), trimmed_mono_dispatch_sz));
-
-                size_t trimmed_pair_dispatch_sz = std::min(this->pair_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_resolutor.get(), trimmed_pair_dispatch_sz)); 
-
-                size_t trimmed_uacm_dispatch_sz = std::min(this->uacm_dispatch_sz, sz);;
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz));
-
-                size_t trimmed_pacm_dispatch_sz = std::min(this->pacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz));
-
-                size_t trimmed_crit_dispatch_sz = std::min(this->crit_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_resolutor.get(), trimmed_crit_dispatch_sz)); 
-
-                size_t trimmed_immu_dispatch_sz = std::min(this->immu_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_resolutor.get(), trimmed_immu_dispatch_sz)); 
-                
-                size_t trimmed_poly_dispatch_sz = std::min(this->poly_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> poly_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->poly_resolutor.get(), trimmed_poly_dispatch_sz));
-
-                size_t trimmed_extnsrc_dispatch_sz = std::min(this->extnsrc_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
-
-                size_t trimmed_extnsrx_dispatch_sz = std::min(this->extnsrx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz)); 
-
-                size_t trimmed_extndst_dispatch_sz = std::min(this->extndst_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz)); 
-
-                size_t trimmed_extndsx_dispatch_sz = std::min(this->extndsx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz));
-
-                size_t trimmed_msgrfwd_dispatch_sz = std::min(this->msgrfwd_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
-
-                size_t trimmed_msgrbwd_dispatch_sz = std::min(this->msgrbwd_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
-
-                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
-                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
-                auto rstr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz, rstr_dh_mem.get()));
-                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
-                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
-                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
-                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
-                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
-                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
-                auto poly_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->poly_resolutor.get(), trimmed_poly_dispatch_sz, poly_dh_mem.get())); 
-
-                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
-                auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz, extnsrx_dh_mem.get()));
-                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
-                auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz, extndsx_dh_mem.get()));
-                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
-                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
+                size_t trimmed_kvfeed_vectorization_sz  = std::min(this->kvfeed_vectorization_sz, sz);
+                size_t kvfeed_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_kvfeed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> kvfeed_mem(kvfeed_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_kvfeed_vectorization_sz, kvfeed_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
@@ -1910,99 +1823,126 @@ namespace dg::network_memcommit_resolutor{
                         }
                     }
 
-                    switch (tile_kind.value()){
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind, event_arr[i]);
+                }
+            }
+
+        private:
+            
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<tile_kind_t, ForwardPingSignalEvent>{
+
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * leaf_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * blkr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * rstr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * mono_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * pair_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * uacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * pacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * crit_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * immu_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * poly_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * extnsrc_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * extnsrx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * extndst_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * extndsx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * msgrfwd_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent> * msgrbwd_resolutor;
+
+                void push(const tile_kind_t& tile_kind, std::move_iterator<ForwardPingSignalEvent *> event_arr, size_t sz){
+
+                    switch (tile_kind){
                         case TILE_KIND_LEAF:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
+                            this->leaf_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_BLKR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
+                            this->blkr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_RSTR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(rstr_delivery_handle.get(), event_arr[i]);
+                            this->rstr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MONO:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(mono_delivery_handle.get(), event_arr[i]);
+                            this->mono_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PAIR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pair_delivery_handle.get(), event_arr[i]);
+                            this->pair_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_UACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(uacm_delivery_handle.get(), event_arr[i]);
+                            this->uacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
+                            this->pacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_CRIT:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
+                            this->crit_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_IMMU:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
+                            this->immu_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_POLY:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(poly_delivery_handle.get(), event_arr[i]);
+                            this->poly_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRC:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
+                            this->extnsrc_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
+                            this->extnsrx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDST:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
+                            this->extndst_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDSX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
+                            this->extndsx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRFWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrfwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRBWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrbwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         default:
                         {
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
                             } else{
                                 std::unreachable();
                             }
                         }
                     }
                 }
-            }
+            };
     };
 
     //---
@@ -3833,105 +3773,60 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> leaf_resolutor;
-            const size_t leaf_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> blkr_resolutor;
-            const size_t blkr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> rstr_resolutor;
-            const size_t rstr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> mono_resolutor;
-            const size_t mono_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> pair_resolutor;
-            const size_t pair_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> uacm_resolutor;
-            const size_t uacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> pacm_resolutor;
-            const size_t pacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> crit_resolutor;
-            const size_t crit_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> immu_resolutor;
-            const size_t immu_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> poly_resolutor;
-            const size_t poly_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extnsrc_resolutor;
-            const size_t extnsrc_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extnsrx_resolutor;
-            const size_t extnsrx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extndst_resolutor;
-            const size_t extndst_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extndsx_resolutor;
-            const size_t extndsx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> msgrfwd_resolutor;
-            const size_t msgrfwd_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> msgrbwd_resolutor;
-            const size_t msgrbwd_dispatch_sz;
+            const std::unique_ptr<ForwardPongLeafRequestResolutor> leaf_resolutor;
+            const std::unique_ptr<ForwardPongBlkrRequestResolutor> blkr_resolutor;
+            const std::unique_ptr<ForwardPongRstrRequestResolutor> rstr_resolutor;
+            const std::unique_ptr<ForwardPongMonoRequestResolutor> mono_resolutor;
+            const std::unique_ptr<ForwardPongPairRequestResolutor> pair_resolutor;
+            const std::unique_ptr<ForwardPongUACMRequestResolutor> uacm_resolutor;
+            const std::unique_ptr<ForwardPongPACMRequestResolutor> pacm_resolutor;
+            const std::unique_ptr<ForwardPongCritRequestResolutor> crit_resolutor;
+            const std::unique_ptr<ForwardPongImmuRequestResolutor> immu_resolutor;
+            const std::unique_ptr<ForwardPongPolyRequestResolutor> poly_resolutor;
+            const std::unique_ptr<ForwardPongExtnSrcRequestResolutor> extnsrc_resolutor;
+            const std::unique_ptr<ForwardPongExtnSrxRequestResolutor> extnsrx_resolutor;
+            const std::unique_ptr<ForwardPongExtnDstRequestResolutor> extndst_resolutor;
+            const std::unique_ptr<ForwardPongExtnDsxRequestResolutor> extndsx_resolutor;
+            const std::unique_ptr<ForwardPongMsgrFwdRequestResolutor> msgrfwd_resolutor;
+            const std::unique_ptr<ForwardPongMsgrBwdRequestResolutor> msgrbwd_resolutor;
+            const size_t kvfeed_vectorization_sz;
 
         public:
 
-            ForwardPongRequestResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> leaf_resolutor,
-                                        size_t leaf_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::Consumerinterface<ForwardPongRequestEvent>> blkr_resolutor,
-                                        size_t blkr_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> rstr_resolutor,
-                                        size_t rstr_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> mono_resolutor,
-                                        size_t mono_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> pair_resolutor,
-                                        size_t pair_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> uacm_resolutor,
-                                        size_t uacm_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> pacm_resolutor,
-                                        size_t pacm_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> crit_resolutor,
-                                        size_t crit_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> immu_resolutor,
-                                        size_t immu_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> poly_resolutor,
-                                        size_t poly_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extnsrc_resolutor,
-                                        size_t extnsrc_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extnsrx_resolutor,
-                                        size_t extnsrx_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extndst_resolutor,
-                                        size_t extndst_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> extndsx_resolutor,
-                                        size_t extndsx_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> msgrfwd_resolutor,
-                                        size_t msgrfwd_dispatch_sz,
-                                        std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent>> msgrbwd_resolutor,
-                                        size_t msgrbwd_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
-                                                                              leaf_dispatch_sz(leaf_dispatch_sz),
-                                                                              blkr_resolutor(std::move(blkr_resolutor)),
-                                                                              blkr_dispatch_sz(blkr_dispatch_sz),
-                                                                              rstr_resolutor(std::move(rstr_resolutor)),
-                                                                              rstr_dispatch_sz(rstr_dispatch_sz),
-                                                                              mono_resolutor(std::move(mono_resolutor)),
-                                                                              mono_dispatch_sz(mono_dispatch_sz),
-                                                                              pair_resolutor(std::move(pair_resolutor)),
-                                                                              pair_dispatch_sz(pair_dispatch_sz),
-                                                                              uacm_resolutor(std::move(uacm_resolutor)),
-                                                                              uacm_dispatch_sz(uacm_dispatch_sz),
-                                                                              pacm_resolutor(std::move(pacm_resolutor)),
-                                                                              pacm_dispatch_sz(pacm_dispatch_sz),
-                                                                              crit_resolutor(std::move(crit_resolutor)),
-                                                                              crit_dispatch_sz(crit_dispatch_sz),
-                                                                              immu_resolutor(std::move(immu_resolutor)),
-                                                                              immu_dispatch_sz(immu_dispatch_sz),
-                                                                              poly_resolutor(std::move(poly_resolutor)),
-                                                                              poly_dispatch_sz(poly_dispatch_sz),
-                                                                              extnsrc_resolutor(std::move(extnsrc_resolutor)),
-                                                                              extnsrc_dispatch_sz(extnsrc_dispatch_sz),
-                                                                              extnsrx_resolutor(std::move(extnsrx_resolutor)),
-                                                                              extnsrx_dispatch_sz(extnsrx_dispatch_sz),
-                                                                              extndst_resolutor(std::move(extndst_resolutor)),
-                                                                              extndst_dispatch_sz(extndst_dispatch_sz),
-                                                                              extndst_resolutor(std::move(extndst_resolutor)),
-                                                                              extndsx_resolutor(std::move(extndsx_resolutor)),
-                                                                              extndsx_dispatch_sz(extndsx_dispatch_sz),
-                                                                              msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
-                                                                              msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
-                                                                              msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
-                                                                              msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
+            ForwardPongRequestResolutor(std::unique_ptr<ForwardPongLeafRequestResolutor> leaf_resolutor,
+                                        std::unique_ptr<ForwardPongBlkrRequestResolutor> blkr_resolutor,
+                                        std::unique_ptr<ForwardPongRstrRequestResolutor> rstr_resolutor,
+                                        std::unique_ptr<ForwardPongMonoRequestResolutor> mono_resolutor,
+                                        std::unique_ptr<ForwardPongPairRequestResolutor> pair_resolutor,
+                                        std::unique_ptr<ForwardPongUACMRequestResolutor> uacm_resolutor,
+                                        std::unique_ptr<ForwardPongPACMRequestResolutor> pacm_resolutor,
+                                        std::unique_ptr<ForwardPongCritRequestResolutor> crit_resolutor,
+                                        std::unique_ptr<ForwardPongImmuRequestResolutor> immu_resolutor,
+                                        std::unique_ptr<ForwardPongPolyRequestResolutor> poly_resolutor,
+                                        std::unique_ptr<ForwardPongExtnSrcRequestResolutor> extnsrc_resolutor,
+                                        std::unique_ptr<ForwardPongExtnSrxRequestResolutor> extnsrx_resolutor,
+                                        std::unique_ptr<ForwardPongExtnDstRequestResolutor> extndst_resolutor,
+                                        std::unique_ptr<ForwardPongExtnDsxRequestResolutor> extndsx_resolutor,
+                                        std::unique_ptr<ForwardPongMsgrFwdRequestResolutor> msgrfwd_resolutor,
+                                        std::unique_ptr<ForwardPongMsgrBwdRequestResolutor> msgrbwd_resolutor,
+                                        size_t kvfeed_vectorization_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
+                                                                                  blkr_resolutor(std::move(blkr_resolutor)),
+                                                                                  rstr_resolutor(std::move(rstr_resolutor)),
+                                                                                  mono_resolutor(std::move(mono_resolutor)),
+                                                                                  pair_resolutor(std::move(pair_resolutor)),
+                                                                                  uacm_resolutor(std::move(uacm_resolutor)),
+                                                                                  pacm_resolutor(std::move(pacm_resolutor)),
+                                                                                  crit_resolutor(std::move(crit_resolutor)),
+                                                                                  immu_resolutor(std::move(immu_resolutor)),
+                                                                                  poly_resolutor(std::move(poly_resolutor)),
+                                                                                  extnsrc_resolutor(std::move(extnsrc_resolutor)),
+                                                                                  extnsrx_resolutor(std::move(extnsrx_resolutor)),
+                                                                                  extndst_resolutor(std::move(extndst_resolutor)),
+                                                                                  extndst_resolutor(std::move(extndst_resolutor)),
+                                                                                  extndsx_resolutor(std::move(extndsx_resolutor)),
+                                                                                  msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
+                                                                                  msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
+                                                                                  kvfeed_vectorization_sz(kvfeed_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const ForwardPongRequestEvent& event) const noexcept -> exception_t{
 
@@ -3970,71 +3865,29 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardPongRequestEvent * event_arr, size_t sz) noexcept{
 
-                size_t trimmed_leaf_dispatch_sz = std::min(this->leaf_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz));
+                auto internal_resolutor                 = InternalResolutor{};
 
-                size_t trimmed_blkr_dispatch_sz = std::min(this->blkr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz)); 
+                internal_resolutor.leaf_resolutor       = this->leaf_resolutor.get();
+                internal_resolutor.blkr_resolutor       = this->blkr_resolutor.get();
+                internal_resolutor.rstr_resolutor       = this->rstr_resolutor.get();
+                internal_resolutor.mono_resolutor       = this->mono_resolutor.get();
+                internal_resolutor.pair_resolutor       = this->pair_resolutor.get();
+                internal_resolutor.uacm_resolutor       = this->uacm_resolutor.get();
+                internal_resolutor.pacm_resolutor       = this->pacm_resolutor.get();
+                internal_resolutor.crit_resolutor       = this->crit_resolutor.get();
+                internal_resolutor.immu_resolutor       = this->immu_resolutor.get();
+                internal_resolutor.poly_resolutor       = this->poly_resolutor.get();
+                internal_resolutor.extnsrc_resolutor    = this->extnsrc_resolutor.get();
+                internal_resolutor.extnsrx_resolutor    = this->extnsrx_resolutor.get();
+                internal_resolutor.extndst_resolutor    = this->extndst_resolutor.get();
+                internal_resolutor.extndsx_resolutor    = this->extndsx_resolutor.get();
+                internal_resolutor.msgrfwd_resolutor    = this->msgrfwd_resolutor.get();
+                internal_resolutor.msgrbwd_resolutor    = this->msgrbwd_resolutor.get();
 
-                size_t trimmed_rstr_dispatch_sz = std::min(this->rstr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rstr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz));
-
-                size_t trimmed_mono_dispatch_sz = std::min(this->mono_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_resolutor.get(), trimmed_mono_dispatch_sz));
-
-                size_t trimmed_pair_dispatch_sz = std::min(this->pair_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_resolutor.get(), trimmed_pair_dispatch_sz));
-
-                size_t trimmed_uacm_dispatch_sz = std::min(this->uacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz));
-
-                size_t trimmed_pacm_dispatch_sz = std::min(this->pacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz));
-
-                size_t trimmed_crit_dispatch_sz = std::min(this->crit_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_resolutor.get(), trimmed_crit_dispatch_sz));
-
-                size_t trimmed_immu_dispatch_sz = std::min(this->immu_dispatch_sz, sz); 
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_resolutor.get(), trimmed_immu_dispatch_sz));
-
-                size_t trimmed_poly_dispatch_sz = std::min(this->poly_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> poly_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->poly_resolutor.get(), trimmed_poly_dispatch_sz)); 
-
-                size_t trimmed_extnsrc_dispatch_sz = std::min(this->extnsrc_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
-
-                size_t trimmed_extnsrx_dispatch_sz = std::min(this->extnsrx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz));
-
-                size_t trimmed_extndst_dispatch_sz = std::min(this->extndst_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz));
-
-                size_t trimmed_extndsx_dispatch_sz = std::min(this->extndsx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz));
-
-                size_t trimmed_msgrfwd_dispatch_sz = std::min(this->msgrfwd_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
-
-                size_t trimmed_msgrbwd_dispatch_sz = std::min(this->msgrbwd_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
-
-                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
-                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
-                auto rstr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz, rstr_dh_mem.get()));
-                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
-                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
-                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
-                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
-                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
-                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
-                auto poly_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->poly_resolutor.get(), trimmed_poly_dispatch_sz, poly_dh_mem.get())); 
-
-                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
-                auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz, extnsrx_dh_mem.get()));
-                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
-                auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz, extndsx_dh_mem.get()));
-                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
-                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
+                size_t trimmed_kvfeed_vectorization_sz  = std::min(this->kvfeed_vectorization_sz, sz);
+                size_t kvfeed_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_kvfeed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> kvfeed_mem(kvfeed_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_kvfeed_vectorization_sz, kvfeed_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
@@ -4044,99 +3897,126 @@ namespace dg::network_memcommit_resolutor{
                         }
                     }
 
-                    switch (tile_kind.value()){
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].requestee);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind, event_arr[i]);
+                }
+            }
+        
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<tile_kind_t, ForwardPongRequestEvent>{
+
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * leaf_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * blkr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * rstr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * mono_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * pair_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * uacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * pacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * crit_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * immu_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * poly_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * extnsrc_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * extnsrx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * extndst_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * extndsx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * msgrfwd_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPongRequestEvent> * msgrbwd_resolutor;
+
+                void push(const tile_kind_t& tile_kind, std::move_iterator<ForwardPongRequestEvent *> event_arr, size_t sz){
+
+                    switch (tile_kind){
                         case TILE_KIND_LEAF:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
+                            this->leaf_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_BLKR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
+                            this->blkr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_RSTR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(rstr_delivery_handle.get(), event_arr[i]);
+                            this->rstr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MONO:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(mono_delivery_handle.get(), event_arr[i]);
+                            this->mono_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PAIR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pair_delivery_handle.get(), event_arr[i]);
+                            this->pair_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_UACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(uacm_delivery_handle.get(), event_arr[i]);
+                            this->uacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
+                            this->pacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_CRIT:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
+                            this->crit_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_IMMU:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
+                            this->immu_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_POLY:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(poly_delivery_handle.get(), event_arr[i]);
+                            this->poly_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRC:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
+                            this->extnsrc_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
+                            this->extnsrx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDST:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
+                            this->extndst_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDSX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
+                            this->extndsx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRFWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrfwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRBWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrbwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         default:
                         {
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
                             } else{
                                 std::unreachable();
                             }
                         }
                     }
                 }
-            }
+            };
     };
 
     //
@@ -6540,309 +6420,248 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             const std::unique_ptr<ForwardPingPongLeafRequestResolutor> leaf_pingpong_resolutor;
-            const size_t leaf_dispatch_sz;
             const std::unique_ptr<ForwardPingPongBlkrRequestResolutor> blkr_pingpong_resolutor;
-            const size_t blkr_dispatch_sz;
             const std::unique_ptr<ForwardPingPongRstrRequestResolutor> rstr_pingpong_resolutor;
-            const size_t rstr_dispatch_sz;
             const std::unique_ptr<ForwardPingPongMonoRequestResolutor> mono_pingpong_resolutor;
-            const size_t mono_dispatch_sz;
             const std::unique_ptr<ForwardPingPongPairRequestResolutor> pair_pingpong_resolutor;
-            const size_t pair_dispatch_sz;
             const std::unique_ptr<ForwardPingPongUACMRequestResolutor> uacm_pingpong_resolutor;
-            const size_t uacm_dispatch_sz;
             const std::unique_ptr<ForwardPingPongPACMRequestResolutor> pacm_pingpong_resolutor;
-            const size_t pacm_dispatch_sz;
             const std::unique_ptr<ForwardPingPongCritRequestResolutor> crit_pingpong_resolutor;
-            const size_t crit_dispatch_sz;
             const std::unique_ptr<ForwardPingPongImmuRequestResolutor> immu_pingpong_resolutor;
-            const size_t immu_dispatch_sz;
             const std::unique_ptr<ForwardPingPongPolyRequestResolutor> poly_pingpong_resolutor;
-            const size_t poly_dispatch_sz;
             const std::unique_ptr<ForwardPingPongExtnSrcRequestResolutor> extnsrc_pingpong_resolutor;
-            const size_t extnsrc_dispatch_sz;
             const std::unique_ptr<ForwardPingPongExtnSrxRequestResolutor> extnsrx_pingpong_resolutor;
-            const size_t extnsrx_dispatch_sz;
             const std::unique_ptr<ForwardPingPongExtnDstRequestResolutor> extndst_pingpong_resolutor;
-            const size_t extndst_dispatch_sz;
             const std::unique_ptr<ForwardPingPongExtnDsxRequestResolutor> extndsx_pingpong_resolutor;
-            const size_t extndsx_dispatch_sz;
             const std::unique_ptr<ForwardPingPongMsgrFwdRequestResolutor> msgrfwd_pingpong_resolutor;
-            const size_t msgrfwd_dispatch_sz;
             const std::unique_ptr<ForwardPingPongMsgrBwdRequestResolutor> msgrbwd_pingpong_resolutor;
-            const size_t msgrbwd_dispatch_sz;
+            const size_t kvfeed_vectorization_sz;
 
         public:
 
             ForwardPingPongRequestResolutor(std::unique_ptr<ForwardPingPongLeafRequestResolutor> leaf_pingpong_resolutor,
-                                            size_t leaf_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongBlkrRequestResolutor> blkr_pingpong_resolutor,
-                                            size_t blkr_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongRstrRequestResolutor> rstr_pingpong_resolutor,
-                                            size_t rstr_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongMonoRequestResolutor> mono_pingpong_resolutor,
-                                            size_t mono_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongPairRequestResolutor> pair_pingpong_resolutor,
-                                            size_t pair_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongUACMRequestResolutor> uacm_pingpong_resolutor,
-                                            size_t uacm_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongPACMRequestResolutor> pacm_pingpong_resolutor,
-                                            size_t pacm_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongCritRequestResolutor> crit_pingpong_resolutor,
-                                            size_t crit_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongImmuRequestResolutor> immu_pingpong_resolutor,
-                                            size_t immu_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongPolyRequestResolutor> poly_pingpong_resolutor,
-                                            size_t poly_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongExtnSrcRequestResolutor> extnsrc_pingpong_resolutor,
-                                            size_t extnsrc_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongExtnSrxRequestResolutor> extnsrx_pingpong_resolutor,
-                                            size_t extnsrx_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongExtnDstRequestResolutor> extndst_pingpong_resolutor,
-                                            size_t extndst_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongExtnDsxRequestResolutor> extndsx_pingpong_resolutor,
-                                            size_t extndsx_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongMsgrFwdRequestResolutor> msgrfwd_pingpong_resolutor,
-                                            size_t msgrfwd_dispatch_sz,
                                             std::unique_ptr<ForwardPingPongMsgrBwdRequestResolutor> msgrbwd_pingpong_resolutor,
-                                            size_t msgrbwd_dispatch_sz) noexcept: leaf_pingpong_resolutor(std::move(leaf_pingpong_resolutor)),
-                                                                                  leaf_dispatch_sz(leaf_dispatch_sz),
-                                                                                  blkr_pingpong_resolutor(std::move(blkr_pingpong_resolutor)),
-                                                                                  blkr_dispatch_sz(blkr_dispatch_sz),
-                                                                                  rstr_pingpong_resolutor(std::move(rstr_pingpong_resolutor)),
-                                                                                  rstr_dispatch_sz(rstr_dispatch_sz),
-                                                                                  mono_pingpong_resolutor(std::move(mono_pingpong_resolutor)),
-                                                                                  mono_dispatch_sz(mono_dispatch_sz),
-                                                                                  pair_pingpong_resolutor(std::move(pair_pingpong_resolutor)),
-                                                                                  pair_dispatch_sz(pair_dispatch_sz),
-                                                                                  uacm_pingpong_resolutor(std::move(uacm_pingpong_resolutor)),
-                                                                                  uacm_dispatch_sz(uacm_dispatch_sz),
-                                                                                  pacm_pingpong_resolutor(std::move(pacm_pingpong_resolutor)),
-                                                                                  pacm_dispatch_sz(pacm_dispatch_sz),
-                                                                                  crit_pingpong_resolutor(std::move(crit_pingpong_resolutor)),
-                                                                                  crit_dispatch_sz(crit_dispatch_sz),
-                                                                                  immu_pingpong_resolutor(std::move(immu_pingpong_resolutor)),
-                                                                                  immu_dispatch_sz(immu_dispatch_sz),
-                                                                                  poly_pingpong_resolutor(std::move(poly_pingpong_resolutor)),
-                                                                                  poly_dispatch_sz(poly_dispatch_sz),
-                                                                                  extnsrc_pingpong_resolutor(std::move(extnsrc_pingpong_resolutor)),
-                                                                                  extnsrc_dispatch_sz(extnsrc_dispatch_sz),
-                                                                                  extnsrx_pingpong_resolutor(std::move(extnsrx_pingpong_resolutor)),
-                                                                                  extnsrx_dispatch_sz(extnsrx_dispatch_sz),
-                                                                                  extndst_pingpong_resolutor(std::move(extndst_pingpong_resolutor)),
-                                                                                  extndst_dispatch_sz(extndst_dispatch_sz),
-                                                                                  extndsx_pingpong_resolutor(std::move(extndsx_pingpong_resolutor)),
-                                                                                  extndsx_dispatch_sz(extndsx_dispatch_sz),
-                                                                                  msgrfwd_pingpong_resolutor(std::move(msgrfwd_pingpong_resolutor)),
-                                                                                  msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
-                                                                                  msgrbwd_pingpong_resolutor(std::move(msgrbwd_pingpong_resolutor)),
-                                                                                  msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
+                                            size_t kvfeed_vectorization_sz) noexcept: leaf_pingpong_resolutor(std::move(leaf_pingpong_resolutor)),
+                                                                                      blkr_pingpong_resolutor(std::move(blkr_pingpong_resolutor)),
+                                                                                      rstr_pingpong_resolutor(std::move(rstr_pingpong_resolutor)),
+                                                                                      mono_pingpong_resolutor(std::move(mono_pingpong_resolutor)),
+                                                                                      pair_pingpong_resolutor(std::move(pair_pingpong_resolutor)),
+                                                                                      uacm_pingpong_resolutor(std::move(uacm_pingpong_resolutor)),
+                                                                                      pacm_pingpong_resolutor(std::move(pacm_pingpong_resolutor)),
+                                                                                      crit_pingpong_resolutor(std::move(crit_pingpong_resolutor)),
+                                                                                      immu_pingpong_resolutor(std::move(immu_pingpong_resolutor)),
+                                                                                      poly_pingpong_resolutor(std::move(poly_pingpong_resolutor)),
+                                                                                      extnsrc_pingpong_resolutor(std::move(extnsrc_pingpong_resolutor)),
+                                                                                      extnsrx_pingpong_resolutor(std::move(extnsrx_pingpong_resolutor)),
+                                                                                      extndst_pingpong_resolutor(std::move(extndst_pingpong_resolutor)),
+                                                                                      extndsx_pingpong_resolutor(std::move(extndsx_pingpong_resolutor)),
+                                                                                      msgrfwd_pingpong_resolutor(std::move(msgrfwd_pingpong_resolutor)),
+                                                                                      msgrbwd_pingpong_resolutor(std::move(msgrbwd_pingpong_resolutor)),
+                                                                                      kvfeed_vectorization_sz(kvfeed_vectorization_sz){}
 
-        auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
+            auto is_met_dispatch_requirements(const ForwardPingPongRequestEvent& event) const noexcept -> exception_t{
 
-            std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event.requestee);
+                std::expected<tile_kind_t, exception_t> tile_kind = dg::network_tile_member_getsetter::get_tile_kind(event.requestee);
 
-            if (!tile_kind.has_value()){
-                return tile_kind.error();
-            }
-
-            switch (tile_kind.value()){
-                case TILE_KIND_LEAF: [[fallthrough]]
-                case TILE_KIND_BLKR: [[fallthrough]]
-                case TILE_KIND_RSTR: [[fallthrough]]
-                case TILE_KIND_MONO: [[fallthrough]]
-                case TILE_KIND_PAIR: [[fallthrough]]
-                case TILE_KIND_UACM: [[fallthrough]]
-                case TILE_KIND_PACM: [[fallthrough]]
-                case TILE_KIND_CRIT: [[fallthrough]]
-                case TILE_KIND_IMMU: [[fallthrough]]
-                case TILE_KIND_POLY: [[fallthrough]]
-                case TILE_KIND_EXTNSRC: [[fallthrough]]
-                case TILE_KIND_EXTNSRX: [[fallthrough]]
-                case TILE_KIND_EXTNDST: [[fallthrough]]
-                case TILE_KIND_EXTNDSX: [[fallthrough]]
-                case TILE_KIND_MSGRFWD: [[fallthrough]]
-                case TILE_KIND_MSGRBWD:
-                {
-                    return dg::network_exception::SUCCESS;
+                if (!tile_kind.has_value()){
+                    return tile_kind.error();
                 }
-                default:
-                {
-                    return dg::network_exception::BAD_TILE_ACCESS;
-                }
-            }
-        }
-
-        void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
-
-            size_t trimmed_leaf_dispatch_sz     = std::min(this->leaf_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_pingpong_resolutor.get(), trimmed_leaf_dispatch_sz));
-
-            size_t trimmed_blkr_dispatch_sz     = std::min(this->blkr_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_pingpong_resolutor.get(), trimmed_blkr_dispatch_sz)); 
-
-            size_t trimmed_rstr_dispatch_sz     = std::min(this->rstr_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> rstr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->rstr_pingpong_resolutor.get(), trimmed_rstr_dispatch_sz)); 
-
-            size_t trimmed_mono_dispatch_sz     = std::min(this->mono_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_pingpong_resolutor.get(), trimmed_mono_dispatch_sz));
-
-            size_t trimmed_pair_dispatch_sz     = std::min(this->pair_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_pingpong_resolutor.get(), trimmed_pair_dispatch_sz));
-
-            size_t trimmed_uacm_dispatch_sz     = std::min(this->uacm_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_pingpong_resolutor.get(), trimmed_uacm_dispatch_sz));
-
-            size_t trimmed_pacm_dispatch_sz     = std::min(this->pacm_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_pingpong_resolutor.get(), trimmed_pacm_dispatch_sz));
-
-            size_t trimmed_crit_dispatch_sz     = std::min(this->crit_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_pingpong_resolutor.get(), trimmed_crit_dispatch_sz));
-
-            size_t trimmed_immu_dispatch_sz     = std::min(this->immu_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_pingpong_resolutor.get(), trimmed_immu_dispatch_sz));
-
-            size_t trimmed_poly_dispatch_sz     = std::min(this->poly_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> poly_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->poly_pingpong_resolutor.get(), trimmed_poly_dispatch_sz)); 
-
-            size_t trimmed_extnsrc_dispatch_sz  = std::min(this->extnsrc_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_pingpong_resolutor.get(), trimmed_extnsrc_dispatch_sz));
-
-            size_t trimmed_extnsrx_dispatch_sz  = std::min(this->extnsrx_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_pingpong_resolutor.get(), trimmed_extnsrx_dispatch_sz));
-
-            size_t trimmed_extndst_dispatch_sz  = std::min(this->extndst_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_pingpong_resolutor.get(), trimmed_extndst_dispatch_sz));
-
-            size_t trimmed_extndsx_dispatch_sz  = std::min(this->extndsx_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_pingpong_resolutor.get(), trimmed_extndsx_dispatch_sz));
-
-            size_t trimmed_msgrfwd_dispatch_sz  = std::min(this->msgrfwd_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_pingpong_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
-
-            size_t trimmed_msgrbwd_dispatch_sz  = std::min(this->msgrbwd_dispatch_sz, sz);
-            dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_pingpong_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
-
-            auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_pingpong_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
-            auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_pingpong_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
-            auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_pingpong_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
-            auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_pingpong_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
-            auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_pingpong_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
-            auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_pingpong_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
-            auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_pingpong_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
-            auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_pingpong_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
-            auto poly_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->poly_pingpong_resolutor.get(), trimmed_poly_dispatch_sz, poly_dh_mem.get())); 
-
-            auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_pingpong_resolutor.get(), this->extnsrc_dispatch_sz));
-            auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_pingpong_resolutor.get(), this->extnsrx_dispatch_sz));
-            auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_pingpong_resolutor.get(), this->extndst_dispatch_sz));
-            auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_pingpong_resolutor.get(), this->extndsx_dispatch_sz));
-            auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_pingpong_resolutor.get(), this->msgrfwd_dispatch_sz));
-            auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_pingpong_resolutor.get(), this->msgrbwd_dispatch_sz));
-
-            for (size_t i = 0u; i < sz; ++i){
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
-                        std::abort();
-                    }
-                }
-
-                tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].requestee);
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_LEAF:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_BLKR:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_RSTR:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(rstr_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_MONO:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(mono_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_PAIR:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(pair_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_UACM:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(uacm_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_PACM:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_CRIT:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_IMMU:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_POLY:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(poly_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_EXTNSRC:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_EXTNSRX:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_EXTNDST:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_EXTNDSX:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
-                    case TILE_KIND_MSGRFWD:
-                    {
-                        dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
-                        break;
-                    }
+                    case TILE_KIND_LEAF: [[fallthrough]]
+                    case TILE_KIND_BLKR: [[fallthrough]]
+                    case TILE_KIND_RSTR: [[fallthrough]]
+                    case TILE_KIND_MONO: [[fallthrough]]
+                    case TILE_KIND_PAIR: [[fallthrough]]
+                    case TILE_KIND_UACM: [[fallthrough]]
+                    case TILE_KIND_PACM: [[fallthrough]]
+                    case TILE_KIND_CRIT: [[fallthrough]]
+                    case TILE_KIND_IMMU: [[fallthrough]]
+                    case TILE_KIND_POLY: [[fallthrough]]
+                    case TILE_KIND_EXTNSRC: [[fallthrough]]
+                    case TILE_KIND_EXTNSRX: [[fallthrough]]
+                    case TILE_KIND_EXTNDST: [[fallthrough]]
+                    case TILE_KIND_EXTNDSX: [[fallthrough]]
+                    case TILE_KIND_MSGRFWD: [[fallthrough]]
                     case TILE_KIND_MSGRBWD:
                     {
-                        dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
-                        break;                        
+                        return dg::network_exception::SUCCESS;
                     }
                     default:
                     {
-                        if constexpr(DEBUG_MODE_FLAG){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        } else{
-                            std::unreachable();
-                        }
+                        return dg::network_exception::BAD_TILE_ACCESS;
                     }
                 }
             }
-        }
+
+            void push(ForwardPingPongRequestEvent * event_arr, size_t sz) noexcept{
+
+                auto internal_resolutor                 = InternalResolutor{};
+
+                internal_resolutor.leaf_resolutor       = this->leaf_resolutor.get();
+                internal_resolutor.blkr_resolutor       = this->blkr_resolutor.get();
+                internal_resolutor.rstr_resolutor       = this->rstr_resolutor.get();
+                internal_resolutor.mono_resolutor       = this->mono_resolutor.get();
+                internal_resolutor.pair_resolutor       = this->pair_resolutor.get();
+                internal_resolutor.uacm_resolutor       = this->uacm_resolutor.get();
+                internal_resolutor.pacm_resolutor       = this->pacm_resolutor.get();
+                internal_resolutor.crit_resolutor       = this->crit_resolutor.get();
+                internal_resolutor.immu_resolutor       = this->immu_resolutor.get();
+                internal_resolutor.poly_resolutor       = this->poly_resolutor.get();
+                internal_resolutor.extnsrc_resolutor    = this->extnsrc_resolutor.get();
+                internal_resolutor.extnsrx_resolutor    = this->extnsrx_resolutor.get();
+                internal_resolutor.extndst_resolutor    = this->extndst_resolutor.get();
+                internal_resolutor.extndsx_resolutor    = this->extndsx_resolutor.get();
+                internal_resolutor.msgrfwd_resolutor    = this->msgrfwd_resolutor.get();
+                internal_resolutor.msgrbwd_resolutor    = this->msgrbwd_resolutor.get();
+
+                size_t trimmed_kvfeed_vectorization_sz  = std::min(this->kvfeed_vectorization_sz, sz);
+                size_t kvfeed_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_kvfeed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> kvfeed_mem(kvfeed_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_kvfeed_vectorization_sz, kvfeed_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (exception_t err = this->is_met_dispatch_requirements(event_arr[i]); dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
+                            std::abort();
+                        }
+                    }
+
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].requestee);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind, event_arr[i]);
+                }
+            }
+
+        private:
+
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<tile_kind_t, ForwardPingPongRequestEvent>{
+
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * leaf_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * blkr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * rstr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * mono_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * pair_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * uacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * pacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * crit_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * immu_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * poly_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * extnsrc_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * extnsrx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * extndst_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * extndsx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * msgrfwd_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardPingPongRequestEvent> * msgrbwd_resolutor;
+
+                void push(const tile_kind_t& tile_kind, std::move_iterator<ForwardPingPongRequestEvent *> event_arr, size_t sz){
+
+                    switch (tile_kind){
+                        case TILE_KIND_LEAF:
+                        {
+                            this->leaf_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_BLKR:
+                        {
+                            this->blkr_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_RSTR:
+                        {
+                            this->rstr_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_MONO:
+                        {
+                            this->mono_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_PAIR:
+                        {
+                            this->pair_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_UACM:
+                        {
+                            this->uacm_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_PACM:
+                        {
+                            this->pacm_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_CRIT:
+                        {
+                            this->crit_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_IMMU:
+                        {
+                            this->immu_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_POLY:
+                        {
+                            this->poly_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_EXTNSRC:
+                        {
+                            this->extnsrc_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_EXTNSRX:
+                        {
+                            this->extnsrx_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_EXTNDST:
+                        {
+                            this->extndst_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_EXTNDSX:
+                        {
+                            this->extndsx_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_MSGRFWD:
+                        {
+                            this->msgrfwd_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_MSGRBWD:
+                        {
+                            this->msgrbwd_resolutor->push(event_arr, sz);
+                            break;
+                        }
+                        default:
+                        {
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    }
+                }
+            };
     };
 
     //
@@ -7359,26 +7178,26 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            const std::shared_ptr<CronSignalResolutor> cron_resolutor;
+            const std::unique_ptr<CronSignalResolutor> cron_resolutor;
             const size_t cron_dispatch_sz;
-            const std::shared_ptr<SmphSignalResolutor> smph_resolutor;
+            const std::unique_ptr<SmphSignalResolutor> smph_resolutor;
             const size_t smph_dispatch_sz;
-            const std::shared_ptr<FrequencizedSmphSignalResolutor> fsmp_resolutor;
+            const std::unique_ptr<FsmpSignalResolutor> fsmp_resolutor;
             const size_t fsmp_dispatch_sz;
-        
+
         public:
 
-            AggregationSignalResolutor(std::shared_ptr<CronSignalResolutor> cron_resolutor,
+            AggregationSignalResolutor(std::unique_ptr<CronSignalResolutor> cron_resolutor,
                                        size_t cron_dispatch_sz,
-                                       std::shared_ptr<SmphSignalResolutor> smph_resolutor,
+                                       std::unique_ptr<SmphSignalResolutor> smph_resolutor,
                                        size_t smph_dispatch_sz,
-                                       std::shared_ptr<FrequencizedSmphSignalResolutor> fsmp_resolutor,
+                                       std::unique_ptr<FsmpSignalResolutor> fsmp_resolutor,
                                        size_t fsmp_dispatch_sz) noexcept: cron_resolutor(std::move(cron_resolutor)),
-                                                                           cron_dispatch_sz(cron_dispatch_sz),
-                                                                           smph_resolutor(std::move(smph_resolutor)),
-                                                                           smph_dispatch_sz(smph_dispatch_sz),
-                                                                           fsmp_resolutor(fsmp_resolutor),
-                                                                           fsmp_dispatch_sz(fsmp_dispatch_sz){}
+                                                                          cron_dispatch_sz(cron_dispatch_sz),
+                                                                          smph_resolutor(std::move(smph_resolutor)),
+                                                                          smph_dispatch_sz(smph_dispatch_sz),
+                                                                          fsmp_resolutor(fsmp_resolutor),
+                                                                          fsmp_dispatch_sz(fsmp_dispatch_sz){}
 
             auto is_met_dispatch_requirements(const VirtualSignalAggregationEvent& event) const noexcept -> exception_t{
 
@@ -7481,16 +7300,9 @@ namespace dg::network_memcommit_resolutor{
         }
     }
 
-    //everything up to this point is correct, in terms of performances
-    //what happens after this point is very hard to do
-    //first, we need to make sure that we are dispatching at least 1MB of WO -> the asynchronous device
-    //we are averaging around 1TB/ 1 million memory orderings
-    //as for combinatorial operations (this is the intercourse operations, we arent doing linears), we have to avg around 10MB/ WO -> the asynchronous device
+    //
 
-    //we know that the problem of finding the optimal storage (Taylor Series pattern) is a programming program + finding problem
-    //             and the problem of "parroting" the projection space is the search problem
-
-    //we'll thru the forward do + backward do + ping + pong + pingpong for all the trivial tiles for now
+    //clear
     class ForwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         public:
@@ -7973,7 +7785,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class ForwardDoMonoSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+    class ForwardDoMonoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
 
@@ -7987,19 +7799,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardDoMonoSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                           std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                           std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                           size_t request_delivery_capacity,
-                                           size_t radxfetch_vectorization_sz,
-                                           size_t region_vectorization_sz,
-                                           size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                      cuda_async_device(std::move(cuda_async_device)),
-                                                                                      host_async_device(std::move(host_async_device)),
-                                                                                      request_delivery_capacity(request_delivery_capacity),
-                                                                                      radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                      region_vectorization_sz(region_vectorization_sz),
-                                                                                      forward_vectorization_sz(forward_vectorization_sz){}
+            ForwardDoMonoSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                         std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                         std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                         size_t request_delivery_capacity,
+                                         size_t radxfetch_vectorization_sz,
+                                         size_t region_vectorization_sz,
+                                         size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                    cuda_async_device(std::move(cuda_async_device)),
+                                                                                    host_async_device(std::move(host_async_device)),
+                                                                                    request_delivery_capacity(request_delivery_capacity),
+                                                                                    radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                    region_vectorization_sz(region_vectorization_sz),
+                                                                                    forward_vectorization_sz(forward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -8406,7 +8218,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class ForwardDoPairSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+    class ForwardDoPairSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
 
@@ -8420,19 +8232,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardDoPairSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                           std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                           std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                           size_t request_delivery_capacity,
-                                           size_t radxfetch_vectorization_sz,
-                                           size_t region_vectorization_sz,
-                                           size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                      cuda_async_device(std::move(cuda_async_device)),
-                                                                                      host_async_device(std::move(host_async_device)),
-                                                                                      request_delivery_capacity(request_delivery_capacity),
-                                                                                      radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                      region_vectorization_sz(region_vectorization_sz),
-                                                                                      forward_vectorization_sz(forward_vectorization_sz){}
+            ForwardDoPairSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                         std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                         std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                         size_t request_delivery_capacity,
+                                         size_t radxfetch_vectorization_sz,
+                                         size_t region_vectorization_sz,
+                                         size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                    cuda_async_device(std::move(cuda_async_device)),
+                                                                                    host_async_device(std::move(host_async_device)),
+                                                                                    request_delivery_capacity(request_delivery_capacity),
+                                                                                    radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                    region_vectorization_sz(region_vectorization_sz),
+                                                                                    forward_vectorization_sz(forward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -8939,24 +8751,7 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    //we dont have to argue why this guy happens
-    //the problem is that we are on CUDA, CUDA acquisition is expensive, so we have to be on a memregion to make this happen
-    //a memregion contains roughly 1024 tiles, so every memregion acquisition is potentially a memory transfer, which is reduced by 1024 folds, which is the RAM BUS rate
-    //we'll move to a pair implementation ONLY, because the mono logic is hindering this very badly
-    //OK, we solved the problem of memregion dispatches, we haven't solved the problem of cron jobs (we dont even know how to implement this without literally expoding the core, it's very hard to spam the memregion press)
-
-    //poly can be immu + leaf + pair + mono
-
-    //pair + mono -> polypair
-    //immu + leaf will disable certain backprop getter + setter
-
-    //all in all, poly will be what we need, used 99% of the time
-    //we'll be performing taylor series on 64x64 tiles (we'd call this intercourse, that's the sole operation that we'd use, not linear, not add, not multiply, not softmax or whatever)
-    //we'll be row-major people row x row for fast forward
-
-    //we'll be performing search + convert to gradient semantic space + inch in the direction
-    //we have solved the problem of synchronizations (backprop + friends)
-
+    //clear
     class ForwardDoPolySignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
@@ -11705,7 +11500,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //optimizables
-    class ForwardDoMsgrFwdSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
+    class ForwardDoMsgrFwdSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>{
 
         private:
 
@@ -11720,21 +11515,21 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            ForwardDoMsgrFwdSingalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                              std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<EndUserPacket>> eu_packet_box,
-                                              std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                              size_t request_delivery_capacity,
-                                              size_t eu_delivery_capacity,
-                                              size_t radxfetch_vectorization_sz,
-                                              size_t region_vectorization_sz,
-                                              size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                         eu_packet_box(std::move(eu_packet_box)),
-                                                                                         host_async_device(std::move(host_async_device)),
-                                                                                         request_delivery_capacity(request_delivery_capacity),
-                                                                                         eu_delivery_capacity(eu_delivery_capacity),
-                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                         region_vectorization_sz(region_vectorization_sz),
-                                                                                         forward_vectorization_sz(forward_vectorization_sz){}
+            ForwardDoMsgrFwdSingalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                            std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<EndUserPacket>> eu_packet_box,
+                                            std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                            size_t request_delivery_capacity,
+                                            size_t eu_delivery_capacity,
+                                            size_t radxfetch_vectorization_sz,
+                                            size_t region_vectorization_sz,
+                                            size_t forward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                       eu_packet_box(std::move(eu_packet_box)),
+                                                                                       host_async_device(std::move(host_async_device)),
+                                                                                       request_delivery_capacity(request_delivery_capacity),
+                                                                                       eu_delivery_capacity(eu_delivery_capacity),
+                                                                                       radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                       region_vectorization_sz(region_vectorization_sz),
+                                                                                       forward_vectorization_sz(forward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -12610,104 +12405,59 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> leaf_resolutor;
-            const size_t leaf_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> blkr_resolutor;
-            const size_t blkr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> rstr_resolutor;
-            const size_t rstr_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> mono_resolutor;
-            const size_t mono_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> pair_resolutor;
-            const size_t pair_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> uacm_resolutor;
-            const size_t uacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> pacm_resolutor;
-            const size_t pacm_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> crit_resolutor;
-            const size_t crit_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> immu_resolutor;
-            const size_t immu_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> poly_resolutor;
-            const size_t poly_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrc_resolutor;
-            const size_t extnsrc_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrx_resolutor;
-            const size_t extnsrx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndst_resolutor;
-            const size_t extndst_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndsx_resolutor;
-            const size_t extndsx_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrfwd_resolutor;
-            const size_t msgrfwd_dispatch_sz;
-            const std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrbwd_resolutor;
-            const size_t msgrbwd_dispatch_sz;
+            const std::unique_ptr<ForwardDoLeafSignalResolutor> leaf_resolutor;
+            const std::unique_ptr<ForwardDoBlkrSignalResolutor> blkr_resolutor;
+            const std::unique_ptr<ForwardDoRstrSignalResolutor> rstr_resolutor;
+            const std::unique_ptr<ForwardDoMonoSignalResolutor> mono_resolutor;
+            const std::unique_ptr<ForwardDoPairSignalResolutor> pair_resolutor;
+            const std::unique_ptr<ForwardDoUACMSignalResolutor> uacm_resolutor;
+            const std::unique_ptr<ForwardDoPACMSignalResolutor> pacm_resolutor;
+            const std::unique_ptr<ForwardDoCritSignalResolutor> crit_resolutor;
+            const std::unique_ptr<ForwardDoImmuSignalResolutor> immu_resolutor;
+            const std::unique_ptr<ForwardDoPolySignalResolutor> poly_resolutor;
+            const std::unique_ptr<ForwardDoExtnSrcSignalResolutor> extnsrc_resolutor;
+            const std::unique_ptr<ForwardDoExtnSrxSignalResolutor> extnsrx_resolutor;
+            const std::unique_ptr<ForwardDoExtnDstSignalResolutor> extndst_resolutor;
+            const std::unique_ptr<ForwardDoExtnDsxSignalResolutor> extndsx_resolutor;
+            const std::unique_ptr<ForwardDoMsgrFwdSignalResolutor> msgrfwd_resolutor;
+            const std::unique_ptr<ForwardDoMsgrBwdSignalResolutor> msgrbwd_resolutor;
+            const size_t kvfeed_vectorization_sz;
 
         public:
 
-            ForwardDoSignalResolutor(std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> leaf_resolutor,
-                                     size_t leaf_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> blkr_resolutor,
-                                     size_t blkr_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> rstr_resolutor,
-                                     size_t rstr_dispatch_sz, 
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> mono_resolutor,
-                                     size_t mono_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> pair_resolutor,
-                                     size_t pair_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> uacm_resolutor,
-                                     size_t uacm_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> pacm_resolutor,
-                                     size_t pacm_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> crit_resolutor,
-                                     size_t crit_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> immu_resolutor,
-                                     size_t immu_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> poly_resolutor,
-                                     size_t poly_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrc_resolutor,
-                                     size_t extnsrc_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extnsrx_resolutor,
-                                     size_t extnsrx_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndst_resolutor,
-                                     size_t extndst_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> extndsx_resolutor,
-                                     size_t extndsx_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrfwd_resolutor,
-                                     size_t msgrfwd_dispatch_sz,
-                                     std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent>> msgrbwd_resolutor,
-                                     size_t msgrbwd_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
-                                                                           leaf_dispatch_sz(leaf_dispatch_sz),
-                                                                           blkr_resolutor(std::move(blkr_resolutor)),
-                                                                           blkr_dispatch_sz(blkr_dispatch_sz),
-                                                                           rstr_resolutor(std::move(rstr_resolutor)),
-                                                                           rstr_dispatch_sz(rstr_dispatch_sz),
-                                                                           mono_resolutor(std::move(mono_resolutor)),
-                                                                           mono_dispatch_sz(mono_dispatch_sz),
-                                                                           pair_resolutor(std::move(pair_resolutor)),
-                                                                           pair_dispatch_sz(pair_dispatch_sz),
-                                                                           uacm_resolutor(std::move(uacm_resolutor)),
-                                                                           uacm_dispatch_sz(uacm_dispatch_sz),
-                                                                           pacm_resolutor(std::move(pacm_resolutor)),
-                                                                           pacm_dispatch_sz(pacm_dispatch_sz),
-                                                                           crit_resolutor(std::move(crit_resolutor)),
-                                                                           crit_dispatch_sz(crit_dispatch_sz),
-                                                                           immu_resolutor(std::move(immu_resolutor)),
-                                                                           immu_dispatch_sz(immu_dispatch_sz),
-                                                                           poly_resolutor(std::move(poly_resolutor)),
-                                                                           poly_dispatch_sz(poly_dispatch_sz),
-                                                                           extnsrc_resolutor(std::move(extnsrc_resolutor)),
-                                                                           extnsrc_dispatch_sz(extnsrc_dispatch_sz),
-                                                                           extnsrx_resolutor(std::move(extnsrx_resolutor)),
-                                                                           extnsrx_dispatch_sz(extnsrx_dispatch_sz),
-                                                                           extndst_resolutor(std::move(extndst_resolutor)),
-                                                                           extndst_dispatch_sz(extndst_dispatch_sz),
-                                                                           extndsx_resolutor(std::move(extndsx_resolutor)),
-                                                                           extndsx_dispatch_sz(extndsx_dispatch_sz),
-                                                                           msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
-                                                                           msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
-                                                                           msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
-                                                                           msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
+            ForwardDoSignalResolutor(std::unique_ptr<ForwardDoLeafSignalResolutor> leaf_resolutor,
+                                     std::unique_ptr<ForwardDoBlkrSignalResolutor> blkr_resolutor,
+                                     std::unique_ptr<ForwardDoRstrSignalResolutor> rstr_resolutor,
+                                     std::unique_ptr<ForwardDoMonoSignalResolutor> mono_resolutor,
+                                     std::unique_ptr<ForwardDoPairSignalResolutor> pair_resolutor,
+                                     std::unique_ptr<ForwardDoUACMSignalResolutor> uacm_resolutor,
+                                     std::unique_ptr<ForwardDoPACMSignalResolutor> pacm_resolutor,
+                                     std::unique_ptr<ForwardDoCritSignalResolutor> crit_resolutor,
+                                     std::unique_ptr<ForwardDoImmuSignalResolutor> immu_resolutor,
+                                     std::unique_ptr<ForwardDoPolySignalResolutor> poly_resolutor,
+                                     std::unique_ptr<ForwardDoExtnSrcSignalResolutor> extnsrc_resolutor,
+                                     std::unique_ptr<ForwardDoExtnSrxSignalResolutor> extnsrx_resolutor,
+                                     std::unique_ptr<ForwardDoExtnDstSignalResolutor> extndst_resolutor,
+                                     std::unique_ptr<ForwardDoExtnDsxSignalResolutor> extndsx_resolutor,
+                                     std::unique_ptr<ForwardDoMsgrFwdSignalResolutor> msgrfwd_resolutor,
+                                     std::unique_ptr<ForwardDoMsgrBwdSignalResolutor> msgrbwd_resolutor,
+                                     size_t kvfeed_vectorization_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
+                                                                               blkr_resolutor(std::move(blkr_resolutor)),
+                                                                               rstr_resolutor(std::move(rstr_resolutor)),
+                                                                               mono_resolutor(std::move(mono_resolutor)),
+                                                                               pair_resolutor(std::move(pair_resolutor)),
+                                                                               uacm_resolutor(std::move(uacm_resolutor)),
+                                                                               pacm_resolutor(std::move(pacm_resolutor)),
+                                                                               crit_resolutor(std::move(crit_resolutor)),
+                                                                               immu_resolutor(std::move(immu_resolutor)),
+                                                                               poly_resolutor(std::move(poly_resolutor)),
+                                                                               extnsrc_resolutor(std::move(extnsrc_resolutor)),
+                                                                               extnsrx_resolutor(std::move(extnsrx_resolutor)),
+                                                                               extndst_resolutor(std::move(extndst_resolutor)),
+                                                                               extndsx_resolutor(std::move(extndsx_resolutor)),
+                                                                               msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
+                                                                               msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
+                                                                               kvfeed_vectorization_sz(kvfeed_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const ForwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -12746,71 +12496,29 @@ namespace dg::network_memcommit_resolutor{
 
             void push(ForwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                size_t trimmed_leaf_dispatch_sz     = std::min(this->leaf_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz)); 
+                auto internal_resolutor                 = InternalResolutor{};
 
-                size_t trimmed_blkr_dispatch_sz     = std::min(this->blkr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz));
+                internal_resolutor.leaf_resolutor       = this->leaf_resolutor.get();
+                internal_resolutor.blkr_resolutor       = this->blkr_resolutor.get();
+                internal_resolutor.rstr_resolutor       = this->rstr_resolutor.get();
+                internal_resolutor.mono_resolutor       = this->mono_resolutor.get();
+                internal_resolutor.pair_resolutor       = this->pair_resolutor.get();
+                internal_resolutor.uacm_resolutor       = this->uacm_resolutor.get();
+                internal_resolutor.pacm_resolutor       = this->pacm_resolutor.get();
+                internal_resolutor.crit_resolutor       = this->crit_resolutor.get();
+                internal_resolutor.immu_resolutor       = this->immu_resolutor.get();
+                internal_resolutor.poly_resolutor       = this->poly_resolutor.get();
+                internal_resolutor.extnsrc_resolutor    = this->extnsrc_resolutor.get();
+                internal_resolutor.extnsrx_resolutor    = this->extnsrx_resolutor.get();
+                internal_resolutor.extndst_resolutor    = this->extndst_resolutor.get();
+                internal_resolutor.extndsx_resolutor    = this->extndsx_resolutor.get();
+                internal_resolutor.msgrfwd_resolutor    = this->msgrfwd_resolutor.get();
+                internal_resolutor.msgrbwd_resolutor    = this->msgrbwd_resolutor.get();
 
-                size_t trimmed_rstr_dispatch_sz     = std::min(this->rstr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rstr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz));
-
-                size_t trimmed_mono_dispatch_sz     = std::min(this->mono_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_resolutor.get(), trimmed_mono_dispatch_sz));
-
-                size_t trimmed_pair_dispatch_sz     = std::min(this->pair_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_resolutor.get(), trimmed_pair_dispatch_sz));
-
-                size_t trimmed_uacm_dispatch_sz     = std::min(this->uacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz));
-
-                size_t trimmed_pacm_dispatch_sz     = std::min(this->pacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz));
-
-                size_t trimmed_crit_dispatch_sz     = std::min(this->crit_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_resolutor.get(), trimmed_crit_dispatch_sz));
-
-                size_t trimmed_immu_dispatch_sz     = std::min(this->immu_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_resolutor.get(), trimmed_immu_dispatch_sz));
-
-                size_t trimmed_poly_dispatch_sz     = std::min(this->poly_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> poly_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->poly_resolutor.get(), trimmed_poly_dispatch_sz));
-
-                size_t trimmed_extnsrc_dispatch_sz  = std::min(this->extnsrc_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
-
-                size_t trimmed_extnsrx_dispatch_sz  = std::min(this->extnsrx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz));
-
-                size_t trimmed_extndst_dispatch_sz  = std::min(this->extndst_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz));
-
-                size_t trimmed_extndsx_dispatch_sz  = std::min(this->extndsx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz));
-
-                size_t trimmed_msgrfwd_dispatch_sz  = std::min(this->msgrfwd_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
-
-                size_t trimmed_msgrbwd_dispatch_sz  = std::min(this->msgrbwd_dispatch_sz, sz); 
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
-
-                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
-                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
-                auto rstr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz, rstr_dh_mem.get()));
-                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
-                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
-                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
-                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
-                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
-                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
-                auto poly_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->poly_resolutor.get(), trimmed_poly_dispatch_sz, poly_dh_mem.get()));
-
-                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
-                auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz, extnsrx_dh_mem.get()));
-                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
-                auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz, extndsx_dh_mem.get()));
-                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
-                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
+                size_t trimmed_kvfeed_vectorization_sz  = std::min(this->kvfeed_vectorization_sz, sz);
+                size_t kvfeed_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_kvfeed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> kvfeed_mem(kvfeed_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_kvfeed_vectorization_sz, kvfeed_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
@@ -12820,107 +12528,132 @@ namespace dg::network_memcommit_resolutor{
                         }
                     }
 
-                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst); 
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind, event_arr[i]);
+                }
+            }
+        
+        private:
+            
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<tile_kind_t, ForwardDoSignalEvent>{
+
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * leaf_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * blkr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * rstr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * mono_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * pair_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * uacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * pacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * crit_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * immu_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * poly_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * extnsrc_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * extnsrx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * extndst_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * extndsx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * msgrfwd_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<ForwardDoSignalEvent> * msgrbwd_resolutor;
+
+                void push(const tile_kind_t& tile_kind, std::move_iterator<ForwardDoSignalEvent *> event_arr, size_t sz){
 
                     switch (tile_kind){
                         case TILE_KIND_LEAF:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
+                            this->leaf_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_BLKR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
+                            this->blkr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_RSTR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(rstr_delivery_handle.get(), event_arr[i]);
+                            this->rstr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MONO:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(mono_delivery_handle.get(), event_arr[i]);
+                            this->mono_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PAIR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pair_delivery_handle.get(), event_arr[i]);
+                            this->pair_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_UACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(uacm_delivery_handle.get(), event_arr[i]);
+                            this->uacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
+                            this->pacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_CRIT:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
+                            this->crit_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_IMMU:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
+                            this->immu_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_POLY:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(poly_delivery_handle.get(), event_arr[i]);
+                            this->poly_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRC:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
+                            this->extnsrc_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
+                            this->extnsrx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDST:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
+                            this->extndst_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDSX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
+                            this->extndsx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRFWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrfwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRBWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrbwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         default:
                         {
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
                             } else{
                                 std::unreachable();
                             }
                         }
-                    };
+                    }
                 }
-            }
+            };
     };
 
     //
 
     //clear
-    class BackwardDoLeafSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -12932,15 +12665,15 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoLeafSignalResolutorV2(std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                            std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                            size_t radxfetch_vectorization_sz,
-                                            size_t region_vectorization_sz,
-                                            size_t gradupdate_vectorization_sz) noexcept: cuda_async_device(std::move(cuda_async_device)),
-                                                                                          host_async_device(std::move(host_async_device)),
-                                                                                          radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                          region_vectorization_sz(region_vectorization_sz),
-                                                                                          gradupdate_vectorization_sz(gradupdate_vectorization_sz){}
+            BackwardDoLeafSignalResolutor(std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                          std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                          size_t radxfetch_vectorization_sz,
+                                          size_t region_vectorization_sz,
+                                          size_t gradupdate_vectorization_sz) noexcept: cuda_async_device(std::move(cuda_async_device)),
+                                                                                        host_async_device(std::move(host_async_device)),
+                                                                                        radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                        region_vectorization_sz(region_vectorization_sz),
+                                                                                        gradupdate_vectorization_sz(gradupdate_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -13294,7 +13027,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class BackwardDoMonoSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoMonoSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -13308,19 +13041,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoMonoSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                            std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                            std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                            size_t request_delivery_capacity,
-                                            size_t radxfetch_vectorization_sz,
-                                            size_t region_vectorization_sz,
-                                            size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                        cuda_async_device(std::move(cuda_async_device)),
-                                                                                        host_async_device(std::move(host_async_device)),
-                                                                                        request_delivery_capacity(request_delivery_capacity),
-                                                                                        radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                        region_vectorization_sz(region_vectorization_sz),
-                                                                                        backward_vectorization_sz(backward_vectorization_sz){}
+            BackwardDoMonoSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                          std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                          std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                          size_t request_delivery_capacity,
+                                          size_t radxfetch_vectorization_sz,
+                                          size_t region_vectorization_sz,
+                                          size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                      cuda_async_device(std::move(cuda_async_device)),
+                                                                                      host_async_device(std::move(host_async_device)),
+                                                                                      request_delivery_capacity(request_delivery_capacity),
+                                                                                      radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                      region_vectorization_sz(region_vectorization_sz),
+                                                                                      backward_vectorization_sz(backward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -13759,7 +13492,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class BackwardDoBlkrSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoBlkrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         public:
 
@@ -13780,12 +13513,12 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    class BackwardDoRstrSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoRstrSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
     };
 
     //clear
-    class BackwardDoPairSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoPairSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -13799,19 +13532,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoPairSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>> request_box,
-                                            std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                            std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                            size_t request_delivery_capacity,
-                                            size_t radxfetch_vectorization_sz,
-                                            size_t region_vectorization_sz,
-                                            size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                        cuda_async_device(std::move(cuda_async_device)),
-                                                                                        host_async_device(std::move(host_async_device)),
-                                                                                        request_delivery_capacity(request_delivery_capacity),
-                                                                                        radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                        region_vectorization_sz(region_vectorization_sz),
-                                                                                        backward_vectorization_sz(backward_vectorization_sz){}
+            BackwardDoPairSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<uma_ptr_t>> request_box,
+                                          std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                          std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                          size_t request_delivery_capacity,
+                                          size_t radxfetch_vectorization_sz,
+                                          size_t region_vectorization_sz,
+                                          size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                      cuda_async_device(std::move(cuda_async_device)),
+                                                                                      host_async_device(std::move(host_async_device)),
+                                                                                      request_delivery_capacity(request_delivery_capacity),
+                                                                                      radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                      region_vectorization_sz(region_vectorization_sz),
+                                                                                      backward_vectorization_sz(backward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -16470,7 +16203,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class BackwardDoExtnSrcSignalResolutorV2: public virtual dg::network_produer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoExtnSrcSignalResolutor: public virtual dg::network_produer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -16484,19 +16217,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoExtnSrcSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                               std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                               std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                               size_t request_delivery_capacity,
-                                               size_t radxfetch_vectorization_sz,
-                                               size_t region_vectorization_sz,
-                                               size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                           cuda_async_device(std::move(cuda_async_device)),
-                                                                                           host_async_device(std::move(host_async_device)),
-                                                                                           request_delivery_capacity(request_delivery_capacity),
-                                                                                           radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                           region_vectorization_sz(region_vectorization_sz),
-                                                                                           backward_vectorization_sz(backward_vectorization_sz){}
+            BackwardDoExtnSrcSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                             std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                             size_t request_delivery_capacity,
+                                             size_t radxfetch_vectorization_sz,
+                                             size_t region_vectorization_sz,
+                                             size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                         cuda_async_device(std::move(cuda_async_device)),
+                                                                                         host_async_device(std::move(host_async_device)),
+                                                                                         request_delivery_capacity(request_delivery_capacity),
+                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                         region_vectorization_sz(region_vectorization_sz),
+                                                                                         backward_vectorization_sz(backward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -16956,7 +16689,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class BackwardDoExtnDstSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoExtnDstSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -16970,19 +16703,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoExtnDstSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_event_t>>> request_box,
-                                               std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
-                                               std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                               size_t request_delivery_capacity,
-                                               size_t radxfetch_vectorization_sz,
-                                               size_t region_vectorization_sz,
-                                               size_t gradmove_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                           uma_ip_retriever(std::move(uma_ip_retriever)),
-                                                                                           host_async_device(std::move(host_async_device)),
-                                                                                           request_delivery_capacity(request_delivery_capacity),
-                                                                                           radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                           region_vectorization_sz(region_vectorization_sz),
-                                                                                           gradmove_vectorization_sz(gradmove_vectorization_sz){}
+            BackwardDoExtnDstSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<Request<external_virtual_memory_event_t>>> request_box,
+                                             std::shared_ptr<UnifiedMemoryIPRetrieverInterface> uma_ip_retriever,
+                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                             size_t request_delivery_capacity,
+                                             size_t radxfetch_vectorization_sz,
+                                             size_t region_vectorization_sz,
+                                             size_t gradmove_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                         uma_ip_retriever(std::move(uma_ip_retriever)),
+                                                                                         host_async_device(std::move(host_async_device)),
+                                                                                         request_delivery_capacity(request_delivery_capacity),
+                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                         region_vectorization_sz(region_vectorization_sz),
+                                                                                         gradmove_vectorization_sz(gradmove_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -17768,7 +17501,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class BackwardDoMsgrFwdSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoMsgrFwdSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -17782,19 +17515,19 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoMsgrFwdSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                               std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                               std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
-                                               size_t request_delivery_capacity,
-                                               size_t radxfetch_vectorization_sz,
-                                               size_t region_vectorization_sz,
-                                               size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                           host_async_device(std::move(host_async_device)),
-                                                                                           cuda_async_device(std::move(cuda_async_device)),
-                                                                                           request_delivery_capacity(request_delivery_capacity),
-                                                                                           radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                           region_vectorization_sz(region_vectorization_sz),
-                                                                                           backward_vectorization_sz(backward_vectorization_sz){}
+            BackwardDoMsgrFwdSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                             std::shared_ptr<dg::network_cuda_controller::AsynchronousDeviceInterface> cuda_async_device,
+                                             size_t request_delivery_capacity,
+                                             size_t radxfetch_vectorization_sz,
+                                             size_t region_vectorization_sz,
+                                             size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                         host_async_device(std::move(host_async_device)),
+                                                                                         cuda_async_device(std::move(cuda_async_device)),
+                                                                                         request_delivery_capacity(request_delivery_capacity),
+                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                         region_vectorization_sz(region_vectorization_sz),
+                                                                                         backward_vectorization_sz(backward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -18231,7 +17964,7 @@ namespace dg::network_memcommit_resolutor{
     };
 
     //clear
-    class BackwardDoMsgrBwdSignalResolutorV2: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
+    class BackwardDoMsgrBwdSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent>{
 
         private:
 
@@ -18246,21 +17979,21 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            BackwardDoMsgrBwdSignalResolutorV2(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                               std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<EndUserPacket>> eu_packet_box,
-                                               std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
-                                               size_t request_delivery_capacity,
-                                               size_t eu_packet_delivery_capacity,
-                                               size_t radxfetch_vectorization_sz,
-                                               size_t region_vectorization_sz,
-                                               size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                                           eu_packet_box(std::move(eu_packet_box)),
-                                                                                           host_async_device(std::move(host_async_device)),
-                                                                                           request_delivery_capacity(request_delivery_capacity),
-                                                                                           eu_packet_delivery_capacity(eu_packet_delivery_capacity),
-                                                                                           radxfetch_vectorization_sz(radxfetch_vectorization_sz),
-                                                                                           region_vectorization_sz(region_vectorization_sz),
-                                                                                           backward_vectorization_sz(backward_vectorization_sz){}
+            BackwardDoMsgrBwdSignalResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                                             std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<EndUserPacket>> eu_packet_box,
+                                             std::shared_ptr<dg::network_host_asynchronous::AsynchronousDeviceInterface> host_async_device,
+                                             size_t request_delivery_capacity,
+                                             size_t eu_packet_delivery_capacity,
+                                             size_t radxfetch_vectorization_sz,
+                                             size_t region_vectorization_sz,
+                                             size_t backward_vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                                                         eu_packet_box(std::move(eu_packet_box)),
+                                                                                         host_async_device(std::move(host_async_device)),
+                                                                                         request_delivery_capacity(request_delivery_capacity),
+                                                                                         eu_packet_delivery_capacity(eu_packet_delivery_capacity),
+                                                                                         radxfetch_vectorization_sz(radxfetch_vectorization_sz),
+                                                                                         region_vectorization_sz(region_vectorization_sz),
+                                                                                         backward_vectorization_sz(backward_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -18733,104 +18466,59 @@ namespace dg::network_memcommit_resolutor{
 
         private:
 
-            const std::unique_ptr<BackwardDoLeafSignalResolutorV2> leaf_resolutor;
-            const size_t leaf_dispatch_sz;
-            const std::unique_ptr<BackwardDoBlkrSignalResolutorV2> blkr_resolutor;
-            const size_t blkr_dispatch_sz;
-            const std::unique_ptr<BackwardDoRstrSignalResolutorV2> rstr_resolutor;
-            const size_t rstr_dispatch_sz;
-            const std::unique_ptr<BackwardDoMonoSignalResolutorV2> mono_resolutor;
-            const size_t mono_dispatch_sz;
-            const std::unique_ptr<BackwardDoPairSignalResolutorV2> pair_resolutor;
-            const size_t pair_dispatch_sz;
+            const std::unique_ptr<BackwardDoLeafSignalResolutor> leaf_resolutor;
+            const std::unique_ptr<BackwardDoBlkrSignalResolutor> blkr_resolutor;
+            const std::unique_ptr<BackwardDoRstrSignalResolutor> rstr_resolutor;
+            const std::unique_ptr<BackwardDoMonoSignalResolutor> mono_resolutor;
+            const std::unique_ptr<BackwardDoPairSignalResolutor> pair_resolutor;
             const std::unique_ptr<BackwardDoUACMSignalResolutor> uacm_resolutor;
-            const size_t uacm_dispatch_sz;
             const std::unique_ptr<BackwardDoPACMSignalResolutor> pacm_resolutor;
-            const size_t pacm_dispatch_sz;
             const std::unique_ptr<BackwardDoCritSignalResolutor> crit_resolutor;
-            const size_t crit_dispatch_sz;
             const std::unique_ptr<BackwardDoImmuSignalResolutor> immu_resolutor;
-            const size_t immu_dispatch_sz;
             const std::unique_ptr<BackwardDoPolySignalResolutor> poly_resolutor;
-            const size_t poly_dispatch_sz;
-            const std::unique_ptr<BackwardDoExtnSrcSignalResolutorV2> extnsrc_resolutor;
-            const size_t extnsrc_dispatch_sz;
+            const std::unique_ptr<BackwardDoExtnSrcSignalResolutor> extnsrc_resolutor;
             const std::unique_ptr<BackwardDoExtnSrxSignalResolutor> extnsrx_resolutor;
-            const size_t extnsrx_dispatch_sz;
-            const std::unique_ptr<BackwardDoExtnDstSignalResolutorV2> extndst_resolutor;
-            const size_t extndst_dispatch_sz;
+            const std::unique_ptr<BackwardDoExtnDstSignalResolutor> extndst_resolutor;
             const std::unique_ptr<BackwardDoExtnDsxSignalResolutor> extndsx_resolutor;
-            const size_t extndsx_dispatch_sz;
-            const std::unique_ptr<BackwardDoMsgrFwdSignalResolutorV2> msgrfwd_resolutor;
-            const size_t msgrfwd_dispatch_sz;
-            const std::unique_ptr<BackwardDoMsgrBwdSignalResolutorV2> msgrbwd_resolutor;
-            const size_t msgrbwd_dispatch_sz;
+            const std::unique_ptr<BackwardDoMsgrFwdSignalResolutor> msgrfwd_resolutor;
+            const std::unique_ptr<BackwardDoMsgrBwdSignalResolutor> msgrbwd_resolutor;
+            const size_t kvfeed_vectorization_sz;
 
         public:
 
-            BackwardDoSignalResolutor(std::unique_ptr<BackwardDoLeafSignalResolutorV2> leaf_resolutor,
-                                      size_t leaf_dispatch_sz,
-                                      std::unique_ptr<BackwardDoBlkrSignalResolutorV2> blkr_resolutor,
-                                      size_t blkr_dispatch_sz,
-                                      std::unique_ptr<BackwardDoRstrSignalResolutorV2> rstr_resolutor,
-                                      size_t rstr_dispatch_sz,
-                                      std::unique_ptr<BackwardDoMonoSignalResolutorV2> mono_resolutor,
-                                      size_t mono_dispatch_sz,
-                                      std::unique_ptr<BackwardDoPairSignalResolutorV2> pair_resolutor,
-                                      size_t pair_dispatch_sz,
+            BackwardDoSignalResolutor(std::unique_ptr<BackwardDoLeafSignalResolutor> leaf_resolutor,
+                                      std::unique_ptr<BackwardDoBlkrSignalResolutor> blkr_resolutor,
+                                      std::unique_ptr<BackwardDoRstrSignalResolutor> rstr_resolutor,
+                                      std::unique_ptr<BackwardDoMonoSignalResolutor> mono_resolutor,
+                                      std::unique_ptr<BackwardDoPairSignalResolutor> pair_resolutor,
                                       std::unique_ptr<BackwardDoUACMSignalResolutor> uacm_resolutor,
-                                      size_t uacm_dispatch_sz,
                                       std::unique_ptr<BackwardDoPACMSignalResolutor> pacm_resolutor,
-                                      size_t pacm_dispatch_sz,
                                       std::unique_ptr<BackwardDoCritSignalResolutor> crit_resolutor,
-                                      size_t crit_dispatch_sz,
                                       std::unique_ptr<BackwardDoImmuSignalResolutor> immu_resolutor,
-                                      size_t immu_dispatch_sz,
                                       std::unique_ptr<BackwardDoPolySignalResolutor> poly_resolutor,
-                                      size_t poly_dispatch_sz,
-                                      std::unique_ptr<BackwardDoExtnSrcSignalResolutorV2> extnsrc_resolutor,
-                                      size_t extnsrc_dispatch_sz,
+                                      std::unique_ptr<BackwardDoExtnSrcSignalResolutor> extnsrc_resolutor,
                                       std::unique_ptr<BackwardDoExtnSrxSignalResolutor> extnsrx_resolutor,
-                                      size_t extnsrx_dispatch_sz,
-                                      std::unique_ptr<BackwardDoExtnDstSignalResolutorV2> extndst_resolutor,
-                                      size_t extndst_dispatch_sz,
+                                      std::unique_ptr<BackwardDoExtnDstSignalResolutor> extndst_resolutor,
                                       std::unique_ptr<BackwardDoExtnDsxSignalResolutor> extndsx_resolutor,
-                                      size_t extndsx_dispatch_sz,
-                                      std::unique_ptr<BackwardDoMsgrFwdSignalResolutorV2> msgrfwd_resolutor,
-                                      size_t msgrfwd_dispatch_sz,
-                                      std::unique_ptr<BackwardDoMsgrBwdSignalResolutorV2> msgrbwd_resolutor,
-                                      size_t msgrbwd_dispatch_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
-                                                                            leaf_dispatch_sz(leaf_dispatch_sz),
-                                                                            blkr_resolutor(std::move(blkr_resolutor)),
-                                                                            blkr_dispatch_sz(blkr_dispatch_sz),
-                                                                            rstr_resolutor(std::move(rstr_resolutor)),
-                                                                            rstr_dispatch_sz(rstr_dispatch_sz),
-                                                                            mono_resolutor(std;:move(mono_resolutor)),
-                                                                            mono_dispatch_sz(mono_dispatch_sz),
-                                                                            pair_resolutor(std::move(pair_resolutor)),
-                                                                            pair_dispatch_sz(pair_dispatch_sz),
-                                                                            uacm_resolutor(std::move(uacm_resolutor)),
-                                                                            uacm_dispatch_sz(uacm_dispatch_sz),
-                                                                            pacm_resolutor(std::move(pacm_resolutor)),
-                                                                            pacm_dispatch_sz(pacm_dispatch_sz),
-                                                                            crit_resolutor(std::move(crit_resolutor)),
-                                                                            crit_dispatch_sz(crit_dispatch_sz),
-                                                                            immu_resolutor(std::move(immu_resolutor)),
-                                                                            immu_dispatch_sz(immu_dispatch_sz),
-                                                                            poly_resolutor(std::move(poly_resolutor)),
-                                                                            poly_dispatch_sz(poly_dispatch_sz),
-                                                                            extnsrc_resolutor(std::move(extnsrc_resolutor)),
-                                                                            extnsrc_dispatch_sz(extnsrc_dispatch_sz),
-                                                                            extnsrx_resolutor(std::move(extnsrx_resolutor)),
-                                                                            extnsrx_dispatch_sz(extnsrx_dispatch_sz),
-                                                                            extndst_resolutor(std::move(extndst_resolutor)),
-                                                                            extndst_dispatch_sz(extndst_dispatch_sz),
-                                                                            extndsx_resolutor(std::move(extndsx_resolutor)),
-                                                                            extndsx_dispatch_sz(extndsx_dispatch_sz),
-                                                                            msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
-                                                                            msgrfwd_dispatch_sz(msgrfwd_dispatch_sz),
-                                                                            msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
-                                                                            msgrbwd_dispatch_sz(msgrbwd_dispatch_sz){}
+                                      std::unique_ptr<BackwardDoMsgrFwdSignalResolutor> msgrfwd_resolutor,
+                                      std::unique_ptr<BackwardDoMsgrBwdSignalResolutor> msgrbwd_resolutor,
+                                      size_t kvfeed_vectorization_sz) noexcept: leaf_resolutor(std::move(leaf_resolutor)),
+                                                                                blkr_resolutor(std::move(blkr_resolutor)),
+                                                                                rstr_resolutor(std::move(rstr_resolutor)),
+                                                                                mono_resolutor(std;:move(mono_resolutor)),
+                                                                                pair_resolutor(std::move(pair_resolutor)),
+                                                                                uacm_resolutor(std::move(uacm_resolutor)),
+                                                                                pacm_resolutor(std::move(pacm_resolutor)),
+                                                                                crit_resolutor(std::move(crit_resolutor)),
+                                                                                immu_resolutor(std::move(immu_resolutor)),
+                                                                                poly_resolutor(std::move(poly_resolutor)),
+                                                                                extnsrc_resolutor(std::move(extnsrc_resolutor)),
+                                                                                extnsrx_resolutor(std::move(extnsrx_resolutor)),
+                                                                                extndst_resolutor(std::move(extndst_resolutor)),
+                                                                                extndsx_resolutor(std::move(extndsx_resolutor)),
+                                                                                msgrfwd_resolutor(std::move(msgrfwd_resolutor)),
+                                                                                msgrbwd_resolutor(std::move(msgrbwd_resolutor)),
+                                                                                kvfeed_vectorization_sz(kvfeed_vectorization_sz){}
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
@@ -18869,71 +18557,29 @@ namespace dg::network_memcommit_resolutor{
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
 
-                size_t trimmed_leaf_dispatch_sz     = std::min(this->leaf_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> leaf_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz));
+                auto internal_resolutor                 = InternalResolutor{};
 
-                size_t trimmed_blkr_dispatch_sz     = std::min(this->blkr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> blkr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz));
+                internal_resolutor.leaf_resolutor       = this->leaf_resolutor.get();
+                internal_resolutor.blkr_resolutor       = this->blkr_resolutor.get();
+                internal_resolutor.rstr_resolutor       = this->rstr_resolutor.get();
+                internal_resolutor.mono_resolutor       = this->mono_resolutor.get();
+                internal_resolutor.pair_resolutor       = this->pair_resolutor.get();
+                internal_resolutor.uacm_resolutor       = this->uacm_resolutor.get();
+                internal_resolutor.pacm_resolutor       = this->pacm_resolutor.get();
+                internal_resolutor.crit_resolutor       = this->crit_resolutor.get();
+                internal_resolutor.immu_resolutor       = this->immu_resolutor.get();
+                internal_resolutor.poly_resolutor       = this->poly_resolutor.get();
+                internal_resolutor.extnsrc_resolutor    = this->extnsrc_resolutor.get();
+                internal_resolutor.extnsrx_resolutor    = this->extnsrx_resolutor.get();
+                internal_resolutor.extndst_resolutor    = this->extndst_resolutor.get();
+                internal_resolutor.extndsx_resolutor    = this->extndsx_resolutor.get();
+                internal_resolutor.msgrfwd_resolutor    = this->msgrfwd_resolutor.get();
+                internal_resolutor.msgrbwd_resolutor    = this->msgrbwd_resolutor.get();
 
-                size_t trimmed_rstr_dispatch_sz     = std::min(this->rstr_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> rstr_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz)); 
-
-                size_t trimmed_mono_dispatch_sz     = std::min(this->mono_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mono_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->mono_resolutor.get(), trimmed_mono_dispatch_sz));
-
-                size_t trimmed_pair_dispatch_sz     = std::min(this->pair_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pair_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pair_resolutor.get(), trimmed_pair_dispatch_sz));
-
-                size_t trimmed_uacm_dispatch_sz     = std::min(this->uacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> uacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz));
-
-                size_t trimmed_pacm_dispatch_sz     = std::min(this->pacm_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> pacm_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz));
-
-                size_t trimmed_crit_dispatch_sz     = std::min(this->crit_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> crit_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->crit_resolutor.get(), trimmed_crit_dispatch_sz));
-
-                size_t trimmed_immu_dispatch_sz     = std::min(this->immu_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> immu_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->immu_resolutor.get(), trimmed_immu_dispatch_sz));
-
-                size_t trimmed_poly_dispatch_sz     = std::min(this->poly_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> poly_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->poly_resolutor.get()), trimmed_poly_dispatch_sz); 
-
-                size_t trimmed_extnsrc_dispatch_sz  = std::min(this->extnsrc_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrc_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz));
-
-                size_t trimmed_extnsrx_dispatch_sz  = std::min(this->extnsrx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extnsrx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz));
-
-                size_t trimmed_extndst_dispatch_sz  = std::min(this->extndst_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndst_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz));
-
-                size_t trimmed_extndsx_dispatch_sz  = std::min(this->extndsx_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> extndsx_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz)); 
-
-                size_t trimmed_msgrfwd_dispatch_sz  = std::min(this->msgrfwd_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrfwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz));
-
-                size_t trimmed_msgrbwd_dispatch_sz  = std::min(this->msgrbwd_dispatch_sz, sz); 
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> msgrbwd_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz));
-
-                auto leaf_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->leaf_resolutor.get(), trimmed_leaf_dispatch_sz, leaf_dh_mem.get()));
-                auto blkr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->blkr_resolutor.get(), trimmed_blkr_dispatch_sz, blkr_dh_mem.get()));
-                auto rstr_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->rstr_resolutor.get(), trimmed_rstr_dispatch_sz, rstr_dh_mem.get()));
-                auto mono_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->mono_resolutor.get(), trimmed_mono_dispatch_sz, mono_dh_mem.get()));
-                auto pair_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pair_resolutor.get(), trimmed_pair_dispatch_sz, pair_dh_mem.get()));
-                auto uacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->uacm_resolutor.get(), trimmed_uacm_dispatch_sz, uacm_dh_mem.get()));
-                auto pacm_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->pacm_resolutor.get(), trimmed_pacm_dispatch_sz, pacm_dh_mem.get()));
-                auto crit_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->crit_resolutor.get(), trimmed_crit_dispatch_sz, crit_dh_mem.get()));
-                auto immu_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->immu_resolutor.get(), trimmed_immu_dispatch_sz, immu_dh_mem.get()));
-                auto poly_delivery_handle       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->poly_resolutor.get(), trimmed_poly_dispatch_sz, poly_dh_mem.get())); 
-
-                auto extnsrc_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrc_resolutor.get(), trimmed_extnsrc_dispatch_sz, extnsrc_dh_mem.get()));
-                auto extnsrx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extnsrx_resolutor.get(), trimmed_extnsrx_dispatch_sz, extnsrx_dh_mem.get()));
-                auto extndst_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndst_resolutor.get(), trimmed_extndst_dispatch_sz, extndst_dh_mem.get()));
-                auto extndsx_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->extndsx_resolutor.get(), trimmed_extndsx_dispatch_sz, extndsx_dh_mem.get()));
-                auto msgrfwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrfwd_resolutor.get(), trimmed_msgrfwd_dispatch_sz, msgrfwd_dh_mem.get()));
-                auto msgrbwd_delivery_handle    = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->msgrbwd_resolutor.get(), trimmed_msgrbwd_dispatch_sz, msgrbwd_dh_mem.get()));
+                size_t trimmed_kvfeed_vectorization_sz  = std::min(this->kvfeed_vectorization_sz, sz);
+                size_t kvfeed_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_kvfeed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> kvfeed_mem(kvfeed_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_kvfeed_vectorization_sz, kvfeed_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
@@ -18943,153 +18589,127 @@ namespace dg::network_memcommit_resolutor{
                         }
                     }
 
-                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst); 
+                    tile_kind_t tile_kind = dg::network_tile_member_getsetter::get_tile_kind_nothrow(event_arr[i].dst);
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind, event_arr[i]);
+                }
+            }
+        
+        private:
+            
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<tile_kind_t, BackwardDoSignalEvent>{
+
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * leaf_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * blkr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * rstr_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * mono_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * pair_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * uacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * pacm_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * crit_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * immu_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * poly_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * extnsrc_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * extnsrx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * extndst_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * extndsx_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * msgrfwd_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<BackwardDoSignalEvent> * msgrbwd_resolutor;
+
+                void push(const tile_kind_t& tile_kind, std::move_iterator<BackwardDoSignalEvent *> event_arr, size_t sz){
 
                     switch (tile_kind){
                         case TILE_KIND_LEAF:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(leaf_delivery_handle.get(), event_arr[i]);
+                            this->leaf_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_BLKR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(blkr_delivery_handle.get(), event_arr[i]);
+                            this->blkr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_RSTR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(rstr_delivery_handle.get(), event_arr[i]);
+                            this->rstr_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MONO:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(mono_delivery_handle.get(), event_arr[i]);
+                            this->mono_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PAIR:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pair_delivery_handle.get(), event_arr[i]);
+                            this->pair_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_UACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(uacm_delivery_handle.get(), event_arr[i]);
+                            this->uacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_PACM:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(pacm_delivery_handle.get(), event_arr[i]);
+                            this->pacm_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_CRIT:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(crit_delivery_handle.get(), event_arr[i]);
+                            this->crit_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_IMMU:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(immu_delivery_handle.get(), event_arr[i]);
+                            this->immu_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_POLY:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(poly_delivery_handle.get(), event_arr[i]);
+                            this->poly_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRC:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrc_delivery_handle.get(), event_arr[i]);
+                            this->extnsrc_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNSRX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extnsrx_delivery_handle.get(), event_arr[i]);
+                            this->extnsrx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDST:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndst_delivery_handle.get(), event_arr[i]);
+                            this->extndst_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_EXTNDSX:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(extndsx_delivery_handle.get(), event_arr[i]);
+                            this->extndsx_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRFWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrfwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrfwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         case TILE_KIND_MSGRBWD:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(msgrbwd_delivery_handle.get(), event_arr[i]);
+                            this->msgrbwd_resolutor->push(event_arr, sz);
                             break;
                         }
                         default:
                         {
                             if constexpr(DEBUG_MODE_FLAG){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
                             } else{
                                 std::unreachable();
                             }
                         }
                     }
                 }
-            }
+            };
     };
-
-    //we are looking for a flow from resolutor -> warehouse -> resolutor (OK, no latency, only problem: lock_contention @ signal_aggregation_tile, we are spinning the mutex to get 1, 2 signals thru, very bad)
-    //                               resolutor -> mempress -> collector -> warehouse -> resolutor (solved the lock_contention problem by leveraging frequencies)
-
-    //the problem is probably there are two groups of resolutions, the group that does spin on external requests and the group that does normal memevent resolutions
-    //the former group is high-latency-proned + probably waiting on a memregion press or a direct delivery
-
-    //the latter group is low-latency
-    //we've been thinking about the operatable_memevent_id for signal aggregation tile, then we realized that this logic is very cringy so we didn't add that (this is a bad idea)
-
-    //err_comm, hard to do actual error comm
-    //reason being, the unwinding stack is unclear (we are detaching people)
-
-    //solutions: try to compromise the err_comm @ the workorder recv site, bad tile signals + bad initializations or bad references should be eliminated at the initialization + signal_dispatch phase (only check the internals, because bad externals will return request errors, which will be logged -> the database alongside with user_id)
-    //this is an accepted answer
-    //it is incredibly hard to write this
-    //we'll try to leverage hyperthreading to reduce the waiting time, regionkv is to reduce the cost of hyperthreading (because actual waittime does not utilize CPU, yet incurs context switching + hyperthreading kernel management cost)
-    //all the heavy lifting are delivered -> the asynchronous device, whether that is host asynchronous device or cuda asynchronous device
-
-    //we'll try to bottleneck RAM (by delivering as many tasks as possible -> asynchronous devices, all the other workers that dont use asynchronous device will be limited -> certain cores + hyperthreading to bottleneck the RAM usage)
-    //DDR4 will solve some of the problem, not all
-
-    //cuda problems: search problems
-    //               search can only be performed within a cetain window, 1us -> 10us, because we can't hold the lock on the memregion forever
-    //               search by using an instruction payload (specific enough to point where, when, the direction, the operation, the exponential steps + etc)
-    //               it seems to me that the search problem is a hard problem to solve, we dont yet know to head in the internal branch-prediction direction or external branch-prediction direction
-    //               external branch-prediction direction? why?
-    //               internal branch-prediction direction? why?
-    //               or both (there are no whys), the two does not actually cancel out each other
-
-    //cuda blessings: pushing 10 ** 13 fp8 operations/ second, problems, cuda's trying to fatten the internal memory storage due to engineering laziness, we can solve the problem here by using pinned_memory + fsys + ram as backed memories
-    //                there are literally no performance constraints as we are doing heavy search + linear-liked operation on cuda
-    //                there are no alignment problems also (all memory segments are pre-linked at compile-time)
-    //                only problem: cuda might crash, compromises this core, thats precisely the reason for sockets (compute engines involve cuda, persitent engines do not involve cuda, they communicate via sockets)
-    //                problems of fp8 operations: (1): fp8 precision is way off
-    //                                            (2): we are working on search for cuda platforms
-    //                                            (3): multi-precision does not involve fp8 precision
-
-    //                ETA of search implementation: next month
-    //                                              focusing on: internal-branch-prediction-supported search (this involves tons of engineering to get a 10x faster search time)
-    //                                                           external-branch-prediction-supported (search instruction payload, hard to implement correctly)
-
-    //persistent storage: will version control like github, try to rollback the version control if bad evaluation kicks in 
-    //problems of Taylor Series: cannot parrot the cos + sin + sqrt + etc complex semantic space
-    //resolutions: Wanted approach, fast commit + uncommit of exotic patterns (external analysis of projection space + another machine learning to steer the direction (sounds like Taylor Series polynomial + coefficients))
-
-    //final goal: the engine is sufficient to extend and sufficient to P2P, does not block (by imposing a stingent requirement of dispatch runtime complexity), does not tie the further decisions
-    //            msgrfwd + msgrbwd will be used to analyze the string patterns externally
-    //            a coordinator will coordinate our searching mission by using external payloads
-
-    //est to reach final goal, 1-2 years (this is insanely hard to implement)
 
     //clear
     class MemCommitResolutor: public virtual dg::network_concurrency::WorkerInterface{
