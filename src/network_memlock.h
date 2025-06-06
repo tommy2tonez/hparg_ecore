@@ -326,6 +326,16 @@ namespace dg::network_memlock{
     //we need to consider the case where we've been spinning for a century and nothing has been through, alright, this deserves a wait operation, does it?
     //it does fellas, as foretold in the prophecy Cabal upgrade
 
+    //without loss of generality, the implementation could be described as
+    //a worst case bound of forever spin + force acquire, this forces user to use the interfaces to do memlock, not inventing their own routing of acquiring multiple locks
+
+    //first, region synchronization point support (weakly connected component id as synchronization point)
+    //second, average, no starvation approach by NOT DOING SEQUENTIAL WAITING (SEQUENTIAL WAITING is the LAST of LAST LINE of doing)
+    //third, running up the hill in the case of no "good acquired"
+    //fourth, acquiring a memregion == disqualifing all the competing sets containing the region
+    //fifth, the last approach of force_wait (because we are acquiring things in ascending order, there is no dead lock possibility)
+    //sixth, good FIFO queue by not supporting SHARED_LOCK or reference lock
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -363,7 +373,7 @@ namespace dg::network_memlock{
 
                     auto inner_loop_task = [&]() noexcept{
                         rs[i] = recursive_trylock_guard(lock_ins, lock_ptr_arr[i]);
-                        return rs[i].has_value();
+                        return std::get<0>(rs[i]).has_value();
                     };
 
                     size_t retry_sz = size_t{1} << std::min(retry_exponent, INNER_LOOP_BUSY_WAIT_MAX_EXPONENT);
@@ -375,7 +385,7 @@ namespace dg::network_memlock{
                         }
                     }
 
-                    if (!rs[i].has_value()){
+                    if (!std::get<0>(rs[i]).has_value()){
                         wait_idx    = i; //acquire_try strong acquisition does not thru, wait_idx == i, hint the next iteration of the waiting idx 
                         was_thru    = false;
                         break;

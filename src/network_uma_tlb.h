@@ -428,7 +428,7 @@ namespace dg::network_uma_tlb::rec_lck{
 
                     auto inner_loop_task = [&]() noexcept{
                         rs[i] = rec_lck::recursive_lockmap_try(tlb, sorted_args[i].first, sorted_args[i].second);
-                        return rs[i].has_value();
+                        return std::get<0>(rs[i]).has_value();
                     };
 
                     size_t retry_sz = size_t{1} << std::min(retry_exponent, INNER_LOOP_BUSY_WAIT_MAX_EXPONENT);
@@ -440,7 +440,7 @@ namespace dg::network_uma_tlb::rec_lck{
                         }
                     }
 
-                    if (!rs[i].has_value()){
+                    if (!std::get<0>(rs[i]).has_value()){
                         wait_idx    = i;
                         was_thru    = false;
                         break;
