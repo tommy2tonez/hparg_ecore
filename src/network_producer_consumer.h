@@ -22,14 +22,6 @@
 
 namespace dg::network_producer_consumer{
 
-    //alright, we feel lucky that we have implemented this correctly
-    //this is a very hard one to implement correctly languagely, impossible without noexcepting certain functions, push(), delvrsrv_deliver(), delvrsrv_clear(), delvrsrv_close()
-    //we'll refactor the code later
-
-    //I guess we'll be stuck here for at least 5-10 years before we can get a good product (product that helps people taking bluepills, people hate redpills for some reasons)
-    //we'll launch in a year
-    //so it's better to love the code and aim for quality
-
     template <class EventType>
     static inline constexpr bool meets_event_precond_v  = std::is_same_v<EventType, std::decay_t<EventType>>;
 
@@ -113,11 +105,23 @@ namespace dg::network_producer_consumer{
         return new (aligned_buf) T(std::forward<Args>(args)...);
     }
 
+    template <class T, class ...Args>
+    inline auto inplace_construct_object_noalign(char * buf, Args&& ...args) -> T *{
+
+        return new (buf) T(std::forward<Args>(args)...);
+    }
+
     template <class T>
     inline auto inplace_construct_array(char * buf, size_t sz) -> T *{
 
         char * aligned_buf = dg_memalign(buf, std::integral_constant<size_t, alignof(T)>{});
         return new (aligned_buf) T[sz];
+    }
+
+    template <class T>
+    inline auto inplace_construct_array_noalign(char * buf, size_t sz) -> T *{
+
+        return new (buf) T[sz];
     }
 
     template <class T, class ...Args>
@@ -131,15 +135,37 @@ namespace dg::network_producer_consumer{
     }
 
     template <class T, class ...Args>
+    inline auto inplace_construct_noalign(char * buf, Args&& ...args) -> std::remove_extent_t<T> *{
+
+        if constexpr(std::is_array_v<T>){
+            return inplace_construct_array_noalign<std::remove_extent_t<T>>(buf, std::forward<Args>(args)...);
+        } else{
+            return inplace_construct_object_noalign<T>(buf, std::forward<Args>(args)...);
+        }
+    }
+
+    template <class T, class ...Args>
     constexpr auto inplace_construct_object_size(Args&& ...) noexcept -> size_t{
 
         return sizeof(T) + alignof(T);
+    }
+
+    template <class T, class ...Args>
+    constexpr auto inplace_construct_object_noalign_size(Args&& ...) noexcept -> size_t{
+
+        return sizeof(T);
     }
 
     template <class T>
     constexpr auto inplace_construct_array_size(size_t sz) noexcept -> size_t{
 
         return sz * sizeof(T) + alignof(T);
+    }
+
+    template <class T>
+    constexpr auto inplace_construct_array_noalign_size(size_t sz) noexcept -> size_t{
+
+        return sz * sizeof(T);
     }
 
     template <class T, class ...Args>
@@ -149,6 +175,16 @@ namespace dg::network_producer_consumer{
             return inplace_construct_array_size<std::remove_extent_t<T>>(std::forward<Args>(args)...);
         } else{
             return inplace_construct_object_size<T>(std::forward<Args>(args)...);
+        }
+    }
+
+    template <class T, class ...Args>
+    constexpr auto inplace_construct_noalign_size(Args&& ...args) noexcept -> size_t{
+
+        if constexpr(std::is_array_v<T>){
+            return inplace_construct_array_noalign_size<std::remove_extent_t<T>>(std::forward<Args>(args)...);
+        } else{
+            return inplace_construct_object_noalign_size<T>(std::forward<Args>(args)...);
         }
     }
 
@@ -436,6 +472,28 @@ namespace dg::network_producer_consumer{
         return current;
     }
 
+    auto bump_allocator_align(BumpAllocatorResource * bump_allocator, size_t alignment_sz) noexcept -> exception_t{
+
+        assert(stdx::is_pow2(alignment_sz));
+
+        bump_allocator                  = stdx::safe_ptr_access(bump_allocator); 
+
+        size_t fwd_sz                   = alignment_sz - 1u;
+        size_t arithmetic_buf           = reinterpret_cast<size_t>(bump_allocator->head);
+        size_t fwd_arithmetic_buf       = arithmetic_buf + fwd_sz;
+        size_t MASK                     = ~fwd_sz;
+        size_t aligned_arithmetic_buf   = fwd_arithmetic_buf & MASK; 
+        size_t displacement_sz          = aligned_arithmetic_buf - arithmetic_buf;
+
+        if (bump_allocator->sz + displacement_sz > bump_allocator->cap){
+            return dg::network_exception::RESOURCE_EXHAUSTION;
+        }
+
+        bump_allocator->sz              += displacement_sz;
+
+        return dg::network_exception::SUCCESS; 
+    }
+
     //vvv
     //-----------------------
 
@@ -452,14 +510,6 @@ namespace dg::network_producer_consumer{
         size_t sz;
         size_t cap;
     };
-
-    //clear
-    template <class EventType>
-    void delvrsrv_kv_destroy_event_container(KVEventContainer<EventType> event_container) noexcept{
-
-        static_assert(std::is_nothrow_destructible_v<EventType>);
-        dg::network_producer_consumer::inplace_destruct_array(event_container.ptr, event_container.cap);
-    }
 
     //this is wrong? how why ?
     //assume a + b + c + d == sz
@@ -499,6 +549,8 @@ namespace dg::network_producer_consumer{
         kv_feed_unordered_map_t<KeyType, KVEventContainer<EventType>> key_event_map; //we dont want to reinvent the wheel to confuse our peers, we'll leverage advanced inplace allocator + throw, the complexity + debuggability + maintainability of the keyvalue feed are already reaching the unacceptable threshold  
     };
 
+    //this is precisely why I said this is very super complicated to solve the alignment issues 
+
     //clear
     template <class EventType>
     auto delvrsrv_kv_get_event_container_memory_total_bcap(size_t deliverable_cap) noexcept -> size_t{
@@ -512,7 +564,7 @@ namespace dg::network_producer_consumer{
         size_t worst_case_cap   = deliverable_cap * (DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR * DELVRSRV_KV_EVENT_CONTAINER_GROWTH_FACTOR);
         size_t minimum_cap      = DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP;
         size_t cap              = std::max(worst_case_cap, minimum_cap);  
-        size_t bsz              = inplace_construct_size<EventType[]>(cap);
+        size_t bsz              = alignof(EventType) + inplace_construct_noalign_size<EventType[]>(cap);
 
         return bsz;
     }
@@ -521,7 +573,7 @@ namespace dg::network_producer_consumer{
     template <class EventType>
     auto delvrsrv_kv_get_event_container_bsize(size_t capacity) noexcept -> size_t{
 
-        return inplace_construct_size<EventType[]>(capacity);
+        return inplace_construct_noalign_size<EventType[]>(capacity);
     }
 
     //clear
@@ -530,10 +582,18 @@ namespace dg::network_producer_consumer{
 
         // static_assert(std::is_nothrow_default_constructible_v<EventType>);
 
-        EventType * event_arr   = inplace_construct<EventType[]>(buf, capacity);
+        EventType * event_arr   = inplace_construct_noalign<EventType[]>(buf, capacity);
         auto container          = KVEventContainer<EventType>{event_arr, 0u, capacity};
 
         return container;        
+    }
+
+    //clear
+    template <class EventType>
+    void delvrsrv_kv_destroy_event_container(KVEventContainer<EventType> event_container) noexcept{
+
+        static_assert(std::is_nothrow_destructible_v<EventType>);
+        dg::network_producer_consumer::inplace_destruct_array(event_container.ptr, event_container.cap);
     }
 
     //clear
@@ -575,6 +635,8 @@ namespace dg::network_producer_consumer{
                 return std::unexpected(bump_allocator.error());
             }
 
+            dg::network_exception_handler::nothrow_log(bump_allocator_align(bump_allocator.value(), alignof(event_t)));
+
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_deinitialize(bump_allocator.value());});
 
             auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(deliverable_cap);
@@ -613,6 +675,8 @@ namespace dg::network_producer_consumer{
                 return std::unexpected(bump_allocator.error());
             }
 
+            dg::network_exception_handler::nothrow_log(bump_allocator_align(bump_allocator.value(), alignof(event_t)));
+
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_preallocated_deinitialize(bump_allocator.value());});
 
             auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(deliverable_cap);
@@ -649,6 +713,8 @@ namespace dg::network_producer_consumer{
 
         handle->key_event_map.clear();
         bump_allocator_reset(handle->bump_allocator);
+        dg::network_exception_handler::nothrow_log(bump_allocator_align(handle->bump_allocator, alignof(event_t)));
+
         handle->deliverable_sz = 0u;
     }
 
@@ -670,7 +736,6 @@ namespace dg::network_producer_consumer{
             }
         }
 
-        // static_assert(noexcept(handle->key_event_map.find(key))); we need std support to make std::hash noexcept again
         auto map_ptr = handle->key_event_map.find(key);  
 
         if (map_ptr == handle->key_event_map.end()){
@@ -690,9 +755,8 @@ namespace dg::network_producer_consumer{
                 }
             }
 
-            //assume finite pool of memory, we are to write it like this, because there might be a hash_table attack, we never know, assume finite pool of capacity, never growing
-            auto req_container = delvrsrv_kv_make_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value());                
- 
+            auto req_container = delvrsrv_kv_make_preallocated_event_container<event_t>(DELVRSRV_KV_EVENT_CONTAINER_INITIAL_CAP, buf.value());
+
             try{
                 auto [emplace_ptr, emplace_status]  = handle->key_event_map.try_emplace(key, req_container);
                 dg::network_exception_handler::dg_assert(emplace_status);
@@ -759,8 +823,8 @@ namespace dg::network_producer_consumer{
             dg::network_exception_handler::nothrow_log(delvrsrv_kv_push_event_container(map_ptr->second, std::move(event)));
             handle->deliverable_sz += 1;
         }
-    } 
-   
+    }
+
     //clear
     template <class key_t, class event_t>
     void delvrsrv_kv_close_handle(KVDeliveryHandle<key_t, event_t> * handle) noexcept{

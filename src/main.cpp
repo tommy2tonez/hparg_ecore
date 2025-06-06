@@ -117,7 +117,7 @@ class KeyValueTest: public virtual dg::network_producer_consumer::KVConsumerInte
     public:
 
         size_t * total;
-    
+
     public:
 
         void push(const size_t& idx, std::move_iterator<size_t *> arr, size_t sz) noexcept{
@@ -127,6 +127,10 @@ class KeyValueTest: public virtual dg::network_producer_consumer::KVConsumerInte
 };
 
 int main(){
+
+    size_t a                    = {};
+    size_t b                    = {};
+    auto [aa, bb]               = std::tie(a, b); 
 
     size_t SZ                   = size_t{1} << 28;
     size_t total                = 0u;
