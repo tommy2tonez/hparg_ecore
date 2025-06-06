@@ -301,6 +301,28 @@ namespace dg::network_memlock{
         return recursive_trylock_guard_array(lock_ins, lock_ptr_arr);
     }
 
+    //the algorithm can be briefly described as below
+
+    //without wait
+    //without loss of generality
+    //assume we are acquiring a set of memregions
+    //assume that none of the acquiring memregions is "good acquired" (good acquired is a state where we are acquiring and operating, not acquiring and continue spinning)
+
+        //we need to spin on average 500ms to get to the 1st index of spin
+        //other guys on average are at the 29th index of spin, assume we our range is of 30 size
+
+        //assume that til the 1st index of spin, no guy has been able to acquire the lock
+        //OK we are through, our competitive chance is very good
+        //assume someone has been able to acquire the lock, OK, someone is through, we dont really care
+
+    //assume that one of the acquiring memregions is "good acquired", we are to "fast forward" to the none of the acquiring memregions is "good acquired" 
+
+    //with wait
+    //we are guaranteed to "acquire" the waited region (with certain overheads, non-stopping, fixed size overhead)
+    //so the difference is that "overhead" gap, which could hinder our statistical chances of 1st index and 29th index (we need to study this, making sure the overhead does not make up the majority of the spinning time)
+    //we'll be back to do the write-up of the proof
+    //this implementation of memlock guard is actually stable
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
