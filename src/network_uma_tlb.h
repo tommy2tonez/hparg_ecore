@@ -400,9 +400,10 @@ namespace dg::network_uma_tlb::rec_lck{
         if constexpr(SZ == 1u){
             return rec_lck::recursive_lockmap_wait(tlb, args[0].first, args[0].second);
         } else{
-            using try_lockmap_resource_t                                    = decltype(rec_lck::recursive_lockmap_try(tlb, args[0].first, args[0].second));
+            using try_lockmap_resource_t                                    = std::variant<decltype(rec_lck::recursive_lockmap_try(tlb, args[0].first, args[0].second)), decltype(rec_lck::recursive_lockmap_wait(tlb, args[0].first, args[0].second))>;
             constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT              = 5u;
             constexpr std::chrono::milliseconds MAX_EXPBACKOFF_WAIT_TIME    = std::chrono::milliseconds(1);
+            constexpr size_t MAX_EXPBACKOFF_SPIN_SZ                         = 64u;
 
             auto sorted_args                                                = rec_lck::sort_ptr_array(args);
             std::optional<size_t> wait_idx                                  = std::nullopt;
@@ -447,7 +448,10 @@ namespace dg::network_uma_tlb::rec_lck{
                 }
 
                 if (!was_thru){
-                    rs = {};
+                    for (size_t i = 0u; i < SZ; ++i){
+                        size_t back_idx                         = (SZ - 1u) - i;
+                        *stdx::volatile_access(&rs[back_idx])   = {};
+                    }
 
                     if (responsible_idx.has_value()){
                         MutexRegionTLBInterface<T>::map_waitonly_release_responsibility(sorted_args[responsible_idx.value()].first, sorted_args[responsible_idx.value()].second);
@@ -460,7 +464,18 @@ namespace dg::network_uma_tlb::rec_lck{
                 return true; //OK, good
             };
 
-            stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME);
+            bool was_expbackoff_thru = stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME, MAX_EXPBACKOFF_SPIN_SZ);
+            
+            if (was_expbackoff_thru){
+                return rs;
+            }
+
+            rs = {};
+
+            for (size_t i = 0u; i < SZ; ++i){
+                rs[i] = rec_lck::recursive_lockmap_wait(tlb, sorted_args[i].first, sorted_args[i].second);
+            }
+
             return rs;
         }
     }

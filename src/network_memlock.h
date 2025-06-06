@@ -323,6 +323,9 @@ namespace dg::network_memlock{
     //we'll be back to do the write-up of the proof
     //this implementation of memlock guard is actually stable
 
+    //we need to consider the case where we've been spinning for a century and nothing has been through, alright, this deserves a wait operation, does it?
+    //it does fellas, as foretold in the prophecy Cabal upgrade
+
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -332,9 +335,10 @@ namespace dg::network_memlock{
         if constexpr(SZ == 1u){
             return recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]);
         } else{
-            using try_lock_guard_resource_t                                 = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+            using try_lock_guard_resource_t                                 = std::variant<decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0])), decltype(recursive_lock_guard(lock_ins, lock_ptr_arr[0]))>;
             constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT              = 5u;
             constexpr std::chrono::milliseconds MAX_EXPBACKOFF_WAIT_TIME    = std::chrono::milliseconds(1);
+            constexpr size_t MAX_EXPBACKOFF_SPIN_SZ                         = 64u;
 
             auto lock_ptr_arr                                               = sort_ptr_array(arg_lock_ptr_arr); 
             std::optional<size_t> wait_idx                                  = std::nullopt;
@@ -379,7 +383,10 @@ namespace dg::network_memlock{
                 }
 
                 if (!was_thru){
-                    rs = {}; //reversing the acquisition commits, the stillness of the stack is not guaranteed, we dont really care at this lock_guard_array
+                    for (size_t i = 0u; i < SZ; ++i){
+                        size_t back_idx                         = (SZ - 1u) - i; 
+                        *stdx::volatile_access(&rs[back_idx])   = {};
+                    }
 
                     if (responsible_idx.has_value()){
                         dg::network_memlock::MemoryRegionLockInterface<T>::acquire_waitnolock_release_responsibility(lock_ptr_arr[responsible_idx.value()]); //we are still responsible for the waitnolock, we need to release the responsibility
@@ -392,7 +399,18 @@ namespace dg::network_memlock{
                 return true; //OK, good
             };
 
-            stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME);
+            bool was_expbackoff_thru = stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME, MAX_EXPBACKOFF_SPIN_SZ);
+
+            if (was_expbackoff_thru){
+                return rs;
+            }
+
+            rs = {};
+
+            for (size_t i = 0u; i < SZ; ++i){
+                rs[i] = recursive_lock_guard(lock_ins, lock_ptr_arr[i]);
+            }
+
             return rs;
         }
     }
