@@ -310,11 +310,12 @@ namespace dg::network_memlock{
         if constexpr(SZ == 1u){
             return recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]);
         } else{
-            using try_lock_guard_resource_t                     = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
-            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT  = 5u;
+            using try_lock_guard_resource_t                                 = decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0]));
+            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT              = 5u;
+            constexpr std::chrono::milliseconds MAX_EXPBACKOFF_WAIT_TIME    = std::chrono::milliseconds(1);
 
-            auto lock_ptr_arr                                   = sort_ptr_array(arg_lock_ptr_arr); 
-            std::optional<size_t> wait_idx                      = std::nullopt;
+            auto lock_ptr_arr                                               = sort_ptr_array(arg_lock_ptr_arr); 
+            std::optional<size_t> wait_idx                                  = std::nullopt;
             std::array<try_lock_guard_resource_t, SZ> rs;
 
             auto task = [&]() noexcept{
@@ -369,7 +370,7 @@ namespace dg::network_memlock{
                 return true; //OK, good
             };
 
-            stdx::eventloop_expbackoff_spin(task);
+            stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME);
             return rs;
         }
     }

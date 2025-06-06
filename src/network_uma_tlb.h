@@ -400,11 +400,12 @@ namespace dg::network_uma_tlb::rec_lck{
         if constexpr(SZ == 1u){
             return rec_lck::recursive_lockmap_wait(tlb, args[0].first, args[0].second);
         } else{
-            using try_lockmap_resource_t                        = decltype(rec_lck::recursive_lockmap_try(tlb, args[0].first, args[0].second));
-            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT  = 5u;
+            using try_lockmap_resource_t                                    = decltype(rec_lck::recursive_lockmap_try(tlb, args[0].first, args[0].second));
+            constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT              = 5u;
+            constexpr std::chrono::milliseconds MAX_EXPBACKOFF_WAIT_TIME    = std::chrono::milliseconds(1);
 
-            auto sorted_args                                    = rec_lck::sort_ptr_array(args);
-            std::optional<size_t> wait_idx                      = std::nullopt;
+            auto sorted_args                                                = rec_lck::sort_ptr_array(args);
+            std::optional<size_t> wait_idx                                  = std::nullopt;
             std::array<try_lockmap_resource_t, SZ> rs;
 
             auto task = [&]() noexcept{
@@ -459,7 +460,7 @@ namespace dg::network_uma_tlb::rec_lck{
                 return true; //OK, good
             };
 
-            stdx::eventloop_expbackoff_spin(task);
+            stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME);
             return rs;
         }
     }
