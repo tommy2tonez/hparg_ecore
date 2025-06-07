@@ -1,7 +1,7 @@
 #define DEBUG_MODE_FLAG true
 #define STRONG_MEMORY_ORDERING_FLAG true
 
-// #include "network_memlock.h"
+#include "network_memlock.h"
 // #include "network_memlock_proxyspin.h"
 #include <atomic>
 #include <random>
@@ -149,4 +149,7 @@ int main(){
     };
 
     std::cout << timeit(task) << "<ms>" << total << std::endl;
+
+    using lock_t = dg::network_memlock_impl1::Lock<size_t, std::integral_constant<size_t, 2>>;
+    dg::network_memlock::recursive_lock_guard_many(lock_t{}, nullptr, nullptr);
 }

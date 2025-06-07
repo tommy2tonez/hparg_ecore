@@ -605,7 +605,6 @@ namespace dg::network_memcommit_resolutor{
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));    
                                 } else{
-
                                     auto sigagg_1               = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_forward_pingpong_request(signal_smph_addr.value(), left_descendant, ptr,
                                                                                                                                                                                        expected_ops_id, signal_smph_addr));
                                     auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(std::move(sigagg_1));

@@ -172,20 +172,6 @@ namespace dg::network_memlock{
             self& operator =(self&&) = delete;
     };
 
-    //there is not a single more confusing implementation of locks than this
-    //try_guard -> .has_value() or not has_value(), default initializable
-    //guard -> a mysterious default initializable datatype that does RAII (we dont know what, why, how interfaces)
-    //Chinaman has shown me the way of doing locks
-
-    //we'll move on to the second implementation of search
-    //a heavily optimized search on cuda has to involve random + statistical branching (imagine that we keep track of "good decisions" statistically, and randomize in the direction)
-    //this is somewhat like a branch prediction, except for we improvising the community detection + advanced pattern detections
-
-    //we'll implement this next month after our flings with the framework
-    //we dont have time fellas, this if runs at all on 1B devices is our proudest achievement in this lifetime
-    //I wish I could tell you briefly how easy it is to break thru a symmetric coding technique in 2025
-    //yet yall have to stay through the lectures for now
-
     template <class T>
     struct RecursiveLockResource{};
 
@@ -212,7 +198,7 @@ namespace dg::network_memlock{
     template <class T, size_t SZ>
     constexpr auto sort_ptr_array(const std::array<T, SZ>& inp) noexcept -> std::array<T, SZ>{
 
-        static_assert(dg::ptr_info<T>::is_pointer);
+        // static_assert(dg::ptr_info<T>::is_pointer);
 
         std::array<T, SZ> rs = inp;
         // std::sort(rs.begin(), rs.end());
@@ -301,41 +287,6 @@ namespace dg::network_memlock{
         return recursive_trylock_guard_array(lock_ins, lock_ptr_arr);
     }
 
-    //the algorithm can be briefly described as below
-
-    //without wait
-    //without loss of generality
-    //assume we are acquiring a set of memregions
-    //assume that none of the acquiring memregions is "good acquired" (good acquired is a state where we are acquiring and operating, not acquiring and continue spinning)
-
-        //we need to spin on average 500ms to get to the 1st index of spin
-        //other guys on average are at the 29th index of spin, assume we our range is of 30 size
-
-        //assume that til the 1st index of spin, no guy has been able to acquire the lock
-        //OK we are through, our competitive chance is very good
-        //assume someone has been able to acquire the lock, OK, someone is through, we dont really care
-
-    //assume that one of the acquiring memregions is "good acquired", we are to "fast forward" to the none of the acquiring memregions is "good acquired" 
-
-    //with wait
-    //we are guaranteed to "acquire" the waited region (with certain overheads, non-stopping, fixed size overhead)
-    //so the difference is that "overhead" gap, which could hinder our statistical chances of 1st index and 29th index (we need to study this, making sure the overhead does not make up the majority of the spinning time)
-    //we'll be back to do the write-up of the proof
-    //this implementation of memlock guard is actually stable
-
-    //we need to consider the case where we've been spinning for a century and nothing has been through, alright, this deserves a wait operation, does it?
-    //it does fellas, as foretold in the prophecy Cabal upgrade
-
-    //without loss of generality, the implementation could be described as
-    //a worst case bound of forever spin + force acquire, this forces user to use the interfaces to do memlock, not inventing their own routing of acquiring multiple locks
-
-    //first, region synchronization point support (weakly connected component id as synchronization point)
-    //second, average, no starvation approach by NOT DOING SEQUENTIAL WAITING (SEQUENTIAL WAITING is the LAST of LAST LINE of doing)
-    //third, running up the hill in the case of no "good acquired"
-    //fourth, acquiring a memregion == disqualifing all the competing sets containing the region
-    //fifth, the last approach of force_wait (because we are acquiring things in ascending order, there is no dead lock possibility)
-    //sixth, good FIFO queue by not supporting SHARED_LOCK or reference lock
-
     template <class T, size_t SZ>
     auto recursive_lock_guard_array(const dg::network_memlock::MemoryRegionLockInterface<T> lock_ins,
                                     const std::array<typename dg::network_memlock::MemoryRegionLockInterface<T>::ptr_t<>, SZ>& arg_lock_ptr_arr){
@@ -345,10 +296,12 @@ namespace dg::network_memlock{
         if constexpr(SZ == 1u){
             return recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]);
         } else{
-            using try_lock_guard_resource_t                                 = std::variant<decltype(recursive_trylock_guard(lock_ins, lock_ptr_arr[0])), decltype(recursive_lock_guard(lock_ins, lock_ptr_arr[0]))>;
+            using try_lock_guard_resource_t                                 = std::variant<decltype(recursive_trylock_guard(lock_ins, arg_lock_ptr_arr[0])), decltype(recursive_lock_guard(lock_ins, arg_lock_ptr_arr[0]))>;
             constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT              = 5u;
-            constexpr std::chrono::milliseconds MAX_EXPBACKOFF_WAIT_TIME    = std::chrono::milliseconds(1);
-            constexpr size_t MAX_EXPBACKOFF_SPIN_SZ                         = 64u;
+
+            constexpr size_t CYCLIC_EXPBACKOFF_SPIN_SZ                      = 16u;
+            constexpr std::chrono::nanoseconds CYCLIC_EXPBACKOFF_WAIT_TIME  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(100));
+            constexpr size_t CYCLIC_EXPBACKOFF_REVOLUTION                   = 8u;
 
             auto lock_ptr_arr                                               = sort_ptr_array(arg_lock_ptr_arr); 
             std::optional<size_t> wait_idx                                  = std::nullopt;
@@ -409,7 +362,7 @@ namespace dg::network_memlock{
                 return true; //OK, good
             };
 
-            bool was_expbackoff_thru = stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME, MAX_EXPBACKOFF_SPIN_SZ);
+            bool was_expbackoff_thru = stdx::eventloop_cyclic_expbackoff_spin(task, CYCLIC_EXPBACKOFF_SPIN_SZ, CYCLIC_EXPBACKOFF_WAIT_TIME, CYCLIC_EXPBACKOFF_REVOLUTION);
 
             if (was_expbackoff_thru){
                 return rs;
@@ -500,8 +453,11 @@ namespace dg::network_memlock_impl1{
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;;
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t; 
 
-            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> lck_table{};
-            static inline ptr_t region_first{}; 
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> lck_table;
+            static inline ptr_t region_first; 
+
+            static inline constexpr size_t FOREHEAD_SPIN_SIZE                       = 16u;
+            static inline constexpr std::chrono::nanoseconds FOREHEAD_SPIN_PERIOD   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
@@ -514,7 +470,7 @@ namespace dg::network_memlock_impl1{
             }
 
             static auto internal_acquire_try_strong(size_t table_idx) noexcept -> bool{
-    
+
                 return self::internal_acquire_try(table_idx);
             }
 
@@ -524,7 +480,7 @@ namespace dg::network_memlock_impl1{
                     return lck_table[table_idx].value.test_and_set(std::memory_order_relaxed) == false;
                 };
 
-                bool is_success = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                bool is_success = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SIZE, FOREHEAD_SPIN_PERIOD);
 
                 if (is_success){
                     return;
@@ -563,8 +519,8 @@ namespace dg::network_memlock_impl1{
 
             static void init(ptr_t first, ptr_t last){ 
 
-                uptr_t ufirst   = pointer_cast<uptr_t>(first);
-                uptr_t ulast    = pointer_cast<uptr_t>(last);
+                uptr_t ufirst   = dg::pointer_cast<uptr_t>(first);
+                uptr_t ulast    = dg::pointer_cast<uptr_t>(last);
 
                 if (ulast < ufirst){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -614,10 +570,10 @@ namespace dg::network_memlock_impl1{
                 self::internal_acquire_wait(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
-            static void acquire_waitnolock(ptr_t ptr) noexcept[
+            static void acquire_waitnolock(ptr_t ptr) noexcept{
 
-                self::internal_acquire_waitnolock(ptr);
-            ]
+                self::internal_acquire_waitnolock(self::memregion_slot(segcheck_ins::access(ptr)));
+            }
 
             static void acquire_waitnolock_release_responsibility(ptr_t ptr) noexcept{
 
@@ -646,97 +602,6 @@ namespace dg::network_memlock_impl1{
     };
 
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
-    struct MtxLock{};
-
-    template <class ID, size_t MEMREGION_SZ, class PtrT>
-    struct MtxLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>: MemoryRegionLockInterface<MtxLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, PtrT>>{
-
-        public:
-
-            using ptr_t = PtrT;
-
-        private:
-
-            using self          = MtxLock;
-            using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
-            using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>; 
-
-            static inline std::unique_ptr<stdx::hdi_container<std::mutex>[]> lck_table{};
-            static inline ptr_t region_first{};
-
-            static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
-
-                return dg::memult::distance(region_first, ptr) / MEMREGION_SZ;
-            }
-
-        public:
-
-            static void init(ptr_t first, ptr_t last){
-                
-                uptr_t ufirst   = pointer_cast<uptr_t>(first);
-                uptr_t ulast    = pointer_cast<uptr_t>(last);
-
-                if (ulast < ufirst){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                if (ufirst % MEMREGION_SZ != 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                if (ulast % MEMREGION_SZ != 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                size_t lck_table_sz     = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table               = std::make_unique<stdx::hdi_container<std::mutex>[]>(lck_table_sz);
-                region_first            = first;
-                segcheck_ins::init(first, last);
-            }
-
-            static void deinit() noexcept{
-
-                lck_table       = nullptr;
-                region_first    = {};
-            }
-
-            static auto memregion_size() noexcept -> size_t{
-
-                return MEMREGION_SZ;
-            }
-
-            static auto acquire_try(ptr_t ptr) noexcept -> bool{
-
-                return lck_table[memregion_slot(segcheck_ins::access(ptr))].value.try_lock(); //mutex is a sufficient memory barrier
-            }
-
-            static void acquire_wait(ptr_t ptr) noexcept{
-
-                lck_table[memregion_slot(segcheck_ins::access(ptr))].value.lock();
-            }
-
-            static void acquire_release(ptr_t ptr) noexcept{
-
-                lck_table[memregion_slot(segcheck_ins::access(ptr))].value.unlock();
-            }
-
-            static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
-
-                return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
-            }
-
-            static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
-
-                if (acquire_transfer_try(new_ptr, old_ptr)){
-                    return;
-                }
-
-                acquire_release(old_ptr);
-                acquire_wait(new_ptr);
-            }
-    };
-
-    template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
     struct AtomicReferenceLock{};
 
     template <class ID, size_t MEMREGION_SZ, class PtrT>
@@ -753,13 +618,19 @@ namespace dg::network_memlock_impl1{
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>; 
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
 
-            static inline constexpr atomic_lock_t MEMREGION_EMP_STATE   = 0u;
-            static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE   = std::numeric_limits<atomic_lock_t>::max();
-            static inline constexpr atomic_lock_t MEMREGION_MID_STATE   = std::numeric_limits<atomic_lock_t>::max() - 1u;
+            static inline constexpr atomic_lock_t MEMREGION_EMP_STATE                   = 0u;
+            static inline constexpr atomic_lock_t MEMREGION_ACQ_STATE                   = std::numeric_limits<atomic_lock_t>::max();
+            static inline constexpr atomic_lock_t MEMREGION_MID_STATE                   = std::numeric_limits<atomic_lock_t>::max() - 1u;
+
+            static inline constexpr size_t FOREHEAD_SPIN_SZ                             = 16u;
+            static inline constexpr std::chrono::nanoseconds FOREHEAD_SPIN_PERIOD       = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
+
+            static inline constexpr size_t COMPETITIVE_SPIN_SZ                          = 32u;
+            static inline constexpr std::chrono::nanoseconds COMPETITIVE_SPIN_PERIOD    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10)); 
 
             static inline std::unique_ptr<stdx::hdi_container<std::atomic<atomic_lock_t>>[]> lck_table{};    
-            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>> acquirability_table{};
-            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>> referenceability_table{};
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> acquirability_table{};
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> referenceability_table{};
 
             static inline ptr_t region_first{};
 
@@ -787,12 +658,12 @@ namespace dg::network_memlock_impl1{
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{
-                
+
                 auto lambda     = [&]() noexcept{
                     return self::internal_acquire_try(table_idx);
                 };
 
-                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SZ, FOREHEAD_SPIN_PERIOD);
 
                 if (was_thru){
                     return;
@@ -805,24 +676,24 @@ namespace dg::network_memlock_impl1{
                         break;
                     }
 
-                    this->acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+                    acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
                 }
             }
 
             static void internal_acquire_waitnolock(size_t table_idx) noexcept{
 
-                this->acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+                acquirability_table[table_idx].value.wait(false, std::memory_order_relaxed);
             }
 
             static void internal_acquire_waitnolock_release_responsibility(size_t table_idx) noexcept{
 
-                this->acquirability_table[table_idx].value.notify_one();
+                acquirability_table[table_idx].value.notify_one();
             }
 
             static void internal_acquire_release(size_t table_idx) noexcept{
 
                 acquirability_table[table_idx].value.test_and_set(std::memory_order_relaxed);
-                referenceability_table[table_idx].value.test_and_test(std::memory_order_relaxed);
+                referenceability_table[table_idx].value.test_and_set(std::memory_order_relaxed);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 lck_table[table_idx].value.exchange(MEMREGION_EMP_STATE, std::memory_order_relaxed);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -857,12 +728,12 @@ namespace dg::network_memlock_impl1{
                     }
 
                     was_referenced = true;
-                    acquirability_table[table_idx].clear(std::memory_order_relaxed);
+                    acquirability_table[table_idx].value.clear(std::memory_order_relaxed);
 
                     return true;
                 };
 
-                stdx::eventloop_expbackoff_spin(task);
+                stdx::eventloop_cyclic_expbackoff_spin(task, COMPETITIVE_SPIN_SZ, COMPETITIVE_SPIN_PERIOD);
                 return was_referenced;
             }
 
@@ -872,7 +743,7 @@ namespace dg::network_memlock_impl1{
                     return self::internal_reference_try(table_idx);
                 };
 
-                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SZ, FOREHEAD_SPIN_PERIOD);
 
                 if (was_thru){
                     return;
@@ -885,23 +756,21 @@ namespace dg::network_memlock_impl1{
                         break;
                     }
 
-                    this->referenceability_table[table_idx].value.wait(false, std::memory_order_relaxed);
+                    referenceability_table[table_idx].value.wait(false, std::memory_order_relaxed);
                 }
             }
 
             static void internal_reference_release(size_t table_idx) noexcept{
 
-                //attempt to buf -> acquired, 
-                // lck_table[table_idx].value.fetch_sub(1, std::memory_order_relaxed);
-
-                lock_state_t old_value = {};
+                atomic_lock_t old_value = {};
 
                 auto lambda = [&]() noexcept{
                     old_value = lck_table[table_idx].value.exchange(MEMREGION_MID_STATE);
                     return old_value != MEMREGION_MID_STATE;
                 };
 
-                stdx::eventloop_expbackoff_spin(lambda);
+                stdx::eventloop_cyclic_expbackoff_spin(lambda, COMPETITIVE_SPIN_SZ, COMPETITIVE_SPIN_PERIOD);
+
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 acquirability_table[table_idx].value.test_and_set(std::memory_order_relaxed);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -918,8 +787,8 @@ namespace dg::network_memlock_impl1{
 
             static void init(ptr_t first, ptr_t last){
                 
-                uptr_t ufirst   = pointer_cast<uptr_t>(first);
-                uptr_t ulast    = pointer_cast<uptr_t>(last);
+                uptr_t ufirst   = dg::pointer_cast<uptr_t>(first);
+                uptr_t ulast    = dg::pointer_cast<uptr_t>(last);
 
                 if (ulast < ufirst){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -940,9 +809,9 @@ namespace dg::network_memlock_impl1{
                 region_first            = first;
 
                 for (size_t i = 0u; i < lck_table_sz; ++i){
-                    lck_table[i].value              = MEMREGION_EMP_STATE;
-                    acquirability_table[i].value.test_and_set(true, std::memory_order_seq_cst);
-                    referenceability_table[i].value.test_and_set(true, std::memory_order_seq_cst);
+                    lck_table[i].value = MEMREGION_EMP_STATE;
+                    acquirability_table[i].value.test_and_set(std::memory_order_seq_cst);
+                    referenceability_table[i].value.test_and_set(std::memory_order_seq_cst);
                 }
 
                 segcheck_ins::init(first, last);
@@ -964,7 +833,7 @@ namespace dg::network_memlock_impl1{
             }
 
             static auto acquire_try_strong(ptr_t ptr) noexcept -> bool{
-    
+
                 return self::internal_acquire_try_strong(self::memregion_slot(segcheck_ins::access(ptr)));
             }
 
@@ -1028,199 +897,12 @@ namespace dg::network_memlock_impl1{
                 self::reference_wait(new_ptr);
             }
     };
-
-    template <class ID, class MemRegionSize, class MutexT = std::atomic_flag, class PtrT = std::add_pointer_t<const void>>
-    struct MtxReferenceLock{};    
-
-    template <class ID, size_t MEMREGION_SZ, class MutexT, class PtrT>
-    struct MtxReferenceLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, MutexT, PtrT>: MemoryReferenceLockInterface<MtxReferenceLock<ID, std::integral_constant<size_t, MEMREGION_SZ>, MutexT, PtrT>>{
-
-        public:
-
-            using ptr_t = PtrT; 
-
-        private:
-
-            using refcount_t    = uint64_t;
-            using self          = MtxReferenceLock;
-            using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;
-            using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
-
-            static constexpr inline refcount_t REFERENCE_EMPTY_STATE    = 0u;
-            static constexpr inline refcount_t REFERENCE_ACQUIRED_STATE = std::numeric_limits<refcount_t>::max();
-
-            struct LockUnit{
-                MutexT lck;
-                refcount_t refcount;
-            };
-
-            static inline std::unique_ptr<stdx::hdi_container<LockUnit>[]> lck_table{};
-            static inline ptr_t region_first{}; 
-
-            static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
-
-                return dg::memult::distance(region_first, ptr) / MEMREGION_SZ;
-            }
-
-            static auto internal_acquire_try(size_t table_idx) noexcept -> bool{
-
-                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
-                
-                if (lck_table[table_idx].value.refcount != REFERENCE_EMPTY_STATE){
-                    return false;
-                }
-
-                lck_table[table_idx].value.refcount = REFERENCE_ACQUIRED_STATE;
-                return true;
-            }
-
-            static void internal_acquire_wait(size_t table_idx) noexcept{
-
-                while (!internal_acquire_try(table_idx)){}
-            }
-
-            static void internal_acquire_release(size_t table_idx) noexcept{
-
-                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
-                lck_table[table_idx].refcount = REFERENCE_EMPTY_STATE;
-            }
-
-            static auto internal_reference_try(size_t table_idx) noexcept -> bool{
-
-                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
-                
-                if (lck_table[table_idx].value.refcount == REFERENCE_ACQUIRED_STATE){
-                    return false;
-                }
-
-                ++lck_table[table_idx].value.refcount;
-                return true;
-            }
-
-            static auto internal_reference_wait(size_t table_idx) noexcept{
-
-                while (!internal_reference_try(table_idx)){}
-            }
-
-            static auto internal_reference_release(size_t table_idx) noexcept{
-
-                stdx::xlock_guard<MutexT> lck_grd(lck_table[table_idx].value.lck);
-                --lck_table[table_idx].value.refcount;
-            }
-
-        public:
-
-            static void init(ptr_t first, ptr_t last){ 
-                
-                uptr_t ufirst   = pointer_cast<uptr_t>(first);
-                uptr_t ulast    = pointer_cast<uptr_t>(last);
-
-                if (ulast < ufirst){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                if (ufirst % MEMREGION_SZ != 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                if (ulast % MEMREGION_SZ != 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                size_t lck_table_sz = (ulast - ufirst) / MEMREGION_SZ;
-                lck_table           = std::make_unique<stdx::hdi_container<LockUnit>[]>(lck_table_sz);
-                region_first        = first;
-                
-                for (size_t i = 0u; i < lck_table_sz; ++i){
-                    lck_table[i].value.refcount = REFERENCE_EMPTY_STATE;
-                }
-
-                segcheck_ins::init(first, last);
-            }
-
-            static void deinit() noexcept{
-
-                lck_table = nullptr;
-            }
-
-            static auto transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
-                
-                return memregion_slot(segcheck_ins::access(new_ptr)) == memregion_slot(segcheck_ins::access(old_ptr));
-            }
-
-            static auto acquire_try(ptr_t ptr) noexcept -> bool{
-
-                return internal_acquire_try(memregion_slot(segcheck_ins::access(ptr)));
-            }
-
-            static void acquire_wait(ptr_t ptr) noexcept{
-
-                internal_acquire_wait(memregion_slot(segcheck_ins::access(ptr)));
-            }
-
-            static void acquire_release(ptr_t ptr) noexcept{
-
-                internal_acquire_release(memregion_slot(segcheck_ins::access(ptr)));
-            }
-
-            static auto acquire_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
-
-                return transfer_try(new_ptr, old_ptr);
-            } 
-
-            static void acquire_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
-
-                if (acquire_transfer_try(new_ptr, old_ptr)){
-                    return;
-                }
-
-                acquire_release(old_ptr);
-                acquire_wait(new_ptr);
-            }
-
-            static auto reference_try(ptr_t ptr) noexcept -> bool{
-
-                return internal_reference_try(memregion_slot(segcheck_ins::access(ptr)));
-            }
-
-            static void reference_wait(ptr_t ptr) noexcept{
-
-                internal_reference_wait(memregion_slot(segcheck_ins::access(ptr)));
-            } 
-
-            static void reference_release(ptr_t ptr) noexcept{
-
-                internal_reference_release(memregion_slot(segcheck_ins::access(ptr)));
-            }
-
-            static auto reference_transfer_try(ptr_t new_ptr, ptr_t old_ptr) noexcept -> bool{
-
-                return transfer_try(new_ptr, old_ptr);
-            }
-
-            static void reference_transfer_wait(ptr_t new_ptr, ptr_t old_ptr) noexcept{
-
-                if (reference_transfer_try(new_ptr, old_ptr)){
-                    return;
-                }
-
-                reference_release(old_ptr);
-                reference_wait(new_ptr);
-            }
-    };
-
-    static inline constexpr bool IS_ATOMIC_OPERATION_PREFERRED = true; 
     
     template <class ID, class MemRegionSize, class PtrT = std::add_pointer_t<const void>>
-    using Lock = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED,
-                                    AtomicFlagLock<ID, MemRegionSize, PtrT>,
-                                    MtxLock<ID, MemRegionSize, PtrT>>;
-    
+    using Lock = AtomicFlagLock<ID, MemRegionSize, PtrT>;
 
     template <class ID, class MemRegionSize, class MutexT = std::atomic_flag, class PtrT = std::add_pointer_t<const void>>
-    using ReferenceLock = std::conditional_t<IS_ATOMIC_OPERATION_PREFERRED,
-                                             AtomicReferenceLock<ID, MemRegionSize, PtrT>,
-                                             MtxReferenceLock<ID, MemRegionSize, MutexT, PtrT>>;
+    using ReferenceLock = AtomicReferenceLock<ID, MemRegionSize, PtrT>;
 
 }
 

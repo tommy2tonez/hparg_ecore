@@ -402,8 +402,9 @@ namespace dg::network_uma_tlb::rec_lck{
         } else{
             using try_lockmap_resource_t                                    = std::variant<decltype(rec_lck::recursive_lockmap_try(tlb, args[0].first, args[0].second)), decltype(rec_lck::recursive_lockmap_wait(tlb, args[0].first, args[0].second))>;
             constexpr size_t INNER_LOOP_BUSY_WAIT_MAX_EXPONENT              = 5u;
-            constexpr std::chrono::milliseconds MAX_EXPBACKOFF_WAIT_TIME    = std::chrono::milliseconds(1);
-            constexpr size_t MAX_EXPBACKOFF_SPIN_SZ                         = 64u;
+            constexpr size_t CYCLIC_EXPBACKOFF_SPIN_SZ                      = 16u;
+            constexpr std::chrono::nanoseconds CYCLIC_EXPBACKOFF_WAIT_TIME  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(100));
+            constexpr size_t CYCLIC_EXPBACKOFF_REVOLUTION                   = 8u;
 
             auto sorted_args                                                = rec_lck::sort_ptr_array(args);
             std::optional<size_t> wait_idx                                  = std::nullopt;
@@ -464,7 +465,7 @@ namespace dg::network_uma_tlb::rec_lck{
                 return true; //OK, good
             };
 
-            bool was_expbackoff_thru = stdx::eventloop_cyclic_expbackoff_spin(task, MAX_EXPBACKOFF_WAIT_TIME, MAX_EXPBACKOFF_SPIN_SZ);
+            bool was_expbackoff_thru = stdx::eventloop_cyclic_expbackoff_spin(task, CYCLIC_EXPBACKOFF_SPIN_SZ, CYCLIC_EXPBACKOFF_WAIT_TIME, CYCLIC_EXPBACKOFF_REVOLUTION);
             
             if (was_expbackoff_thru){
                 return rs;

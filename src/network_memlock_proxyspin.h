@@ -142,9 +142,14 @@ namespace dg::network_memlock_proxyspin{
             using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t;
 
+            static inline constexpr size_t FOREHEAD_SPIN_SZ                             = 16u;
+            static inline constexpr std::chrono::nanoseconds FOREHEAD_SPIN_PERIOD       = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
+
+            static inline constexpr size_t COMPETITIVE_SPIN_SZ                          = 32u;
+            static inline constexpr std::chrono::nanoseconds COMPETITIVE_SPIN_PERIOD    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10)); 
+
             static inline std::unique_ptr<stdx::hdi_container<std::atomic<lock_state_t>>[]> lck_table{};
             static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> acquirability_table{};
-
             static inline ptr_t region_first{}; 
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
@@ -193,14 +198,14 @@ namespace dg::network_memlock_proxyspin{
                     return true;
                 };
 
-                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, stdx::SPINLOCK_SIZE_MAGIC_VALUE);
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SIZE, FOREHEAD_SPIN_PERIOD);
 
                 if (was_thru){
                     return;
                 }
 
                 while (true){
-                    was_thru = stdx::eventloop_expbackoff_spin(lambda, 1u);
+                    was_thru = lambda();
 
                     if (was_thru){
                         break;
@@ -304,7 +309,7 @@ namespace dg::network_memlock_proxyspin{
                     return true;    
                 };
 
-                stdx::eventloop_expbackoff_spin(lambda);
+                stdx::eventloop_cyclic_expbackoff_spin(lambda, COMPETITIVE_SPIN_SZ, COMPETITIVE_SPIN_PERIOD);
                 return strong_result;
             }
 
@@ -330,7 +335,7 @@ namespace dg::network_memlock_proxyspin{
                     return true;
                 };
 
-                stdx::eventloop_expbackoff_spin(lambda);
+                stdx::eventloop_cyclic_expbackoff_spin(lambda, COMPETITIVE_SPIN_SZ, COMPETITIVE_SPIN_PERIOD);
                 acquirability_table[table_idx].value.notify_one();
                 std::atomic_signal_fence(std::memory_order_seq_cst); //this is unnecessary
             }

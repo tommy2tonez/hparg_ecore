@@ -310,38 +310,47 @@ namespace stdx{
     using double_const_launderer    = const_launderer<double>; 
     using void_const_launderer      = const_launderer<void>;
 
-    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED       = false;
-    static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED = true;
-    static inline constexpr bool IS_ATOMIC_FLAG_AS_SPINLOCK         = true;
+    static inline constexpr bool IS_SAFE_MEMORY_ORDER_ENABLED                                   = false;
+    static inline constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED                             = true;
+    static inline constexpr bool IS_ATOMIC_FLAG_AS_SPINLOCK                                     = true;
 
-    static inline constexpr size_t SPINLOCK_SIZE_MAGIC_VALUE        = 16u;
+    static inline constexpr size_t SPINLOCK_SIZE_MAGIC_VALUE                                    = 16u;
+    static inline constexpr size_t EXPBACKOFF_MUTEX_SPINLOCK_SIZE                               = 16u; 
+
+    static inline constexpr std::chrono::nanoseconds EXPBACKOFF_DEFAULT_SPIN_PERIOD             = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
+    static inline constexpr std::chrono::nanoseconds EXPBACKOFF_MUTEX_SPIN_PERIOD               = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
 
     using spin_lock_t = std::conditional_t<IS_ATOMIC_FLAG_AS_SPINLOCK,
                                            std::atomic_flag,
                                            std::mutex>; 
 
+    // template <class Lambda>
+    // inline void eventloop_expbackoff_spin(Lambda&& lambda) noexcept(noexcept(lambda())){
+
+    //     const size_t BASE                   = 2u;
+    //     const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
+    //     size_t current_sequential_pause     = 1u;
+
+    //     while (true){
+    //         if (lambda()){
+    //             return;
+    //         }
+
+    //         for (size_t i = 0u; i < current_sequential_pause; ++i){
+    //             _mm_pause();
+    //         }
+
+    //         current_sequential_pause = std::min(MAX_SEQUENTIAL_PAUSE, current_sequential_pause * BASE);
+    //     }
+    // }
+
+    //recall the eqn: x^0 + x^1 + x^n = f(x) = (x^ (n + 1) - 1) / (x - 1)
+    //we are to find x
+
     template <class Lambda>
-    inline void eventloop_expbackoff_spin(Lambda&& lambda) noexcept(noexcept(lambda())){
-
-        const size_t BASE                   = 2u;
-        const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
-        size_t current_sequential_pause     = 1u;
-
-        while (true){
-            if (lambda()){
-                return;
-            }
-
-            for (size_t i = 0u; i < current_sequential_pause; ++i){
-                _mm_pause();
-            }
-
-            current_sequential_pause = std::min(MAX_SEQUENTIAL_PAUSE, current_sequential_pause * BASE);
-        }
-    }
-
-    template <class Lambda>
-    inline bool eventloop_expbackoff_spin(Lambda&& lambda, size_t spin_sz) noexcept(noexcept(lambda())){
+    inline bool eventloop_expbackoff_spin(Lambda&& lambda, 
+                                          size_t spin_sz,
+                                          std::chrono::nanoseconds period) noexcept(noexcept(lambda())){
 
         const size_t BASE                   = 2u;
         const size_t MAX_SEQUENTIAL_PAUSE   = 64u;
@@ -360,6 +369,35 @@ namespace stdx{
         }
 
         return false;
+    }
+
+    template <class Lambda>
+    inline void eventloop_competitive_spin(Lambda&& lambda) noexcept(noexcept(lambda())){
+
+        lambda();
+    }
+
+    template <class Lambda>
+    inline bool eventloop_competitive_spin(Lambda&& lambda, size_t sz) noexcept(noexcept(lambda())){
+
+        return true;
+    } 
+
+    template <class Lambda>
+    inline void eventloop_cyclic_expbackoff_spin(Lambda&& lambda,
+                                                 size_t spin_sz,
+                                                 std::chrono::nanoseconds period) noexcept(noexcept(lambda())){
+
+        lambda();
+    } 
+
+    template <class Lambda>
+    inline bool eventloop_cyclic_expbackoff_spin(Lambda&& lambda, 
+                                                 size_t spin_sz,
+                                                 std::chrono::nanoseconds period,
+                                                 size_t revolution) noexcept(noexcept(lambda())){
+
+        return true;
     }
 
     inline __attribute__((always_inline)) bool atomic_flag_memsafe_try_lock(std::atomic_flag * volatile mtx) noexcept{
@@ -393,7 +431,7 @@ namespace stdx{
 
         if (!job()){ //fast_path
             while (true){
-                if (eventloop_expbackoff_spin(job, SPINLOCK_SIZE_MAGIC_VALUE)){
+                if (eventloop_expbackoff_spin(job, EXPBACKOFF_MUTEX_SPINLOCK_SIZE, EXPBACKOFF_MUTEX_SPIN_PERIOD)){
                     break;
                 }
 
