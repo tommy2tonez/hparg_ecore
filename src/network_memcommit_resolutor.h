@@ -130,7 +130,7 @@ namespace dg::network_memcommit_resolutor{
 
     //we are dispatching roughly 100MM tiles/ core * second -> asynchronous devices, we are being hopeful
     //averaging around 6TB of memory worth of dispatch/ core * second -> cuda
-    //linear wise, we are to 64000 * 6TB ~= 100 PB/ core * second -> cuda  
+    //linear wise, we are to 64000 * 6TB ~= 100 PB/ core * second -> cuda
 
     //we are still doing the backprop, yet we need to "dice" the projection space + "hint" the descendant of their "straightness"
     //we need to do taylor projection for every two random tiles
@@ -139,7 +139,15 @@ namespace dg::network_memcommit_resolutor{
     //this is actually possible
     //the problem is called conscious backprop (we'll be talking about the solution later)
     //conscious backprop is actually a fast projection of the current gradient space -> descendant gradient spaces
-    //we call this a language, not essentially an actual gradient mathematical backprop 
+    //we call this a language, not essentially an actual gradient mathematical backprop
+
+    //logit density mining can only be done @ 8KB of logit storage
+    //we'd have to do 99% compression of context
+    //we'd have to run the job on cuda
+    //this is another project, not related to this project
+
+    //after we got the conscious right (by literally pouring million of dollars into compute), we'll tackle the problem of backward by loading the conscious projection -> cuda
+    //so we could turn that logit density mining -> this logit density mining
 
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
@@ -16508,7 +16516,7 @@ namespace dg::network_memcommit_resolutor{
 
                         //
 
-                        if (dg::network_dispatch_control::is_cuda_dispatch(dispatch_platform)){
+                        if (dg::network_dispatch_control::is_cuda_dispatch(devirtualized_dispatch_control.dispatch_platform)){
                             cuda_ptr_t dst_grad_cu_ptr                              = dg::network_vmamap::get_cuda_ptr(dst_vmamap_remapper);
                             dg::vector<cuda_ptr_t> lhs_logit_cu_ptr_vec             = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<cuda_ptr_t>>(PACM_ACM_SZ));
                             dg::vector<cuda_ptr_t> lhs_grad_cu_ptr_vec              = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<cuda_ptr_t>>(PACM_ACM_SZ));
@@ -16535,7 +16543,7 @@ namespace dg::network_memcommit_resolutor{
                                                                                                             .dispatch_control           = cuda_dispatch_control};
 
                             dg::network_producer_consumer::delvrsrv_deliver(cuda_delivery_handle.get(), std::move(cuda_resolutor_arg));
-                        } else if(dg::network_dispatch_control::is_host_dispatch(dispatch_platform)){                            
+                        } else if(dg::network_dispatch_control::is_host_dispatch(devirtualized_dispatch_control.dispatch_platform)){                            
                             host_ptr_t dst_grad_host_ptr                            = dg::network_vmamap::get_host_ptr(dst_vmamap_remapper);
                             dg::vector<host_ptr_t> lhs_logit_host_ptr_vec           = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<host_ptr_t>>(PACM_ACM_SZ));
                             dg::vector<host_ptr_t> lhs_grad_host_ptr_vec            = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<host_ptr_t>>(PACM_ACM_SZ));

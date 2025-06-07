@@ -1,3 +1,25 @@
+// MIT License
+
+// Copyright (c) 2025 tommy2tonez
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #ifndef __SORT_VARIANTS_H__
 #define __SORT_VARIANTS_H__
 
@@ -10,17 +32,11 @@
 #include <type_traits>
 #include <bit>
 
-//this implementation is not complicated, yet involved a lot of blackarts, we'll further optimize this if there are times
-//this should suffice as a production implementation
-
 namespace dg::sort_variants::quicksort{
 
-    static inline constexpr size_t BLOCK_PIVOT_MAX_LESS_SZ      = 8u;
-    static inline constexpr size_t BLOCK_PIVOT_MAX_WALL_SZ      = 64u;
-    static inline constexpr size_t MAX_RECURSION_DEPTH          = 64u; 
-    static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER    = 8u; 
-    static inline constexpr size_t SMALL_QUICKSORT_SZ           = 16u;
-    static inline constexpr size_t ASC_SORTING_RATIO            = 4u;
+    static inline constexpr size_t BLOCK_PIVOT_MAX_WALL_SZ          = 64u;
+    static inline constexpr size_t MAX_RECURSION_DEPTH              = 64u; 
+    static inline constexpr size_t COMPUTE_LEEWAY_MULTIPLIER        = 8u;
 
     using qs_unsigned_bitset_t = uint64_t;
 
@@ -42,7 +58,7 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class _Ty>
-    static void insertion_sort_1(_Ty * first, _Ty * last){
+    static inline void insertion_sort_1(_Ty * first, _Ty * last){
 
         size_t sz = std::distance(first, last);
         
@@ -111,8 +127,11 @@ namespace dg::sort_variants::quicksort{
         }(idx_seq);
     }
 
+    //can we get an Amen?
+    //this is incredibly hard to write
+
     template <class _Ty>
-    static void insertion_sort_2(_Ty * first, _Ty * last){
+    static __attribute__((noinline)) void insertion_sort_2(_Ty * first, _Ty * last){
 
         size_t sz                           = std::distance(first, last);
         constexpr size_t SLIDING_WINDOW_SZ  = 5u;
@@ -122,9 +141,9 @@ namespace dg::sort_variants::quicksort{
             return;
         }
 
-        //strategize, for loop, 4 + trailing one every iteration
+        template_sort_arr(first, std::integral_constant<size_t, SLIDING_WINDOW_SZ>{});
 
-        for (size_t i = 0u; i < sz; ++i){
+        for (size_t i = SLIDING_WINDOW_SZ; i < sz; ++i){
             intmax_t sorting_idx = i;
 
             while (true){
@@ -142,177 +161,55 @@ namespace dg::sort_variants::quicksort{
         }
     }
 
+    static consteval auto boundless_insertion_sort_overflow_size() -> size_t{
+
+        return 5u;
+    }
+
+    static consteval auto boundless_insertion_sort_max_sorting_size() -> size_t{
+
+        return 7u;
+    }
+
     template <class _Ty>
-    static auto insertion_sort_3(_Ty * first, _Ty * last, size_t insertion_sort_allowance) -> _Ty *{
+    static inline void boundless_insertion_sort(_Ty * first, _Ty * last){
 
-        size_t sz                           = std::distance(first, last);
-        constexpr size_t SLIDING_WINDOW_SZ  = 3u;
+        constexpr size_t SLIDING_WINDOW_SZ = 5u;
+        size_t sz = std::distance(first, last);
 
-        if (sz < SLIDING_WINDOW_SZ) [[unlikely]]{
-            insertion_sort_1(first, last);
-            return last;
-        }
+        template_sort_arr(first, std::integral_constant<size_t, SLIDING_WINDOW_SZ>{});
 
-        size_t counter = 0u; 
+        if (sz <= SLIDING_WINDOW_SZ){
+            (void) sz;
+        } else if (sz <= 7u){
+            for (size_t i = SLIDING_WINDOW_SZ; i < 6u; ++i){
+                intmax_t sorting_idx = i;
 
-        //strategize, for loop, 4 + trailing one every iteration
+                while (true){
+                    if (sorting_idx == 0 || first[sorting_idx] >= first[sorting_idx - 1]){
+                        break;
+                    }
 
-        for (size_t i = 0u; i < sz; ++i){
-            intmax_t sorting_idx = i;
-
-            if (counter >= insertion_sort_allowance){
-                return std::next(first, i);
-            }
-
-            while (true){
-                if (sorting_idx == 0){
-                    break;
+                    sorting_idx = std::max(intmax_t{0}, static_cast<intmax_t>(sorting_idx - (SLIDING_WINDOW_SZ - 1)));
+                    template_sort_arr(std::next(first, sorting_idx), std::integral_constant<size_t, SLIDING_WINDOW_SZ>{});
                 }
+            }
 
-                if (first[sorting_idx] >= first[sorting_idx - 1]){
-                    break;
+            if (sz == 7u){
+                intmax_t sorting_idx = 6;
+    
+                while (true){
+                    if (sorting_idx == 0 || first[sorting_idx] >= first[sorting_idx - 1]){
+                        break;
+                    }
+    
+                    sorting_idx = std::max(intmax_t{0}, static_cast<intmax_t>(sorting_idx - (SLIDING_WINDOW_SZ - 1)));
+                    template_sort_arr(std::next(first, sorting_idx), std::integral_constant<size_t, SLIDING_WINDOW_SZ>{});
                 }
-
-                sorting_idx = std::max(intmax_t{0}, static_cast<intmax_t>(sorting_idx - (SLIDING_WINDOW_SZ - 1)));
-                template_sort_arr(std::next(first, sorting_idx), std::integral_constant<size_t, SLIDING_WINDOW_SZ>{});
-                counter += 1;
             }
+        } else{
+            std::unreachable();
         }
-
-        return last;
-    }
-
-    //optimization ON, how to do this correctly?
-    template <class _Ty>
-    static auto find_left_wall(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        while (true){
-            // if (first == last){
-                // return first;
-            // }
-
-            if (first == pivot){
-                return first;
-            }
-
-            if (*first > *pivot){
-                return first;
-            }
-
-            //<= pivot
-
-            std::advance(first, 1u);
-        }
-    }
-
-    template <class _Ty>
-    static auto find_right_wall(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        while (true){
-            // if (first == last){
-                // return last;
-            // }
-
-            if (std::prev(last) == pivot){
-                return last;
-            }
-
-            if (*std::prev(last) < *pivot){ //
-                return last;
-            }
-
-            //>= pivot
-            last = std::prev(last);
-            // std::advance(last, -1);
-        }
-    }
-
-    //we'll be super happy if we could optimize this
-    template <class _Ty>
-    static inline auto  pivot_partition_1(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        assert(first != last);
-
-        //attempt to swap pivot
-
-        std::swap(*std::prev(last), *pivot);
-
-        const _Ty& pivot_value  = *std::prev(last); 
-        size_t iteration_sz     = std::distance(first, last); 
-        size_t less_sz          = 0u;
-        
-        size_t blk_sz           = iteration_sz / BLOCK_PIVOT_MAX_LESS_SZ;
-        size_t blk_pop_sz       = blk_sz * BLOCK_PIVOT_MAX_LESS_SZ; 
-        size_t rem_sz           = iteration_sz - blk_pop_sz; 
-
-        for (size_t i = 0u; i < blk_sz; ++i){
-            _Ty * local_first           = std::next(first, i * BLOCK_PIVOT_MAX_LESS_SZ);
-            qs_unsigned_bitset_t bitset = 0u;
-
-            for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
-                bitset |= static_cast<qs_unsigned_bitset_t>(local_first[j] < pivot_value) << j;
-            }
-
-            while (bitset != 0u){
-                size_t j = std::countr_zero(bitset);
-                bitset &= (bitset - 1u);
-
-                std::swap(first[less_sz++], local_first[j]);      
-            }
-        }
-
-        for (size_t i = 0u; i < rem_sz; ++i){
-            if (first[i + blk_pop_sz] < pivot_value){
-                std::swap(first[less_sz++], first[i + blk_pop_sz]);
-            }
-        }
-
-        std::swap(first[less_sz], *std::prev(last));
-        return std::next(first, less_sz);
-    }
-
-    //we'll be super happy if we could optimize this
-    template <class _Ty>
-    static __attribute__((noinline)) auto  pivot_partition_0(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        assert(first != last);
-
-        //attempt to swap pivot
-
-        std::swap(*std::prev(last), *pivot);
-
-        const _Ty& pivot_value  = *std::prev(last); 
-        size_t iteration_sz     = std::distance(first, last); 
-        size_t less_sz          = 0u;
-        
-        size_t blk_sz           = iteration_sz / BLOCK_PIVOT_MAX_LESS_SZ;
-        size_t blk_pop_sz       = blk_sz * BLOCK_PIVOT_MAX_LESS_SZ; 
-        size_t rem_sz           = iteration_sz - blk_pop_sz; 
-
-        for (size_t i = 0u; i < blk_sz; ++i){
-            _Ty * local_first           = std::next(first, i * BLOCK_PIVOT_MAX_LESS_SZ);
-            qs_unsigned_bitset_t bitset = 0u;
-
-            for (size_t j = 0u; j < BLOCK_PIVOT_MAX_LESS_SZ; ++j){
-                bitset |= static_cast<qs_unsigned_bitset_t>(local_first[j] < pivot_value) << j;
-            }
-
-            while (bitset != 0u){
-                size_t j = std::countr_zero(bitset);
-                bitset &= (bitset - 1u);
-
-                std::swap(first[less_sz++], local_first[j]);      
-            }
-        }
-
-        for (size_t i = 0u; i < rem_sz; ++i){
-            if (first[i + blk_pop_sz] < pivot_value){
-                std::swap(first[less_sz++], first[i + blk_pop_sz]);
-            }
-        }
-
-        std::swap(first[less_sz], *std::prev(last));
-        return std::next(first, less_sz);
     }
 
     template <class _Ty>
@@ -351,6 +248,7 @@ namespace dg::sort_variants::quicksort{
     static consteval auto low_bits(const std::integral_constant<size_t, SZ>) -> T{
 
         static_assert(std::is_unsigned_v<T>);
+        static_assert(SZ <= std::numeric_limits<T>::digits);
 
         if (SZ == std::numeric_limits<T>::digits){
             return std::numeric_limits<T>::max();
@@ -395,23 +293,8 @@ namespace dg::sort_variants::quicksort{
         return rhs_bitset;
     }
 
-    //we are 15% from optimal as clued by our peers
-    //where how
-    //without SIMD, I dont think I could further optimize the code, as hinted by our measures
-    //this function performance is fine, if first last size is > 128 or 256, the optimality of this function is reached at the point,
-    //if there are performance issues, we'd want to have another dispatch code for another size
-    //we have given up on actually solving the problem, it's very super complicated
-    //the theoerical limit is probably around 30% w.r.t to the std sort for uniform distributed data, we are still 20% deviated from the optimal code, we have done a fine job, not the best pivot_partition_1 could be further optimized or another radix of the implementation
-    //we have reached 37.8% w.r.t to the std implementation without using SIMD, this is quite an achievement, we'll be back
-    //180ms is the optimal threshold, we'll try (we have reached 179ms guys!!!)
-    //for the very first time, we've reached 189ms
-    //we'll stop the optimizations fellas
-    //I think this is good enough, we'll process the pull requests later
-
     template <class _Ty>
-    static inline auto pivot_partition_2(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        //this is complicated to write, I'll try
+    static inline auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
 
         std::swap(*std::prev(last), *pivot);
 
@@ -445,9 +328,6 @@ namespace dg::sort_variants::quicksort{
                 std::advance(llast, -static_cast<intmax_t>(BLOCK_PIVOT_MAX_WALL_SZ));
             }
         }
-
-        //while loop is broken when the not considered range < BLOCK_PIVOT_MAX_WALL_SZ
-        //and the while (lhs_bitset + rhs_bitset) is guaranteed to be the immediate previous reached point 
 
         size_t after_sz = std::distance(ffirst, llast);
 
@@ -508,65 +388,20 @@ namespace dg::sort_variants::quicksort{
     }
 
     template <class _Ty>
-    static inline auto pivot_partition(_Ty * first, _Ty * last, _Ty * pivot) -> _Ty *{
-
-        // size_t sz = std::distance(first, last);
-
-        // if (sz <= SMALL_PIVOT_PARTITION_SZ){
-            // return pivot_partition_1(first, last, pivot);
-        // } else{
-        return pivot_partition_2(first, last, pivot);
-        // }
-    }
-
-    template <class _Ty>
-    static auto base_asc_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
+    static auto base_quicksort(_Ty * first, _Ty * last, _Ty * incl_last_boundlessable,  
+                               uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
 
         size_t sz = std::distance(first, last);
 
-        if (sz <= SMALL_QUICKSORT_SZ){
-            insertion_sort_2(first, last);
-            return sz * sz;
-        }
+        if (sz <= boundless_insertion_sort_max_sorting_size()){
+            intmax_t boundless_distance = std::distance(last, incl_last_boundlessable); 
 
-        if (flops > max_flops || stack_idx >= MAX_RECURSION_DEPTH) [[unlikely]]{
-            std::sort(first, last);
-            return sz * ulog2(ceil2(sz));
-        }
+            if (boundless_distance >= 0) [[likely]]{
+                boundless_insertion_sort(first, last);
+            } else [[unlikely]]{
+                insertion_sort_2(first, last);
+            }
 
-        size_t insertion_sort_allowance = sz / ASC_SORTING_RATIO;
-        _Ty * insert_last               = insertion_sort_3(first, last, insertion_sort_allowance);
-        _Ty * new_first                 = insert_last;
-        size_t new_sz                   = std::distance(new_first, last);
-        uint64_t incurred_cost          = insertion_sort_allowance; 
-
-        if (new_sz == 0u){
-            return incurred_cost;
-        }
-        
-        size_t mid_idx                  = new_sz >> 1;
-
-        _Ty * left_incl_wall            = find_left_wall(new_first, last, std::next(new_first, mid_idx));
-        _Ty * right_excl_wall           = find_right_wall(new_first, last, std::next(new_first, mid_idx));  
-        _Ty * pivot_ptr                 = pivot_partition_1(left_incl_wall, right_excl_wall, std::next(new_first, mid_idx));
-        
-        incurred_cost                   += new_sz * 2;
-        incurred_cost                   += base_asc_quicksort(new_first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
-        incurred_cost                   += base_asc_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
-
-        std::inplace_merge(first, new_first, last); //this is incredibly hard to implement correctly
-        incurred_cost                   += sz;
-
-        return incurred_cost;
-    }
-
-    template <class _Ty>
-    static auto base_quicksort(_Ty * first, _Ty * last, uint64_t flops, uint64_t max_flops, uint32_t stack_idx) -> uint64_t{
-
-        size_t sz = std::distance(first, last);
-
-        if (sz <= SMALL_QUICKSORT_SZ){
-            insertion_sort_2(first, last);
             return sz * sz;
         }
 
@@ -574,7 +409,7 @@ namespace dg::sort_variants::quicksort{
             std::sort(first, last);
             return sz * ulog2(ceil2(sz));
         } else [[likely]]{
-            static_assert(SMALL_QUICKSORT_SZ >= 4);
+            static_assert(boundless_insertion_sort_max_sorting_size() >= 4);
 
             constexpr size_t PIVOT_CAND_SZ  = 3u;
             size_t mid_idx                  = sz >> 1;
@@ -588,27 +423,23 @@ namespace dg::sort_variants::quicksort{
             _Ty * pivot_ptr                 = pivot_partition(first, last, mid_ptr);    
 
             incurred_cost                   += sz;
-            incurred_cost                   += base_quicksort(first, pivot_ptr, flops + incurred_cost, max_flops, stack_idx + 1u);
-            incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, flops + incurred_cost, max_flops, stack_idx + 1u);
+            incurred_cost                   += base_quicksort(first, pivot_ptr, incl_last_boundlessable, flops + incurred_cost, max_flops, stack_idx + 1u);
+            incurred_cost                   += base_quicksort(std::next(pivot_ptr), last, incl_last_boundlessable, flops + incurred_cost, max_flops, stack_idx + 1u);
 
             return incurred_cost;    
         }
     }
 
-    template <class _Ty>
-    __attribute__((noinline)) void asc_quicksort(_Ty * first, _Ty * last) noexcept{
-
-        static_assert(std::is_arithmetic_v<_Ty>);
-
-        size_t sz           = std::distance(first, last);
-        size_t compute_sz   = sz * ulog2(ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
-
-        base_asc_quicksort(first, last, 0u, compute_sz, 0u);
-    }
-
     //we are very proud of what people have recommended at 
     //https://llvm.org/devmtg/2023-02-25/slides/A-New-Implementation-for-std-sort.pdf
+    //https://github.com/minjaehwang/bitsetsort?tab=readme-ov-file
     //our good friends implementation is here: https://github.com/llvm/llvm-project/blob/main/libcxx/include/__algorithm/sort.h
+    //our friend implementation is VERY GOOD
+    //we'll move on for now, the implementation is good enough, we'll need to consider the merge sort for length of <= 32
+    //other than that, we are OK
+    //we can squeeze another 30% performance if we could get the <= 32 sort right
+    //we'll be back
+
     //we have made a further progress on the optimization (by re-branching + reimplementing insertion sort for arithmetic types)
     //we dont really have applications for the arithmetic sort except for our heap implementation which is a very crucial backbone of all things
     //for the first time, we can sort our heap segments 3 times faster without polluting CPUs (we have completed the assignment!!!)
@@ -617,15 +448,26 @@ namespace dg::sort_variants::quicksort{
     //quad swap is a merge_sort (or quicksort) approach of swapping, reducing the number of supposedly 6 cmps -> 5 cmps
     //this when used in conjunction with our template sort can be very useful 
 
+    //I was trying to get to the 140s
+    //because that would mark a major milestone for these sorting missions
+    //I finally got to the 149 ms guys!!!
+
     template <class _Ty>
     __attribute__((noinline)) void quicksort(_Ty * first, _Ty * last) noexcept{
-
+        
         static_assert(std::is_arithmetic_v<_Ty>);
 
-        size_t sz           = std::distance(first, last);
-        size_t compute_sz   = sz * ulog2(ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
+        size_t sz = std::distance(first, last);
 
-        base_quicksort(first, last, 0u, compute_sz, 0u);
+        if (sz < boundless_insertion_sort_overflow_size()){
+            insertion_sort_1(first, last);
+            return;
+        }
+
+        size_t compute_sz               = sz * ulog2(ceil2(sz)) * COMPUTE_LEEWAY_MULTIPLIER;
+        _Ty * incl_last_boundlessable   = std::prev(last, boundless_insertion_sort_overflow_size());
+
+        base_quicksort(first, last, incl_last_boundlessable, 0u, compute_sz, 0u);
     }
 } 
 
