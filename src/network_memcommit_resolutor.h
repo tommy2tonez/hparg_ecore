@@ -16345,6 +16345,72 @@ namespace dg::network_memcommit_resolutor{
 
                         operatable_id_t dst_operatable_bwd_id   = dg::network_tile_member_getsetter::get_pacm_operatable_backward_id_nothrow(dst);
 
+                        dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_lhs_arr(PACM_ACM_SZ);
+                        dg::network_tile_member_getsetter::get_pacm_left_descendant_nothrow(dst, dst_lhs_arr.get());
+
+                        if (!std::equal(dst_lhs_arr.get(), std::next(dst_lhs_arr.get(), PACM_ACM_SZ), data_arr[i].lhs_vec.begin())){
+                            continue;
+                        }
+
+                        dg::network_stack_allocation::NoExceptAllocation<init_status_t[]> lhs_init_status_arr(PACM_ACM_SZ);
+
+                        if (exception_t err = this->get_init_status_arr(dst_lhs_arr.get(), PACM_ACM_SZ, lhs_init_status_arr.get()); dg::network_exception::is_failed(err)){
+                            continue;
+                        }
+
+                        if (std::find(lhs_init_status_arr.get(), std::next(lhs_init_status_arr.get(), PACM_ACM_SZ),
+                                      [&](const init_status_t& init_status){return init_status != TILE_INIT_STATUS_INITIALIZED;}) != std::next(lhs_init_status_arr.get(), PACM_ACM_SZ)){
+                            continue;
+                        }
+
+                        dg::network_stack_allocation::NoExceptAllocation<operatable_id_t[]> lhs_operatable_bwd_id_arr(PACM_ACM_SZ);
+
+                        if (exception_t err = this->get_operatable_backward_id_arr(dst_lhs_arr.get(), PACM_ACM_SZ, lhs_operatable_bwd_id_arr.get()); dg::network_exception::is_failed(err)){
+                            continue;
+                        }
+
+                        if (std::find(lhs_operatable_bwd_id_arr.get(), std::next(lhs_operatable_bwd_id_arr.get(), PACM_ACM_SZ),
+                                      [&](const operatable_id_t& operatable_id) noexcept{return operatable_id != dst_operatable_bwd_id;}) != std::next(lhs_operatable_bwd_id_arr.get(), PACM_ACM_SZ)){
+                            continue;
+                        }
+
+                        //
+
+                        dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> dst_rhs_arr(PACM_ACM_SZ);
+                        dg::network_tile_member_getsetter::get_pacm_right_descendant_nothrow(dst, dst_rhs_arr.get());
+
+                        if (!std::equal(dst_rhs_arr.get(), std::next(dst_rhs_arr.get(), PACM_ACM_SZ), data_arr[i].rhs_vec.begin())){
+                            continue;
+                        }
+
+                        dg::network_stack_allocation::NoExceptAllocation<init_status_t[]> rhs_init_status_arr(PACM_ACM_SZ);
+
+                        if (exception_t err = this->get_init_status_arr(dst_rhs_arr.get(), PACM_ACM_SZ, rhs_init_status_arr.get()); dg::network_exception::is_failed(err)){
+                            continue;
+                        }
+
+                        if (std::find(rhs_init_status_arr.get(), std::next(rhs_init_status_arr.get(), PACM_ACM_SZ),
+                                      [&](const init_status_t& init_status){return init_status != TILE_INIT_STATUS_INITIALIZED;} != std::next(rhs_init_status_arr.get(), PACM_ACM_SZ))){
+                            continue;
+                        }
+
+                        dg::network_stack_allocation::NoExceptAllocation<operatable_id_t[]> rhs_operatable_bwd_id_arr(PACM_ACM_SZ);
+
+                        if (exception_t err = this->get_operatable_backward_id_arr(dst_rhs_arr.get(), PACM_ACM_SZ, rhs_operatable_bwd_id_arr.get()); dg::network_exception::is_failed(err)){
+                            continue;
+                        }
+
+                        if (std::find(rhs_operatable_bwd_id_arr.get(), std::next(rhs_operatable_bwd_id_arr.get(), PACM_ACM_SZ),
+                                      [&](const operatable_id_t& operatable_id) noexcept{return operatable_id != dst_operatable_bwd_id;}) != std::next(rhs_operatable_bwd_id_arr.get(), PACM_ACM_SZ)){
+                            continue;
+                        }
+
+                        //
+
+                        uma_ptr_t dst_grad_umaptr               = dg::network_tile_member_getsetter::get_pacm_grad_addr_nothrow(dst);
+                        dispatch_control_fat_t dispatch_control = dg::network_tile_member_getsetter::get_pacm_backward_dispatch_control_nothrow(dst);
+                        
+                        dg::network_stack_allocation::NoExceptAllocation<uma_ptr_t[]> lhs_logit_addr_arr(PACM_ACM_SZ);
 
                         if (exception_t err = this->get_logit_uma_ptr_arr(dst_lhs_arr.get(), PACM_ACM_SZ, lhs_logit_addr_arr.get()); dg::network_exception::is_failed(err)){
                             continue;
