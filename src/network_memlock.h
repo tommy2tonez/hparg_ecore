@@ -450,11 +450,11 @@ namespace dg::network_memlock_impl1{
         private:
 
             using self          = AtomicFlagLock;
-            using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;;
+            using segcheck_ins  = dg::network_segcheck_bound::StdAccess<self, ptr_t>;
             using uptr_t        = typename dg::ptr_info<ptr_t>::max_unsigned_t; 
 
             static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> lck_table;
-            static inline ptr_t region_first; 
+            static inline ptr_t region_first;
 
             static inline constexpr size_t FOREHEAD_SPIN_SIZE                       = 16u;
             static inline constexpr std::chrono::nanoseconds FOREHEAD_SPIN_PERIOD   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
@@ -628,11 +628,10 @@ namespace dg::network_memlock_impl1{
             static inline constexpr size_t COMPETITIVE_SPIN_SZ                          = 32u;
             static inline constexpr std::chrono::nanoseconds COMPETITIVE_SPIN_PERIOD    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10)); 
 
-            static inline std::unique_ptr<stdx::hdi_container<std::atomic<atomic_lock_t>>[]> lck_table{};    
-            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> acquirability_table{};
-            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> referenceability_table{};
-
-            static inline ptr_t region_first{};
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic<atomic_lock_t>>[]> lck_table;
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> acquirability_table;
+            static inline std::unique_ptr<stdx::hdi_container<std::atomic_flag>[]> referenceability_table;
+            static inline ptr_t region_first;
 
             static auto memregion_slot(ptr_t ptr) noexcept -> size_t{
 
@@ -663,7 +662,7 @@ namespace dg::network_memlock_impl1{
                     return self::internal_acquire_try(table_idx);
                 };
 
-                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SZ, FOREHEAD_SPIN_PERIOD);
+                bool was_thru   = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SZ, FOREHEAD_SPIN_PERIOD);
 
                 if (was_thru){
                     return;
