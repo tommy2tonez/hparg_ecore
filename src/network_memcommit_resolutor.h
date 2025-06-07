@@ -66,6 +66,8 @@ namespace dg::network_memcommit_resolutor{
 
     //it has to work on fp8 fp16 u8 u16, a compact 2 KB projection buffer that takes the responsibility of backwarding
 
+    //we are 3 months to our ETA of deploying this to the mainframe. YAY!!!
+
     class ForwardPingLeafSignalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<ForwardPingSignalEvent>{
 
         public:
@@ -9465,8 +9467,9 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(data_arr[i].root);
-                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(data_arr[i].root);
+                        uma_ptr_t dst                   = data_arr[i].root;
+                        init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(dst);
+                        operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(dst);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -9490,7 +9493,7 @@ namespace dg::network_memcommit_resolutor{
                                 dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(dst, dispatch_radix_arg.descendant_vec.data());
 
                                 auto dispatch_control               = dg::network_tile_member_getsetter::get_uacm_forward_dispatch_control_nothrow(dst);
-                                auto devirtualized_dispatch_control = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::devirtualize_uacm_dispatch_control(dispatch_control));
+                                auto devirtualized_dispatch_control = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::devirtualize_uacm_forward_dispatch_control(dispatch_control));
 
                                 dispatch_radix_arg.dst_vd_id        = devirtualized_dispatch_control.dst_vd_id;
                                 std::copy(devirtualized_dispatch_control.descendant_vd_id_vec.begin(), devirtualized_dispatch_control.descendant_vd_id_vec.end(), dispatch_radix_arg.descendant_vec.begin());
@@ -15241,6 +15244,13 @@ namespace dg::network_memcommit_resolutor{
 
             auto is_met_dispatch_requirements(const BackwardDoSignalEvent& event) const noexcept -> exception_t{
 
+                std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_uacm_ptr_access(event.dst);
+
+                if (!ptrchk.has_value()){
+                    return ptrchk.error();
+                }
+
+                return dg::network_exception::SUCCESS;
             }
 
             void push(BackwardDoSignalEvent * event_arr, size_t sz) noexcept{
@@ -15341,17 +15351,17 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             struct DispatchRadixArgument{
-                dg::array_view<uma_ptr_t, UACM_ACM_SZ> src;
+                dg::vector<uma_ptr_t> src_vec;
                 device_id_t dst_grad_vd_id;
-                dg::array_view<device_id_t, UACM_ACM_SZ> src_grad_vd_id;
-                dg::array_view<device_id_t, UACM_ACM_SZ> src_logit_vd_id;
+                dg::vector<device_id_t> src_grad_vd_id;
+                dg::vector<device_id_t> src_logit_vd_id;
+                platform_t platform;
             };
 
             struct RadixFetcherArgument{
                 uma_ptr_t root;
                 operatable_id_t expected_ops_id;
-                DispatchRadixArgument * fetching_addr;
-                bool * validation_bit;
+                std::optional<DispatchRadixArgument> * fetching_addr;
             };
 
             struct InternalDispatchRadixFetcher: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, RadixFetcherArgument>{
@@ -15361,6 +15371,7 @@ namespace dg::network_memcommit_resolutor{
                     dg::network_memops_uma::memlock_guard mem_grd(rcu_addr);
 
                     for (size_t i = 0u; i < sz; ++i){
+                        uma_ptr_t dst                   = data_arr[i].root;
                         init_status_t init_status       = dg::network_tile_member_getsetter::get_uacm_init_status_nothrow(data_arr[i].root);
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(data_arr[i].root);
 
@@ -15374,19 +15385,27 @@ namespace dg::network_memcommit_resolutor{
                             }
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
-                                if (current_ops_id == data_arr[i].expected_ops_id){
-                                    *data_arr[i].validation_bit = true;
-                                    dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(data_arr[i].root, data_arr[i].fetching_addr->src.data());
-
-                                    size_t dispatch_control_bsz = dg::network_tile_member_getsetter::get_uacm_backward_dispatch_control_byte_size_nothrow(dst);
-                                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> dispatch_control_buf(dispatch_control_bsz);
-                                    dg::network_tile_member_getsetter::get_uacm_backward_dispatch_control_nothrow(dst, dispatch_control_buf.get());
-
-                                    dg::network_dispatch_control::read_uacm_backward_dispatch_src_grad_virtual_device_id(dispatch_control_buf.get(), data_arr[i].fetching_addr->src_grad_vd_id.data());
-                                    dg::network_dispatch_control::read_uacm_backward_dispatch_src_logit_virtual_device_id(dispatch_control_buf.get(), data_arr[i].fetching_addr->src_logit_vd_id.data());
-                                    dg::network_dispatch_control::read_uacm_backward_dispatch_root_virtual_device_id(dispatch_control_buf.get(), &data_arr[i].fetching_addr->dst_grad_vd_id);
+                                if (current_ops_id != data_arr[i].expected_ops_id){
+                                    break;
                                 }
 
+                                DispatchRadixArgument dispatch_radix_arg{.src_vec           = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<uma_ptr_t>>(UACM_ACM_SZ)),
+                                                                         .dst_grad_vd_id    = {},
+                                                                         .src_grad_vd_id    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<device_id_t>>(UACM_ACM_SZ)),
+                                                                         .src_logit_vd_id   = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<device_id_t>>(UACM_ACM_SZ)),
+                                                                         .platform          = {}};
+                                
+                                dg::network_tile_member_getsetter::get_uacm_descendant_nothrow(data_arr[i].root, dispatch_radix_arg.src_vec.data());
+
+                                auto dispatch_control               = dg::network_tile_member_getsetter::get_uacm_backward_dispatch_control_nothrow(dst);
+                                auto devirtualized_dispatch_control = dg::network_exception_handler::nothrow_log(dg::network_dispatch_control::devirtualize_uacm_backward_dispatch_control(dispatch_control));
+
+                                dispatch_radix_arg.dst_grad_vd_id   = devirtualized_dispatch_control.dst_grad_vd_id;
+                                std::copy(devirtualized_dispatch_control.src_grad_vd_id.begin(), devirtualized_dispatch_control.src_grad_vd_id.end(), dispatch_radix.src_grad_vd_id.begin());
+                                std::copy(devirtualized_dispatch_control.src_logit_vd_id.begin(), devirtualized_dispatch_control.src_logit_vd_id.end(), dispatch_radix.src_logit_vd_id.begin());
+                                dispatch_radix_arg.platform         = devirtualized_dispatch_control.platform;
+
+                                *data_arr[i].fetching_addr          = std::move(dispatch_radix_arg);
                                 break;
                             }
                             default:
